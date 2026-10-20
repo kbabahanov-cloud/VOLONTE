@@ -46,11 +46,11 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - Engel: bu oturumdan `*.workers.dev` adresine ağ izni yok (proxy 403), bu yüzden Claude webhook'u elle kuramıyor.
   - Çözüm (kodda hazır, henüz yüklenmedi): 5 dakikada bir çalışan zamanlanmış görev `webhookKontrol` → BOT_TOKEN girilince webhook'u `SELF_URL/telegram` adresine kendisi kurar. Herkese açık kurulum sayfası fikri güvenlik kontrolüne takıldı, vazgeçildi.
 - [x] **Komut 6b: zamanlanmış görev onayı** (20 Ekim, kullanıcı onayladı; yüklendi, görev `*/5 * * * *` aktif, bağlantılar: ALLOWED_IDS, KAYIT, SELF_URL, WEBHOOK_SECRET).** Güvenlik kontrolü bunu da ayrı onay istedi. Yüklenecek: yeni kod + SELF_URL=`https://volonte-asistan.volonte.workers.dev` + schedules `*/5 * * * *` (ücretsiz). Güncellemede ALLOWED_IDS'i boşaltma — o anki değeri koru.
-- [ ] Komut 7: kullanıcı Cloudflare panelinde Worker → Ayarlar → Değişkenler → `BOT_TOKEN` (Secret/Şifreli) girer.
+- [x] Komut 7 (20 Ekim, BOT_TOKEN secret olarak görüldü): kullanıcı Cloudflare panelinde Worker → Ayarlar → Değişkenler → `BOT_TOKEN` (Secret/Şifreli) girer.
 - [ ] Komut 8: en geç 5 dk sonra webhook kendiliğinden kurulur; kullanıcı bota /start yazar; Claude `bekleyen:` kaydından kimliği bulup ALLOWED_IDS'e ekler; deneme (/son, kanala test paylaşımı).
 - Not: Bota yabancı müşteri yazarsa şu an cevap yok. İstenirse "Sipariş için WhatsApp: +90 536 239 00 91" cevabı eklenebilir (müşteriye giden mesaj → onay gerekir).
 
-**Sıradaki komut: Komut 7 (kullanıcı BOT_TOKEN girer).**
+**Sıradaki komut: Komut 8 (kullanıcı bota /start yazar, Claude `bekleyen:` kaydından kimliği alıp ALLOWED_IDS'e ekler).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
