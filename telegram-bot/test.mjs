@@ -1,7 +1,7 @@
 // Çalıştırma: node --test telegram-bot/test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker, { fiyatBul, guncellemeIsle, haftaOzeti, gunAnahtari } from "./worker.js";
+import worker, { fiyatBul, guncellemeIsle, haftaOzeti, gunAnahtari, webhookKontrol } from "./worker.js";
 
 function sahteOrtam() {
   const depo = new Map();
@@ -103,4 +103,19 @@ test("webhook gizli anahtar olmadan reddedilir", async () => {
   assert.equal((await worker.fetch(istek(null), env)).status, 401);
   assert.equal((await worker.fetch(istek("yanlis!!"), env)).status, 401);
   assert.equal((await worker.fetch(istek("gizli123"), env)).status, 200);
+});
+
+test("zamanlanmış görev webhook'u kendi adresine kurar", async () => {
+  const { env, gonderilen } = sahteOrtam();
+  env.SELF_URL = "https://bot.example.dev";
+  globalThis.fetch = async (url, istek) => {
+    gonderilen.push({ url, govde: JSON.parse(istek.body) });
+    const kurulu = url.endsWith("getWebhookInfo") ? { ok: true, result: { url: "" } } : { ok: true };
+    return new Response(JSON.stringify(kurulu));
+  };
+  assert.equal(await webhookKontrol(env), "kuruldu");
+  assert.equal(gonderilen[1].govde.url, "https://bot.example.dev/telegram");
+  assert.equal(gonderilen[1].govde.secret_token, "gizli123");
+  delete env.BOT_TOKEN;
+  assert.equal(await webhookKontrol(env), "token-yok");
 });

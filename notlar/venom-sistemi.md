@@ -42,12 +42,15 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - [x] Komut 5: Cloudflare API bağlantısı çalışıyor (20 Ekim, token doğrulandı; proxy ile geliyor). Hesap kimliği: `9b7e7d56c7c591fb6c69d2e372b04e27` (`CLOUDFLARE_ACCOUNT_ID` ortam değişkeni boş geliyor, kimlik API'den alındı). Yetki: Workers + KV var, D1 yok (gerekmiyor).
 - [x] Bot kodu yazıldı: `telegram-bot/worker.js` (+ `test.mjs`, 7 test geçiyor). Kanal paylaşımlarını KV'ye kaydeder (metin, en büyük fotoğraf, tarih, link, fiyat; albüm = tek paylaşım; düzenleme günceller). Komutlar: /son, /hafta, /yardim. İzinsiz kişiye cevap vermez, kimliğini `bekleyen:<id>` altına 7 gün yazar. Fotoğraf gelirse "Claude sohbetine gönderin" der (Claude API onayı yok).
 - [x] Cloudflare'de oluşturuldu: KV `volonte-bot-kayit` (id `cd4cd47b965142c6859bf702510166bb`), workers.dev alt alanı `volonte` → adres `https://volonte-asistan.volonte.workers.dev`.
-- [ ] **Komut 6: Worker yükleme onayı.** Oturumdaki güvenlik kontrolü yüklemeyi "canlıya alma" sayıp durdurdu → kullanıcı onayı gerekiyor. Yükleme: Worker adı `volonte-asistan`, bağlantılar KAYIT (KV), ALLOWED_IDS (boş), WEBHOOK_SECRET (Claude rastgele üretir; gizli, repoya yazılmaz). Yüklemede `keep_bindings: ["secret_text"]` kullan ki BOT_TOKEN silinmesin.
+- [x] Komut 6: kullanıcı onayladı (20 Ekim) → Worker `volonte-asistan` yüklendi (1. yükleme; KAYIT, ALLOWED_IDS boş, WEBHOOK_SECRET). WEBHOOK_SECRET sadece oturum not klasöründe, repoda yok; yeni oturumda gerekirse yeniden üretilip secret olarak girilir.
+  - Engel: bu oturumdan `*.workers.dev` adresine ağ izni yok (proxy 403), bu yüzden Claude webhook'u elle kuramıyor.
+  - Çözüm (kodda hazır, henüz yüklenmedi): 5 dakikada bir çalışan zamanlanmış görev `webhookKontrol` → BOT_TOKEN girilince webhook'u `SELF_URL/telegram` adresine kendisi kurar. Herkese açık kurulum sayfası fikri güvenlik kontrolüne takıldı, vazgeçildi.
+- [ ] **Komut 6b: zamanlanmış görev onayı.** Güvenlik kontrolü bunu da ayrı onay istedi. Yüklenecek: yeni kod + SELF_URL=`https://volonte-asistan.volonte.workers.dev` + schedules `*/5 * * * *` (ücretsiz). Güncellemede ALLOWED_IDS'i boşaltma — o anki değeri koru.
 - [ ] Komut 7: kullanıcı Cloudflare panelinde Worker → Ayarlar → Değişkenler → `BOT_TOKEN` (Secret/Şifreli) girer.
-- [ ] Komut 8: Claude `/kurulum` ile webhook kurar; kullanıcı bota /start yazar; Claude `bekleyen:` kaydından kimliği bulup ALLOWED_IDS'e ekler; deneme (/son, kanala test paylaşımı).
+- [ ] Komut 8: en geç 5 dk sonra webhook kendiliğinden kurulur; kullanıcı bota /start yazar; Claude `bekleyen:` kaydından kimliği bulup ALLOWED_IDS'e ekler; deneme (/son, kanala test paylaşımı).
 - Not: Bota yabancı müşteri yazarsa şu an cevap yok. İstenirse "Sipariş için WhatsApp: +90 536 239 00 91" cevabı eklenebilir (müşteriye giden mesaj → onay gerekir).
 
-**Sıradaki komut: Komut 6 (Worker yükleme onayı).**
+**Sıradaki komut: Komut 6b (zamanlanmış görev onayı).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

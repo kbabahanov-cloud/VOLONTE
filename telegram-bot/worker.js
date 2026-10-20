@@ -10,6 +10,8 @@
 //  BOT_TOKEN       secret — kullanıcı kendisi girer, hiçbir yere yazılmaz.
 //  WEBHOOK_SECRET  secret — Telegram'ın gönderdiği istekleri doğrulamak için.
 //  ALLOWED_IDS     düz metin — virgülle ayrılmış Telegram kimlikleri.
+//  SELF_URL        düz metin — bu Worker'ın adresi (webhook için).
+//  Zamanlanmış görev (5 dakikada bir) webhook'u kendisi kurar.
 //  KAYIT           KV bağlantısı.
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
@@ -28,23 +30,28 @@ export default {
       return new Response("ok");
     }
 
-    if (request.method === "POST" && url.pathname === "/kurulum") {
-      if (!gizliEsit(request.headers.get("X-Kurulum-Anahtari"), env.WEBHOOK_SECRET)) {
-        return new Response("yetkisiz", { status: 401 });
-      }
-      if (!env.BOT_TOKEN) return new Response("BOT_TOKEN girilmemiş", { status: 400 });
-      const cevap = await telegram(env, "setWebhook", {
-        url: `${url.origin}/telegram`,
-        secret_token: env.WEBHOOK_SECRET,
-        allowed_updates: ["message", "channel_post", "edited_channel_post"],
-        drop_pending_updates: true,
-      });
-      return Response.json(cevap);
-    }
-
     return new Response("VOLONTE asistanı çalışıyor.");
   },
+
+  // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
+  // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
+  async scheduled(event, env) {
+    await webhookKontrol(env);
+  },
 };
+
+export async function webhookKontrol(env) {
+  if (!env.BOT_TOKEN || !env.SELF_URL) return "token-yok";
+  const hedef = `${env.SELF_URL}/telegram`;
+  const bilgi = await telegram(env, "getWebhookInfo", {});
+  if (bilgi.ok && bilgi.result.url === hedef) return "kurulu";
+  const cevap = await telegram(env, "setWebhook", {
+    url: hedef,
+    secret_token: env.WEBHOOK_SECRET,
+    allowed_updates: ["message", "channel_post", "edited_channel_post"],
+  });
+  return cevap.ok ? "kuruldu" : `hata: ${cevap.description}`;
+}
 
 export async function guncellemeIsle(update, env) {
   if (update.channel_post) return paylasimKaydet(update.channel_post, env, false);
