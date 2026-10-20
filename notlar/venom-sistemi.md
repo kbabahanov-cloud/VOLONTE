@@ -21,6 +21,29 @@
      - Video kullanıcıya sunulur. **Kullanıcı onay vermeden hiçbir şey yayınlanmaz.**
      - Onaydan sonra Telegram, TikTok ve Instagram'da yayınlanır.
 
+## ⚡ ŞU AN AKTİF İŞ: Telegram botu "hızlı başarı" (20 Ekim 2026)
+
+Kullanıcı VENOM'dan önce hızlı bir sonuç istedi. **Yeni oturumda buradan devam et.**
+
+Hedef:
+1. Kanal (t.me/Volonteroseoffical) takibi: her yeni paylaşımı kaydet (metin, fotoğraf, tarih, link, varsa fiyat).
+2. Telegram Ads takibi ve öneri. **Resmî reklamveren API'si bulunamadı.** ADSLY/Adstat "satıcı ortağı" modeli, hesabı üçüncü tarafa taşımak demek → şimdilik hayır. Kullanıcının Telegram oturumuyla panele girmek → asla. Seçilen yol: kullanıcı panel ekran görüntüsünü bota (ya da sohbette Claude'a) gönderir, analiz edilir. Yapay zekâyla bot içi analiz = Claude API (ücretli) → ayrıca onay gerekir. İlk haftalar ekran görüntüleri sohbette Claude'a gönderilir (ücretsiz).
+3. Reklam yönetimi (durdurma/bütçe) ileride, sadece onayla ve resmî yol bulunursa.
+
+Kurallar: bot sadece kullanıcının Telegram kimliğine cevap verir; bot kanalda yetkisiz (sadece okur); bot tokenı Claude'a/sohbete/repoya yazılmaz → Cloudflare Worker secret olarak kullanıcı kendisi girer.
+
+Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depolama (ücretsiz katman). Eski kanal geçmişi: Telegram Desktop "sohbet geçmişini dışa aktar" ile.
+
+İlerleme:
+- [x] Komut 1: @BotFather ile bot açıldı → **@VolonteasistantBOT** (setjoingroups Disable istendi).
+- [x] Komut 2: bot kanala yönetici olarak, tüm yetkiler kapalı eklendi.
+- [x] Komut 3: Cloudflare hesabı açıldı (ücretsiz, 2FA istendi).
+- [x] Komut 4: ortam ağ izni: `api.cloudflare.com`, `api.telegram.org` eklendi (20 Ekim'de curl ile doğrulandı).
+- [ ] Komut 5: Cloudflare API token ("Edit Cloudflare Workers" şablonu) → ortam ayarlarına `CLOUDFLARE_API_TOKEN` ve `CLOUDFLARE_ACCOUNT_ID`. Yeni oturum gerekir.
+- [ ] Sonra: Claude bot kodunu yazar (ayrı klasör, test), deploy eder; kullanıcı bot tokenını Cloudflare panelinde Worker secret olarak girer; webhook kurulur; kullanıcının Telegram kimliği izin listesine eklenir; deneme.
+
+**Sıradaki komut: Komut 5.**
+
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
 Kullanıcı kararı: Sistemin tamamını programlamayı ve süreci yönetmeyi Claude'a bıraktı. **Claude yolu çizer ve her seferinde tek bir komut verir. Kullanıcı yapar ve sonucu bildirir.** Para harcanacak, asıl WhatsApp numarasına dokunulacak veya geri alınamaz bir işlem yapılacaksa Claude yine önce onay ister.
