@@ -51,9 +51,12 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - [x] 20 Ekim 13:50 UTC: kanal kaydı çalışıyor (13696–13697, CODE.3329 paylaşımı kaydedildi). `durum:webhook` artık `bekleyen`, `sonHata`, `bot` (getMe kullanıcı adı) alanlarını da yazıyor. Kullanıcının ilk /start mesajları (biri başka hesaptan) bota ulaşmadı, bekleyen: kaydı yok → yeniden /start istendi. Kullanıcı kuralı: eklemeden önce görülen isimler kullanıcıya gösterilecek, onay alınacak.
 - [x] Komut 8 (20 Ekim): kullanıcı asıl hesabından /start yazdı → MURAT BABAHANOV (@MURATVOLNTE), kimlik **2005113508**. Kullanıcı "evet ekle" dedi → ALLOWED_IDS=`2005113508`. Worker güncellerken bu değeri koru.
 - [ ] Komut 9: deneme — kullanıcı bota /yardim, /son, /hafta yazar.
+- [x] Yeni özellik (20 Ekim, kullanıcı isteği): **/paylas <kod> [sıra]** → kod dizininden (`kodlar` KV anahtarı: kod → en yeni 5 paylaşım {ids, tarih, album}) paylaşımı bulur, `copyMessages` ile önce sadece kullanıcıya önizleme yollar, "✅ Onayla / ❌ İptal" düğmeleri. Onay kaydı `onay:<anahtar>` (24 saat, tek kullanımlık, sadece ALLOWED_IDS basabilir). Onaylanınca kanaldan kanala `copyMessages` (aynı medya + yazı, albüm korunur, "iletildi" etiketi yok). Kod okuma: CODE./KOD/Model/#123. Webhook artık `callback_query` alır ve `max_connections: 1` (albüm parçaları sırayla). Günlük KV yazma sınırı (1000) için `post:` kayıtları kaldırıldı. Kanal kimliği `kanal` anahtarında (zamanlanmış görev getChat ile bulur). 3329 elle dizine eklendi (13696–13697).
+- [ ] Komut 10: kullanıcı kanalda bota **"Mesaj gönderme / Публикация сообщений"** yetkisini açar (diğerleri kapalı kalır) → `/paylas 3329` dener.
+- [ ] Komut 11: eski paylaşımlar — Telegram Desktop → kanal → ⋮ → Sohbet geçmişini dışa aktar → JSON, medya işaretsiz → `result.json` Claude'a. Claude `node telegram-bot/ice-aktar.mjs result.json` ile dizini çıkarır, mevcut `kodlar` ile birleştirip tek yazmada KV'ye yükler (bot Worker'da büyük dosya işleyemez: ücretsiz katman 10 ms CPU).
 - Not: Bota yabancı müşteri yazarsa şu an cevap yok. İstenirse "Sipariş için WhatsApp: +90 536 239 00 91" cevabı eklenebilir (müşteriye giden mesaj → onay gerekir).
 
-**Sıradaki komut: Komut 9 (bot denemesi: /yardim, /son, /hafta).**
+**Sıradaki komut: Komut 10 (kanalda "Mesaj gönderme" yetkisi + /paylas 3329 denemesi).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
