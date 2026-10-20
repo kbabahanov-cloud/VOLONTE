@@ -39,10 +39,15 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - [x] Komut 2: bot kanala yönetici olarak, tüm yetkiler kapalı eklendi.
 - [x] Komut 3: Cloudflare hesabı açıldı (ücretsiz, 2FA istendi).
 - [x] Komut 4: ortam ağ izni: `api.cloudflare.com`, `api.telegram.org` eklendi (20 Ekim'de curl ile doğrulandı).
-- [ ] Komut 5: Cloudflare API token ("Edit Cloudflare Workers" şablonu) → ortam ayarlarına `CLOUDFLARE_API_TOKEN` ve `CLOUDFLARE_ACCOUNT_ID`. Yeni oturum gerekir.
-- [ ] Sonra: Claude bot kodunu yazar (ayrı klasör, test), deploy eder; kullanıcı bot tokenını Cloudflare panelinde Worker secret olarak girer; webhook kurulur; kullanıcının Telegram kimliği izin listesine eklenir; deneme.
+- [x] Komut 5: Cloudflare API bağlantısı çalışıyor (20 Ekim, token doğrulandı; proxy ile geliyor). Hesap kimliği: `9b7e7d56c7c591fb6c69d2e372b04e27` (`CLOUDFLARE_ACCOUNT_ID` ortam değişkeni boş geliyor, kimlik API'den alındı). Yetki: Workers + KV var, D1 yok (gerekmiyor).
+- [x] Bot kodu yazıldı: `telegram-bot/worker.js` (+ `test.mjs`, 7 test geçiyor). Kanal paylaşımlarını KV'ye kaydeder (metin, en büyük fotoğraf, tarih, link, fiyat; albüm = tek paylaşım; düzenleme günceller). Komutlar: /son, /hafta, /yardim. İzinsiz kişiye cevap vermez, kimliğini `bekleyen:<id>` altına 7 gün yazar. Fotoğraf gelirse "Claude sohbetine gönderin" der (Claude API onayı yok).
+- [x] Cloudflare'de oluşturuldu: KV `volonte-bot-kayit` (id `cd4cd47b965142c6859bf702510166bb`), workers.dev alt alanı `volonte` → adres `https://volonte-asistan.volonte.workers.dev`.
+- [ ] **Komut 6: Worker yükleme onayı.** Oturumdaki güvenlik kontrolü yüklemeyi "canlıya alma" sayıp durdurdu → kullanıcı onayı gerekiyor. Yükleme: Worker adı `volonte-asistan`, bağlantılar KAYIT (KV), ALLOWED_IDS (boş), WEBHOOK_SECRET (Claude rastgele üretir; gizli, repoya yazılmaz). Yüklemede `keep_bindings: ["secret_text"]` kullan ki BOT_TOKEN silinmesin.
+- [ ] Komut 7: kullanıcı Cloudflare panelinde Worker → Ayarlar → Değişkenler → `BOT_TOKEN` (Secret/Şifreli) girer.
+- [ ] Komut 8: Claude `/kurulum` ile webhook kurar; kullanıcı bota /start yazar; Claude `bekleyen:` kaydından kimliği bulup ALLOWED_IDS'e ekler; deneme (/son, kanala test paylaşımı).
+- Not: Bota yabancı müşteri yazarsa şu an cevap yok. İstenirse "Sipariş için WhatsApp: +90 536 239 00 91" cevabı eklenebilir (müşteriye giden mesaj → onay gerekir).
 
-**Sıradaki komut: Komut 5.**
+**Sıradaki komut: Komut 6 (Worker yükleme onayı).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
