@@ -125,6 +125,8 @@ test("kod bulma", () => {
   assert.equal(kodBul("Model 3394 new"), "3394");
   assert.equal(kodBul("New #4410"), "4410");
   assert.equal(kodBul("Yeni sezon geldi"), null);
+  assert.equal(kodBul("THIS MODEL IS AVAILABLE. CODE 5501"), "5501");
+  assert.equal(kodBul("THIS MODEL IS BACK"), null);
 });
 
 // Telegram'ı taklit eder: copyMessages yeni kimlikler döner.
@@ -220,7 +222,7 @@ test("bilinmeyen kod", async () => {
 test("eski paylaşımları içe aktarma: albüm gruplama ve kod", async () => {
   const { gruplaVeDizinle } = await import("./ice-aktar.mjs");
   const kodlar = gruplaVeDizinle([
-    { id: 100, type: "message", date_unixtime: "1000", photo: "(dosya yok)", text: "" },
+    { id: "100", type: "message", date_unixtime: "1000", photo: "(dosya yok)", text: "" },
     { id: 101, type: "message", date_unixtime: "1000", photo: "(dosya yok)", text: ["✅", { type: "bold", text: "CODE.3329" }] },
     { id: 102, type: "message", date_unixtime: "1000", media_type: "video_file", text: "" },
     { id: 103, type: "message", date_unixtime: "2000", photo: "(dosya yok)", text: "CODE 3329 new color" },
@@ -229,4 +231,14 @@ test("eski paylaşımları içe aktarma: albüm gruplama ve kod", async () => {
   ]);
   assert.deepEqual(kodlar["3329"].map((g) => g.ids), [[103], [100, 101, 102]]);
   assert.equal(kodlar["777"], undefined); // medyasız yazı paylaşılmaz
+});
+
+test("eski albümün tek parçası düzenlenince parçalar kaybolmaz", async () => {
+  const { env, depo } = sahteOrtam();
+  depo.set("kodlar", JSON.stringify({ "3563": [{ ids: [13666, 13667, 13668], tarih: 1000, album: null }] }));
+  await guncellemeIsle({ edited_channel_post: { message_id: 13666, date: 1000, edit_date: 2000, chat: kanal, photo: [{ file_id: "f" }], caption: "CODE.3563 PRICE 20$", media_group_id: "X" } }, env);
+  const k = JSON.parse(depo.get("kodlar"))["3563"];
+  assert.equal(k.length, 1);
+  assert.deepEqual(k[0].ids, [13666, 13667, 13668]);
+  assert.equal(k[0].album, "X");
 });

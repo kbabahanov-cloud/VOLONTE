@@ -110,7 +110,11 @@ export function fiyatBul(metin) {
 // "CODE.3329", "Kod: 3394 B", "#3329", "Model 3329" → "3329"
 export function kodBul(metin) {
   if (!metin) return null;
-  const m = metin.match(/(?:code|kod|код|réf|ref|model|модель)\s*[.:#№\-]*\s*([A-Z0-9][A-Z0-9\-]{1,15})/i) || metin.match(/#([0-9]{3,8})\b/);
+  // Kodda en az bir rakam olmalı: "MODEL IS AVAILABLE" kod sayılmaz.
+  for (const m of metin.matchAll(/(?:code|kod|код|réf|ref|model|модель)\s*[.:#№\-]*\s*([A-Z0-9][A-Z0-9\-]{1,15})/gi)) {
+    if (/\d/.test(m[1])) return kodNormal(m[1]);
+  }
+  const m = metin.match(/#([0-9]{3,8})\b/);
   return m ? kodNormal(m[1]) : null;
 }
 
@@ -119,8 +123,20 @@ export function kodNormal(kod) {
 }
 
 // kodlar = { "3329": [{ ids: [13696, 13697], tarih, album }], ... } (en yeni başta)
+// Aynı paylaşım (ortak parça ya da aynı albüm) zaten varsa parçalar birleştirilir:
+// eski bir albümün tek parçasının yazısı düzenlenince diğer parçalar kaybolmasın.
 export function kodEkle(kodlar, kod, giris) {
-  const liste = (kodlar[kod] || []).filter((g) => !g.ids.some((id) => giris.ids.includes(id)));
+  const ayniMi = (g) => g.ids.some((id) => giris.ids.includes(id)) || (giris.album && g.album === giris.album);
+  const eskiler = (kodlar[kod] || []).filter(ayniMi);
+  const liste = (kodlar[kod] || []).filter((g) => !ayniMi(g));
+  if (eskiler.length) {
+    giris = {
+      ...giris,
+      ids: [...new Set([...giris.ids, ...eskiler.flatMap((g) => g.ids)])].sort((a, b) => a - b),
+      tarih: Math.min(giris.tarih, ...eskiler.map((g) => g.tarih)),
+      album: giris.album || eskiler.find((g) => g.album)?.album || null,
+    };
+  }
   liste.unshift(giris);
   liste.sort((a, b) => b.tarih - a.tarih || b.ids[0] - a.ids[0]);
   kodlar[kod] = liste.slice(0, KOD_BASINA);

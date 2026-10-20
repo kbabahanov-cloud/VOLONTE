@@ -16,7 +16,11 @@ const medyaVar = (m) => Boolean(m.photo || m.media_type || m.file);
 
 // Albüm parçaları dışa aktarımda ayrı mesajlardır: arka arkaya, aynı saniyede, medyalı.
 export function gruplaVeDizinle(mesajlar) {
-  const liste = mesajlar.filter((m) => m.type === "message").sort((a, b) => a.id - b.id);
+  // Dışa aktarımda kimlik ve tarih bazen metin ("13696") olarak gelir.
+  const liste = mesajlar
+    .filter((m) => m.type === "message")
+    .map((m) => ({ ...m, id: Number(m.id) }))
+    .sort((a, b) => a.id - b.id);
   const gruplar = [];
   for (const m of liste) {
     const tarih = Number(m.date_unixtime);
