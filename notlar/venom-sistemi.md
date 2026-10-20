@@ -60,7 +60,7 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: ANA PLAN → Komut 4b (portföy kararı öncesi kontrol; aşağıya bak).**
+**Sıradaki komut: ANA PLAN → Komut 4c (eski portföyün işletme bilgileri; aşağıya bak).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
@@ -100,7 +100,12 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 - 20 Ekim: kullanıcı bildirdi: VOLONTE **Instagram hesabı eski "спортивные костюмы из Турции" portföyüne** bağlı; **Live durumdaki bir uygulama da o portföyde**. Yani iki portföy var: eski (Instagram + Live uygulama) ve 25 Eylül'de açılan HEMRA ARTYKOV. Volonte CRM'in hangisinde olduğu henüz bilinmiyor.
   - Claude önerisi: **tek portföy**. WhatsApp hesabı (WABA) bir portföye bağlanınca taşımak zor → WhatsApp eklemeden önce karar. Kullanıcı tam yöneticiyse **eski portföy** kullanılsın (Instagram + Live uygulama orada, tek doğrulama hepsini kapsar, eski hesap). Portföy görünen adı "VOLONTE" yapılabilir; doğrulamada esas olan işletme bilgilerindeki resmi ad = HEMRA ARTYKOV (vergi levhası) + adres. Yeni HEMRA ARTYKOV portföyü boş bırakılır, silinmez. Karar kullanıcıda.
 
-**Sıradaki komut: Komut 4b — eski portföyde yetki ve uygulama kontrolü (tam kontrol var mı, Volonte CRM hangi portföyde), sonra portföy kararı. WhatsApp ürünü henüz EKLENMEYECEK.**
+- [x] Komut 4b (20 Ekim): eski portföyde Murat Babahanov **tam erişimli**. **Volonte CRM** uygulaması bu portföyde, kimlik **884729331246890**, **Live**. Uygulamada tam erişimli 2 kişi: Murat Babahanov + **"Volonte API" sistem kullanıcısı** (kimin açtığı teyit edilecek). HEMRA ARTYKOV portföyü başka bir Facebook hesabından açılmış, kullanıcının hesabında görünmüyor → dokunulmayacak.
+- **KARAR (kullanıcı, 20 Ekim): eski portföyde ("спортивные костюмы из Турции") devam.** WhatsApp, doğrulama ve ileride Instagram hepsi burada.
+- [ ] Komut 4c: eski portföyde İşletme bilgileri → resmi ad HEMRA ARTYKOV, adres, telefon +90 501 335 11 11, web sitesi; portföy adı → VOLONTE (isteğe bağlı, geri alınabilir).
+- [ ] Sonra: Volonte CRM'e WhatsApp ürünü (test numarası) → Komut 4 (doğrulama, belge: vergi levhası).
+
+**Sıradaki komut: Komut 4c (eski portföyün işletme bilgileri).**
 
 ## Kapsam kararı (24 Eylül 2026)
 
