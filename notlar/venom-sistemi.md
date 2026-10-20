@@ -60,7 +60,7 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: ANA PLAN → Komut 4a-kontrol (Volonte CRM uygulamasında WhatsApp ürünü + portföy).**
+**Sıradaki komut: ANA PLAN → Komut 4b (portföy kararı öncesi kontrol; aşağıya bak).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
@@ -97,7 +97,10 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 
 - 20 Ekim: kullanıcı Meta geliştirici hesabının açık olduğunu ve **"Volonte CRM"** adlı uygulamanın (In development) zaten var olduğunu söyledi → Komut 4a'nın telefon doğrulaması ve uygulama açma kısmı tamam. Kalan: uygulamada WhatsApp ürünü var mı ve HEMRA ARTYKOV portföyüne bağlı mı kontrolü (4a-kontrol).
 
-**Sıradaki komut: Komut 4a-kontrol (Volonte CRM'de WhatsApp ürünü + portföy bağlantısı), sonra Komut 4.**
+- 20 Ekim: kullanıcı bildirdi: VOLONTE **Instagram hesabı eski "спортивные костюмы из Турции" portföyüne** bağlı; **Live durumdaki bir uygulama da o portföyde**. Yani iki portföy var: eski (Instagram + Live uygulama) ve 25 Eylül'de açılan HEMRA ARTYKOV. Volonte CRM'in hangisinde olduğu henüz bilinmiyor.
+  - Claude önerisi: **tek portföy**. WhatsApp hesabı (WABA) bir portföye bağlanınca taşımak zor → WhatsApp eklemeden önce karar. Kullanıcı tam yöneticiyse **eski portföy** kullanılsın (Instagram + Live uygulama orada, tek doğrulama hepsini kapsar, eski hesap). Portföy görünen adı "VOLONTE" yapılabilir; doğrulamada esas olan işletme bilgilerindeki resmi ad = HEMRA ARTYKOV (vergi levhası) + adres. Yeni HEMRA ARTYKOV portföyü boş bırakılır, silinmez. Karar kullanıcıda.
+
+**Sıradaki komut: Komut 4b — eski portföyde yetki ve uygulama kontrolü (tam kontrol var mı, Volonte CRM hangi portföyde), sonra portföy kararı. WhatsApp ürünü henüz EKLENMEYECEK.**
 
 ## Kapsam kararı (24 Eylül 2026)
 
