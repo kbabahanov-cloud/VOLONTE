@@ -60,7 +60,7 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: ANA PLAN → Komut 4c (eski portföyün işletme bilgileri; aşağıya bak).**
+**Sıradaki komut: ANA PLAN → Komut 4 (Volonte portföyünde doğrulamayı başlatma; aşağıya bak).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
@@ -102,10 +102,10 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 
 - [x] Komut 4b (20 Ekim): eski portföyde Murat Babahanov **tam erişimli**. **Volonte CRM** uygulaması bu portföyde, kimlik **884729331246890**, **Live**. Uygulamada tam erişimli 2 kişi: Murat Babahanov + **"Volonte API" sistem kullanıcısı** (kimin açtığı teyit edilecek). HEMRA ARTYKOV portföyü başka bir Facebook hesabından açılmış, kullanıcının hesabında görünmüyor → dokunulmayacak.
 - **KARAR (kullanıcı, 20 Ekim): eski portföyde ("спортивные костюмы из Турции") devam.** WhatsApp, doğrulama ve ileride Instagram hepsi burada.
-- [ ] Komut 4c: eski portföyde İşletme bilgileri → resmi ad HEMRA ARTYKOV, adres, telefon +90 501 335 11 11, web sitesi; portföy adı → VOLONTE (isteğe bağlı, geri alınabilir).
+- [x] Komut 4c (20 Ekim): kullanıcı girdi ve kaydetti: resmi ad HEMRA ARTYKOV, adres, şehir, posta kodu, telefon, web sitesi, vergi numarası. **Portföy adı artık "Volonte".** Durum: Doğrulanmamış (beklenen; doğrulama ayrıca başlatılır). Eski tanım: eski portföyde İşletme bilgileri → resmi ad HEMRA ARTYKOV, adres, telefon +90 501 335 11 11, web sitesi; portföy adı → VOLONTE (isteğe bağlı, geri alınabilir).
 - [ ] Sonra: Volonte CRM'e WhatsApp ürünü (test numarası) → Komut 4 (doğrulama, belge: vergi levhası).
 
-**Sıradaki komut: Komut 4c (eski portföyün işletme bilgileri).**
+**Sıradaki komut: Komut 4 — Güvenlik Merkezi'nde "Doğrulamayı başlat" butonu var mı? Varsa vergi levhasıyla başlat; yoksa Volonte CRM'e WhatsApp ürünü eklenir (4d).**
 
 ## Kapsam kararı (24 Eylül 2026)
 
