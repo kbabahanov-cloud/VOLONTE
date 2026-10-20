@@ -49,10 +49,11 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - [x] Komut 7 (20 Ekim, BOT_TOKEN secret olarak görüldü): kullanıcı Cloudflare panelinde Worker → Ayarlar → Değişkenler → `BOT_TOKEN` (Secret/Şifreli) girer.
 - [x] 20 Ekim 13:35 UTC: webhook kuruldu (`durum:webhook` = "kuruldu"). İlk denemeler başarısızdı: girilen şifrede boşluk vardı → kod artık BOT_TOKEN'ı `trim` ediyor ve her zamanlanmış çalışmanın sonucunu KV'de `durum:webhook` anahtarına yazıyor (hata ayıklamak için buradan okunur).
 - [x] 20 Ekim 13:50 UTC: kanal kaydı çalışıyor (13696–13697, CODE.3329 paylaşımı kaydedildi). `durum:webhook` artık `bekleyen`, `sonHata`, `bot` (getMe kullanıcı adı) alanlarını da yazıyor. Kullanıcının ilk /start mesajları (biri başka hesaptan) bota ulaşmadı, bekleyen: kaydı yok → yeniden /start istendi. Kullanıcı kuralı: eklemeden önce görülen isimler kullanıcıya gösterilecek, onay alınacak.
-- [ ] Komut 8: en geç 5 dk sonra webhook kendiliğinden kurulur; kullanıcı bota /start yazar; Claude `bekleyen:` kaydından kimliği bulup ALLOWED_IDS'e ekler; deneme (/son, kanala test paylaşımı).
+- [x] Komut 8 (20 Ekim): kullanıcı asıl hesabından /start yazdı → MURAT BABAHANOV (@MURATVOLNTE), kimlik **2005113508**. Kullanıcı "evet ekle" dedi → ALLOWED_IDS=`2005113508`. Worker güncellerken bu değeri koru.
+- [ ] Komut 9: deneme — kullanıcı bota /yardim, /son, /hafta yazar.
 - Not: Bota yabancı müşteri yazarsa şu an cevap yok. İstenirse "Sipariş için WhatsApp: +90 536 239 00 91" cevabı eklenebilir (müşteriye giden mesaj → onay gerekir).
 
-**Sıradaki komut: Komut 8 (kullanıcı bota /start yazar, Claude `bekleyen:` kaydından kimliği alıp ALLOWED_IDS'e ekler).**
+**Sıradaki komut: Komut 9 (bot denemesi: /yardim, /son, /hafta).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
