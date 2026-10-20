@@ -36,7 +36,8 @@ export default {
   // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
-    await webhookKontrol(env);
+    const durum = await webhookKontrol(env);
+    await env.KAYIT.put("durum:webhook", JSON.stringify({ durum, zaman: Math.floor(Date.now() / 1000) }));
   },
 };
 
@@ -44,7 +45,8 @@ export async function webhookKontrol(env) {
   if (!env.BOT_TOKEN || !env.SELF_URL) return "token-yok";
   const hedef = `${env.SELF_URL}/telegram`;
   const bilgi = await telegram(env, "getWebhookInfo", {});
-  if (bilgi.ok && bilgi.result.url === hedef) return "kurulu";
+  if (!bilgi.ok) return `hata: ${bilgi.error_code} ${bilgi.description}`;
+  if (bilgi.result.url === hedef) return "kurulu";
   const cevap = await telegram(env, "setWebhook", {
     url: hedef,
     secret_token: env.WEBHOOK_SECRET,
@@ -201,7 +203,8 @@ export async function haftaOzeti(env, simdi = Math.floor(Date.now() / 1000)) {
 // ---------- Yardımcılar ----------
 
 async function telegram(env, metod, govde) {
-  const r = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/${metod}`, {
+  const token = String(env.BOT_TOKEN || "").trim();
+  const r = await fetch(`https://api.telegram.org/bot${token}/${metod}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(govde),

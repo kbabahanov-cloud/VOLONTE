@@ -47,6 +47,7 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - Çözüm (kodda hazır, henüz yüklenmedi): 5 dakikada bir çalışan zamanlanmış görev `webhookKontrol` → BOT_TOKEN girilince webhook'u `SELF_URL/telegram` adresine kendisi kurar. Herkese açık kurulum sayfası fikri güvenlik kontrolüne takıldı, vazgeçildi.
 - [x] **Komut 6b: zamanlanmış görev onayı** (20 Ekim, kullanıcı onayladı; yüklendi, görev `*/5 * * * *` aktif, bağlantılar: ALLOWED_IDS, KAYIT, SELF_URL, WEBHOOK_SECRET).** Güvenlik kontrolü bunu da ayrı onay istedi. Yüklenecek: yeni kod + SELF_URL=`https://volonte-asistan.volonte.workers.dev` + schedules `*/5 * * * *` (ücretsiz). Güncellemede ALLOWED_IDS'i boşaltma — o anki değeri koru.
 - [x] Komut 7 (20 Ekim, BOT_TOKEN secret olarak görüldü): kullanıcı Cloudflare panelinde Worker → Ayarlar → Değişkenler → `BOT_TOKEN` (Secret/Şifreli) girer.
+- [x] 20 Ekim 13:35 UTC: webhook kuruldu (`durum:webhook` = "kuruldu"). İlk denemeler başarısızdı: girilen şifrede boşluk vardı → kod artık BOT_TOKEN'ı `trim` ediyor ve her zamanlanmış çalışmanın sonucunu KV'de `durum:webhook` anahtarına yazıyor (hata ayıklamak için buradan okunur).
 - [ ] Komut 8: en geç 5 dk sonra webhook kendiliğinden kurulur; kullanıcı bota /start yazar; Claude `bekleyen:` kaydından kimliği bulup ALLOWED_IDS'e ekler; deneme (/son, kanala test paylaşımı).
 - Not: Bota yabancı müşteri yazarsa şu an cevap yok. İstenirse "Sipariş için WhatsApp: +90 536 239 00 91" cevabı eklenebilir (müşteriye giden mesaj → onay gerekir).
 
