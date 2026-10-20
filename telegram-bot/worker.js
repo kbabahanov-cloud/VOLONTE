@@ -37,7 +37,18 @@ export default {
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
     const durum = await webhookKontrol(env);
-    await env.KAYIT.put("durum:webhook", JSON.stringify({ durum, zaman: Math.floor(Date.now() / 1000) }));
+    const kayit = { durum, zaman: Math.floor(Date.now() / 1000) };
+    if (env.BOT_TOKEN) {
+      const bilgi = await telegram(env, "getWebhookInfo", {});
+      if (bilgi.ok) {
+        kayit.bekleyen = bilgi.result.pending_update_count;
+        kayit.sonHata = bilgi.result.last_error_message || null;
+        kayit.sonHataZamani = bilgi.result.last_error_date || null;
+      }
+      const ben = await telegram(env, "getMe", {});
+      if (ben.ok) kayit.bot = ben.result.username;
+    }
+    await env.KAYIT.put("durum:webhook", JSON.stringify(kayit));
   },
 };
 
