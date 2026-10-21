@@ -3,8 +3,9 @@
 //        (fotoğraf/video işaretlemeye gerek yok) → result.json
 // Çalıştırma: node telegram-bot/ice-aktar.mjs result.json > kodlar-eski.json
 // Çıktı, botun "kodlar" kaydıyla aynı biçimdedir; Claude mevcut kayıtla birleştirip yükler.
+// Kodsuz dizin için: node telegram-bot/ice-aktar.mjs result.json kodsuz > kodsuz-eski.json
 import { readFileSync } from "node:fs";
-import { kodBul, kodEkle } from "./worker.js";
+import { kodBul, kodEkle, KODSUZ_KALIP } from "./worker.js";
 
 export function metinAl(m) {
   if (typeof m.text === "string") return m.text;
@@ -15,7 +16,7 @@ export function metinAl(m) {
 const medyaVar = (m) => Boolean(m.photo || m.media_type || m.file);
 
 // Albüm parçaları dışa aktarımda ayrı mesajlardır: arka arkaya, aynı saniyede, medyalı.
-export function gruplaVeDizinle(mesajlar) {
+export function grupla(mesajlar) {
   // Dışa aktarımda kimlik ve tarih bazen metin ("13696") olarak gelir.
   const liste = mesajlar
     .filter((m) => m.type === "message")
@@ -32,17 +33,38 @@ export function gruplaVeDizinle(mesajlar) {
       gruplar.push({ ids: [m.id], tarih, medya: medyaVar(m), metin: metinAl(m) });
     }
   }
+  return gruplar;
+}
+
+export function gruplaVeDizinle(mesajlar) {
   const kodlar = {};
-  for (const g of gruplar) {
+  for (const g of grupla(mesajlar)) {
     const kod = kodBul(g.metin);
     if (kod && g.medya) kodEkle(kodlar, kod, { ids: g.ids, tarih: g.tarih, album: null });
   }
   return kodlar;
 }
 
+// Kodsuz, medyalı, "AVAILABLE AGAIN" / "DISPONIBLE" yazan son 1 yılın paylaşımları.
+export function kodsuzDizin(mesajlar, simdi) {
+  const kodsuz = {};
+  for (const g of grupla(mesajlar)) {
+    if (!g.medya || kodBul(g.metin) || !KODSUZ_KALIP.test(g.metin)) continue;
+    if (g.tarih < simdi - 365 * 86400) continue;
+    kodsuz[`~${g.ids[0]}`] = { ids: g.ids, tarih: g.tarih, album: null };
+  }
+  return kodsuz;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const veri = JSON.parse(readFileSync(process.argv[2], "utf8"));
-  const kodlar = gruplaVeDizinle(veri.messages || []);
-  console.error(`${Object.keys(kodlar).length} kod bulundu.`);
-  process.stdout.write(JSON.stringify(kodlar));
+  if (process.argv[3] === "kodsuz") {
+    const kodsuz = kodsuzDizin(veri.messages || [], Math.floor(Date.now() / 1000));
+    console.error(`${Object.keys(kodsuz).length} kodsuz paylaşım bulundu.`);
+    process.stdout.write(JSON.stringify(kodsuz));
+  } else {
+    const kodlar = gruplaVeDizinle(veri.messages || []);
+    console.error(`${Object.keys(kodlar).length} kod bulundu.`);
+    process.stdout.write(JSON.stringify(kodlar));
+  }
 }

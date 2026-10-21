@@ -10,7 +10,9 @@
 //  4. Günlük yeniden paylaşım: her sabah 09:00'da izinli herkese en uzun süredir
 //     paylaşılmayan 10 modeli düğmelerle yollar. Onaylananlar sıraya girer ve
 //     09:00–21:00 arasında, aralarında 60–90 dk ile kanala paylaşılır.
-//     Günde en fazla 10 paylaşım (elle /paylas dahil). /kuyruk, /tekrar.
+//     Günde en fazla 10 paylaşım (elle /paylas dahil). /kuyruk. Bot hiçbir
+//     paylaşımı silmez. Son 1 yılın kodlu ve kodsuz ("AVAILABLE AGAIN" /
+//     "DISPONIBLE") paylaşımları önerilir; kodsuzlar "~<ilk mesaj id>" ile tutulur.
 //
 // KV ücretsiz katmanda günde 1000 yazma var; bu yüzden paylaşım başına
 // en fazla 3 yazma yapılır (ozet, gun, kodlar).
@@ -37,8 +39,8 @@ const SABAH_ADET = 10;
 const BEKLEME_GUN = 30; // bu kadar gündür paylaşılmayan modeller önerilir
 const ATLA_GUN = 7; // "Yok, atla" denen model bu kadar gün önerilmez
 const ARALIK_DK = [60, 90];
-const TEKRAR_KALIP = /available\s+again|back\s+in\s+stock|in\s+stock\s+again|restock|de\s+nouveau|à\s+nouveau|a\s+nouveau|encore\s+disponible|disponible\s+encore/i;
-const TEKRAR_UZUNLUK = 60;
+const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
+export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
 export default {
   async fetch(request, env) {
@@ -240,13 +242,24 @@ async function paylasimKaydet(post, env, duzenleme) {
   }
   if (degisti) await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
 
-  // "AVAILABLE AGAIN" gibi tekrar stok paylaşımları (/tekrar)
-  if (!duzenleme && TEKRAR_KALIP.test(metin)) {
-    const tekrar = (await env.KAYIT.get("tekrar", "json")) || [];
-    if (!tekrar.some((t) => t.id === kayit.id)) {
-      tekrar.unshift({ id: kayit.id, tarih: kayit.tarih, kod: kod, metin: kisalt(metin) });
-      await env.KAYIT.put("tekrar", JSON.stringify(tekrar.slice(0, TEKRAR_UZUNLUK)));
+  // Kodsuz "AVAILABLE AGAIN" / "DISPONIBLE" paylaşımları: kodsuz = { "~<ilk id>": { ids, tarih, album } }
+  if (!kod && (kayit.foto || kayit.video)) {
+    const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+    let kdegisti = false;
+    const albumdeki = kayit.album && Object.values(kodsuz).find((g) => g.album === kayit.album);
+    if (albumdeki) {
+      if (!albumdeki.ids.includes(kayit.id)) {
+        albumdeki.ids.push(kayit.id);
+        albumdeki.ids.sort((a, b) => a - b);
+        kdegisti = true;
+      }
+    } else if (KODSUZ_KALIP.test(metin) && !duzenleme) {
+      const ozetGirisi = ozet.sonlar.find((s) => s.ids.includes(kayit.id));
+      const ids = ozetGirisi ? [...ozetGirisi.ids].sort((a, b) => a - b) : [kayit.id];
+      kodsuz[`~${ids[0]}`] = { ids, tarih: kayit.tarih, album: kayit.album };
+      kdegisti = true;
     }
+    if (kdegisti) await env.KAYIT.put("kodsuz", JSON.stringify(kodsuz));
   }
 }
 
@@ -285,8 +298,6 @@ async function mesajIsle(msg, env) {
     return paylasOnizle(msg, env);
   } else if (komut === "/kuyruk") {
     return kuyrukGoster(msg.chat.id, env);
-  } else if (komut === "/tekrar") {
-    cevap = await tekrarListesi(env);
   } else {
     cevap = YARDIM;
   }
@@ -301,7 +312,6 @@ const YARDIM = [
   "/paylas 3329 — o kodun son paylaşımını önizle, onaylarsan kanalda tekrar paylaş",
   "/paylas 3329 2 — aynı kodun bir önceki paylaşımı",
   "/kuyruk — onaylanıp paylaşılmayı bekleyenler (iptal edilebilir)",
-  "/tekrar — \"AVAILABLE AGAIN\" paylaşımları ve tarihleri",
   "/yardim — bu liste",
   "",
   "Kanala yapılan her paylaşımı otomatik kaydediyorum.",
@@ -427,9 +437,16 @@ export async function kanaldaPaylas(env, kod, ids, simdi) {
   }
   const yeniIds = sonuc.result.map((r) => r.message_id);
 
-  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
-  kodEkle(kodlar, kod, { ids: yeniIds, tarih: simdi, album: null });
-  await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
+  if (kodsuzMu(kod)) {
+    // Anahtar aynı kalır; sonraki paylaşım en yeni kopyadan yapılır.
+    const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+    kodsuz[kod] = { ids: yeniIds, tarih: simdi, album: null };
+    await env.KAYIT.put("kodsuz", JSON.stringify(kodsuz));
+  } else {
+    const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+    kodEkle(kodlar, kod, { ids: yeniIds, tarih: simdi, album: null });
+    await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
+  }
   const gun = gunAnahtari(simdi);
   await env.KAYIT.put(`gun:${gun}`, String(Number((await env.KAYIT.get(`gun:${gun}`)) || 0) + 1));
   await env.KAYIT.put(`sayac:${gun}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
@@ -457,13 +474,19 @@ export async function rotasyon(env, simdi) {
   await siradakiniPaylas(env, simdi);
 }
 
-export function adaylar(kodlar, atlananlar, kuyruktakiler, simdi) {
-  const sinir = simdi - BEKLEME_SN;
-  return Object.entries(kodlar)
-    .filter(([kod, liste]) => liste.length && liste[0].tarih < sinir)
-    .filter(([kod]) => !(atlananlar[kod] > simdi) && !kuyruktakiler.includes(kod))
-    .sort((a, b) => a[1][0].tarih - b[1][0].tarih)
-    .map(([kod, liste]) => ({ kod, ids: liste[0].ids, tarih: liste[0].tarih }));
+const kodsuzMu = (kod) => kod.startsWith("~");
+const kodGoster = (kod) => (kodsuzMu(kod) ? "Kodsuz paylaşım" : kod);
+
+// En uzun süredir paylaşılmayan önce. Son paylaşımı 30 günden eski, 1 yıldan yeni olanlar.
+export function adaylar(kodlar, kodsuz, atlananlar, kuyruktakiler, simdi) {
+  const hepsi = [
+    ...Object.entries(kodlar).filter(([, l]) => l.length).map(([kod, l]) => ({ kod, ids: l[0].ids, tarih: l[0].tarih })),
+    ...Object.entries(kodsuz).map(([kod, g]) => ({ kod, ids: g.ids, tarih: g.tarih })),
+  ];
+  return hepsi
+    .filter((a) => a.tarih < simdi - BEKLEME_SN && a.tarih >= simdi - YIL_SN)
+    .filter((a) => !(atlananlar[a.kod] > simdi) && !kuyruktakiler.includes(a.kod))
+    .sort((a, b) => a.tarih - b.tarih || a.ids[0] - b.ids[0]);
 }
 const BEKLEME_SN = BEKLEME_GUN * 86400;
 
@@ -485,12 +508,13 @@ async function sabahListesi(env, simdi) {
 
   const kanal = await env.KAYIT.get("kanal", "json");
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+  const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
   const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
   const kuyruk = await kuyrukListesi(env);
   const kisiler = kisilerden(env);
   if (!kanal || !kisiler.length) return;
 
-  const liste = adaylar(kodlar, atlananlar, kuyruk.map((k) => k.kod), simdi);
+  const liste = adaylar(kodlar, kodsuz, atlananlar, kuyruk.map((k) => k.kod), simdi);
   for (const kisi of kisiler) {
     await telegram(env, "sendMessage", {
       chat_id: kisi,
@@ -502,10 +526,11 @@ async function sabahListesi(env, simdi) {
 
   // Telegram çağrı sınırı (ücretsiz katman 50) için en fazla 14 aday denenir.
   let gonderilen = 0;
+  const silinenler = [];
   for (const aday of liste.slice(0, SABAH_ADET + 4)) {
     if (gonderilen >= SABAH_ADET) break;
     const gunOnce = Math.floor((simdi - aday.tarih) / 86400);
-    const yazi = `${aday.kod} · son paylaşım ${tarihYaz(aday.tarih).slice(0, 5)}.${new Date((aday.tarih + SAAT_FARKI) * 1000).getUTCFullYear()} (${gunOnce} gün önce)`;
+    const yazi = `${kodGoster(aday.kod)} · son paylaşım ${tarihUzun(aday.tarih)} (${gunOnce} gün önce)`;
     const mesajlar = [];
     for (const kisi of kisiler) {
       const r = await telegram(env, "copyMessage", {
@@ -519,14 +544,19 @@ async function sabahListesi(env, simdi) {
         ]] },
       });
       if (r.ok) mesajlar.push([kisi, r.result.message_id]);
-      else if (/not found|to copy/i.test(r.description || "")) break; // kanaldan silinmiş
+      else if (/not found|to copy/i.test(r.description || "")) { silinenler.push(aday.kod); break; } // kanaldan silinmiş
     }
     if (mesajlar.length) {
-      sabah.mesajlar[aday.kod] = { ids: aday.ids, yazi, mesajlar };
+      sabah.mesajlar[aday.kod] = { ids: aday.ids, tarih: aday.tarih, yazi, mesajlar };
       gonderilen += 1;
     }
   }
   await env.KAYIT.put(`sabah:${gun}`, JSON.stringify(sabah), { expirationTtl: 3 * 86400 });
+  // Kanalda bulunamayanlar bir yıl önerilmez (bot hiçbir şeyi silmez, sadece listeden düşer).
+  if (silinenler.length) {
+    for (const kod of silinenler) atlananlar[kod] = simdi + YIL_SN;
+    await env.KAYIT.put("atlananlar", JSON.stringify(atlananlar));
+  }
 }
 
 async function sabahSecimi(cq, env) {
@@ -545,7 +575,7 @@ async function sabahSecimi(cq, env) {
 
   let sonYazi;
   if (islem === "r1") {
-    await env.KAYIT.put(`kuyruk:${kod}`, JSON.stringify({ kod, ids: oge.ids, kim, zaman: simdi }));
+    await env.KAYIT.put(`kuyruk:${kod}`, JSON.stringify({ kod, ids: oge.ids, tarih: oge.tarih, kim, zaman: simdi }));
     sonYazi = `${oge.yazi}\n✅ ${kim} onayladı — sıraya alındı (/kuyruk).`;
     await cevapla("Sıraya alındı ✅");
   } else {
@@ -576,9 +606,10 @@ async function siradakiniPaylas(env, simdi) {
   await env.KAYIT.put("sonraki", String(simdi + aralik));
 
   const sonuc = await kanaldaPaylas(env, oge.kod, oge.ids, simdi);
+  const ad = kodGoster(oge.kod);
   const metin = sonuc.ok
-    ? `✅ ${oge.kod} kanalda paylaşıldı (${oge.kim} onaylamıştı).${sonuc.link ? "\n" + sonuc.link : ""}`
-    : `⚠️ ${oge.kod} paylaşılamadı: ${sonuc.hata}`;
+    ? `✅ ${ad} kanalda paylaşıldı (${oge.kim} onaylamıştı).${sonuc.link ? "\n" + sonuc.link : ""}`
+    : `⚠️ ${ad} paylaşılamadı: ${sonuc.hata}`;
   for (const kisi of kisilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: metin, disable_web_page_preview: true });
 }
 
@@ -598,7 +629,7 @@ async function kuyrukGoster(sohbet, env) {
       t = sabahBaslangici(t, s >= SABAH_SAATI);
       hak = GUNLUK_SINIR;
     }
-    const satir = `${i + 1}) ${o.kod} — tahmini ${tarihYaz(t)} (${o.kim} onayladı)`;
+    const satir = `${i + 1}) ${kodGoster(o.kod)}${kodsuzMu(o.kod) ? ` (${tarihUzun(o.tarih)} tarihli)` : ""} — tahmini ${tarihYaz(t)} (${o.kim} onayladı)`;
     t += 75 * 60;
     hak -= 1;
     return satir;
@@ -606,7 +637,7 @@ async function kuyrukGoster(sohbet, env) {
   return telegram(env, "sendMessage", {
     chat_id: sohbet,
     text: `Sıradaki paylaşımlar (bugün kalan hak: ${kalan}/${GUNLUK_SINIR}):\n\n${satirlar.join("\n")}\n\nİptal etmek için düğmeye basın:`,
-    reply_markup: { inline_keyboard: kuyruk.map((o) => [{ text: `❌ ${o.kod} iptal`, callback_data: `kq:${o.kod}` }]) },
+    reply_markup: { inline_keyboard: kuyruk.map((o, i) => [{ text: `❌ ${i + 1}) ${kodGoster(o.kod)} iptal`, callback_data: `kq:${o.kod}` }]) },
   });
 }
 
@@ -619,22 +650,11 @@ function sabahBaslangici(t, yarin) {
 async function kuyrukIptal(cq, env) {
   const kod = cq.data.slice(3);
   const oge = await env.KAYIT.get(`kuyruk:${kod}`, "json");
-  if (!oge) return telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: `${kod} sırada değil (paylaşılmış ya da iptal edilmiş olabilir).` });
+  const ad = kodGoster(kod);
+  if (!oge) return telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: `${ad} sırada değil (paylaşılmış ya da iptal edilmiş olabilir).` });
   await env.KAYIT.delete(`kuyruk:${kod}`);
-  await telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: `${kod} iptal edildi` });
-  return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `❌ ${kod} sıradan çıkarıldı (${kisiAdi(cq.from)}). Kanala paylaşılmayacak.` });
-}
-
-export async function tekrarListesi(env) {
-  const tekrar = (await env.KAYIT.get("tekrar", "json")) || [];
-  if (!tekrar.length) return "\"AVAILABLE AGAIN\" türü kayıtlı paylaşım yok.";
-  const kanal = await env.KAYIT.get("kanal", "json");
-  const satirlar = tekrar.slice(0, 20).map((t, i) => {
-    const tarih = new Date((t.tarih + SAAT_FARKI) * 1000).toISOString().slice(0, 10).split("-").reverse().join(".");
-    const link = kanal && kanal.kullanici ? `https://t.me/${kanal.kullanici}/${t.id}` : "";
-    return `${i + 1}) ${tarih}${t.kod ? " · " + t.kod : ""} — ${t.metin}\n   ${link}`;
-  });
-  return `Tekrar stoğa giren paylaşımlar (en yeni ${satirlar.length} / ${tekrar.length}):\n\n${satirlar.join("\n")}`;
+  await telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "İptal edildi" });
+  return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `❌ ${ad} sıradan çıkarıldı (${kisiAdi(cq.from)}). Kanala paylaşılmayacak; kanalda hiçbir şey silinmedi.` });
 }
 
 // ---------- Yardımcılar ----------
@@ -658,6 +678,10 @@ function gizliEsit(a, b) {
 
 export function gunAnahtari(unix) {
   return new Date((unix + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
+}
+
+function tarihUzun(unix) {
+  return new Date((unix + SAAT_FARKI) * 1000).toISOString().slice(0, 10).split("-").reverse().join(".");
 }
 
 function tarihYaz(unix) {
