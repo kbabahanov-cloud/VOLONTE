@@ -6,6 +6,7 @@
 // Günlük paylaşım sınırı ve saatler sohbetle değiştirilemez.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { sinirAsildiMi, harcamaEkle, SINIR_MESAJI } from "./harcama.js";
 
 const VARSAYILAN_MODEL = "claude-opus-5-5";
 const GUNLUK_MESAJ_SINIRI = 100; // fatura güvenliği: günde en fazla bu kadar asistan mesajı
@@ -68,6 +69,7 @@ export async function asistanCevapla(msg, env, yardimci, simdi) {
     return yaz("Yapay zekâ henüz bağlı değil (Anthropic anahtarı girilmemiş). Komutlar çalışıyor: /yardim");
   }
 
+  if (await sinirAsildiMi(env, simdi)) return yaz(SINIR_MESAJI);
   const gun = yardimci.gunAnahtari(simdi);
   const sayac = Number((await env.KAYIT.get(`ai:${gun}`)) || 0);
   if (sayac >= GUNLUK_MESAJ_SINIRI) {
@@ -84,8 +86,9 @@ export async function asistanCevapla(msg, env, yardimci, simdi) {
   let cevap = "";
   try {
     for (let tur = 0; tur < EN_FAZLA_TUR; tur++) {
+      const model = env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;
       const response = await client.beta.messages.create({
-        model: env.ANTHROPIC_MODEL || VARSAYILAN_MODEL,
+        model,
         max_tokens: 4000,
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
@@ -94,6 +97,7 @@ export async function asistanCevapla(msg, env, yardimci, simdi) {
         tools: ARACLAR,
         messages,
       });
+      await harcamaEkle(env, model, response.usage, simdi);
 
       if (response.stop_reason === "refusal") {
         cevap = "Bu isteğe cevap veremiyorum. Başka türlü sorabilir misiniz?";

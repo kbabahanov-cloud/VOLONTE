@@ -7,6 +7,7 @@
 //    fotoğrafı adayların fotoğraflarıyla yan yana karşılaştırılır → sonuç ve güven.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { sinirAsildiMi, harcamaEkle, SINIR_MESAJI } from "./harcama.js";
 
 const VARSAYILAN_MODEL = "claude-opus-5-5";
 
@@ -39,9 +40,11 @@ export async function dosyaIndir(env, tg, fileId) {
 const gorsel = (data) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
 
 async function jsonIste(env, { system, content, schema, maxTokens = 2000 }) {
+  if (await sinirAsildiMi(env)) throw new Error(SINIR_MESAJI);
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 50_000 });
+  const model = env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;
   const response = await client.beta.messages.create({
-    model: env.ANTHROPIC_MODEL || VARSAYILAN_MODEL,
+    model,
     max_tokens: maxTokens,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
@@ -49,6 +52,7 @@ async function jsonIste(env, { system, content, schema, maxTokens = 2000 }) {
     ...(system ? { system } : {}),
     messages: [{ role: "user", content }],
   });
+  await harcamaEkle(env, model, response.usage);
   if (response.stop_reason === "refusal") throw new Error("model isteği reddetti");
   const metin = response.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   return JSON.parse(metin);

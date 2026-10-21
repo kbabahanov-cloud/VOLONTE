@@ -37,6 +37,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
+import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
 const KANAL_ADI = "Volonteroseoffical";
@@ -123,6 +124,13 @@ async function durumKontrol(env) {
       (onceki.durum === kayit.durum || (onceki.durum === "kuruldu" && kayit.durum === "kurulu"));
     if (!ayniDurum || kayit.zaman - (onceki.zaman || 0) > 3600) {
       await env.KAYIT.put("durum:webhook", JSON.stringify(kayit));
+    }
+    // Aylık yapay zekâ harcaması %80'i geçince bir kez haber ver.
+    const harcanan = await buAyHarcanan(env, kayit.zaman);
+    const uyariAnahtari = `${ayAnahtari(kayit.zaman)}:uyari`;
+    if (env.BOT_TOKEN && harcanan >= AYLIK_SINIR_USD * UYARI_ORANI && !(await env.KAYIT.get(uyariAnahtari))) {
+      await env.KAYIT.put(uyariAnahtari, "1", { expirationTtl: 70 * 86400 });
+      await herkese(env, `⚠️ Bu ay yapay zekâya yaklaşık ${harcanan.toFixed(2)} $ harcandı (sınır ${AYLIK_SINIR_USD} $). Sınıra gelince yapay zekâ cevapları ve fotoğraf tanıma ay sonuna kadar durur; turlar ve komutlar çalışır.`);
     }
 }
 
@@ -554,12 +562,14 @@ const kisiAdi = (from) => [from.first_name, from.last_name].filter(Boolean).join
 // Zamanlanmış görevden her 5 dakikada çağrılır.
 export async function rotasyon(env, simdi) {
   await silmeDevam(env);
-  try {
-    await katalogAdimi(env, simdi);
-  } catch (e) {
-    // Görülebilsin diye son hata KV'ye yazılır (Claude Code okur).
-    const ayrinti = e && (e.status ? `${e.status} ${e.message}` : e.message || String(e));
-    await env.KAYIT.put("katalogHata", JSON.stringify({ zaman: simdi, hata: String(ayrinti).slice(0, 800) }), { expirationTtl: 7 * 86400 });
+  // Zamanlanmış görev her seferinde farklı ülkedeki bir veri merkezinde çalışıyor ve
+  // Anthropic bazılarından gelen istekleri reddediyor (403). Katalog adımı bu yüzden
+  // Kuzey Amerika'ya sabitlenmiş bir Durable Object içinde çalışır.
+  if (env.KATALOG) {
+    const nesne = env.KATALOG.get(env.KATALOG.idFromName("katalog"), { locationHint: "enam" });
+    await nesne.fetch("https://katalog/adim");
+  } else {
+    await katalogGuvenli(env, simdi);
   }
   let tur = await env.KAYIT.get("tur", "json");
   const gun = gunAnahtari(simdi);
@@ -973,6 +983,26 @@ async function kuyrukIptal(cq, env) {
 
 // ---------- Fotoğraf tanıma: katalog ve tanıma ----------
 
+export class KatalogDO {
+  constructor(state, env) {
+    this.env = env;
+  }
+  async fetch() {
+    await katalogGuvenli(this.env, Math.floor(Date.now() / 1000));
+    return new Response("ok");
+  }
+}
+
+async function katalogGuvenli(env, simdi) {
+  try {
+    await katalogAdimi(env, simdi);
+  } catch (e) {
+    // Görülebilsin diye son hata KV'ye yazılır (Claude Code okur).
+    const ayrinti = e && (e.status ? `${e.status} ${e.message}` : e.message || String(e));
+    await env.KAYIT.put("katalogHata", JSON.stringify({ zaman: simdi, hata: String(ayrinti).slice(0, 800) }), { expirationTtl: 7 * 86400 });
+  }
+}
+
 // Katalogdaki her model için kanaldaki en yeni paylaşımın ilk medyası (silinenler hariç).
 export function katalogListesi(kodlar, kodsuz, silinenler) {
   const liste = [];
@@ -987,6 +1017,7 @@ export function katalogListesi(kodlar, kodsuz, silinenler) {
 export async function katalogAdimi(env, simdi) {
   const arsiv = await env.KAYIT.get("arsiv", "json");
   if (!arsiv || !env.ANTHROPIC_API_KEY || !env.BOT_TOKEN) return;
+  if (await sinirAsildiMi(env, simdi)) return;
   const gunAn = `katalog:${gunAnahtari(simdi)}`;
   const cagri = Number((await env.KAYIT.get(gunAn)) || 0);
   if (cagri >= KATALOG_GUNLUK_CAGRI) return;
@@ -1036,6 +1067,7 @@ async function fotoTani(msg, env, simdi) {
   const sohbet = msg.chat.id;
   const yaz = (text) => telegram(env, "sendMessage", { chat_id: sohbet, text, disable_web_page_preview: true });
   if (!env.ANTHROPIC_API_KEY) return yaz("Fotoğraf tanıma için yapay zekâ bağlı değil.");
+  if (await sinirAsildiMi(env, simdi)) return yaz(SINIR_MESAJI);
   const tarifler = (await env.KAYIT.get("tarifler", "json")) || {};
   const silinenler = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
   const katalog = Object.entries(tarifler).filter(([k, v]) => !silinenler[k] && !/kıyafet yok/i.test(v.t));
@@ -1130,6 +1162,7 @@ function asistanYardimcilari(env) {
         await haftaOzeti(env, simdi),
         `Sırada bekleyen onaylı paylaşım: ${kuyruk.length}${kuyruk.length ? " — " + kuyruk.map((o) => kodGoster(o.kod)).join(", ") : ""}.`,
         turDurumu,
+        `Bu ay yapay zekâ harcaması (tahmini): ${(await buAyHarcanan(env, simdi)).toFixed(2)} $ / ${AYLIK_SINIR_USD} $.`,
         `Kurallar: bir turun ${TUR_ADET} onayı tamamlanmadan o turun paylaşımı başlamaz; tamamlanınca sonraki tur hemen açılır. Paylaşım ${SABAH_SAATI}:00–${AKSAM_SAATI}:00, ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla, günde en fazla ${GUNLUK_SINIR}.`,
       ].join("\n");
     },

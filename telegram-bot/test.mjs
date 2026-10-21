@@ -892,3 +892,27 @@ test("fotoğraf tanıma: katalog yoksa söyler, yapay zekâ çağrılmaz", async
   assert.equal(o.istekler.length, 0);
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /Kemal arşiv/);
 });
+
+// ---------- Aylık harcama sınırı ----------
+
+test("harcama: her çağrının maliyeti toplanır; 60 $ dolunca asistan, tanıma ve katalog durur", async () => {
+  const { maliyetUsd, ayAnahtari } = await import("./harcama.js");
+  assert.equal(maliyetUsd("claude-opus-5-5", { input_tokens: 1_000_000 }), 4);
+  assert.equal(maliyetUsd("claude-opus-5-5", { output_tokens: 1000, cache_read_input_tokens: 1_000_000, cache_creation_input_tokens: 1_000_000 }), 0.02 + 0.2 + 5);
+  const o = tanimaOrtami([{ ...mesaj(1, "Merhaba"), usage: { input_tokens: 2000, output_tokens: 500 } }]);
+  const su = Math.floor(Date.now() / 1000);
+  await yazi(o.env, 111, "merhaba");
+  assert.equal(o.depo.get(ayAnahtari(su)), String(2000 * 4 + 500 * 20)); // mikro-dolar: 0,018 $
+  o.depo.set(ayAnahtari(su), String(60_000_000));
+  await yazi(o.env, 111, "tekrar merhaba");
+  assert.equal(o.istekler.length, 1);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /60 \$ yapay zekâ harcama sınırına ulaşıldı/);
+  tanimaHazir(o);
+  await foto(o.env, 111);
+  assert.equal(o.istekler.length, 1);
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
+  o.depo.delete("tarifler");
+  await katalogAdimi(o.env, su);
+  assert.equal(o.istekler.length, 1);
+  assert.equal(cagrilar(o.gonderilen, "forwardMessage").length, 0);
+});
