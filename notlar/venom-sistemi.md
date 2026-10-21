@@ -71,12 +71,18 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - **Asistan** (`telegram-bot/asistan.js`): "/" ile başlamayan yazılar → Claude (`ANTHROPIC_MODEL`=claude-opus-5-5, effort low, `fallbacks: "default"`, strict araçlar). Araçlar: durum_ozeti, model_bilgisi, liste_gonder, durum_isaretle, hic_gelmeyecek_onayi_iste, paylasim_onizle, kuyruk_goster. Paylaşma/silme aracı YOK — sadece onay düğmesi. Sınırlar sohbetle değişmez. Günde 100 asistan mesajı (`ai:<gün>`), geçmiş `sohbet:<id>` son 10 metin, 2 gün. Anahtar `ANTHROPIC_API_KEY` Worker secret (kullanıcı girecek).
   - Paketleme: `telegram-bot/` npm projesi; `npm test` (40 test), `npm run build` → `dist/worker.js` (~515 KB, esbuild, platform browser). Yüklemede dist/worker.js gönderilir; bindings: KAYIT, ALLOWED_IDS, SELF_URL, ANTHROPIC_MODEL (+ secret'lar keep_bindings ile korunur).
   - 21 Ekim durum: ilk listede 6 onay (1'i paylaşıldı, sıradaki 13:28), 4 "yok".
+- [x] **Tur sistemi (21 Ekim, kullanıcı onayladı: "onay a"; yüklendi, 40 test):** önceki 4 düğmeli günlük listenin yerine geçer.
+  - Düğmeler: ✅ Onaylıyorum (`t1:<tur>:<kod>`), ⏳ Beklesin 7 gün (`t7`), 🗑️ Sil (`tx` → sadece basanda "Evet, hepsini sil `ty` / Vazgeç `tv`"). Asistanın silme onayı `ty:-:<kod>`. Eski `r*` düğmeleri artık "eski liste" der.
+  - `tur` KV: {no, durum toplaniyor|paylasiliyor|bitti, basla, bitis, onaylar[], ogeler{kod:{ids,tarih,yazi,mesajlar,karar,kim}}}. 09:00'da (tur yoksa ya da bitmiş ve bitişi bugünden önceyse) yeni tur: en eski 10 aday. Beklesin/Sil → hemen yerine 1 yeni aday (ikisine). 10 onay → `kuyruk:<kod>` (tur no ile) + "10 onay tamam" → 09:00–21:00, 90–120 dk arayla (`ARALIK_DK`); tur öncesi sıradakiler 60–90 (`ESKI_ARALIK_DK`). Tur kuyruğu bitince "bitti" (her saat kontrol), ertesi sabah yeni tur. Tur sürerken her sabah bir kez hatırlatma (`hatirlatma:<gün>`). Aday kalmaz ve bekleyen yoksa: onay varsa onlarla paylaşıma geçer, yoksa tur biter.
+  - Hız (kullanıcı kararı A): 1,5–2 saat aralık, günde ~6–8 paylaşım; 10 paylaşım ~1,5 gün.
+  - Silme adımı 20 mesaj/çalışma. Asistan araçları: durum_ozeti (tur durumu dahil), model_bilgisi, beklesin, sil_onayi_iste, paylasim_onizle, kuyruk_goster (ek liste kaldırıldı).
+  - 21 Ekim 13:10: `tur` = {no:0, durum:"bitti"} elle yazıldı → **1. tur 22 Ekim 09:00**. Bugünkü 5 eski onay (3194, 3244, 3399, 3415, 988) 60–90 dk arayla bugün paylaşılıyor (ilki 13:28).
 - [ ] Komut A1: kullanıcı platform.claude.com hesabı, ön ödemeli kredi (otomatik yükleme KAPALI), aylık harcama sınırı (öneri 30 $), API anahtarı → Cloudflare secret `ANTHROPIC_API_KEY`.
 - [ ] Komut A2: kanalda bota "Başkalarının mesajlarını sil" yetkisi.
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: Komut A1 (Anthropic hesabı + anahtar), sonra A2 (silme yetkisi). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
+**Sıradaki komut: Komut A2 (kanalda silme yetkisi — yarınki turda "Sil" için), sonra A1 (Anthropic hesabı + anahtar). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
