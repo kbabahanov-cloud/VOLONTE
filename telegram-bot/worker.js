@@ -28,15 +28,24 @@
 //  KAYIT           KV bağlantısı.
 //  ANTHROPIC_API_KEY  secret — kullanıcı kendisi girer (yapay zekâ asistanı, asistan.js).
 //  ANTHROPIC_MODEL    düz metin, isteğe bağlı — varsayılan claude-opus-5-5.
+//  5. Fotoğraftan model tanıma (tanima.js): izinli kişi bota fotoğraf gönderince
+//     katalogdaki tariflerden adaylar seçilir, fotoğraflar karşılaştırılır. Katalog
+//     gizli "Kemal arşiv" kanalı (bot oraya yönetici eklenince bağlanır) üzerinden
+//     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
-import { asistanCevapla, anahtarKontrol } from "./asistan.js";
+import Anthropic from "@anthropic-ai/sdk";
+import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
+import { medyaDosyasi, dosyaIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
 const KANAL_ADI = "Volonteroseoffical";
 const OZET_UZUNLUK = 30;
 const KOD_BASINA = 200; // her kod için saklanan paylaşım sayısı ("Sil" hepsini silebilsin)
-const GUNCELLEMELER = ["message", "channel_post", "edited_channel_post", "callback_query"];
+const GUNCELLEMELER = ["message", "channel_post", "edited_channel_post", "callback_query", "my_chat_member"];
+const KATALOG_PARTI = 8; // bir çalışmada tarif edilen görsel
+const KATALOG_GUNLUK_CAGRI = 150; // fatura güvenliği: günde en fazla katalog çağrısı
+const TANIMA_ADAY = 5;
 
 // Günlük yeniden paylaşım ayarları
 const SABAH_SAATI = 8; // paylaşım bu saatte başlar (ilk tur / hatırlatma da)
@@ -137,10 +146,35 @@ export async function webhookKontrol(env) {
 }
 
 export async function guncellemeIsle(update, env) {
-  if (update.channel_post) return paylasimKaydet(update.channel_post, env, false);
-  if (update.edited_channel_post) return paylasimKaydet(update.edited_channel_post, env, true);
+  const post = update.channel_post || update.edited_channel_post;
+  if (post) {
+    // Sadece VOLONTE kanalı kaydedilir (arşiv kanalı ya da başka kanal değil).
+    if (!(await anaKanalMi(post.chat, env))) return;
+    return paylasimKaydet(post, env, Boolean(update.edited_channel_post));
+  }
+  if (update.my_chat_member) return uyelikIsle(update.my_chat_member, env);
   if (update.message) return mesajIsle(update.message, env);
   if (update.callback_query) return dugmeIsle(update.callback_query, env);
+}
+
+async function anaKanalMi(chat, env) {
+  const kanal = await env.KAYIT.get("kanal", "json");
+  return kanal ? chat.id === kanal.id : chat.username === KANAL_ADI;
+}
+
+// Bot bir kanala yönetici eklenince: izinli kişi eklediyse orası "Kemal arşiv" olur.
+async function uyelikIsle(m, env) {
+  if (!m.chat || m.chat.type !== "channel" || (await anaKanalMi(m.chat, env))) return;
+  const durum = m.new_chat_member && m.new_chat_member.status;
+  const arsiv = await env.KAYIT.get("arsiv", "json");
+  if (durum === "administrator" && izinliMi(m.from.id, env)) {
+    await env.KAYIT.put("arsiv", JSON.stringify({ id: m.chat.id, ad: m.chat.title || "" }));
+    const toplam = katalogListesi((await env.KAYIT.get("kodlar", "json")) || {}, (await env.KAYIT.get("kodsuz", "json")) || {}, {}).length;
+    await herkese(env, `📦 "${m.chat.title || "Arşiv"}" kanalı Kemal arşivi olarak bağlandı (${kisiAdi(m.from)}). Fotoğraf tanıma için ${toplam} modelin kataloğunu hazırlamaya başlıyorum; birkaç saat sürer, bitince haber veririm. Bu kanala dokunmayın, sadece bot kullanır.`);
+  } else if ((durum === "left" || durum === "kicked") && arsiv && arsiv.id === m.chat.id) {
+    await env.KAYIT.delete("arsiv");
+    await herkese(env, `📦 Kemal arşiv kanalından çıkarıldı; yeni modellerin kataloğu hazırlanamaz. Fotoğraf tanıma mevcut katalogla çalışmaya devam eder.`);
+  }
 }
 
 // ---------- Kanal paylaşımları ----------
@@ -334,8 +368,8 @@ async function mesajIsle(msg, env) {
 
   const komut = (msg.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   let cevap;
-  if (msg.photo) {
-    cevap = "Ekran görüntüsü geldi. Şimdilik reklam analizini Claude sohbetinde yapıyoruz — aynı görüntüyü oraya da gönderin.";
+  if (medyaDosyasi(msg, 0)) {
+    return fotoTani(msg, env, Math.floor(Date.now() / 1000));
   } else if (komut === "/son") {
     cevap = await sonPaylasimlar(env);
   } else if (komut === "/hafta") {
@@ -520,6 +554,11 @@ const kisiAdi = (from) => [from.first_name, from.last_name].filter(Boolean).join
 // Zamanlanmış görevden her 5 dakikada çağrılır.
 export async function rotasyon(env, simdi) {
   await silmeDevam(env);
+  try {
+    await katalogAdimi(env, simdi);
+  } catch (e) {
+    console.log("katalog adımı hatası", e && e.message);
+  }
   let tur = await env.KAYIT.get("tur", "json");
   const gun = gunAnahtari(simdi);
 
@@ -929,6 +968,130 @@ async function kuyrukIptal(cq, env) {
   await telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "İptal edildi" });
   return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `❌ ${ad} sıradan çıkarıldı (${kisiAdi(cq.from)}). Kanala paylaşılmayacak; kanalda hiçbir şey silinmedi.` });
 }
+
+// ---------- Fotoğraf tanıma: katalog ve tanıma ----------
+
+// Katalogdaki her model için kanaldaki en yeni paylaşımın ilk medyası (silinenler hariç).
+export function katalogListesi(kodlar, kodsuz, silinenler) {
+  const liste = [];
+  for (const kod of [...Object.keys(kodlar), ...Object.keys(kodsuz)]) {
+    if (silinenler[kod]) continue;
+    const sec = modelSecenekleri(kod, kodlar, kodsuz)[0];
+    if (sec) liste.push({ kod, mesaj: sec.ids[0] });
+  }
+  return liste;
+}
+
+export async function katalogAdimi(env, simdi) {
+  const arsiv = await env.KAYIT.get("arsiv", "json");
+  if (!arsiv || !env.ANTHROPIC_API_KEY || !env.BOT_TOKEN) return;
+  const gunAn = `katalog:${gunAnahtari(simdi)}`;
+  const cagri = Number((await env.KAYIT.get(gunAn)) || 0);
+  if (cagri >= KATALOG_GUNLUK_CAGRI) return;
+
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const tarifler = (await env.KAYIT.get("tarifler", "json")) || {};
+  const hatalar = (await env.KAYIT.get("tarifhata", "json")) || {};
+  const silinenler = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+  const tum = katalogListesi((await env.KAYIT.get("kodlar", "json")) || {}, (await env.KAYIT.get("kodsuz", "json")) || {}, silinenler);
+  const eksik = tum.filter((x) => !tarifler[x.kod] && (hatalar[x.kod] || 0) < 3);
+  if (!eksik.length) {
+    if (!(await env.KAYIT.get("katalogHazir")) && Object.keys(tarifler).length) {
+      await env.KAYIT.put("katalogHazir", "1");
+      await herkese(env, `✅ Katalog hazır: ${Object.keys(tarifler).length} model. Artık müşterinin gönderdiği fotoğrafı bana iletebilirsiniz; hangi model olduğunu bulmaya çalışırım.`);
+    }
+    return;
+  }
+  await env.KAYIT.put(gunAn, String(cagri + 1), { expirationTtl: 2 * 86400 });
+
+  const tg = (metod, govde) => telegram(env, metod, govde);
+  const gorseller = [];
+  for (const x of eksik.slice(0, KATALOG_PARTI)) {
+    const r = await tg("forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: x.mesaj, disable_notification: true });
+    const dosya = r.ok && medyaDosyasi(r.result, 320);
+    if (!dosya) {
+      hatalar[x.kod] = /not found|forward/i.test(r.description || "") || r.ok ? 3 : (hatalar[x.kod] || 0) + 1;
+      continue;
+    }
+    try {
+      gorseller.push({ kimlik: x.kod, b64: await dosyaIndir(env, tg, dosya), dosya, mesaj: x.mesaj });
+    } catch {
+      hatalar[x.kod] = (hatalar[x.kod] || 0) + 1;
+    }
+  }
+  if (gorseller.length) {
+    const yeni = await tarifle(env, gorseller);
+    for (const g of gorseller) {
+      if (yeni[g.kimlik]) tarifler[g.kimlik] = { t: yeni[g.kimlik], f: g.dosya, m: g.mesaj };
+      else hatalar[g.kimlik] = (hatalar[g.kimlik] || 0) + 1;
+    }
+    await env.KAYIT.put("tarifler", JSON.stringify(tarifler));
+  }
+  await env.KAYIT.put("tarifhata", JSON.stringify(hatalar));
+}
+
+async function fotoTani(msg, env, simdi) {
+  const sohbet = msg.chat.id;
+  const yaz = (text) => telegram(env, "sendMessage", { chat_id: sohbet, text, disable_web_page_preview: true });
+  if (!env.ANTHROPIC_API_KEY) return yaz("Fotoğraf tanıma için yapay zekâ bağlı değil.");
+  const tarifler = (await env.KAYIT.get("tarifler", "json")) || {};
+  const silinenler = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+  const katalog = Object.entries(tarifler).filter(([k, v]) => !silinenler[k] && !/kıyafet yok/i.test(v.t));
+  if (!katalog.length) {
+    const arsiv = await env.KAYIT.get("arsiv", "json");
+    return yaz(arsiv ? "Katalog hâlâ hazırlanıyor; bitince haber vereceğim, sonra fotoğrafı tekrar gönderin." : "Fotoğraf tanıma için önce \"Kemal arşiv\" kanalının bağlanması gerekiyor (Claude Code'daki talimata bakın).");
+  }
+  const gun = gunAnahtari(simdi);
+  const sayac = Number((await env.KAYIT.get(`ai:${gun}`)) || 0);
+  if (sayac >= 100) return yaz("Bugünkü 100 yapay zekâ mesajı sınırı doldu; yarın tekrar deneyin.");
+  await env.KAYIT.put(`ai:${gun}`, String(sayac + 1), { expirationTtl: 2 * 86400 });
+  await telegram(env, "sendChatAction", { chat_id: sohbet, action: "typing" });
+
+  const tg = (metod, govde) => telegram(env, metod, govde);
+  const ipucu = (msg.caption || "").slice(0, 200);
+  let sonuc;
+  let gecerli;
+  try {
+    const musteri = await dosyaIndir(env, tg, medyaDosyasi(msg, 800));
+    const secilen = (await adaySec(env, musteri, katalog.map(([k, v]) => `${k} | ${v.t}`), ipucu)).filter((k) => tarifler[k]);
+    if (!secilen.length) return yaz("Bu fotoğrafta katalogdaki modellere benzeyen bir kıyafet bulamadım. Daha net bir fotoğraf gönderebilir misiniz?");
+    const adaylar = [];
+    for (const k of secilen.slice(0, TANIMA_ADAY)) {
+      try {
+        adaylar.push({ kimlik: k, b64: await dosyaIndir(env, tg, tarifler[k].f) });
+      } catch { /* indirilemeyen aday atlanır */ }
+    }
+    sonuc = await karsilastir(env, musteri, adaylar, ipucu);
+    gecerli = [...new Set([sonuc.en_iyi, ...(sonuc.siralama || []), ...secilen].filter((k) => k && tarifler[k]))];
+  } catch (e) {
+    return yaz(e instanceof Anthropic.APIError ? hataMesaji(e) : `Fotoğraf işlenemedi (${e.message}). Tekrar deneyin.`);
+  }
+
+  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+  const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+  const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const sonTarih = (k) => Math.max(...modelSecenekleri(k, kodlar, kodsuz).map((x) => x.tarih), sonpaylasim[k] || 0);
+  const ad = (k) => (kodsuzMu(k) ? `kodsuz paylaşım (${tarihUzun(sonTarih(k))})` : k);
+  const emin = sonuc.guven === "yuksek" && sonuc.en_iyi && tarifler[sonuc.en_iyi];
+  const gosterilecek = emin ? [sonuc.en_iyi] : gecerli.slice(0, 3);
+  const baslik = emin
+    ? `🔎 Bu büyük ihtimalle <b>${kac(ad(sonuc.en_iyi))}</b> — son paylaşım ${tarihUzun(sonTarih(sonuc.en_iyi))}.\n${kac(sonuc.aciklama)}`
+    : `🤔 Emin değilim${sonuc.guven === "orta" && sonuc.en_iyi ? ` (en yakın: <b>${kac(ad(sonuc.en_iyi))}</b>)` : ""}. En yakın ${gosterilecek.length} aday aşağıda.\n${kac(sonuc.aciklama)}`;
+  await telegram(env, "sendMessage", { chat_id: sohbet, text: baslik, parse_mode: "HTML", disable_web_page_preview: true });
+  for (const [i, k] of gosterilecek.entries()) {
+    const sec = modelSecenekleri(k, kodlar, kodsuz)[0];
+    if (!sec) continue;
+    await telegram(env, "copyMessage", {
+      chat_id: sohbet,
+      from_chat_id: kanal.id,
+      message_id: sec.ids[0],
+      caption: `${emin ? "" : `Aday ${i + 1}: `}${ad(k)} · son paylaşım ${tarihUzun(sonTarih(k))}${kanal.kullanici ? `\nt.me/${kanal.kullanici}/${sec.ids[0]}` : ""}`,
+    });
+  }
+}
+
+const kac = (t) => String(t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // ---------- Yapay zekâ asistanının araçları ----------
 

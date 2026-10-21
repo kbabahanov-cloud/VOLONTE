@@ -773,3 +773,122 @@ test("asistan: harcama sınırı hatası anlaşılır mesaj verir", async () => 
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /harcama sınırına ulaşıldı/);
 });
 
+
+// ---------- Fotoğraf tanıma ----------
+
+const { katalogAdimi } = await import("./worker.js");
+
+function tanimaOrtami(cevaplar) {
+  const o = asistanOrtami(cevaplar);
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.includes("/file/bot")) { o.gonderilen.push({ url: adres, govde: {} }); return new Response(new Uint8Array([255, 216, 255, 1, 2, 3])); }
+    if (adres.endsWith("/forwardMessage")) {
+      const govde = JSON.parse(istek.body);
+      o.gonderilen.push({ url: adres, govde });
+      if (govde.message_id === 999) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message to forward not found" }));
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1, photo: [{ file_id: `k${govde.message_id}`, width: 90 }, { file_id: `o${govde.message_id}`, width: 320 }, { file_id: `b${govde.message_id}`, width: 1280 }] } }));
+    }
+    if (adres.endsWith("/getFile")) {
+      const govde = JSON.parse(istek.body);
+      o.gonderilen.push({ url: adres, govde });
+      return new Response(JSON.stringify({ ok: true, result: { file_path: `photos/${govde.file_id}.jpg` } }));
+    }
+    return onceki(url, istek);
+  };
+  return o;
+}
+const json = (nesne) => mesaj(1, JSON.stringify(nesne));
+const resimSayisi = (istek) => istek.messages[0].content.filter((c) => c.type === "image").length;
+
+test("arşiv kanalı: sadece izinli kişi eklerse bağlanır; arşivdeki paylaşımlar kanala karışmaz", async () => {
+  const o = rotasyonOrtami();
+  const uyelik = (kimden) => ({ my_chat_member: { chat: { id: -555, type: "channel", title: "Kemal arşiv" }, from: { id: kimden, first_name: "X" }, new_chat_member: { status: "administrator", user: { id: 1 } } } });
+  await guncellemeIsle(uyelik(999), o.env);
+  assert.equal(o.depo.get("arsiv"), undefined);
+  await guncellemeIsle(uyelik(111), o.env);
+  assert.deepEqual(JSON.parse(o.depo.get("arsiv")), { id: -555, ad: "Kemal arşiv" });
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /Kemal arşivi olarak bağlandı/);
+  await guncellemeIsle({ channel_post: { message_id: 7, date: o.simdi, chat: { id: -555, type: "channel" }, photo: [{ file_id: "f" }], caption: "CODE.7777" } }, o.env);
+  assert.ok(!JSON.parse(o.depo.get("kodlar"))["7777"]);
+});
+
+test("katalog: 8'erli partilerle 320 px görsellerden tarif yazılır, bitince bir kez haber verilir", async () => {
+  const kimlikler = ["3329", "3100", "3200", "2900", "~200"];
+  const o = tanimaOrtami([
+    json({ tarifler: kimlikler.map((k) => ({ kimlik: k, tarif: `tarif ${k}` })) }),
+  ]);
+  o.depo.set("arsiv", JSON.stringify({ id: -555, ad: "Kemal arşiv" }));
+  await katalogAdimi(o.env, o.simdi);
+  assert.equal(cagrilar(o.gonderilen, "forwardMessage").length, 5);
+  assert.ok(cagrilar(o.gonderilen, "forwardMessage").every((f) => f.govde.chat_id === -555 && f.govde.from_chat_id === -100));
+  assert.deepEqual(cagrilar(o.gonderilen, "getFile").map((g) => g.govde.file_id).sort(), ["o100", "o200", "o300", "o400", "o500"]);
+  assert.equal(resimSayisi(o.istekler[0]), 5);
+  assert.equal(o.istekler[0].output_config.format.type, "json_schema");
+  const tarifler = JSON.parse(o.depo.get("tarifler"));
+  assert.deepEqual(tarifler["3100"], { t: "tarif 3100", f: "o300", m: 300 });
+  // ikinci çalışma: eksik yok → bir kez "Katalog hazır"
+  await katalogAdimi(o.env, o.simdi + 300);
+  await katalogAdimi(o.env, o.simdi + 600);
+  assert.equal(o.istekler.length, 1);
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").filter((m) => /Katalog hazır: 5 model/.test(m.govde.text)).length, 2); // ikisine, bir kez
+});
+
+test("katalog: kanalda bulunamayan paylaşım tekrar denenmez; arşiv yoksa hiçbir şey yapılmaz", async () => {
+  const o = tanimaOrtami([json({ tarifler: [{ kimlik: "3100", tarif: "x" }] })]);
+  o.depo.set("kodlar", JSON.stringify({ "3100": [{ ids: [300], tarih: o.simdi - 50 * GUN }], "3300": [{ ids: [999], tarih: o.simdi - 50 * GUN }] }));
+  o.depo.set("kodsuz", "{}");
+  await katalogAdimi(o.env, o.simdi);
+  assert.equal(o.istekler.length, 0);
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
+  await katalogAdimi(o.env, o.simdi);
+  assert.equal(JSON.parse(o.depo.get("tarifhata"))["3300"], 3);
+  assert.ok(JSON.parse(o.depo.get("tarifler"))["3100"]);
+});
+
+function tanimaHazir(o) {
+  o.depo.set("tarifler", JSON.stringify({
+    "3100": { t: "siyah uzun abiye, taşlı yaka", f: "o300", m: 300 },
+    "3200": { t: "kırmızı iki parça takım", f: "o400", m: 400 },
+    "~200": { t: "yeşil kemerli elbise", f: "o200", m: 200 },
+  }));
+}
+const foto = (env, kisi, caption) => guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(kisi), from: { id: kisi, first_name: "Murat" }, photo: [{ file_id: "mk", width: 90 }, { file_id: "mo", width: 800 }, { file_id: "mb", width: 1280 }], caption } }, env);
+
+test("fotoğraf tanıma: emin olunca 'büyük ihtimalle' + modelin fotoğrafı", async () => {
+  const o = tanimaOrtami([json({ adaylar: ["3100", "~200", "yok"] }), json({ en_iyi: "3100", guven: "yuksek", siralama: ["3100", "~200"], aciklama: "Yaka taşları ve kesim aynı." })]);
+  tanimaHazir(o);
+  await foto(o.env, 111, "müşteri soruyor");
+  assert.equal(cagrilar(o.gonderilen, "getFile")[0].govde.file_id, "mo"); // 800 px
+  assert.match(o.istekler[0].system[0].text, /3100 \| siyah uzun abiye/);
+  assert.match(o.istekler[0].messages[0].content.at(-1).text, /not: müşteri soruyor/);
+  assert.equal(resimSayisi(o.istekler[1]), 3); // müşteri + 2 aday ("yok" atıldı)
+  const m = cagrilar(o.gonderilen, "sendMessage").at(-1).govde;
+  assert.equal(m.parse_mode, "HTML");
+  assert.match(m.text, /Bu büyük ihtimalle <b>3100<\/b> — son paylaşım \d\d\.\d\d\.2026/);
+  const kopya = cagrilar(o.gonderilen, "copyMessage");
+  assert.equal(kopya.length, 1);
+  assert.equal(kopya[0].govde.message_id, 300);
+  assert.equal(kopya[0].govde.chat_id, 111);
+  assert.equal(o.depo.get(`ai:${gunAnahtari(Math.floor(Date.now() / 1000))}`), "1");
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0); // kanala hiçbir şey gitmez
+});
+
+test("fotoğraf tanıma: emin değilse en yakın 2–3 adayı fotoğraflarıyla gösterir", async () => {
+  const o = tanimaOrtami([json({ adaylar: ["3200", "3100", "~200"] }), json({ en_iyi: "3200", guven: "orta", siralama: ["3200", "~200", "3100"], aciklama: "Renk farklı olabilir." })]);
+  tanimaHazir(o);
+  await foto(o.env, 222);
+  const m = cagrilar(o.gonderilen, "sendMessage").at(-1).govde;
+  assert.match(m.text, /Emin değilim \(en yakın: <b>3200<\/b>\)\. En yakın 3 aday/);
+  const kopyalar = cagrilar(o.gonderilen, "copyMessage");
+  assert.deepEqual(kopyalar.map((k) => k.govde.message_id), [400, 200, 300]);
+  assert.match(kopyalar[1].govde.caption, /^Aday 2: kodsuz paylaşım/);
+});
+
+test("fotoğraf tanıma: katalog yoksa söyler, yapay zekâ çağrılmaz", async () => {
+  const o = tanimaOrtami([]);
+  await foto(o.env, 111);
+  assert.equal(o.istekler.length, 0);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /Kemal arşiv/);
+});

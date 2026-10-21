@@ -87,9 +87,20 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - Günlük 10 sınırı = sadece botun yaptığı yeniden paylaşımlar (tur + /paylas). Kanala elle atılan paylaşımlar sınıra sayılmaz, sadece /hafta'da görünür.
   - Asistan cevapları Markdown → Telegram HTML (`telegramHtml`), biçim hatasında düz metin. 42 test.
 
+- [x] **Kemal güncellemesi (21 Ekim, kullanıcı onayı: "Onay. 2: B ve a evet. 4: evet, sınır 60."; yüklendi, 50 test):**
+  - İsim: Kemal (sistem istemi, /yardim, tur mesajları). Telegram görünen adı kullanıcı BotFather'dan değiştirecek (Komut K2); kullanıcı adı @VolonteasistantBOT aynı.
+  - Tüm paylaşımlar: tur mesajında modelin kanaldaki bütün paylaşımları (en fazla 8, en yeni önce) tarih + medya sayısı + link; her tarih için "✅ <tarih>" (`t1:<tur>:<kod>:<sıra>`), seçilen paylaşım sıraya girer; "🖼 Hepsini göster" (`tg:`) sadece basana copyMessages. Kodsuz: tek paylaşım (+ "Kemal bunu yeniden paylaştı" notu).
+  - Hız (B + a): pencere 08:00–23:00, aralık 90–100 dk (günde 10). Bir tur 10 onaya ulaşınca sıraya girer ve **sonraki tur hemen açılır** (onaylar önceden toplanır). Turun son paylaşımında "🏁 N. turun paylaşımları tamamlandı". Aday kalmazsa tur "bitti", ertesi gün 08:00 yeni tur. Hatırlatma 08:00.
+  - **Fotoğraf tanıma** (`telegram-bot/tanima.js`): katalog = her modelin en yeni paylaşımının ilk medyası gizli arşiv kanalına forwardMessage → 320 px dosya → Claude (8 görsel/çağrı, structured output) → KV `tarifler` {kod: {t, f, m}}; 5 dk görevi, günde en fazla 150 çağrı (`katalog:<gün>`), bulunamayan → `tarifhata`=3. Arşiv: bot bir kanala yönetici eklenince (`my_chat_member`, ekleyen izinli kişiyse) KV `arsiv`. Tanıma: izinli kişi fotoğraf gönderir → 800 px → adım 1 tarif listesi (system, cache) en fazla 5 aday → adım 2 müşteri + aday görselleri karşılaştırma {en_iyi, guven, siralama, aciklama} → "büyük ihtimalle X" + modelin fotoğrafı, ya da "emin değilim" + 2–3 aday. `ai:<gün>` sınırına sayılır.
+  - Güvenlik düzeltmesi: sadece VOLONTE kanalının paylaşımları kaydedilir (`anaKanalMi`), arşiv/başka kanal karışmaz.
+  - Maliyet tahmini (görsel ≈ 28×28 piksel başına 1 token; 320 px ≈ 175 token): katalog bir kerelik ~1–2 $; tanıma başına ~3–8 sent (tarif listesi önbellekte değilse üst sınır).
+- [ ] Komut K1: kullanıcı gizli "Kemal arşiv" kanalı açar, @VolonteasistantBOT'u yönetici ekler (Mesaj gönderme). Bağlanınca bot ikisine haber verir, katalog başlar.
+- [ ] Komut K2: BotFather → /mybots → @VolonteasistantBOT → Edit Bot → Edit Name → Kemal.
+- [ ] Komut K3: Anthropic Console → Billing → Spend limits → 60 $ (kullanıcı onayladı).
+
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: Komut A3 — kullanıcı bota normal yazıyla asistanı dener ("bu hafta kaç paylaşım yaptık"); Claude `ai:<gün>` sayacı ve hataları kontrol eder. Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
+**Sıradaki komut: Komut K1 (Kemal arşiv kanalı), sonra K2 (BotFather adı), K3 (harcama sınırı 60 $). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

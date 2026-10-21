@@ -156,7 +156,7 @@ export function duzMetin(md) {
   return md.replace(/\*\*(.+?)\*\*/g, "$1").replace(/__(.+?)__/g, "$1").replace(/^#{1,6}\s+/gm, "").replace(/`/g, "");
 }
 
-function hataMesaji(e) {
+export function hataMesaji(e) {
   if (e instanceof Anthropic.AuthenticationError) return "Yapay zekâ anahtarı geçersiz görünüyor. Cloudflare'deki ANTHROPIC_API_KEY'i kontrol edin.";
   if (e instanceof Anthropic.RateLimitError) {
     return /usage limits|spend/i.test(e.message || "")
