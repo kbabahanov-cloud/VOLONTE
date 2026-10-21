@@ -78,11 +78,11 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - Silme adımı 20 mesaj/çalışma. Asistan araçları: durum_ozeti (tur durumu dahil), model_bilgisi, beklesin, sil_onayi_iste, paylasim_onizle, kuyruk_goster (ek liste kaldırıldı).
   - 21 Ekim 13:10: `tur` = {no:0, durum:"bitti"} elle yazıldı → **1. tur 22 Ekim 09:00**. Bugünkü 5 eski onay (3194, 3244, 3399, 3415, 988) 60–90 dk arayla bugün paylaşılıyor (ilki 13:28).
 - [ ] Komut A1: kullanıcı platform.claude.com hesabı, ön ödemeli kredi (otomatik yükleme KAPALI), aylık harcama sınırı (öneri 30 $), API anahtarı → Cloudflare secret `ANTHROPIC_API_KEY`.
-- [ ] Komut A2: kanalda bota "Başkalarının mesajlarını sil" yetkisi.
+- [x] Komut A2 (21 Ekim): yetki verildi; bot getChatMember ile doğruladı → `durum:webhook.yetki` = {paylas: true, sil: true, duzenle: true}. ("Mesajları düzenleme" de açık; bot kullanmıyor, kullanıcı isterse kapatabilir.)
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: Komut A2 (kanalda silme yetkisi — yarınki turda "Sil" için), sonra A1 (Anthropic hesabı + anahtar). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
+**Sıradaki komut: Komut A1 (Anthropic hesabı + anahtar). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

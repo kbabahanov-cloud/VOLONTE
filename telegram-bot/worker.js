@@ -88,6 +88,12 @@ async function durumKontrol(env) {
       }
       const ben = await telegram(env, "getMe", {});
       if (ben.ok) kayit.bot = ben.result.username;
+      // Kanaldaki yetkiler: paylaşım ve "Sil" için gerekli.
+      const kanalBilgi = await env.KAYIT.get("kanal", "json");
+      if (ben.ok && kanalBilgi) {
+        const uye = await telegram(env, "getChatMember", { chat_id: kanalBilgi.id, user_id: ben.result.id });
+        if (uye.ok) kayit.yetki = { paylas: Boolean(uye.result.can_post_messages), sil: Boolean(uye.result.can_delete_messages), duzenle: Boolean(uye.result.can_edit_messages) };
+      }
       if (!(await env.KAYIT.get("kanal"))) {
         const k = await telegram(env, "getChat", { chat_id: `@${KANAL_ADI}` });
         if (k.ok) await env.KAYIT.put("kanal", JSON.stringify({ id: k.result.id, kullanici: k.result.username || KANAL_ADI }));
