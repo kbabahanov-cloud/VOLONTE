@@ -24,11 +24,16 @@
 //  SELF_URL        düz metin — bu Worker'ın adresi (webhook için).
 //  Zamanlanmış görev (5 dakikada bir) webhook'u kendisi kurar.
 //  KAYIT           KV bağlantısı.
+//  ANTHROPIC_API_KEY  secret — kullanıcı kendisi girer (yapay zekâ asistanı, asistan.js).
+//  ANTHROPIC_MODEL    düz metin, isteğe bağlı — varsayılan claude-opus-5-5.
+//  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
+
+import { asistanCevapla } from "./asistan.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
 const KANAL_ADI = "Volonteroseoffical";
 const OZET_UZUNLUK = 30;
-const KOD_BASINA = 5; // her kod için saklanan en yeni paylaşım sayısı
+const KOD_BASINA = 200; // her kod için saklanan paylaşım sayısı ("Hiç gelmeyecek" hepsini silebilsin)
 const GUNCELLEMELER = ["message", "channel_post", "edited_channel_post", "callback_query"];
 
 // Günlük yeniden paylaşım ayarları
@@ -37,7 +42,11 @@ const AKSAM_SAATI = 21; // bu saatten sonra paylaşım yapılmaz
 const GUNLUK_SINIR = 10;
 const SABAH_ADET = 10;
 const BEKLEME_GUN = 30; // bu kadar gündür paylaşılmayan modeller önerilir
-const ATLA_GUN = 7; // "Yok, atla" denen model bu kadar gün önerilmez
+const ATLA_GUN = 7; // "Şu an yok" denen model bu kadar gün önerilmez
+const TEKRAR_GELECEK_GUN = 30; // "Tekrar gelecek" denen model bu kadar gün önerilmez
+export const KALICI = 4102444800; // 2100 yılı: "Hiç gelmeyecek" bir daha önerilmez
+const SILME_ADIM = 30; // bir çalışmada en fazla bu kadar mesaj silinir (Telegram çağrı sınırı)
+const LISTE_PARTI = 10; // bir çalışmada gönderilen en fazla model
 const ARALIK_DK = [60, 90];
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
@@ -298,6 +307,8 @@ async function mesajIsle(msg, env) {
     return paylasOnizle(msg, env);
   } else if (komut === "/kuyruk") {
     return kuyrukGoster(msg.chat.id, env);
+  } else if (msg.text && !msg.text.startsWith("/")) {
+    return asistanCevapla(msg, env, asistanYardimcilari(env), Math.floor(Date.now() / 1000));
   } else {
     cevap = YARDIM;
   }
@@ -313,6 +324,9 @@ const YARDIM = [
   "/paylas 3329 2 — aynı kodun bir önceki paylaşımı",
   "/kuyruk — onaylanıp paylaşılmayı bekleyenler (iptal edilebilir)",
   "/yardim — bu liste",
+  "",
+  "",
+  "Komut yazmadan da konuşabilirsiniz: \"bugün 20 model gönder\", \"3357 hiç gelmeyecek\", \"bu hafta kaç paylaşım yaptık\". Paylaşma ve silme için yine düğmeyle onay isterim.",
   "",
   "Kanala yapılan her paylaşımı otomatik kaydediyorum.",
   `Her sabah ${SABAH_SAATI}:00'da uzun süredir paylaşılmayan ${SABAH_ADET} modeli gönderirim; onaylananları ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında paylaşırım (günde en fazla ${GUNLUK_SINIR}).`,
@@ -360,6 +374,8 @@ async function paylasOnizle(msg, env) {
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const liste = kodlar[kod] || [];
   if (!kanal || !liste.length) return yaz(`${kod} kodlu kayıtlı paylaşım bulamadım.`);
+  const arsiv = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+  if (arsiv[kod]) return yaz(`${kod} "hiç gelmeyecek" olarak işaretli (${arsiv[kod].kim}); paylaşımları silindi, tekrar paylaşılmaz.`);
   const secilen = liste[sira - 1];
   if (!secilen) return yaz(`${kod} için ${liste.length} kayıt var. 1 ile ${liste.length} arasında bir sıra yazın.`);
 
@@ -388,7 +404,8 @@ async function dugmeIsle(cq, env) {
   if (!izinliMi(cq.from.id, env)) return cevapla("Yetkiniz yok.");
 
   const veri = String(cq.data || "");
-  if (veri.startsWith("r1:") || veri.startsWith("r0:")) return sabahSecimi(cq, env);
+  // r0: eski iki düğmeli listedeki "Yok, atla" = "Şu an yok"
+  if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return sabahSecimi(cq, env);
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
 
   const [islem, anahtar] = veri.split(":");
@@ -440,7 +457,8 @@ export async function kanaldaPaylas(env, kod, ids, simdi) {
   if (kodsuzMu(kod)) {
     // Anahtar aynı kalır; sonraki paylaşım en yeni kopyadan yapılır.
     const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
-    kodsuz[kod] = { ids: yeniIds, tarih: simdi, album: null };
+    const eski = kodsuz[kod] || { ids: [] };
+    kodsuz[kod] = { ids: yeniIds, tarih: simdi, album: null, gecmis: [...(eski.gecmis || []), eski.ids] };
     await env.KAYIT.put("kodsuz", JSON.stringify(kodsuz));
   } else {
     const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
@@ -467,11 +485,23 @@ const kisiAdi = (from) => [from.first_name, from.last_name].filter(Boolean).join
 
 // Zamanlanmış görevden her 5 dakikada çağrılır.
 export async function rotasyon(env, simdi) {
+  await silmeDevam(env);
   const s = saat(simdi);
-  if (s < SABAH_SAATI || s >= AKSAM_SAATI) return;
   const gun = gunAnahtari(simdi);
-  if (!(await env.KAYIT.get(`sabah:${gun}`))) await sabahListesi(env, simdi);
-  await siradakiniPaylas(env, simdi);
+  if (s >= SABAH_SAATI && s < AKSAM_SAATI && !(await env.KAYIT.get(`sabah:${gun}`))) {
+    await env.KAYIT.put(`sabah:${gun}`, JSON.stringify({ gun, mesajlar: {} }), { expirationTtl: 3 * 86400 });
+    await listeGonder(env, simdi, SABAH_ADET, true);
+    return;
+  }
+  // Asistandan istenen ek liste: gece de gönderilir (gönderim paylaşım değildir).
+  const ek = Number((await env.KAYIT.get(`ekliste:${gun}`)) || 0);
+  if (ek > 0) {
+    const parti = Math.min(ek, LISTE_PARTI);
+    await env.KAYIT.put(`ekliste:${gun}`, String(ek - parti), { expirationTtl: 2 * 86400 });
+    await listeGonder(env, simdi, parti, false);
+    return;
+  }
+  if (s >= SABAH_SAATI && s < AKSAM_SAATI) await siradakiniPaylas(env, simdi);
 }
 
 const kodsuzMu = (kod) => kod.startsWith("~");
@@ -500,12 +530,19 @@ async function kuyrukListesi(env) {
   return ogeler.sort((a, b) => a.zaman - b.zaman);
 }
 
-async function sabahListesi(env, simdi) {
-  const gun = gunAnahtari(simdi);
-  // Önce "gönderildi" işaretle: görev iki kez çalışırsa liste iki kez gitmesin.
-  const sabah = { gun, mesajlar: {} };
-  await env.KAYIT.put(`sabah:${gun}`, JSON.stringify(sabah), { expirationTtl: 3 * 86400 });
+const dortDugme = (gun, kod) => ({ inline_keyboard: [
+  [{ text: "✅ Onaylıyorum", callback_data: `r1:${gun}:${kod}` }, { text: "⏳ Şu an yok", callback_data: `r7:${gun}:${kod}` }],
+  [{ text: "🔁 Tekrar gelecek", callback_data: `r30:${gun}:${kod}` }, { text: "🚫 Hiç gelmeyecek", callback_data: `rx:${gun}:${kod}` }],
+] });
+const eminMisin = (gun, kod) => ({ inline_keyboard: [[
+  { text: "🗑 Evet, hepsini sil", callback_data: `hx:${gun}:${kod}` },
+  { text: "↩️ Vazgeç", callback_data: `hv:${gun}:${kod}` },
+]] });
 
+// Bugünün listesine `adet` model ekler (sabah listesi ya da asistandan istenen ek liste).
+async function listeGonder(env, simdi, adet, sabahMi) {
+  const gun = gunAnahtari(simdi);
+  const sabah = (await env.KAYIT.get(`sabah:${gun}`, "json")) || { gun, mesajlar: {} };
   const kanal = await env.KAYIT.get("kanal", "json");
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
@@ -514,37 +551,29 @@ async function sabahListesi(env, simdi) {
   const kisiler = kisilerden(env);
   if (!kanal || !kisiler.length) return;
 
-  const liste = adaylar(kodlar, kodsuz, atlananlar, kuyruk.map((k) => k.kod), simdi);
-  for (const kisi of kisiler) {
-    await telegram(env, "sendMessage", {
-      chat_id: kisi,
-      text: liste.length
-        ? `☀️ Günaydın! En uzun süredir paylaşılmayan modeller aşağıda.\nStokta olanlara "✅ Paylaş" deyin; ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında 60–90 dk arayla kanala paylaşırım. Hiçbiri onaysız paylaşılmaz.`
-        : `☀️ Günaydın! Bugün önerecek model yok (hepsi son ${BEKLEME_GUN} günde paylaşılmış ya da atlanmış).`,
-    });
-  }
+  const dislanan = [...kuyruk.map((k) => k.kod), ...Object.keys(sabah.mesajlar)];
+  const liste = adaylar(kodlar, kodsuz, atlananlar, dislanan, simdi);
+  const baslik = sabahMi
+    ? (liste.length
+      ? `☀️ Günaydın! En uzun süredir paylaşılmayan modeller aşağıda.\n✅ Onaylıyorum → ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında 60–90 dk arayla kanala paylaşırım. ⏳ Şu an yok → ${ATLA_GUN} gün sonra, 🔁 Tekrar gelecek → ${TEKRAR_GELECEK_GUN} gün sonra tekrar sorarım. 🚫 Hiç gelmeyecek → onayınızla kanaldaki paylaşımlarını silerim.`
+      : `☀️ Günaydın! Bugün önerecek model yok (hepsi son ${BEKLEME_GUN} günde paylaşılmış ya da işaretlenmiş).`)
+    : (liste.length ? `📋 İstenen ek liste (${Math.min(adet, liste.length)} model):` : "📋 Ek liste için önerecek model kalmadı.");
+  for (const kisi of kisiler) await telegram(env, "sendMessage", { chat_id: kisi, text: baslik });
 
-  // Telegram çağrı sınırı (ücretsiz katman 50) için en fazla 14 aday denenir.
+  // Telegram çağrı sınırı (ücretsiz katman 50) için en fazla adet+4 aday denenir.
   let gonderilen = 0;
-  const silinenler = [];
-  for (const aday of liste.slice(0, SABAH_ADET + 4)) {
-    if (gonderilen >= SABAH_ADET) break;
+  const bulunamayan = [];
+  for (const aday of liste.slice(0, adet + 4)) {
+    if (gonderilen >= adet) break;
     const gunOnce = Math.floor((simdi - aday.tarih) / 86400);
     const yazi = `${kodGoster(aday.kod)} · son paylaşım ${tarihUzun(aday.tarih)} (${gunOnce} gün önce)`;
     const mesajlar = [];
     for (const kisi of kisiler) {
       const r = await telegram(env, "copyMessage", {
-        chat_id: kisi,
-        from_chat_id: kanal.id,
-        message_id: aday.ids[0],
-        caption: yazi,
-        reply_markup: { inline_keyboard: [[
-          { text: "✅ Stokta var, paylaş", callback_data: `r1:${gun}:${aday.kod}` },
-          { text: "❌ Yok, atla", callback_data: `r0:${gun}:${aday.kod}` },
-        ]] },
+        chat_id: kisi, from_chat_id: kanal.id, message_id: aday.ids[0], caption: yazi, reply_markup: dortDugme(gun, aday.kod),
       });
       if (r.ok) mesajlar.push([kisi, r.result.message_id]);
-      else if (/not found|to copy/i.test(r.description || "")) { silinenler.push(aday.kod); break; } // kanaldan silinmiş
+      else if (/not found|to copy/i.test(r.description || "")) { bulunamayan.push(aday.kod); break; }
     }
     if (mesajlar.length) {
       sabah.mesajlar[aday.kod] = { ids: aday.ids, tarih: aday.tarih, yazi, mesajlar };
@@ -552,16 +581,40 @@ async function sabahListesi(env, simdi) {
     }
   }
   await env.KAYIT.put(`sabah:${gun}`, JSON.stringify(sabah), { expirationTtl: 3 * 86400 });
-  // Kanalda bulunamayanlar bir yıl önerilmez (bot hiçbir şeyi silmez, sadece listeden düşer).
-  if (silinenler.length) {
-    for (const kod of silinenler) atlananlar[kod] = simdi + YIL_SN;
+  // Kanalda bulunamayanlar bir yıl önerilmez.
+  if (bulunamayan.length) {
+    for (const kod of bulunamayan) atlananlar[kod] = simdi + YIL_SN;
     await env.KAYIT.put("atlananlar", JSON.stringify(atlananlar));
   }
+}
+
+export async function atla(env, kod, gunSayisi, simdi) {
+  const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
+  atlananlar[kod] = gunSayisi === null ? KALICI : simdi + gunSayisi * 86400;
+  for (const [k, t] of Object.entries(atlananlar)) if (t < simdi) delete atlananlar[k];
+  await env.KAYIT.put("atlananlar", JSON.stringify(atlananlar));
 }
 
 async function sabahSecimi(cq, env) {
   const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const [islem, gun, kod] = cq.data.split(":");
+  const kim = kisiAdi(cq.from);
+  const simdi = Math.floor(Date.now() / 1000);
+  const benimMesaj = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
+
+  // Asistandan gelen "Hiç gelmeyecek" onayı: listeye bağlı değil (gün "-").
+  if (gun === "-") {
+    if (islem === "hv") {
+      await cevapla("Vazgeçildi");
+      return telegram(env, "editMessageText", { ...benimMesaj, text: `↩️ ${kodGoster(kod)}: vazgeçildi, hiçbir şey silinmedi.` });
+    }
+    if (islem !== "hx") return cevapla("Geçersiz düğme.");
+    if (await env.KAYIT.get(`silinecek:${kod}`)) return cevapla("Silme zaten sürüyor.");
+    await cevapla("Siliniyor");
+    await telegram(env, "editMessageText", { ...benimMesaj, text: `🚫 ${kodGoster(kod)}: ${kim} "hiç gelmeyecek" dedi — kanaldaki paylaşımları siliniyor...` });
+    return hicGelmeyecek(env, kod, kim, simdi);
+  }
+
   const sabah = await env.KAYIT.get(`sabah:${gun}`, "json");
   const oge = sabah && sabah.mesajlar[kod];
   if (!oge) return cevapla("Bu liste artık geçerli değil.");
@@ -569,27 +622,108 @@ async function sabahSecimi(cq, env) {
   const secimAnahtari = `secim:${gun}:${kod}`;
   const onceki = await env.KAYIT.get(secimAnahtari, "json");
   if (onceki) return cevapla(`${onceki.kim} zaten işaretledi.`);
-  const kim = kisiAdi(cq.from);
-  const simdi = Math.floor(Date.now() / 1000);
-  await env.KAYIT.put(secimAnahtari, JSON.stringify({ islem, kim }), { expirationTtl: 3 * 86400 });
 
+  // "Hiç gelmeyecek": önce sadece basan kişiye "Emin misin?" sorulur, kilit konmaz.
+  if (islem === "rx") {
+    await cevapla("Emin misiniz?");
+    return telegram(env, "editMessageCaption", { ...benimMesaj, caption: `${oge.yazi}\n🚫 Emin misiniz? Bu modelin kanaldaki TÜM paylaşımları silinecek ve bir daha önerilmeyecek.`, reply_markup: eminMisin(gun, kod) });
+  }
+  if (islem === "hv") {
+    await cevapla("Vazgeçildi");
+    return telegram(env, "editMessageCaption", { ...benimMesaj, caption: oge.yazi, reply_markup: dortDugme(gun, kod) });
+  }
+
+  await env.KAYIT.put(secimAnahtari, JSON.stringify({ islem, kim }), { expirationTtl: 3 * 86400 });
   let sonYazi;
   if (islem === "r1") {
     await env.KAYIT.put(`kuyruk:${kod}`, JSON.stringify({ kod, ids: oge.ids, tarih: oge.tarih, kim, zaman: simdi }));
     sonYazi = `${oge.yazi}\n✅ ${kim} onayladı — sıraya alındı (/kuyruk).`;
     await cevapla("Sıraya alındı ✅");
+  } else if (islem === "r7" || islem === "r0") {
+    await atla(env, kod, ATLA_GUN, simdi);
+    sonYazi = `${oge.yazi}\n⏳ ${kim}: şu an yok — ${ATLA_GUN} gün sonra tekrar sorulacak.`;
+    await cevapla("Tamam");
+  } else if (islem === "r30") {
+    await atla(env, kod, TEKRAR_GELECEK_GUN, simdi);
+    sonYazi = `${oge.yazi}\n🔁 ${kim}: tekrar gelecek — ${TEKRAR_GELECEK_GUN} gün sonra tekrar sorulacak.`;
+    await cevapla("Tamam");
+  } else if (islem === "hx") {
+    sonYazi = `${oge.yazi}\n🚫 ${kim}: hiç gelmeyecek — kanaldaki paylaşımları siliniyor.`;
+    await cevapla("Siliniyor");
   } else {
-    const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
-    atlananlar[kod] = simdi + ATLA_GUN * 86400;
-    for (const [k, t] of Object.entries(atlananlar)) if (t < simdi) delete atlananlar[k];
-    await env.KAYIT.put("atlananlar", JSON.stringify(atlananlar));
-    sonYazi = `${oge.yazi}\n❌ ${kim}: stokta yok — ${ATLA_GUN} gün önerilmeyecek.`;
-    await cevapla("Atlandı");
+    return cevapla("Geçersiz düğme.");
   }
   // İki kişinin ekranında da düğmeleri kaldır, kimin seçtiğini yaz.
   for (const [kisi, mesajId] of oge.mesajlar) {
     await telegram(env, "editMessageCaption", { chat_id: kisi, message_id: mesajId, caption: sonYazi, reply_markup: { inline_keyboard: [] } });
   }
+  if (islem === "hx") await hicGelmeyecek(env, kod, kim, simdi);
+}
+
+// ---------- "Hiç gelmeyecek": onaylı silme ----------
+
+// Botun bildiği bütün kanal mesajları (kodlu: tüm paylaşımlar; kodsuz: kayıt + botun kopyaları)
+export function modelMesajlari(kod, kodlar, kodsuz) {
+  if (kodsuzMu(kod)) {
+    const g = kodsuz[kod];
+    return g ? [...new Set([...(g.gecmis || []).flat(), ...g.ids])].sort((a, b) => a - b) : [];
+  }
+  return [...new Set((kodlar[kod] || []).flatMap((g) => g.ids))].sort((a, b) => a - b);
+}
+
+export async function hicGelmeyecek(env, kod, kim, simdi) {
+  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+  const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+  const ids = modelMesajlari(kod, kodlar, kodsuz);
+  // Paylaşım tarihleri botun kendi kaydında kalır (kodlar / kodsuz silinmez).
+  const arsiv = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+  const tarihler = kodsuzMu(kod)
+    ? [kodsuz[kod]?.tarih].filter(Boolean)
+    : (kodlar[kod] || []).map((g) => g.tarih);
+  arsiv[kod] = { kim, zaman: simdi, tarihler, mesajSayisi: ids.length };
+  await env.KAYIT.put("hicgelmeyecek", JSON.stringify(arsiv));
+  await atla(env, kod, null, simdi);
+  await env.KAYIT.delete(`kuyruk:${kod}`);
+  await env.KAYIT.put(`silinecek:${kod}`, JSON.stringify({ kod, kim, kalan: ids, silinen: 0, hatali: [], hata: null }));
+  await silmeAdimi(env, kod);
+}
+
+async function silmeAdimi(env, kod) {
+  const anahtar = `silinecek:${kod}`;
+  const is = await env.KAYIT.get(anahtar, "json");
+  if (!is) return;
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const parti = is.kalan.slice(0, SILME_ADIM);
+  for (const id of parti) {
+    const r = await telegram(env, "deleteMessage", { chat_id: kanal.id, message_id: id });
+    if (r.ok) is.silinen += 1;
+    else {
+      is.hatali.push(id);
+      is.hata = is.hata || r.description || "bilinmeyen hata";
+    }
+  }
+  is.kalan = is.kalan.slice(parti.length);
+  if (is.kalan.length) {
+    await env.KAYIT.put(anahtar, JSON.stringify(is)); // kalanı 5 dk'lık görev sürdürür
+    return;
+  }
+  await env.KAYIT.delete(anahtar);
+  const ad = kodGoster(kod);
+  let metin = `🚫 ${ad} (${is.kim}): ${is.silinen} mesaj kanaldan silindi. Bu model bir daha önerilmeyecek; paylaşım tarihleri botun kaydında duruyor.`;
+  if (is.hatali.length) {
+    const eski = /can't be deleted|cannot be deleted|not enough rights|rights/i.test(is.hata || "");
+    metin += `\n⚠️ ${is.hatali.length} mesaj silinemedi (${is.hata}).`;
+    if (eski) metin += `\nTelegram botların eski mesajları silmesine izin vermiyor olabilir ya da botun "Başkalarının mesajlarını sil" yetkisi kapalı. Bunları elle silebilirsiniz:`;
+    const links = is.hatali.slice(0, 15).map((id) => (kanal.kullanici ? `https://t.me/${kanal.kullanici}/${id}` : `#${id}`));
+    metin += "\n" + links.join("\n");
+    if (is.hatali.length > 15) metin += `\n... ve ${is.hatali.length - 15} mesaj daha.`;
+  }
+  for (const kisi of kisilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: metin, disable_web_page_preview: true });
+}
+
+async function silmeDevam(env) {
+  const { keys } = await env.KAYIT.list({ prefix: "silinecek:" });
+  if (keys.length) await silmeAdimi(env, keys[0].name.slice("silinecek:".length));
 }
 
 async function siradakiniPaylas(env, simdi) {
@@ -655,6 +789,94 @@ async function kuyrukIptal(cq, env) {
   await env.KAYIT.delete(`kuyruk:${kod}`);
   await telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "İptal edildi" });
   return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `❌ ${ad} sıradan çıkarıldı (${kisiAdi(cq.from)}). Kanala paylaşılmayacak; kanalda hiçbir şey silinmedi.` });
+}
+
+// ---------- Yapay zekâ asistanının araçları ----------
+
+function asistanYardimcilari(env) {
+  const kayitliMi = async (kod) => {
+    if (!kod) return false;
+    if (kodsuzMu(kod)) return Boolean(((await env.KAYIT.get("kodsuz", "json")) || {})[kod]);
+    return Boolean((((await env.KAYIT.get("kodlar", "json")) || {})[kod] || []).length);
+  };
+  return {
+    gunAnahtari,
+    tarihYaz,
+    kisiAdi,
+    kodNormal,
+    gonder: (sohbet, text) => telegram(env, "sendMessage", { chat_id: sohbet, text, disable_web_page_preview: true }),
+    yaziyor: (sohbet) => telegram(env, "sendChatAction", { chat_id: sohbet, action: "typing" }),
+
+    async durumOzeti(simdi) {
+      const bugun = await bugunSayac(env, simdi);
+      const kuyruk = await kuyrukListesi(env);
+      const sabah = (await env.KAYIT.get(`sabah:${gunAnahtari(simdi)}`, "json")) || { mesajlar: {} };
+      const ek = Number((await env.KAYIT.get(`ekliste:${gunAnahtari(simdi)}`)) || 0);
+      return [
+        `Bugün kanala yapılan yeniden paylaşım: ${bugun}/${GUNLUK_SINIR} (kalan ${Math.max(0, GUNLUK_SINIR - bugun)}).`,
+        await haftaOzeti(env, simdi),
+        `Sırada bekleyen onaylı paylaşım: ${kuyruk.length}${kuyruk.length ? " — " + kuyruk.map((o) => kodGoster(o.kod)).join(", ") : ""}.`,
+        `Bugünkü listede gönderilen model: ${Object.keys(sabah.mesajlar).length}${ek ? `, gönderilmeyi bekleyen ek liste: ${ek}` : ""}.`,
+        `Kurallar: paylaşım ${SABAH_SAATI}:00–${AKSAM_SAATI}:00, 60–90 dk arayla, günde en fazla ${GUNLUK_SINIR}.`,
+      ].join("\n");
+    },
+
+    async modelBilgisi(kod, simdi) {
+      if (!(await kayitliMi(kod))) return `${kod} kayıtlı değil.`;
+      const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+      const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+      const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
+      const arsiv = ((await env.KAYIT.get("hicgelmeyecek", "json")) || {})[kod];
+      const tarihler = kodsuzMu(kod) ? [kodsuz[kod].tarih] : kodlar[kod].map((g) => g.tarih);
+      const satirlar = [
+        `${kodGoster(kod)} (${kod}): ${tarihler.length} paylaşım, kanalda ${modelMesajlari(kod, kodlar, kodsuz).length} mesaj.`,
+        `Paylaşım tarihleri (yeniden eskiye): ${tarihler.slice(0, 15).map(tarihUzun).join(", ")}`,
+      ];
+      if (arsiv) satirlar.push(`Durum: HİÇ GELMEYECEK (${arsiv.kim}, ${tarihUzun(arsiv.zaman)}); kanal paylaşımları silindi.`);
+      else if (await env.KAYIT.get(`kuyruk:${kod}`)) satirlar.push("Durum: onaylandı, paylaşım sırasında.");
+      else if (atlananlar[kod] > simdi) satirlar.push(`Durum: ${tarihUzun(atlananlar[kod])} tarihine kadar önerilmeyecek.`);
+      else satirlar.push(tarihler[0] < simdi - BEKLEME_SN ? "Durum: öneri listesine girebilir." : `Durum: son ${BEKLEME_GUN} günde paylaşılmış, henüz önerilmez.`);
+      return satirlar.join("\n");
+    },
+
+    async listeIste(adet, simdi) {
+      const anahtar = `ekliste:${gunAnahtari(simdi)}`;
+      const mevcut = Number((await env.KAYIT.get(anahtar)) || 0);
+      await env.KAYIT.put(anahtar, String(Math.min(mevcut + adet, 40)), { expirationTtl: 2 * 86400 });
+      return `${adet} modellik ek liste sıraya alındı; en geç 5 dakika içinde ikinize de düğmelerle gelecek (10'arlı partiler halinde). Kanala hiçbir şey paylaşılmadı.`;
+    },
+
+    async isaretle(kod, durum, kim, simdi) {
+      if (!(await kayitliMi(kod))) return `${kod} kayıtlı değil; işaretlenmedi.`;
+      const gunSayisi = durum === "tekrar_gelecek" ? TEKRAR_GELECEK_GUN : ATLA_GUN;
+      await atla(env, kod, gunSayisi, simdi);
+      await env.KAYIT.delete(`kuyruk:${kod}`);
+      return `${kodGoster(kod)} ${gunSayisi} gün önerilmeyecek (${kim}). Sıradaysa sıradan çıkarıldı.`;
+    },
+
+    async hicOnayIste(sohbet, kod) {
+      if (!(await kayitliMi(kod))) return `${kod} kayıtlı değil; onay istenmedi.`;
+      if (((await env.KAYIT.get("hicgelmeyecek", "json")) || {})[kod]) return `${kod} zaten "hiç gelmeyecek" olarak işaretli.`;
+      const sayi = modelMesajlari(kod, (await env.KAYIT.get("kodlar", "json")) || {}, (await env.KAYIT.get("kodsuz", "json")) || {}).length;
+      await telegram(env, "sendMessage", {
+        chat_id: sohbet,
+        text: `🚫 ${kodGoster(kod)} (${kod}) hiç gelmeyecek mi?\nEvet derseniz kanaldaki ${sayi} mesajı silinir ve bir daha önerilmez. Paylaşım tarihleri botun kaydında kalır.`,
+        reply_markup: eminMisin("-", kod),
+      });
+      return `Onay düğmeleri gönderildi (${sayi} mesaj). Kullanıcı "Evet"e basmadan hiçbir şey silinmez.`;
+    },
+
+    async paylasimOnizle(msg, kod) {
+      if (kodsuzMu(kod)) return "Kodsuz paylaşımlar sabah listesinden onaylanır; tek başına önizlenemez.";
+      await paylasOnizle({ ...msg, text: `/paylas ${kod}` }, env);
+      return "Önizleme ve Onayla/İptal düğmeleri kullanıcıya gönderildi (kod bulunamadıysa bot bunu yazdı). Kanala henüz hiçbir şey paylaşılmadı.";
+    },
+
+    async kuyrukGoster(sohbet) {
+      await kuyrukGoster(sohbet, env);
+      return "Sıra listesi iptal düğmeleriyle kullanıcıya gönderildi.";
+    },
+  };
 }
 
 // ---------- Yardımcılar ----------

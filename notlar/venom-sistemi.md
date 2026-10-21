@@ -63,9 +63,20 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - `durum:webhook` artık sadece değişince ya da saatte bir yazılıyor (KV günlük 1000 yazma sınırı).
   - 21 Ekim: kullanıcı "bugün gönder" dedi → işaret silindi, ilk liste 12:20 İstanbul'da 10 modelle ikisine gitti (988, 3194, 3229, 3244, 3357, 3399, 3415, ~10619, ~10622, ~10623). Aday havuzu: 604 (167 kodlu, 437 kodsuz); ilk sıradakiler Ocak 2026 kodlu modeller (3357, 3194, 988…), sonra Şubat 2026 kodsuzlar. 28 test geçiyor; yükleme sonrası görev hatasız çalıştı.
 
+- [x] **4 düğme + "Hiç gelmeyecek" silme + yapay zekâ asistanı (21 Ekim, kullanıcı onayladı, model: Opus 5.5; yüklendi):**
+  - Liste düğmeleri: ✅ Onaylıyorum (`r1`) / ⏳ Şu an yok 7 gün (`r7`; eski listedeki `r0` aynı) / 🔁 Tekrar gelecek 30 gün (`r30`) / 🚫 Hiç gelmeyecek (`rx` → sadece basanın ekranında "Evet, hepsini sil (`hx`) / Vazgeç (`hv`)"). Evet → `atlananlar`=KALICI, `hicgelmeyecek` arşivi (kim, zaman, tarihler), sıradan çıkar, `silinecek:<kod>` ile kanal mesajları `deleteMessage` ile silinir (çalışma başına 30, kalanı 5 dk görevi, gece de). Sonunda ikisine özet + silinemeyenlerin linkleri. `kodlar` (tarihler) silinmez. /paylas reddeder. Kullanıcı kararı değişti: önceki "hiçbir paylaşım silinmeyecek" yerine bu geçerli.
+  - `KOD_BASINA` 200: tüm paylaşımlar tutuluyor (result.json'dan yeniden birleştirildi: 212 kod, 337 paylaşım, en çok 9). Kodsuz kayıtlar botun kopyalarını `gecmis` içinde tutar.
+  - ⚠️ Belirsiz: Telegram botların 48 saatten eski mesajları silmesine izin vermeyebilir (resmî metin ulaşılamadı, aiogram kopyasına göre 48 saat kuralı var). İlk gerçek kullanım test olacak; olmazsa bot linkleri verir, kullanıcı elle siler.
+  - Ek liste: `ekliste:<gün>` (asistan `liste_gonder`), 10'arlı partiler, gece de, bugün gönderilenler tekrar gelmez.
+  - **Asistan** (`telegram-bot/asistan.js`): "/" ile başlamayan yazılar → Claude (`ANTHROPIC_MODEL`=claude-opus-5-5, effort low, `fallbacks: "default"`, strict araçlar). Araçlar: durum_ozeti, model_bilgisi, liste_gonder, durum_isaretle, hic_gelmeyecek_onayi_iste, paylasim_onizle, kuyruk_goster. Paylaşma/silme aracı YOK — sadece onay düğmesi. Sınırlar sohbetle değişmez. Günde 100 asistan mesajı (`ai:<gün>`), geçmiş `sohbet:<id>` son 10 metin, 2 gün. Anahtar `ANTHROPIC_API_KEY` Worker secret (kullanıcı girecek).
+  - Paketleme: `telegram-bot/` npm projesi; `npm test` (40 test), `npm run build` → `dist/worker.js` (~515 KB, esbuild, platform browser). Yüklemede dist/worker.js gönderilir; bindings: KAYIT, ALLOWED_IDS, SELF_URL, ANTHROPIC_MODEL (+ secret'lar keep_bindings ile korunur).
+  - 21 Ekim durum: ilk listede 6 onay (1'i paylaşıldı, sıradaki 13:28), 4 "yok".
+- [ ] Komut A1: kullanıcı platform.claude.com hesabı, ön ödemeli kredi (otomatik yükleme KAPALI), aylık harcama sınırı (öneri 30 $), API anahtarı → Cloudflare secret `ANTHROPIC_API_KEY`.
+- [ ] Komut A2: kanalda bota "Başkalarının mesajlarını sil" yetkisi.
+
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme; aşağıya bak).**
+**Sıradaki komut: Komut A1 (Anthropic hesabı + anahtar), sonra A2 (silme yetkisi). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

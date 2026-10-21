@@ -1,7 +1,7 @@
 // Çalıştırma: node --test telegram-bot/test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker, { fiyatBul, kodBul, guncellemeIsle, haftaOzeti, gunAnahtari, webhookKontrol, adaylar, rotasyon, kanaldaPaylas } from "./worker.js";
+import worker, { fiyatBul, kodBul, guncellemeIsle, haftaOzeti, gunAnahtari, webhookKontrol, adaylar, rotasyon, kanaldaPaylas, KALICI } from "./worker.js";
 
 function sahteOrtam() {
   const depo = new Map();
@@ -295,7 +295,7 @@ test("sabah listesi 09:00'dan önce gitmez, 09:00'da ikisine de bir kez gider", 
   assert.deepEqual(kopyalar.map((k) => String(k.govde.chat_id)), ["111", "222", "111", "222", "111", "222"]);
   assert.match(kopyalar[0].govde.caption, /^Kodsuz paylaşım · son paylaşım \d\d\.\d\d\.2026 \(120 gün önce\)/);
   assert.match(kopyalar[2].govde.caption, /^3100 · /);
-  assert.equal(kopyalar[0].govde.reply_markup.inline_keyboard[0][0].text, "✅ Stokta var, paylaş");
+  assert.deepEqual(kopyalar[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Onaylıyorum", "⏳ Şu an yok", "🔁 Tekrar gelecek", "🚫 Hiç gelmeyecek"]);
   assert.equal(cagrilar(gonderilen, "copyMessages").length, 0); // onaysız kanala hiçbir şey gitmez
   gonderilen.length = 0;
   await rotasyon(env, simdi + 300);
@@ -327,7 +327,7 @@ test("izinsiz kişi sabah düğmesine basamaz", async () => {
   assert.equal(depo.get("kuyruk:3100"), undefined);
 });
 
-test("'Yok, atla' 7 gün önerilmez", async () => {
+test("'Şu an yok' 7 gün önerilmez", async () => {
   const { env, gonderilen, depo, simdi } = rotasyonOrtami();
   await rotasyon(env, simdi);
   const atla = cagrilar(gonderilen, "copyMessage")[2].govde.reply_markup.inline_keyboard[0][1].callback_data;
@@ -445,4 +445,220 @@ test("sabahta kanalda bulunamayan paylaşım bir yıl önerilmez", async () => {
   assert.ok(JSON.parse(depo.get("atlananlar"))["3100"] > simdi + 300 * GUN);
   const sabah = JSON.parse(depo.get(`sabah:${gunAnahtari(simdi)}`));
   assert.deepEqual(Object.keys(sabah.mesajlar).sort(), ["3200", "~200"]);
+});
+
+// ---------- 4 düğme ve "Hiç gelmeyecek" ----------
+
+const dugme = (g, kodBaslangic, i) => cagrilar(g, "copyMessage").find((k) => k.govde.caption.startsWith(kodBaslangic)).govde.reply_markup.inline_keyboard.flat()[i].callback_data;
+
+test("'Tekrar gelecek' 30 gün önerilmez", async () => {
+  const { env, gonderilen, depo, simdi } = rotasyonOrtami();
+  await rotasyon(env, simdi);
+  await bas(env, 222, dugme(gonderilen, "3100", 2));
+  const su = Math.floor(Date.now() / 1000);
+  assert.ok(Math.abs(JSON.parse(depo.get("atlananlar"))["3100"] - (su + 30 * GUN)) < 60);
+  assert.match(cagrilar(gonderilen, "editMessageCaption").at(-1).govde.caption, /Merdan: tekrar gelecek/);
+});
+
+function silmeTaklidi(o, silinemeyen = []) {
+  const eski = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    if (url.endsWith("/deleteMessage")) {
+      const govde = JSON.parse(istek.body);
+      o.gonderilen.push({ url, govde });
+      return new Response(JSON.stringify(silinemeyen.includes(govde.message_id) ? { ok: false, description: "Bad Request: message can't be deleted" } : { ok: true, result: true }));
+    }
+    return eski(url, istek);
+  };
+}
+
+test("'Hiç gelmeyecek': Emin misin → Evet → tüm mesajlar silinir, kayıt kalır, bir daha önerilmez", async () => {
+  const o = rotasyonOrtami();
+  // 3100'ün iki ayrı paylaşımı var
+  const kodlar = JSON.parse(o.depo.get("kodlar"));
+  kodlar["3100"].push({ ids: [150, 151], tarih: o.simdi - 200 * GUN });
+  o.depo.set("kodlar", JSON.stringify(kodlar));
+  silmeTaklidi(o);
+  await rotasyon(o.env, o.simdi);
+  const rx = dugme(o.gonderilen, "3100", 3);
+  o.gonderilen.length = 0;
+
+  await bas(o.env, 111, rx);
+  assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 0); // henüz silme yok
+  const soru = cagrilar(o.gonderilen, "editMessageCaption");
+  assert.equal(soru.length, 1); // sadece basan kişinin ekranı
+  assert.match(soru[0].govde.caption, /Emin misiniz/);
+  const [evet, vazgec] = soru[0].govde.reply_markup.inline_keyboard[0].map((d) => d.callback_data);
+
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, vazgec);
+  assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 0);
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption")[0].govde.reply_markup.inline_keyboard.flat().length, 4);
+
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, evet);
+  const silinen = cagrilar(o.gonderilen, "deleteMessage").map((d) => d.govde.message_id);
+  assert.deepEqual(silinen, [150, 151, 300, 301, 302]);
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 2); // ikisinde de güncellendi
+  const ozet = cagrilar(o.gonderilen, "sendMessage").map((m) => m.govde.text);
+  assert.equal(ozet.length, 2);
+  assert.match(ozet[0], /5 mesaj kanaldan silindi/);
+  assert.equal(JSON.parse(o.depo.get("atlananlar"))["3100"], KALICI);
+  const arsiv = JSON.parse(o.depo.get("hicgelmeyecek"))["3100"];
+  assert.equal(arsiv.tarihler.length, 2);
+  assert.equal(JSON.parse(o.depo.get("kodlar"))["3100"].length, 2); // tarihler botun kaydında kalır
+
+  // Merdan sonradan basarsa iki kez işlenmez
+  o.gonderilen.length = 0;
+  await bas(o.env, 222, dugme([{ url: "/copyMessage", govde: { caption: "3100", reply_markup: { inline_keyboard: [[{ callback_data: "r1:" + gunAnahtari(o.simdi) + ":3100" }]] } } }], "3100", 0));
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /zaten işaretledi/);
+
+  // /paylas reddedilir
+  await guncellemeIsle({ message: { message_id: 9, date: 1, chat: ozel(111), from: { id: 111 }, text: "/paylas 3100" } }, o.env);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /hiç gelmeyecek/);
+});
+
+test("silinemeyen eski mesajlar linkleriyle bildirilir", async () => {
+  const o = rotasyonOrtami();
+  silmeTaklidi(o, [300, 301]);
+  await rotasyon(o.env, o.simdi);
+  const rx = dugme(o.gonderilen, "3100", 3);
+  await bas(o.env, 111, rx);
+  const evet = cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data;
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, evet);
+  const ozet = cagrilar(o.gonderilen, "sendMessage")[0].govde.text;
+  assert.match(ozet, /1 mesaj kanaldan silindi/);
+  assert.match(ozet, /2 mesaj silinemedi/);
+  assert.match(ozet, /t\.me\/Volonteroseoffical\/300/);
+});
+
+test("30'dan fazla mesaj 5 dakikalık görevle parça parça silinir", async () => {
+  const o = rotasyonOrtami();
+  const kodlar = JSON.parse(o.depo.get("kodlar"));
+  kodlar["3100"] = Array.from({ length: 9 }, (_, i) => ({ ids: Array.from({ length: 5 }, (_, j) => 1000 + i * 10 + j), tarih: o.simdi - (90 + i) * GUN }));
+  o.depo.set("kodlar", JSON.stringify(kodlar));
+  silmeTaklidi(o);
+  await rotasyon(o.env, o.simdi);
+  await bas(o.env, 111, dugme(o.gonderilen, "3100", 3));
+  const evet = cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data;
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, evet);
+  assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 30);
+  assert.ok(o.depo.get("silinecek:3100"));
+  await rotasyon(o.env, ist(23)); // gece de devam eder
+  assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 45);
+  assert.equal(o.depo.get("silinecek:3100"), undefined);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /45 mesaj kanaldan silindi/);
+});
+
+test("kodsuz paylaşımın botun kopyaları da silinir", async () => {
+  const o = rotasyonOrtami();
+  silmeTaklidi(o);
+  await kanaldaPaylas(o.env, "~200", [200, 201], o.simdi - 40 * GUN);
+  const kodsuz = JSON.parse(o.depo.get("kodsuz"))["~200"];
+  assert.deepEqual(kodsuz.gecmis, [[200, 201]]);
+  const { modelMesajlari } = await import("./worker.js");
+  assert.equal(modelMesajlari("~200", {}, { "~200": kodsuz }).length, 4);
+});
+
+// ---------- Ek liste ----------
+
+test("ek liste 10'arlı partilerle gelir, aynı modeli iki kez göndermez", async () => {
+  const o = rotasyonOrtami();
+  const kodlar = {};
+  for (let i = 0; i < 25; i++) kodlar[String(4000 + i)] = [{ ids: [5000 + i], tarih: o.simdi - (40 + i) * GUN }];
+  o.depo.set("kodlar", JSON.stringify(kodlar));
+  o.depo.set("kodsuz", "{}");
+  await rotasyon(o.env, o.simdi); // sabah: 10
+  o.depo.set(`ekliste:${gunAnahtari(o.simdi)}`, "12");
+  await rotasyon(o.env, o.simdi + 300);
+  await rotasyon(o.env, o.simdi + 600);
+  const kodlarGiden = cagrilar(o.gonderilen, "copyMessage").filter((k) => String(k.govde.chat_id) === "111").map((k) => k.govde.caption.split(" ")[0]);
+  assert.equal(kodlarGiden.length, 22);
+  assert.equal(new Set(kodlarGiden).size, 22);
+  assert.equal(o.depo.get(`ekliste:${gunAnahtari(o.simdi)}`), "0");
+});
+
+// ---------- Yapay zekâ asistanı ----------
+
+function asistanOrtami(cevaplar) {
+  const o = rotasyonOrtami();
+  o.env.ANTHROPIC_API_KEY = "test-anahtar";
+  const istekler = [];
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.startsWith("https://api.anthropic.com")) {
+      istekler.push(JSON.parse(istek.body));
+      return new Response(JSON.stringify(cevaplar.shift()), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return tg(url, istek);
+  };
+  return { ...o, istekler };
+}
+const mesaj = (id, text) => ({ id: "msg", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "text", text }], usage: { input_tokens: 1, output_tokens: 1 } });
+const aracCagrisi = (name, input) => ({ id: "msg", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name, input }], usage: { input_tokens: 1, output_tokens: 1 } });
+const yazi = (env, kisi, text) => guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(kisi), from: { id: kisi, first_name: "Murat" }, text } }, env);
+
+test("asistan: anahtar yoksa nazikçe söyler", async () => {
+  const o = rotasyonOrtami();
+  await yazi(o.env, 111, "bugün kaç paylaşım yaptık");
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /henüz bağlı değil/);
+});
+
+test("asistan: 'bugün 20 model gönder' → ek liste, kanala hiçbir şey gitmez", async () => {
+  const o = asistanOrtami([aracCagrisi("liste_gonder", { adet: 20 }), mesaj(1, "Tamam, 20 model 5 dakika içinde gelecek.")]);
+  await yazi(o.env, 111, "bugün 20 model gönder");
+  assert.equal(o.istekler.length, 2);
+  assert.equal(o.istekler[0].model, "claude-opus-5-5");
+  assert.equal(o.istekler[0].fallbacks, "default");
+  assert.ok(o.istekler[0].tools.every((t) => t.strict === true));
+  assert.ok(!o.istekler[0].tools.some((t) => /sil|delete|paylas$|post/.test(t.name) && t.name !== "paylasim_onizle"));
+  assert.equal(o.istekler[1].messages.at(-1).content[0].type, "tool_result");
+  assert.equal(o.depo.get(`ekliste:${gunAnahtari(Math.floor(Date.now() / 1000))}`), "20");
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, "Tamam, 20 model 5 dakika içinde gelecek.");
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.equal(JSON.parse(o.depo.get("sohbet:111")).length, 2);
+});
+
+test("asistan: '3100 hiç gelmeyecek' → sadece onay düğmesi, silme yok", async () => {
+  const o = asistanOrtami([aracCagrisi("hic_gelmeyecek_onayi_iste", { kod: "3100" }), mesaj(1, "Onay düğmesi gönderdim.")]);
+  silmeTaklidi(o);
+  await yazi(o.env, 111, "3100 hiç gelmeyecek");
+  assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 0);
+  const soru = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.reply_markup);
+  assert.match(soru.govde.text, /3 mesajı silinir/);
+  const evet = soru.govde.reply_markup.inline_keyboard[0][0].callback_data;
+  assert.equal(evet, "hx:-:3100");
+  await bas(o.env, 222, evet);
+  assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 3);
+  assert.equal(JSON.parse(o.depo.get("atlananlar"))["3100"], KALICI);
+});
+
+test("asistan: izinsiz kişiye cevap vermez, günlük sınır çalışır", async () => {
+  const o = asistanOrtami([mesaj(1, "x")]);
+  await yazi(o.env, 999, "merhaba");
+  assert.equal(o.istekler.length, 0);
+  o.depo.set(`ai:${gunAnahtari(Math.floor(Date.now() / 1000))}`, "100");
+  await yazi(o.env, 111, "merhaba");
+  assert.equal(o.istekler.length, 0);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /sınırı doldu/);
+});
+
+test("asistan: harcama sınırı hatası anlaşılır mesaj verir", async () => {
+  const o = asistanOrtami([]);
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => String(url).startsWith("https://api.anthropic.com")
+    ? new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC." } }), { status: 400, headers: { "content-type": "application/json" } })
+    : tg(url, istek);
+  await yazi(o.env, 111, "merhaba");
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /harcama sınırına ulaşıldı/);
+});
+
+test("eski listedeki 'Yok, atla' (r0) hâlâ çalışır", async () => {
+  const o = rotasyonOrtami();
+  await rotasyon(o.env, o.simdi);
+  await bas(o.env, 111, `r0:${gunAnahtari(o.simdi)}:3100`);
+  assert.ok(JSON.parse(o.depo.get("atlananlar"))["3100"] > Math.floor(Date.now() / 1000) + 6 * GUN);
 });
