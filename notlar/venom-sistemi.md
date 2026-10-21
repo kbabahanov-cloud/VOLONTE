@@ -80,6 +80,13 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - [x] Komut A1 (21 Ekim): kullanıcı anahtarı Cloudflare'e secret olarak girdi; bot saatte bir ücretsiz kontrol ediyor (`models.retrieve`) → `durum:webhook.yz` = "ok: claude-opus-5-5". Eski tanım: kullanıcı platform.claude.com hesabı, ön ödemeli kredi (otomatik yükleme KAPALI), aylık harcama sınırı (öneri 30 $), API anahtarı → Cloudflare secret `ANTHROPIC_API_KEY`.
 - [x] Komut A2 (21 Ekim): yetki verildi; bot getChatMember ile doğruladı → `durum:webhook.yetki` = {paylas: true, sil: true, duzenle: true}. ("Mesajları düzenleme" de açık; bot kullanmıyor, kullanıcı isterse kapatabilir.)
 
+- [x] **21 Ekim düzeltmeleri (kullanıcı fark etti, asistan buldu: "kanalda 11 paylaşım, sayaç 4/10"):**
+  - Sebep: önceki not yanlıştı — bot kendi kanal kopyalarını **channel_post olarak alıyor**. kanaldaPaylas da `gun:` artırınca her yeniden paylaşım /hafta'da 2 sayılıyordu (gerçek: 7 = elle 3 + bot 4). Ayrıca Telegram copyMessages kanala kopyalarken kimliği **0** döndürdü → kodlar'a [0,0] kayıtlar ve bozuk t.me/.../0 linkleri; kodsuz kopya (~10619) yeni kayıt (~13724) açtı.
+  - Çözüm: kanaldaPaylas artık sadece `sayac:` (botun günlük sınırı) ve `sonpaylasim` {kod: tarih} yazar; `gun:` ve kod dizini channel_post'tan gelir. `kopya` işareti {kod, zaman, kalan} (10 dk) ile gelen kopyalar tanınır: kodsuz kopya `kopyalar` listesine girer (Sil bunları da siler), yeni kayıt açmaz. 0 kimlik kaydedilmez, link verilmez. adaylar() `sonpaylasim`'i hesaba katar.
+  - Veri düzeltildi: 0'lı kayıtlar silindi (3244, 3399, 3415), ~10619 asıl kimliklerle + kopyalar [13724-13726], ~13724 silindi, `gun:2026-10-21`=7.
+  - Günlük 10 sınırı = sadece botun yaptığı yeniden paylaşımlar (tur + /paylas). Kanala elle atılan paylaşımlar sınıra sayılmaz, sadece /hafta'da görünür.
+  - Asistan cevapları Markdown → Telegram HTML (`telegramHtml`), biçim hatasında düz metin. 42 test.
+
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
 **Sıradaki komut: Komut A3 — kullanıcı bota normal yazıyla asistanı dener ("bu hafta kaç paylaşım yaptık"); Claude `ai:<gün>` sayacı ve hataları kontrol eder. Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**

@@ -265,7 +265,28 @@ async function paylasimKaydet(post, env, duzenleme) {
   }
   if (degisti) await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
 
-  // Kodsuz "AVAILABLE AGAIN" / "DISPONIBLE" paylaşımları: kodsuz = { "~<ilk id>": { ids, tarih, album } }
+  // Botun kendi yeniden paylaşımı mı? (kanaldaPaylas `kopya` işareti bırakır)
+  let kopya = null;
+  if (!duzenleme) {
+    const isaret = await env.KAYIT.get("kopya", "json");
+    if (isaret && isaret.kalan > 0 && Math.abs(kayit.tarih - isaret.zaman) <= 180) {
+      kopya = isaret;
+      isaret.kalan -= 1;
+      if (isaret.kalan > 0) await env.KAYIT.put("kopya", JSON.stringify(isaret), { expirationTtl: 600 });
+      else await env.KAYIT.delete("kopya");
+    }
+  }
+  // Kodsuz paylaşımın kopyası yeni kayıt açmaz; asıl kaydın `kopyalar` listesine girer ("Sil" bunları da siler).
+  if (kopya && kodsuzMu(kopya.kod)) {
+    const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+    if (kodsuz[kopya.kod]) {
+      kodsuz[kopya.kod].kopyalar = [...new Set([...(kodsuz[kopya.kod].kopyalar || []), kayit.id])];
+      await env.KAYIT.put("kodsuz", JSON.stringify(kodsuz));
+    }
+    return;
+  }
+
+  // Kodsuz "AVAILABLE AGAIN" / "DISPONIBLE" paylaşımları: kodsuz = { "~<ilk id>": { ids, tarih, album, kopyalar } }
   if (!kod && (kayit.foto || kayit.video)) {
     const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
     let kdegisti = false;
@@ -460,30 +481,27 @@ async function dugmeIsle(cq, env) {
 export async function kanaldaPaylas(env, kod, ids, simdi) {
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
+  // Kopyalar kanala düşünce channel_post olarak gelir; hangi modele ait olduklarını bilmek için işaret.
+  await env.KAYIT.put("kopya", JSON.stringify({ kod, zaman: simdi, kalan: ids.length }), { expirationTtl: 600 });
   const sonuc = await telegram(env, "copyMessages", { chat_id: kanal.id, from_chat_id: kanal.id, message_ids: ids });
   if (!sonuc.ok) {
+    await env.KAYIT.delete("kopya");
     const ipucu = /rights|admin|not enough|forbidden/i.test(sonuc.description || "")
       ? " — botun kanalda \"Mesaj gönderme\" yetkisi açık mı?" : /not found|to copy/i.test(sonuc.description || "") ? " — paylaşım kanaldan silinmiş olabilir." : "";
     return { ok: false, hata: `${sonuc.description}${ipucu}` };
   }
-  const yeniIds = sonuc.result.map((r) => r.message_id);
+  // Telegram kanala kopyalarken yeni mesaj kimliğini 0 dönebiliyor; gerçek kimlikler
+  // kopyalar kanala düşünce channel_post olarak gelir (paylasimKaydet + `kopya` işareti).
+  const yeniIds = sonuc.result.map((r) => r.message_id).filter((id) => id > 0);
 
-  if (kodsuzMu(kod)) {
-    // Anahtar aynı kalır; sonraki paylaşım en yeni kopyadan yapılır.
-    const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
-    const eski = kodsuz[kod] || { ids: [] };
-    kodsuz[kod] = { ids: yeniIds, tarih: simdi, album: null, gecmis: [...(eski.gecmis || []), eski.ids] };
-    await env.KAYIT.put("kodsuz", JSON.stringify(kodsuz));
-  } else {
-    const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
-    kodEkle(kodlar, kod, { ids: yeniIds, tarih: simdi, album: null });
-    await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
-  }
-  const gun = gunAnahtari(simdi);
-  await env.KAYIT.put(`gun:${gun}`, String(Number((await env.KAYIT.get(`gun:${gun}`)) || 0) + 1));
-  await env.KAYIT.put(`sayac:${gun}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
+  // Son paylaşım tarihi ayrı tutulur; kod dizinine gerçek kimlikler channel_post ile girer.
+  const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
+  sonpaylasim[kod] = simdi;
+  await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
+  // Kanalın /hafta sayısı (gun:) channel_post ile artar; burada sadece botun günlük sınır sayacı.
+  await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
 
-  const link = kanal.kullanici && yeniIds[0] ? `https://t.me/${kanal.kullanici}/${yeniIds[0]}` : null;
+  const link = kanal.kullanici && yeniIds.length ? `https://t.me/${kanal.kullanici}/${yeniIds[0]}` : null;
   return { ok: true, link, ids: yeniIds };
 }
 
@@ -534,10 +552,12 @@ const kodsuzMu = (kod) => kod.startsWith("~");
 const kodGoster = (kod) => (kodsuzMu(kod) ? "Kodsuz paylaşım" : kod);
 
 // En uzun süredir paylaşılmayan önce. Son paylaşımı 30 günden eski, 1 yıldan yeni olanlar.
-export function adaylar(kodlar, kodsuz, atlananlar, kuyruktakiler, simdi) {
+// sonpaylasim: botun yeniden paylaşım tarihleri (kod → tarih); kayıttaki tarihten yeniyse o geçerli.
+export function adaylar(kodlar, kodsuz, atlananlar, kuyruktakiler, simdi, sonpaylasim = {}) {
+  const enYeni = (kod, t) => Math.max(t, sonpaylasim[kod] || 0);
   const hepsi = [
-    ...Object.entries(kodlar).filter(([, l]) => l.length).map(([kod, l]) => ({ kod, ids: l[0].ids, tarih: l[0].tarih })),
-    ...Object.entries(kodsuz).map(([kod, g]) => ({ kod, ids: g.ids, tarih: g.tarih })),
+    ...Object.entries(kodlar).filter(([, l]) => l.length).map(([kod, l]) => ({ kod, ids: l[0].ids, tarih: enYeni(kod, l[0].tarih) })),
+    ...Object.entries(kodsuz).map(([kod, g]) => ({ kod, ids: g.ids, tarih: enYeni(kod, g.tarih) })),
   ];
   return hepsi
     .filter((a) => a.tarih < simdi - BEKLEME_SN && a.tarih >= simdi - YIL_SN)
@@ -585,7 +605,8 @@ async function modelGonder(env, tur, adet, simdi) {
   const kisiler = kisilerden(env);
   if (!kanal || !kisiler.length) return 0;
 
-  const liste = adaylar(kodlar, kodsuz, atlananlar, [...kuyruk.map((k) => k.kod), ...Object.keys(tur.ogeler)], simdi);
+  const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
+  const liste = adaylar(kodlar, kodsuz, atlananlar, [...kuyruk.map((k) => k.kod), ...Object.keys(tur.ogeler)], simdi, sonpaylasim);
   let gonderilen = 0;
   const bulunamayan = [];
   // Telegram çağrı sınırı için en fazla adet+4 aday denenir.
@@ -721,9 +742,9 @@ async function turDugmesi(cq, env) {
 export function modelMesajlari(kod, kodlar, kodsuz) {
   if (kodsuzMu(kod)) {
     const g = kodsuz[kod];
-    return g ? [...new Set([...(g.gecmis || []).flat(), ...g.ids])].sort((a, b) => a - b) : [];
+    return g ? [...new Set([...(g.gecmis || []).flat(), ...g.ids, ...(g.kopyalar || [])])].filter((id) => id > 0).sort((a, b) => a - b) : [];
   }
-  return [...new Set((kodlar[kod] || []).flatMap((g) => g.ids))].sort((a, b) => a - b);
+  return [...new Set((kodlar[kod] || []).flatMap((g) => g.ids))].filter((id) => id > 0).sort((a, b) => a - b);
 }
 
 export async function hicGelmeyecek(env, kod, kim, simdi) {
@@ -864,6 +885,12 @@ function asistanYardimcilari(env) {
     kisiAdi,
     kodNormal,
     gonder: (sohbet, text) => telegram(env, "sendMessage", { chat_id: sohbet, text, disable_web_page_preview: true }),
+    // Asistanın Markdown cevabı Telegram HTML'i olarak; biçim hatasında düz metin.
+    async gonderBicimli(sohbet, html, duz) {
+      const r = await telegram(env, "sendMessage", { chat_id: sohbet, text: html, parse_mode: "HTML", disable_web_page_preview: true });
+      if (!r.ok) return telegram(env, "sendMessage", { chat_id: sohbet, text: duz, disable_web_page_preview: true });
+      return r;
+    },
     yaziyor: (sohbet) => telegram(env, "sendChatAction", { chat_id: sohbet, action: "typing" }),
 
     async durumOzeti(simdi) {
@@ -889,7 +916,8 @@ function asistanYardimcilari(env) {
       const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
       const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
       const arsiv = ((await env.KAYIT.get("hicgelmeyecek", "json")) || {})[kod];
-      const tarihler = kodsuzMu(kod) ? [kodsuz[kod].tarih] : kodlar[kod].map((g) => g.tarih);
+      const sonpaylasim = ((await env.KAYIT.get("sonpaylasim", "json")) || {})[kod];
+      const tarihler = [...new Set([...(kodsuzMu(kod) ? [kodsuz[kod].tarih] : kodlar[kod].map((g) => g.tarih)), ...(sonpaylasim ? [sonpaylasim] : [])])].sort((a, b) => b - a);
       const satirlar = [
         `${kodGoster(kod)} (${kod}): ${tarihler.length} paylaşım, kanalda ${modelMesajlari(kod, kodlar, kodsuz).length} mesaj.`,
         `Paylaşım tarihleri (yeniden eskiye): ${tarihler.slice(0, 15).map(tarihUzun).join(", ")}`,

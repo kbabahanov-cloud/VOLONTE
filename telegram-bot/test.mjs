@@ -1,7 +1,7 @@
 // Çalıştırma: node --test telegram-bot/test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker, { fiyatBul, kodBul, guncellemeIsle, haftaOzeti, gunAnahtari, webhookKontrol, adaylar, rotasyon, kanaldaPaylas, KALICI } from "./worker.js";
+import worker, { fiyatBul, kodBul, guncellemeIsle, haftaOzeti, gunAnahtari, webhookKontrol, adaylar, rotasyon, kanaldaPaylas, KALICI, modelMesajlari } from "./worker.js";
 
 function sahteOrtam() {
   const depo = new Map();
@@ -584,14 +584,63 @@ test("içe aktarma: kodsuz dizin son 1 yıl, AVAILABLE AGAIN / DISPONIBLE", asyn
   assert.deepEqual(k["~1"].ids, [1, 2]);
 });
 
-test("kodsuz paylaşımın botun kopyaları da silinir", async () => {
+test("botun yeniden paylaşımı: kanala düşen kopya bir kez sayılır, kodsuz kopya yeni kayıt açmaz, Sil kopyaları da siler", async () => {
   const o = rotasyonOrtami();
-  silmeTaklidi(o);
-  await kanaldaPaylas(o.env, "~200", [200, 201], o.simdi - 40 * GUN);
-  const kodsuz = JSON.parse(o.depo.get("kodsuz"))["~200"];
-  assert.deepEqual(kodsuz.gecmis, [[200, 201]]);
-  const { modelMesajlari } = await import("./worker.js");
-  assert.equal(modelMesajlari("~200", {}, { "~200": kodsuz }).length, 4);
+  // Telegram kanala kopyalarken kimlik 0 dönebiliyor
+  const eski = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    if (String(url).endsWith("/copyMessages")) { o.gonderilen.push({ url, govde: JSON.parse(istek.body) }); return new Response(JSON.stringify({ ok: true, result: [{ message_id: 0 }, { message_id: 0 }] })); }
+    return eski(url, istek);
+  };
+  const t = o.simdi;
+  const sonuc = await kanaldaPaylas(o.env, "~200", [200, 201], t);
+  assert.equal(sonuc.ok, true);
+  assert.equal(sonuc.link, null); // 0 kimlikle bozuk link verilmez
+  assert.equal(JSON.parse(o.depo.get("sonpaylasim"))["~200"], t);
+  assert.equal(o.depo.get(`gun:${gunAnahtari(t)}`), undefined); // henüz kanala düşmedi
+  // kopyalar kanala düşer (DISPONIBLE yazısıyla)
+  await guncellemeIsle({ channel_post: { message_id: 900, date: t + 2, chat: kanal, photo: [{ file_id: "f" }], caption: "AVAILABLE NOW DISPONIBLE", media_group_id: "Z" } }, o.env);
+  await guncellemeIsle({ channel_post: { message_id: 901, date: t + 2, chat: kanal, photo: [{ file_id: "f" }], media_group_id: "Z" } }, o.env);
+  // sonra insanın kendi paylaşımı: normal kayıt
+  await guncellemeIsle({ channel_post: { message_id: 902, date: t + 60, chat: kanal, photo: [{ file_id: "f" }], caption: "DISPONIBLE 38-40" } }, o.env);
+  const kodsuz = JSON.parse(o.depo.get("kodsuz"));
+  assert.deepEqual(kodsuz["~200"].kopyalar, [900, 901]);
+  assert.deepEqual(kodsuz["~200"].ids, [200, 201]); // asıl kayıt yerinde
+  assert.ok(!kodsuz["~900"]);
+  assert.ok(kodsuz["~902"]);
+  assert.equal(o.depo.get(`gun:${gunAnahtari(t)}`), "2"); // kopya albümü 1 + insan 1
+  assert.equal(o.depo.get(`sayac:${gunAnahtari(t)}`), "1");
+  assert.deepEqual(modelMesajlari("~200", {}, kodsuz), [200, 201, 900, 901]);
+  // yeniden paylaşılan model 30 gün aday olmaz
+  assert.ok(!adaylar({}, kodsuz, {}, [], t + 5 * GUN, JSON.parse(o.depo.get("sonpaylasim"))).some((a) => a.kod === "~200"));
+});
+
+test("kodlu modelin kopyası gerçek kimlikleriyle dizine girer, 0 kimlik kaydedilmez", async () => {
+  const o = rotasyonOrtami();
+  const eski = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => String(url).endsWith("/copyMessages")
+    ? new Response(JSON.stringify({ ok: true, result: [{ message_id: 0 }] }))
+    : eski(url, istek);
+  await kanaldaPaylas(o.env, "3100", [300], o.simdi);
+  await guncellemeIsle({ channel_post: { message_id: 950, date: o.simdi + 1, chat: kanal, photo: [{ file_id: "f" }], caption: "CODE.3100" } }, o.env);
+  const k = JSON.parse(o.depo.get("kodlar"))["3100"];
+  assert.deepEqual(k.map((g) => g.ids), [[950], [300, 301, 302]]);
+  assert.ok(!k.flatMap((g) => g.ids).includes(0));
+  assert.equal(o.depo.get(`gun:${gunAnahtari(o.simdi)}`), "1");
+});
+
+test("asistan cevabındaki **kalın** Telegram'da kalın görünür; biçim hatasında düz metin gider", async () => {
+  const { telegramHtml, duzMetin } = await import("./asistan.js");
+  assert.equal(telegramHtml("**Bu hafta:** 7 paylaşım"), "<b>Bu hafta:</b> 7 paylaşım");
+  assert.equal(telegramHtml("- 3244 <yeni> & `kod`"), "• 3244 &lt;yeni&gt; &amp; <code>kod</code>");
+  assert.equal(telegramHtml("# Özet"), "<b>Özet</b>");
+  assert.equal(telegramHtml("~10619 kodsuz"), "~10619 kodsuz");
+  assert.equal(duzMetin("**Bu hafta:** 7"), "Bu hafta: 7");
+  const o = asistanOrtami([mesaj(1, "**Bu hafta:** 7 paylaşım")]);
+  await yazi(o.env, 111, "bu hafta kaç paylaşım");
+  const son = cagrilar(o.gonderilen, "sendMessage").at(-1).govde;
+  assert.equal(son.parse_mode, "HTML");
+  assert.equal(son.text, "<b>Bu hafta:</b> 7 paylaşım");
 });
 
 // ---------- Yapay zekâ asistanı ----------
