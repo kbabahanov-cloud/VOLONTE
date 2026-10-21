@@ -94,13 +94,13 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - **Fotoğraf tanıma** (`telegram-bot/tanima.js`): katalog = her modelin en yeni paylaşımının ilk medyası gizli arşiv kanalına forwardMessage → 320 px dosya → Claude (8 görsel/çağrı, structured output) → KV `tarifler` {kod: {t, f, m}}; 5 dk görevi, günde en fazla 150 çağrı (`katalog:<gün>`), bulunamayan → `tarifhata`=3. Arşiv: bot bir kanala yönetici eklenince (`my_chat_member`, ekleyen izinli kişiyse) KV `arsiv`. Tanıma: izinli kişi fotoğraf gönderir → 800 px → adım 1 tarif listesi (system, cache) en fazla 5 aday → adım 2 müşteri + aday görselleri karşılaştırma {en_iyi, guven, siralama, aciklama} → "büyük ihtimalle X" + modelin fotoğrafı, ya da "emin değilim" + 2–3 aday. `ai:<gün>` sınırına sayılır.
   - Güvenlik düzeltmesi: sadece VOLONTE kanalının paylaşımları kaydedilir (`anaKanalMi`), arşiv/başka kanal karışmaz.
   - Maliyet tahmini (görsel ≈ 28×28 piksel başına 1 token; 320 px ≈ 175 token): katalog bir kerelik ~1–2 $; tanıma başına ~3–8 sent (tarif listesi önbellekte değilse üst sınır).
-- [ ] Komut K1: kullanıcı gizli "Kemal arşiv" kanalı açar, @VolonteasistantBOT'u yönetici ekler (Mesaj gönderme). Bağlanınca bot ikisine haber verir, katalog başlar.
-- [ ] Komut K2: BotFather → /mybots → @VolonteasistantBOT → Edit Bot → Edit Name → Kemal.
+- [x] Komut K1 (21 Ekim 18:03): arşiv kanalı bağlandı (KV `arsiv` id -1004432627125, başlık "Kemal"). İlk katalog çağrısı (15:05 UTC) hatayla bitti, kaydı yoktu → hata artık KV `katalogHata`ya yazılıyor; sonraki çağrılar sorunsuz (15:20 UTC: 16 tarif, tarifler kaliteli). Hız: 8 model / 5 dk → ~680 model ~7 saat. CPU çalışma başına 30–80 ms (ücretsiz plan 10 ms; şimdilik hata yok, `exceededCpu` görülürse Workers Paid 5 $/ay için kullanıcıya sorulacak). Eski tanım: kullanıcı gizli "Kemal arşiv" kanalı açar, @VolonteasistantBOT'u yönetici ekler (Mesaj gönderme). Bağlanınca bot ikisine haber verir, katalog başlar.
+- [x] Komut K2 (21 Ekim): kullanıcı BotFather'da adı Kemal yaptı. Eski tanım: BotFather → /mybots → @VolonteasistantBOT → Edit Bot → Edit Name → Kemal.
 - [ ] Komut K3: Anthropic Console → Billing → Spend limits → 60 $ (kullanıcı onayladı).
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: Komut K1 (Kemal arşiv kanalı), sonra K2 (BotFather adı), K3 (harcama sınırı 60 $). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
+**Sıradaki komut: Komut K3 (harcama sınırı 60 $); katalog bitince fotoğraf tanıma denemesi (K4). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

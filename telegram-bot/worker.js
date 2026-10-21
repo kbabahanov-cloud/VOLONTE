@@ -557,7 +557,9 @@ export async function rotasyon(env, simdi) {
   try {
     await katalogAdimi(env, simdi);
   } catch (e) {
-    console.log("katalog adımı hatası", e && e.message);
+    // Görülebilsin diye son hata KV'ye yazılır (Claude Code okur).
+    const ayrinti = e && (e.status ? `${e.status} ${e.message}` : e.message || String(e));
+    await env.KAYIT.put("katalogHata", JSON.stringify({ zaman: simdi, hata: String(ayrinti).slice(0, 800) }), { expirationTtl: 7 * 86400 });
   }
   let tur = await env.KAYIT.get("tur", "json");
   const gun = gunAnahtari(simdi);
