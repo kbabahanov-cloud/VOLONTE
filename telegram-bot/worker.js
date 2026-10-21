@@ -29,7 +29,7 @@
 //  ANTHROPIC_MODEL    düz metin, isteğe bağlı — varsayılan claude-opus-5-5.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
-import { asistanCevapla } from "./asistan.js";
+import { asistanCevapla, anahtarKontrol } from "./asistan.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
 const KANAL_ADI = "Volonteroseoffical";
@@ -100,6 +100,14 @@ async function durumKontrol(env) {
       }
     }
     const onceki = (await env.KAYIT.get("durum:webhook", "json")) || {};
+    // Yapay zekâ anahtarı saatte bir kontrol edilir (ücretsiz).
+    if (!onceki.yzZaman || kayit.zaman - onceki.yzZaman > 3600 || (onceki.yz || "").startsWith("anahtar-yok") !== !env.ANTHROPIC_API_KEY) {
+      kayit.yz = await anahtarKontrol(env);
+      kayit.yzZaman = kayit.zaman;
+    } else {
+      kayit.yz = onceki.yz;
+      kayit.yzZaman = onceki.yzZaman;
+    }
     const ayniDurum = JSON.stringify({ ...onceki, zaman: 0, durum: 0 }) === JSON.stringify({ ...kayit, zaman: 0, durum: 0 }) &&
       (onceki.durum === kayit.durum || (onceki.durum === "kuruldu" && kayit.durum === "kurulu"));
     if (!ayniDurum || kayit.zaman - (onceki.zaman || 0) > 3600) {

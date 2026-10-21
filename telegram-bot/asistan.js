@@ -169,3 +169,19 @@ async function araciCalistir(ad, girdi, msg, y, simdi) {
       throw new Error(`bilinmeyen araç: ${ad}`);
   }
 }
+
+// Anahtarın çalıştığını ücretsiz kontrol eder (model bilgisi okunur, token harcanmaz).
+export async function anahtarKontrol(env) {
+  if (!env.ANTHROPIC_API_KEY) return "anahtar-yok";
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 15_000 });
+  try {
+    const model = await client.models.retrieve(env.ANTHROPIC_MODEL || VARSAYILAN_MODEL);
+    return `ok: ${model.id}`;
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) return "anahtar-gecersiz";
+    if (e instanceof Anthropic.PermissionDeniedError) return "izin-yok";
+    if (e instanceof Anthropic.NotFoundError) return "model-bulunamadi";
+    if (e instanceof Anthropic.APIError) return `hata: ${e.status || "?"}`;
+    return "baglanti-hatasi";
+  }
+}

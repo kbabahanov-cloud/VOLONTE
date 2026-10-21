@@ -77,12 +77,12 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - Hız (kullanıcı kararı A): 1,5–2 saat aralık, günde ~6–8 paylaşım; 10 paylaşım ~1,5 gün.
   - Silme adımı 20 mesaj/çalışma. Asistan araçları: durum_ozeti (tur durumu dahil), model_bilgisi, beklesin, sil_onayi_iste, paylasim_onizle, kuyruk_goster (ek liste kaldırıldı).
   - 21 Ekim 13:10: `tur` = {no:0, durum:"bitti"} elle yazıldı → **1. tur 22 Ekim 09:00**. Bugünkü 5 eski onay (3194, 3244, 3399, 3415, 988) 60–90 dk arayla bugün paylaşılıyor (ilki 13:28).
-- [ ] Komut A1: kullanıcı platform.claude.com hesabı, ön ödemeli kredi (otomatik yükleme KAPALI), aylık harcama sınırı (öneri 30 $), API anahtarı → Cloudflare secret `ANTHROPIC_API_KEY`.
+- [x] Komut A1 (21 Ekim): kullanıcı anahtarı Cloudflare'e secret olarak girdi; bot saatte bir ücretsiz kontrol ediyor (`models.retrieve`) → `durum:webhook.yz` = "ok: claude-opus-5-5". Eski tanım: kullanıcı platform.claude.com hesabı, ön ödemeli kredi (otomatik yükleme KAPALI), aylık harcama sınırı (öneri 30 $), API anahtarı → Cloudflare secret `ANTHROPIC_API_KEY`.
 - [x] Komut A2 (21 Ekim): yetki verildi; bot getChatMember ile doğruladı → `durum:webhook.yetki` = {paylas: true, sil: true, duzenle: true}. ("Mesajları düzenleme" de açık; bot kullanmıyor, kullanıcı isterse kapatabilir.)
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: Komut A1 (Anthropic hesabı + anahtar). Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
+**Sıradaki komut: Komut A3 — kullanıcı bota normal yazıyla asistanı dener ("bu hafta kaç paylaşım yaptık"); Claude `ai:<gün>` sayacı ve hataları kontrol eder. Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
