@@ -12,6 +12,7 @@ function sahteOrtam() {
   };
   const env = {
     BOT_TOKEN: "test-token",
+    MESAJ_ARASI_MS: 0,
     WEBHOOK_SECRET: "gizli123",
     ALLOWED_IDS: "111, 222",
     KAYIT: {
@@ -344,9 +345,8 @@ test("bir modelin bütün paylaşımları: her tarih için düğme, seçilen pay
 
   await bas(o.env, 111, onaylar[1].callback_data); // ikinci tarih
   assert.equal(tur(o.depo).ogeler["4013"].secilen, 1);
-  assert.match(cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.caption, /Murat onayladı: .* paylaşımı \(1\/10\)/);
-  // 10 onay olunca sıraya seçilen paylaşım girer
-  for (const k of ["4012", "4011", "4010", "4009", "4008", "4007", "4006", "4005", "4004"]) await bas(o.env, 111, `t1:1:${k}:0`);
+  assert.match(cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.caption, /Murat onayladı: .* paylaşımı — bugün paylaşım sırasına girdi/);
+  // onaylanınca seçilen paylaşım hemen (bugün) sıraya girer
   assert.deepEqual(JSON.parse(o.depo.get("kuyruk:4013")).ids, [3001, 3002, 3003]);
 });
 
@@ -360,7 +360,7 @@ test("onay ikisinde de görünür; ikinci basış ve izinsiz kişi işlemez", as
   await bas(o.env, 222, onay);
   const d = cagrilar(o.gonderilen, "editMessageCaption");
   assert.equal(d.length, 2);
-  assert.match(d[0].govde.caption, /Merdan onayladı: \d\d\.\d\d\.2026 paylaşımı \(1\/10\)/);
+  assert.match(d[0].govde.caption, /Merdan onayladı: \d\d\.\d\d\.2026 paylaşımı — bugün paylaşım sırasına girdi/);
   o.gonderilen.length = 0;
   await bas(o.env, 111, onay);
   assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Merdan zaten işaretledi/);
@@ -371,11 +371,11 @@ test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan 
   const o = turOrtami();
   o.env.EKIP_IDS = "333";
   await rotasyon(o.env, o.simdi);
-  // 3 kişi: bir çalışmada en fazla 24 çağrı → 8 model; kalan 2 sonraki çalışmada
-  assert.equal(turMesajlari(o.gonderilen, "333").length, 8);
-  assert.ok(cagrilar(o.gonderilen, "copyMessage").length <= 24);
+  // sabah tek seferde: her kişiye 10 model (her kişi ayrı çalışmada, istek sınırına takılmaz)
+  for (const k of ["111", "222", "333"]) assert.equal(turMesajlari(o.gonderilen, k).length, 10);
+  o.gonderilen.length = 0;
   await rotasyon(o.env, o.simdi + 300);
-  assert.equal(turMesajlari(o.gonderilen, "333").length, 10);
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0); // 5 dk sonra yeni mesaj yok
 
   o.env.EKIP_IDS = "333,444"; // yeni ekip üyesi
   o.gonderilen.length = 0;
@@ -406,7 +406,7 @@ test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan 
   assert.equal(o.depo.get("bekleyen:333"), undefined); // müşteri moduna düşmez
 });
 
-test("Beklesin: 7 gün sonra sorulur, yerine hemen sıradaki model gelir", async () => {
+test("Beklesin: 7 gün sonra sorulur, yerine yeni model gelmez", async () => {
   const o = turOrtami();
   await rotasyon(o.env, o.simdi);
   const beklesin = turDugme(o.gonderilen, "4013", "⏳");
@@ -414,9 +414,7 @@ test("Beklesin: 7 gün sonra sorulur, yerine hemen sıradaki model gelir", async
   await bas(o.env, 111, beklesin);
   const su = Math.floor(Date.now() / 1000);
   assert.ok(Math.abs(JSON.parse(o.depo.get("atlananlar"))["4013"] - (su + 7 * GUN)) < 60);
-  const yeni = cagrilar(o.gonderilen, "copyMessage");
-  assert.equal(yeni.length, 2); // ikisine de
-  assert.match(yeni[0].govde.caption, /^4003 /); // sıradaki en eski
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0); // günde sadece sabahki 10 model
   assert.match(cagrilar(o.gonderilen, "editMessageCaption")[0].govde.caption, /Murat: beklesin/);
 });
 
@@ -432,7 +430,7 @@ function silmeTaklidi(o, silinemeyen = []) {
   };
 }
 
-test("Sil: Emin misiniz → Vazgeç hiçbir şey silmez → Evet tüm paylaşımları siler, yenisi gelir", async () => {
+test("Sil: Emin misiniz → Vazgeç hiçbir şey silmez → Evet tüm paylaşımları siler, yerine yeni model gelmez", async () => {
   const o = turOrtami();
   const kodlar = JSON.parse(o.depo.get("kodlar"));
   kodlar["4013"].push({ ids: [150, 151, 152], tarih: o.simdi - 200 * GUN });
@@ -462,7 +460,7 @@ test("Sil: Emin misiniz → Vazgeç hiçbir şey silmez → Evet tüm paylaşım
   assert.equal(JSON.parse(o.depo.get("kodlar"))["4013"].length, 2); // tarihler kayıtta kalır
   assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 2);
   assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /5 mesaj kanaldan silindi/);
-  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 2); // yerine yenisi
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0); // yerine yeni model yok
   await guncellemeIsle({ message: { message_id: 9, date: 1, chat: ozel(111), from: { id: 111 }, text: "/paylas 4013" } }, o.env);
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /silindi olarak işaretli/);
 });
@@ -495,93 +493,86 @@ test("çok mesajlı silme 5 dakikalık görevle parça parça biter (gece de)", 
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /45 mesaj kanaldan silindi/);
 });
 
-test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 50–60 dk arayla başlar; sonraki tur hemen açılır, modelleri paylaşım olmayan çalışmada gelir", async () => {
+test("günde tek tur: onaylanan hemen sıraya girer, 50–60 dk arayla paylaşılır; 10 onay beklenmez, yeni tur açılmaz", async () => {
   const o = turOrtami(25);
   await rotasyon(o.env, o.simdi);
   const kodlar10 = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
-  for (const kod of kodlar10.slice(0, 9)) await bas(o.env, 111, `t1:1:${kod}:0`);
-  o.gonderilen.length = 0;
-  await rotasyon(o.env, ist(10));
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.equal(kodlar10.length, 10);
+  await bas(o.env, 111, `t1:1:${kodlar10[0]}:0`);
+  assert.ok(o.depo.get(`kuyruk:${kodlar10[0]}`)); // tek onayla sıraya girdi
+  for (const kod of kodlar10.slice(1)) await bas(o.env, 222, `t1:1:${kod}:0`);
+  assert.equal(tur(o.depo).no, 1); // 10 onay olunca yeni tur açılmaz
   assert.equal(tur(o.depo).durum, "toplaniyor");
-
-  await bas(o.env, 222, `t1:1:${kodlar10[9]}:0`);
-  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /10 onay tamam/.test(m.govde.text)));
-  assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:")).length, 10);
-  // sonraki tur hemen açılır; modelleri düğme çalışmasında değil, 5 dakikalık görevde gelir (istek sınırı)
-  assert.equal(tur(o.depo).no, 2);
-  assert.equal(tur(o.depo).durum, "toplaniyor");
-  assert.equal(turMesajlari(o.gonderilen).length, 0);
 
   o.gonderilen.length = 0;
   const t = ist(10, 5);
   await rotasyon(o.env, t);
   const ilk = cagrilar(o.gonderilen, "copyMessages");
   assert.equal(ilk.length, 1);
-  assert.deepEqual(ilk[0].govde.message_ids, [5240, 5241]); // 1. turun ilk onaylananı (4024), albümün tamamı
+  assert.deepEqual(ilk[0].govde.message_ids, [5240, 5241]); // ilk onaylanan (4024), albümün tamamı
   const ara = Number(o.depo.get("sonraki")) - t;
   assert.ok(ara >= 50 * 60 && ara <= 60 * 60, `aralık ${ara / 60} dk`);
-  assert.equal(turMesajlari(o.gonderilen).length, 0); // paylaşım yapılan çalışmada tur mesajı yok
+  assert.equal(turMesajlari(o.gonderilen).length, 0);
   o.gonderilen.length = 0;
   await rotasyon(o.env, t + 45 * 60);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
-  const yeniler = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
-  assert.equal(yeniler.length, 10); // 2. turun yeni 10 modeli (öncekilerden farklı)
-  assert.ok(!yeniler.some((k) => kodlar10.includes(k)));
+  assert.equal(turMesajlari(o.gonderilen).length, 0); // gün içinde yeni liste gelmez
 });
 
 test("paylaşım penceresi 08:00–20:00", async () => {
   const o = turOrtami();
   o.depo.set("tur", JSON.stringify({ no: 1, durum: "toplaniyor", basla: o.simdi, onaylar: [], ogeler: {} }));
   o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
-  await rotasyon(o.env, ist(20, 5));
-  await rotasyon(o.env, ist(7, 55, 1));
+  await rotasyon(o.env, ist(7, 55));
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   await rotasyon(o.env, ist(19, 50));
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
 });
 
-test("gün biterse tur ertesi gün devam eder: yeni liste yok, bir kez hatırlatma", async () => {
+test("20:00'de gün sonu: paylaşılamayan onaylılar sıradan çıkar, tur kapanır; rapor söyler; ertesi sabah yeni tur", async () => {
   const o = turOrtami();
   await rotasyon(o.env, o.simdi);
   for (const kod of ["4013", "4012", "4011"]) await bas(o.env, 111, `t1:1:${kod}:0`);
+  o.depo.set(`sayac:${gunAnahtari(o.simdi)}`, "10"); // bugünün hakkı doldu
   o.gonderilen.length = 0;
-  await rotasyon(o.env, ist(9, 0, 1));
-  await rotasyon(o.env, ist(9, 5, 1));
-  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0);
-  const h = cagrilar(o.gonderilen, "sendMessage").map((m) => m.govde.text);
-  assert.equal(h.length, 2); // bir kez, ikisine
-  assert.match(h[0], /1\. turda 3\/10 onay var; 7 model cevap bekliyor/);
-  assert.equal(tur(o.depo).no, 1);
+  await rotasyon(o.env, ist(20, 0));
+  assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:")).length, 0);
+  assert.equal(tur(o.depo).durum, "bitti");
+  const rapor = cagrilar(o.gonderilen, "sendMessage").find((m) => /akşam raporu/.test(m.govde.text));
+  assert.match(rapor.govde.text, /paylaşılamayan 3 onaylı model sıradan çıkarıldı \(4013, 4012, 4011\); ileriki bir turda yeniden sorulacak/);
+  // kapanan turun düğmesi artık işlem yapmaz
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, "t1:1:4010:0");
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /geçerli değil/);
+  assert.equal(o.depo.get("kuyruk:4010"), undefined);
+  // gece yeni liste yok; sabah yeni tur, çıkarılanlar yeniden sorulabilir
+  await rotasyon(o.env, ist(23, 0));
+  assert.equal(turMesajlari(o.gonderilen).length, 0);
+  await rotasyon(o.env, ist(8, 0, 1));
+  assert.equal(tur(o.depo).no, 2);
+  const yarin = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
+  assert.equal(yarin.length, 10);
+  assert.ok(yarin.includes("4013"));
 });
 
-test("turun son paylaşımında 🏁 mesajı; tur öncesi sıradakiler 60–90 dk arayla", async () => {
+test("tur öncesinden kalan sıradakiler 60–90 dk arayla", async () => {
   const o = turOrtami(3);
   o.depo.set("tur", JSON.stringify({ no: 2, durum: "toplaniyor", basla: o.simdi, onaylar: [], ogeler: {} }));
-  o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
   o.depo.set("kuyruk:3999", JSON.stringify({ kod: "3999", ids: [7000], kim: "Murat", zaman: 0 })); // tur öncesinden
   const t = ist(12);
   await rotasyon(o.env, t);
   const ara = Number(o.depo.get("sonraki")) - t;
   assert.ok(ara >= 60 * 60 && ara <= 90 * 60); // eski düzen
   assert.ok(!cagrilar(o.gonderilen, "sendMessage").some((m) => /🏁/.test(m.govde.text)));
-  await rotasyon(o.env, t + 2 * 3600);
-  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /🏁 1\. turun paylaşımları tamamlandı/.test(m.govde.text)));
-  assert.equal(tur(o.depo).no, 2); // yeni tur zaten açık, dokunulmaz
 });
 
-test("önerecek model kalmazsa onaylananlarla paylaşıma geçer, ertesi gün yeni tur", async () => {
+test("önerecek model az ise o kadar sorulur; yerine yenisi gelmez; ertesi gün yeni tur", async () => {
   const o = turOrtami(3);
   await rotasyon(o.env, o.simdi);
   assert.equal(turMesajlari(o.gonderilen).length, 3);
   await bas(o.env, 111, "t1:1:4002:0");
-  await bas(o.env, 111, "t1:1:4001:0");
   await bas(o.env, 111, "t7:1:4000");
-  assert.equal(tur(o.depo).durum, "bitti");
-  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /onaylanan 2 modelle paylaşıma geçiyorum/.test(m.govde.text)));
-  assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:")).length, 2);
-  const t1 = tur(o.depo);
-  o.depo.set("tur", JSON.stringify({ ...t1, bitis: o.simdi })); // düğme gerçek saatle bastı; testi saatten bağımsız yap
+  assert.equal(turMesajlari(o.gonderilen).length, 3); // yerine yeni model gelmez
   await rotasyon(o.env, ist(19));
   assert.equal(tur(o.depo).no, 1); // aynı gün yeni tur yok
   await rotasyon(o.env, ist(8, 0, 1));
@@ -602,12 +593,10 @@ test("kanalda bulunamayan model atlanır, yerine sıradaki gelir", async () => {
   assert.ok(!tur(o.depo).ogeler["4013"]);
 });
 
-test("20:00'dan sonra ve günlük 10 sınırında paylaşım yok", async () => {
+test("günlük 10 sınırında paylaşım yok, sıradaki gün içinde bekler", async () => {
   const o = turOrtami();
-  o.depo.set("tur", JSON.stringify({ no: 1, durum: "paylasiliyor", basla: o.simdi, onaylar: [], ogeler: {} }));
+  o.depo.set("tur", JSON.stringify({ no: 1, durum: "toplaniyor", basla: o.simdi, onaylar: [], ogeler: {} }));
   o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
-  await rotasyon(o.env, ist(20, 5));
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   o.depo.set(`sayac:${gunAnahtari(o.simdi)}`, "10");
   await rotasyon(o.env, ist(15));
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
@@ -760,7 +749,7 @@ test("asistan: anahtar yoksa nazikçe söyler", async () => {
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /henüz bağlı değil/);
 });
 
-test("asistan: paylaşma/silme aracı yok; 'beklesin' turdaki modelin yerine yenisini getirir", async () => {
+test("asistan: paylaşma/silme aracı yok; 'beklesin' turdaki modeli işaretler, yerine yeni model gelmez", async () => {
   const o = asistanOrtami([aracCagrisi("beklesin", { kod: "4013" }), mesaj(1, "4013 beklemeye alındı.")]);
   const kodlar = {};
   for (let i = 0; i < 14; i++) kodlar[String(4000 + i)] = [{ ids: [5000 + i * 10], tarih: o.simdi - (40 + i) * GUN }];
@@ -775,7 +764,7 @@ test("asistan: paylaşma/silme aracı yok; 'beklesin' turdaki modelin yerine yen
   assert.equal(o.istekler[0].fallbacks, "default");
   assert.equal(o.istekler[1].messages.at(-1).content[0].type, "tool_result");
   assert.equal(JSON.parse(o.depo.get("tur")).ogeler["4013"].karar, "t7");
-  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 2);
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   assert.equal(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, "4013 beklemeye alındı.");
   assert.equal(JSON.parse(o.depo.get("sohbet:111")).length, 2);
@@ -1001,7 +990,7 @@ test("tepki sayıları kaydedilir; 20:00 raporu bugünkü paylaşımları, en ç
   const metin = r[0].govde.text;
   assert.match(metin, /Bugün kanala 2 paylaşım yapıldı:\n• 10:00 3100 — ❤️ 11\n• 12:00 3200 — ❤️ 4/);
   assert.match(metin, /En çok tepki alanlar \(son 7 gün\):\n• 3100 — ❤️ 11/);
-  assert.match(metin, /Sırada 1 onaylı paylaşım var/);
+  assert.match(metin, /Yarının turu sabah 8:00'de gelir/);
   assert.match(metin, /Görüntülenme sayısını Telegram botlara vermiyor/);
   const dugme = r[0].govde.reply_markup.inline_keyboard[0][0];
   assert.equal(dugme.callback_data, "rp:3100");
