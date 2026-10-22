@@ -711,7 +711,7 @@ const kisiAdi = (from) => [from.first_name, from.last_name].filter(Boolean).join
 
 // Zamanlanmış görevden her 5 dakikada çağrılır.
 export async function rotasyon(env, simdi) {
-  await silmeDevam(env);
+  const siliyor = await silmeDevam(env);
   // Zamanlanmış görev her seferinde farklı ülkedeki bir veri merkezinde çalışıyor ve
   // Anthropic bazılarından gelen istekleri reddediyor (403). Katalog adımı bu yüzden
   // Kuzey Amerika'ya sabitlenmiş bir Durable Object içinde çalışır.
@@ -736,6 +736,7 @@ export async function rotasyon(env, simdi) {
   // biten turdan sonra yeni gün geldiyse.
   if (!tur || tur.durum === "paylasiliyor" || (tur.durum === "bitti" && gunAnahtari(tur.bitis) < gun)) {
     await turBaslat(env, tur, simdi);
+    if (!siliyor) await turDoldur(env, simdi);
     return;
   }
   if (tur.durum === "toplaniyor" && gunAnahtari(tur.basla) < gun && !(await env.KAYIT.get(`hatirlatma:${gun}`))) {
@@ -743,8 +744,38 @@ export async function rotasyon(env, simdi) {
     const bekleyen = Object.values(tur.ogeler).filter((o) => !o.karar).length;
     await herkese(env, `☀️ Günaydın, ben Kemal! ${tur.no}. turda ${tur.onaylar.length}/${TUR_ADET} onay var; ${bekleyen} model cevap bekliyor (yukarıdaki mesajlarda). 10 onay tamamlanınca bu turun paylaşımları başlar.`);
   }
-  await turEksikleriGonder(env);
-  await siradakiniPaylas(env, simdi);
+  const paylasti = await siradakiniPaylas(env, simdi);
+  // Cloudflare ücretsiz pakette bir çalışmada en fazla 50 dış istek var: paylaşım ya da silme
+  // yapılan çalışmada tur mesajları gönderilmez, 5 dk sonraki çalışmaya kalır.
+  if (!paylasti && !siliyor) await turDoldur(env, simdi);
+}
+
+// Tur mesajlarını parça parça gönderir (kişi sayısı arttıkça bir çalışmaya daha az model).
+const TUR_BUTCE = 24; // bir çalışmada tur için en fazla Telegram çağrısı
+export async function turDoldur(env, simdi) {
+  const tur = await env.KAYIT.get("tur", "json");
+  if (!tur || tur.durum !== "toplaniyor") return;
+  const kisiSayisi = Math.max(1, kisilerden(env).length);
+  const bekleyen = Object.values(tur.ogeler).filter((o) => !o.karar).length;
+  const eksik = TUR_ADET - tur.onaylar.length - bekleyen;
+  let butce = TUR_BUTCE;
+  if (eksik > 0) {
+    const adet = Math.min(eksik, Math.max(1, Math.floor(butce / kisiSayisi)));
+    const onceki = new Set(Object.keys(tur.ogeler));
+    await modelGonder(env, tur, adet, simdi);
+    butce -= adet * kisiSayisi;
+    if (tur.durum !== "toplaniyor") {
+      await env.KAYIT.put("tur", JSON.stringify(tur));
+    } else {
+      // Gönderirken biri düğmeye basmış olabilir: güncel tura sadece yeni modelleri ekle.
+      const guncel = await env.KAYIT.get("tur", "json");
+      if (guncel && guncel.no === tur.no) {
+        for (const [kod, oge] of Object.entries(tur.ogeler)) if (!onceki.has(kod) && !guncel.ogeler[kod]) guncel.ogeler[kod] = oge;
+        await env.KAYIT.put("tur", JSON.stringify(guncel));
+      }
+    }
+  }
+  if (butce >= kisiSayisi) await turEksikleriGonder(env, butce);
 }
 
 const herkese = async (env, text) => {
@@ -804,9 +835,8 @@ const eminMisin = (no, kod) => ({ inline_keyboard: [[
 async function turBaslat(env, onceki, simdi) {
   const tur = { no: ((onceki && onceki.no) || 0) + 1, durum: "toplaniyor", basla: simdi, onaylar: [], ogeler: {} };
   await env.KAYIT.put("tur", JSON.stringify(tur)); // önce kaydet: görev üst üste çalışırsa iki tur açılmasın
+  // Modeller burada değil, turDoldur ile parça parça gönderilir (istek sınırı).
   await herkese(env, `🆕 Ben Kemal — ${tur.no}. tur başladı. En uzun süredir paylaşılmayan modeller aşağıda; her birinin altında kanaldaki bütün paylaşım tarihleri var.\n✅ <tarih> → o paylaşım aynen paylaşılır · 🖼 Hepsini göster → bütün fotoğraf/videoları size gönderirim · ⏳ Beklesin (${BEKLESIN_GUN} gün sonra tekrar sorarım) · 🗑️ Sil (onayınızla kanaldaki tüm paylaşımları silinir).\nBeklesin ya da Sil derseniz yerine yenisi gelir. ${TUR_ADET} onay tamamlanınca ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla paylaşırım.`);
-  await modelGonder(env, tur, TUR_ADET, simdi);
-  await env.KAYIT.put("tur", JSON.stringify(tur));
 }
 
 // Tura `adet` yeni model ekler (ilk 10 ya da Beklesin/Sil yerine gelen). Gönderilen sayıyı döner.
@@ -868,8 +898,7 @@ async function modelGonder(env, tur, adet, simdi) {
 
 // Turda cevap bekleyen modelleri, o anda ulaşılamamış ya da sonradan eklenmiş kişilere de
 // gönderir (ör. ekibe yeni katılan, /start'ı geç yazan). Kim önce basarsa geçerli olur.
-const EKSIK_PARTI = 10;
-export async function turEksikleriGonder(env) {
+export async function turEksikleriGonder(env, enFazla = 10) {
   const tur = await env.KAYIT.get("tur", "json");
   if (!tur || tur.durum !== "toplaniyor") return;
   const kanal = await env.KAYIT.get("kanal", "json");
@@ -882,7 +911,7 @@ export async function turEksikleriGonder(env) {
     const sahip = new Set((oge.mesajlar || []).map(([k]) => String(k)));
     const secenekler = oge.secenekler || [{ ids: oge.ids, tarih: oge.tarih }];
     for (const kisi of kisilerden(env)) {
-      if (sahip.has(kisi) || ulasilamayan.has(kisi) || gonderilen >= EKSIK_PARTI) continue;
+      if (sahip.has(kisi) || ulasilamayan.has(kisi) || gonderilen >= enFazla) continue;
       gonderilen += 1;
       const r = await telegram(env, "copyMessage", {
         chat_id: kisi, from_chat_id: kanal.id, message_id: secenekler[0].ids[0], caption: oge.yazi, reply_markup: turKlavye(tur.no, kod, secenekler),
@@ -921,7 +950,7 @@ async function paylasimaGec(env, tur, simdi, eksik = false) {
   const bas = bekleyen > 0 ? "önceki turun paylaşımlarından sonra" : saat(simdi) >= SABAH_SAATI && saat(simdi) < AKSAM_SAATI ? "şimdi" : `${SABAH_SAATI}:00'da`;
   await herkese(env, eksik
     ? `▶️ ${tur.no}. tur: önerecek model kalmadı, onaylanan ${tur.onaylar.length} modelle paylaşıma geçiyorum (${bas}). Sıra: /kuyruk`
-    : `▶️ ${tur.no}. tur: ${TUR_ADET} onay tamam! Paylaşım ${bas} başlıyor, ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arası. Sıra ve saatler: /kuyruk\nSonraki turun listesi hemen geliyor.`);
+    : `▶️ ${tur.no}. tur: ${TUR_ADET} onay tamam! Paylaşım ${bas} başlıyor, ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arası. Sıra ve saatler: /kuyruk\nSonraki turun listesi birkaç dakika içinde geliyor.`);
 }
 
 // Tur içindeki bir model için karar: "t1" onay, "t7" beklesin, "ty" sil (onaylanmış).
@@ -1086,7 +1115,9 @@ async function silmeAdimi(env, kod) {
 
 async function silmeDevam(env) {
   const { keys } = await env.KAYIT.list({ prefix: "silinecek:" });
-  if (keys.length) await silmeAdimi(env, keys[0].name.slice("silinecek:".length));
+  if (!keys.length) return false;
+  await silmeAdimi(env, keys[0].name.slice("silinecek:".length));
+  return true;
 }
 
 async function siradakiniPaylas(env, simdi) {
@@ -1109,6 +1140,7 @@ async function siradakiniPaylas(env, simdi) {
     ? `✅ ${ad} kanalda paylaşıldı (${oge.kim} onaylamıştı).${sonuc.markaNotu ? ` ⚠️ ${sonuc.markaNotu}.` : ""}${sonuc.link ? "\n" + sonuc.link : ""}`
     : `⚠️ ${ad} paylaşılamadı: ${sonuc.hata}`;
   for (const kisi of kisilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: metin + (turBitti ? `\n🏁 ${oge.tur}. turun paylaşımları tamamlandı.` : ""), disable_web_page_preview: true });
+  return true;
 }
 
 async function kuyrukGoster(sohbet, env) {

@@ -23,6 +23,8 @@ const SONRA_GUNLUK = 10;
 const LISTE_PARTI = 8; // bir çalışmada sorulan model
 const PAYLASIM_EN_FAZLA = 4; // bir modelin en yeni kaç paylaşımından poz toplanır
 const POZ_EN_FAZLA = 10;
+const ILETME_EN_FAZLA = 12; // bir hazırlıkta arşive iletilen mesaj (ücretsiz pakette çalışma başına 50 istek)
+const LISTE_BUTCE = 24; // bir çalışmada liste için en fazla Telegram çağrısı
 const DUSUK_COZUNURLUK = 700; // piksel (genişlik ya da yükseklik); altı "düşük çözünürlük"
 const GUNCELLEMELER = ["message", "callback_query"];
 const KATEGORILER = ["dresses", "sets", "tops", "skirts", "trousers", "evening"];
@@ -80,8 +82,8 @@ export default {
     if (!env.BOT_TOKEN) return;
     await webhookKur(env);
     const simdi = Math.floor(Date.now() / 1000);
-    await eksikleriGonder(env, simdi);
-    await listeAdimi(env, simdi);
+    const gonderilen = await eksikleriGonder(env, simdi);
+    await listeAdimi(env, simdi, LISTE_BUTCE - gonderilen);
     // Yapay zekâ adımı Anthropic'in kabul ettiği bölgede çalışsın diye sabit nesnede.
     if (env.SELIN) await env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" }).fetch("https://selin/hazirla");
     else await hazirlaGuvenli(env, simdi);
@@ -142,12 +144,12 @@ function soruKarti(env, bilgi, kod, sec, kisi) {
 const EKSIK_PARTI = 10;
 export async function eksikleriGonder(env, simdi) {
   const s = saat(simdi);
-  if (s < 9 || s >= 21) return;
+  if (s < 9 || s >= 21) return 0;
   const modeller = await oku(env, "selin:modeller", {});
   const bekleyen = Object.entries(modeller).filter(([, m]) => m.durum === "soruldu");
-  if (!bekleyen.length) return;
+  if (!bekleyen.length) return 0;
   const bilgi = await kanalBilgisi(env);
-  if (!bilgi.kanal) return;
+  if (!bilgi.kanal) return 0;
   const ulasilamayan = new Set();
   const yeni = {}; // kod → bu çalışmada gönderilen [kişi, mesaj]
   let gonderilen = 0;
@@ -165,7 +167,7 @@ export async function eksikleriGonder(env, simdi) {
       else ulasilamayan.add(k); // bu çalışmada bir daha denenmez (ör. /start yazmamış)
     }
   }
-  if (!Object.keys(yeni).length) return;
+  if (!Object.keys(yeni).length) return gonderilen;
   // Gönderirken biri düğmeye basmış olabilir: güncel kaydı okuyup sadece mesajları ekle.
   const guncel = await oku(env, "selin:modeller", {});
   for (const [kod, liste] of Object.entries(yeni)) {
@@ -174,9 +176,10 @@ export async function eksikleriGonder(env, simdi) {
     else for (const [k, id] of liste) await tg(env, "editMessageReplyMarkup", { chat_id: k, message_id: id, reply_markup: { inline_keyboard: [] } });
   }
   await yazKV(env, "selin:modeller", guncel);
+  return gonderilen;
 }
 
-export async function listeAdimi(env, simdi) {
+export async function listeAdimi(env, simdi, butce = LISTE_BUTCE) {
   if (!(await env.KAYIT.get("selin:rehberOnay"))) return; // rehber onaylanmadan başlamaz
   const s = saat(simdi);
   if (s < 9 || s >= 21) return;
@@ -186,7 +189,10 @@ export async function listeAdimi(env, simdi) {
   if (sayac >= hedef) return;
   const bilgi = await kanalBilgisi(env);
   const modeller = await oku(env, "selin:modeller", {});
-  const adaylar = listeAdaylari(bilgi, modeller, simdi).slice(0, Math.min(LISTE_PARTI, hedef - sayac));
+  const kisiSayisi = Math.max(1, kisiler(env).length);
+  const parti = Math.min(LISTE_PARTI, hedef - sayac, Math.floor((butce - (sayac === 0 ? kisiSayisi : 0)) / kisiSayisi));
+  if (parti < 1) return;
+  const adaylar = listeAdaylari(bilgi, modeller, simdi).slice(0, parti);
   if (!adaylar.length) return;
   if (sayac === 0) await herkese(env, `🌸 Ben Selin. Bugün ${hedef} model soracağım: mağazada olanlar için siteye hazırlık yapacağım. Her modelde ✅ Mağazada var / ❌ Yok'a basın.`);
   let sorulan = 0;
@@ -259,8 +265,11 @@ export async function medyaTopla(env, bilgi, kod) {
   const videolar = [];
   const yazilar = [];
   const gorulen = new Set();
+  let iletilen = 0;
   for (const sec of modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, PAYLASIM_EN_FAZLA)) {
     for (const id of sec.ids) {
+      if (iletilen >= ILETME_EN_FAZLA || fotolar.length >= POZ_EN_FAZLA) break;
+      iletilen++;
       const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: bilgi.kanal.id, message_id: id, disable_notification: true });
       if (!r.ok) continue;
       const m = r.result;

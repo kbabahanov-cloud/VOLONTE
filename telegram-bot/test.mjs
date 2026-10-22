@@ -371,15 +371,19 @@ test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan 
   const o = turOrtami();
   o.env.EKIP_IDS = "333";
   await rotasyon(o.env, o.simdi);
+  // 3 kişi: bir çalışmada en fazla 24 çağrı → 8 model; kalan 2 sonraki çalışmada
+  assert.equal(turMesajlari(o.gonderilen, "333").length, 8);
+  assert.ok(cagrilar(o.gonderilen, "copyMessage").length <= 24);
+  await rotasyon(o.env, o.simdi + 300);
   assert.equal(turMesajlari(o.gonderilen, "333").length, 10);
 
   o.env.EKIP_IDS = "333,444"; // yeni ekip üyesi
   o.gonderilen.length = 0;
-  await rotasyon(o.env, o.simdi + 300);
-  assert.equal(turMesajlari(o.gonderilen, "444").length, 10);
-  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 10); // diğerlerine tekrar gitmez
-  o.gonderilen.length = 0;
   await rotasyon(o.env, o.simdi + 600);
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 10); // sadece eksik olana; bütçe 24
+  assert.equal(turMesajlari(o.gonderilen, "444").length, 10);
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, o.simdi + 900);
   assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0);
 
   await bas(o.env, 444, "t1:1:4013:0");
@@ -491,7 +495,7 @@ test("çok mesajlı silme 5 dakikalık görevle parça parça biter (gece de)", 
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /45 mesaj kanaldan silindi/);
 });
 
-test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 50–60 dk arayla başlar ve sonraki tur hemen açılır", async () => {
+test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 50–60 dk arayla başlar; sonraki tur hemen açılır, modelleri paylaşım olmayan çalışmada gelir", async () => {
   const o = turOrtami(25);
   await rotasyon(o.env, o.simdi);
   const kodlar10 = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
@@ -504,12 +508,10 @@ test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 50–60 dk arayla b
   await bas(o.env, 222, `t1:1:${kodlar10[9]}:0`);
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /10 onay tamam/.test(m.govde.text)));
   assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:")).length, 10);
-  // sonraki tur hemen: 2. tur, yeni 10 model (öncekilerden farklı)
+  // sonraki tur hemen açılır; modelleri düğme çalışmasında değil, 5 dakikalık görevde gelir (istek sınırı)
   assert.equal(tur(o.depo).no, 2);
   assert.equal(tur(o.depo).durum, "toplaniyor");
-  const yeniler = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
-  assert.equal(yeniler.length, 10);
-  assert.ok(!yeniler.some((k) => kodlar10.includes(k)));
+  assert.equal(turMesajlari(o.gonderilen).length, 0);
 
   o.gonderilen.length = 0;
   const t = ist(10, 5);
@@ -519,9 +521,13 @@ test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 50–60 dk arayla b
   assert.deepEqual(ilk[0].govde.message_ids, [5240, 5241]); // 1. turun ilk onaylananı (4024), albümün tamamı
   const ara = Number(o.depo.get("sonraki")) - t;
   assert.ok(ara >= 50 * 60 && ara <= 60 * 60, `aralık ${ara / 60} dk`);
+  assert.equal(turMesajlari(o.gonderilen).length, 0); // paylaşım yapılan çalışmada tur mesajı yok
   o.gonderilen.length = 0;
   await rotasyon(o.env, t + 45 * 60);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  const yeniler = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
+  assert.equal(yeniler.length, 10); // 2. turun yeni 10 modeli (öncekilerden farklı)
+  assert.ok(!yeniler.some((k) => kodlar10.includes(k)));
 });
 
 test("paylaşım penceresi 08:00–20:00", async () => {
