@@ -137,8 +137,10 @@ export async function listeAdimi(env, simdi) {
   const adaylar = listeAdaylari(bilgi, modeller, simdi).slice(0, Math.min(LISTE_PARTI, hedef - sayac));
   if (!adaylar.length) return;
   if (sayac === 0) await herkese(env, `🌸 Ben Selin. Bugün ${hedef} model soracağım: mağazada olanlar için siteye hazırlık yapacağım. Her modelde ✅ Mağazada var / ❌ Yok'a basın.`);
+  let sorulan = 0;
   for (const { kod, sec } of adaylar) {
     const mesajlar = [];
+    let sorun = null;
     for (const k of kisiler(env)) {
       const r = await tg(env, "copyMessage", {
         chat_id: k, from_chat_id: bilgi.kanal.id, message_id: sec.ids[0],
@@ -146,11 +148,19 @@ export async function listeAdimi(env, simdi) {
         reply_markup: { inline_keyboard: [[{ text: "✅ Mağazada var", callback_data: `sv:${kod}` }, { text: "❌ Yok", callback_data: `sy:${kod}` }]] },
       });
       if (r.ok) mesajlar.push([k, r.result.message_id]);
+      else sorun = r.description || "gönderilemedi";
+    }
+    // Kimseye ulaşmadıysa (ör. kimse Selin'e /start yazmadı) model "soruldu" sayılmaz, günlük hak harcanmaz.
+    if (!mesajlar.length) {
+      await yazKV(env, "selin:hata", { zaman: simdi, hata: `liste ${kod}: ${sorun}` }, 7 * 86400);
+      break;
     }
     modeller[kod] = { durum: "soruldu", zaman: simdi, mesajlar };
+    sorulan++;
   }
+  if (!sorulan) return;
   await yazKV(env, "selin:modeller", modeller);
-  await env.KAYIT.put(`selin:liste:${gun}`, String(sayac + adaylar.length), { expirationTtl: 3 * 86400 });
+  await env.KAYIT.put(`selin:liste:${gun}`, String(sayac + sorulan), { expirationTtl: 3 * 86400 });
 }
 
 // ---------- 2) Hazırlık: pozlar, netlik, açıklama, bedenler ----------

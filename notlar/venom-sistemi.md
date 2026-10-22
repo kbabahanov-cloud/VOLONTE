@@ -113,7 +113,9 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ✅ S1 (22 Ekim): rehber onaylandı (KV selin:rehberOnay=1), bot açıldı: @VolonteSelinBot.
 
-**Sıradaki komut: S2 — Selin'i kanala (tüm yetkiler kapalı) ve 'Kemal Ofis' arşivine (Mesaj gönderme açık) yönetici ekleme + BOT_TOKEN ve ANTHROPIC_API_KEY secret'larını volonte-selin'e girme. Sonra S3 GitHub token, S4 site PR. Ardından Defne (WhatsApp).**
+- ✅ S2 (22 Ekim): kanal/arşiv yöneticiliği + secret'lar girildi, webhook bağlandı. Düzeltme: mesaj kimseye ulaşmazsa model 'soruldu' sayılmıyor.
+
+**Sıradaki komut: S2b — sahip ve Merdan @VolonteSelinBot'a /start yazsın (yoksa 'chat not found'). Sonra S3 GitHub token, S4 site PR. Ardından Defne (WhatsApp).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

@@ -94,6 +94,21 @@ test("rehber onaylanmadan liste gelmez; onaydan sonra en yeni modeller sorulur (
   assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Ben Selin\. Bugün 30 model/);
 });
 
+test("kimse /start yazmadıysa model 'soruldu' sayılmaz, günlük hak harcanmaz", async () => {
+  const o = ortam();
+  o.depo.set("selin:rehberOnay", "1");
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) =>
+    String(url).includes("api.telegram.org") ? new Response(JSON.stringify({ ok: false, description: "Forbidden: bot can't initiate conversation with a user" })) : asil(url, istek);
+  await listeAdimi(o.env, o.simdi);
+  globalThis.fetch = asil;
+  assert.equal(o.depo.get("selin:modeller"), undefined);
+  assert.ok(![...o.depo.keys()].some((k) => k.startsWith("selin:liste:")));
+  assert.match(JSON.parse(o.depo.get("selin:hata")).hata, /initiate conversation/);
+  await listeAdimi(o.env, o.simdi); // /start sonrası normal akış
+  assert.equal(Object.keys(JSON.parse(o.depo.get("selin:modeller"))).length, 2);
+});
+
 test("günlük hedef: ilk 7 gün 30, sonra 10", async () => {
   const o = ortam();
   assert.equal(await gunlukHedef(o.env, o.simdi), 30);
