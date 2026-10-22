@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3595",
+  "baslik": "Printed Chiffon Kimono Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing printed chiffon kimono with a fuchsia satin-look base. The kimono carries a soft watercolour floral print in pink and plum tones, with wide draped sleeves, a long scarf tie at the neck and a cord tie at the side. Elegant for celebrations, receptions and special daytime events. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant un kimono fluide en mousseline imprimée à une base fuchsia d'aspect satiné. Le kimono présente un imprimé floral effet aquarelle aux tons rose et prune, de larges manches drapées, une écharpe à nouer au col et un cordon sur le côté. Idéal pour les cérémonies, réceptions et événements de journée. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um quimono fluido em chiffon estampado com uma base fúcsia de aspeto acetinado. O quimono tem estampa floral em aquarela nos tons rosa e ameixa, mangas amplas e drapeadas, lenço para amarrar no pescoço e cordão lateral. Elegante para cerimónias, receções e eventos especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3595/1.jpg",
+   "galeri/3595/2.jpg",
+   "galeri/3595/3.jpg",
+   "galeri/3595/4.jpg"
+  ],
+  "videolar": [
+   "Volonteroseoffical/13660",
+   "Volonteroseoffical/13629",
+   "Volonteroseoffical/13630",
+   "Volonteroseoffical/13095",
+   "Volonteroseoffical/13096"
+  ],
+  "fiyat": null,
+  "eklenme": "2026-10-22"
+ },
+ {
   "kod": "3448",
   "baslik": "Tropical Print Kaftan Set",
   "kategori": "sets",
