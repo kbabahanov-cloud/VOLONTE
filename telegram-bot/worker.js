@@ -842,6 +842,8 @@ const eminMisin = (no, kod) => ({ inline_keyboard: [[
 async function turBaslat(env, onceki, simdi) {
   const tur = { no: ((onceki && onceki.no) || 0) + 1, durum: "toplaniyor", basla: simdi, gun: gunAnahtari(simdi), onaylar: [], ogeler: {} };
   await env.KAYIT.put("tur", JSON.stringify(tur)); // önce kaydet: görev üst üste çalışırsa iki tur açılmasın
+  // Önceki günlerden sırada kalan onaylılar (ör. akşam temizliği çalışamadıysa) ileri güne taşınmaz.
+  for (const o of await kuyrukListesi(env)) if (gunAnahtari(Math.floor(o.zaman)) < tur.gun) await env.KAYIT.delete(`kuyruk:${o.kod}`);
   const kanal = await env.KAYIT.get("kanal", "json");
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};

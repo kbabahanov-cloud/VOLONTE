@@ -51,11 +51,18 @@ const kisiAdi = (f) => [f.first_name, f.last_name].filter(Boolean).join(" ") || 
 const oku = async (env, k, bos) => (await env.KAYIT.get(k, "json")) ?? bos;
 const yazKV = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { expirationTtl: ttl } : undefined);
 
-async function tg(env, metod, govde) {
+async function tg(env, metod, govde, deneme = 0) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde),
   });
-  return r.json();
+  const j = await r.json();
+  // Telegram "çok hızlı" derse (429) kısa bekleyip bir kez daha dene.
+  const bekle = j && j.error_code === 429 && j.parameters && j.parameters.retry_after;
+  if (bekle && bekle <= 15 && !deneme) {
+    await new Promise((ok) => setTimeout(ok, bekle * 1000));
+    return tg(env, metod, govde, 1);
+  }
+  return j;
 }
 const herkese = async (env, text, ek = {}) => {
   const sonuc = [];
@@ -90,6 +97,7 @@ export default {
     await webhookKur(env);
     const simdi = Math.floor(Date.now() / 1000);
     await githubKontrol(env, simdi);
+    await fotografYokGocu(env, simdi);
     const gonderilen = await eksikleriGonder(env, simdi);
     await listeAdimi(env, simdi, LISTE_BUTCE - gonderilen);
     // Yapay zekâ adımı Anthropic'in kabul ettiği bölgede çalışsın diye sabit nesnede.
@@ -281,13 +289,17 @@ export async function medyaTopla(env, bilgi, kod) {
   const videolar = [];
   const yazilar = [];
   const gorulen = new Set();
+  const hatalar = [];
   let iletilen = 0;
   for (const sec of modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, PAYLASIM_EN_FAZLA)) {
     for (const id of sec.ids) {
       if (iletilen >= ILETME_EN_FAZLA || fotolar.length >= POZ_EN_FAZLA) break;
       iletilen++;
       const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: bilgi.kanal.id, message_id: id, disable_notification: true });
-      if (!r.ok) continue;
+      if (!r.ok) {
+        hatalar.push(`${id}: ${r.description || "?"}`);
+        continue;
+      }
       const m = r.result;
       if (m.caption) yazilar.push(m.caption);
       if (m.photo) {
@@ -301,7 +313,7 @@ export async function medyaTopla(env, bilgi, kod) {
       }
     }
   }
-  return { fotolar, videolar, yazilar };
+  return { fotolar, videolar, yazilar, hatalar };
 }
 
 async function aciklamaYaz(env, { kod, fotolar, tarif, yazilar, duzeltme, onceki }) {
@@ -376,11 +388,26 @@ async function taslakHazirla(env, kod, simdi, duzeltme) {
   let fotolar;
   let videolar;
   let yazilar;
+  let hatalar = [];
   if (onceki && duzeltme) {
     ({ videolar, yazilar } = onceki);
     fotolar = onceki.fotolar.filter((f) => f.net);
   } else {
-    ({ fotolar, videolar, yazilar } = await medyaTopla(env, bilgi, kod));
+    ({ fotolar, videolar, yazilar, hatalar } = await medyaTopla(env, bilgi, kod));
+  }
+  // Kanal mesajları okunamadıysa (Telegram hatası) model kaybolmasın: sıranın sonuna, en fazla 3 deneme.
+  if (!fotolar.length && !videolar.length && hatalar.length) {
+    const deneme = ((modeller[kod] && modeller[kod].deneme) || 0) + 1;
+    await yazKV(env, "selin:hata", { zaman: simdi, hata: `medya okunamadı ${kod} (deneme ${deneme}): ${hatalar.slice(0, 3).join(" | ")}` }, 7 * 86400);
+    if (deneme < 3) {
+      modeller[kod] = { ...(modeller[kod] || {}), durum: "hazirlaniyor", zaman: simdi, deneme };
+      await yazKV(env, "selin:modeller", modeller);
+      await yazKV(env, "selin:hazirla", [...(await oku(env, "selin:hazirla", [])).filter((k) => k !== kod), kod]);
+      return;
+    }
+    modeller[kod] = { ...(modeller[kod] || {}), durum: "eklenmeyecek", zaman: simdi, not: "okunamadı", deneme };
+    await yazKV(env, "selin:modeller", modeller);
+    return herkese(env, `⚠️ ${kod}: kanal paylaşımları okunamadı (${hatalar[0]}). Selin'in kanalda yönetici olduğundan emin olun; sonra /kare ${kod} ya da listeden tekrar deneyin.`);
   }
   // Sadece videosu olan model: onaylı kare varsa o kullanılır; yoksa videodan kare istenir.
   if (!fotolar.length) {
@@ -392,7 +419,11 @@ async function taslakHazirla(env, kod, simdi, duzeltme) {
       try {
         k = await kareIste(env, kod, simdi, videolar);
       } catch (e) {
+        // Geçici hata (GitHub vb.): model kaybolmasın, kare sırasından yeniden denenir.
         await yazKV(env, "selin:hata", { zaman: simdi, hata: `kare isteği ${kod}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
+        const sira = await oku(env, "selin:kareSira", []);
+        if (!sira.includes(kod)) await yazKV(env, "selin:kareSira", [...sira, kod]);
+        k = { durum: "isleniyor" };
       }
       if (k.durum === "isleniyor" || k.durum === "onayda") {
         modeller[kod] = { ...(modeller[kod] || {}), durum: "kare-bekliyor", zaman: simdi };
@@ -405,7 +436,7 @@ async function taslakHazirla(env, kod, simdi, duzeltme) {
   if (!fotolar.length) {
     modeller[kod] = { ...(modeller[kod] || {}), durum: "eklenmeyecek", zaman: simdi, not: "fotoğraf yok" };
     await yazKV(env, "selin:modeller", modeller);
-    return herkese(env, `⚠️ ${kod}: kanalda fotoğrafı bulunamadı; siteye hazırlanamadı.`);
+    return herkese(env, `⚠️ ${kod}: kanalda ne fotoğrafı ne videosu bulundu; siteye hazırlanamadı.`);
   }
   for (const f of fotolar) f.b64 = await dosyaB64(env, (f.orta || f.buyuk).file_id);
   const ai = await aciklamaYaz(env, { kod, fotolar, tarif: bilgi.tarifler[kod] && bilgi.tarifler[kod].t, yazilar, duzeltme, onceki: onceki && { baslik: onceki.baslik, aciklama: onceki.aciklama } });
@@ -481,6 +512,29 @@ async function gh(env, yol, secenek = {}) {
   const govde = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`GitHub ${r.status}: ${govde.message || ""}`);
   return govde;
+}
+
+// Bir kerelik: "fotoğraf yok" denip kalan modeller (okuma hatası olabilir) yeniden hazırlığa alınır;
+// fotoğraf yine yoksa videodan kare yoluna girer. Kullanıcının saydığı 5 model önce.
+async function fotografYokGocu(env, simdi) {
+  try {
+    if (await env.KAYIT.get("selin:goc:fotografyok")) return;
+    const modeller = await oku(env, "selin:modeller", {});
+    const once = ["3522", "3630", "3569", "3275", "3576"];
+    const yok = Object.keys(modeller).filter((k) => modeller[k].not === "fotoğraf yok");
+    const sira = [...once.filter((k) => yok.includes(k)), ...yok.filter((k) => !once.includes(k))];
+    for (const k of sira) {
+      const { not, deneme, ...kalan } = modeller[k];
+      modeller[k] = { ...kalan, durum: "hazirlaniyor", zaman: simdi };
+    }
+    if (sira.length) {
+      await yazKV(env, "selin:modeller", modeller);
+      await yazKV(env, "selin:hazirla", [...sira, ...(await oku(env, "selin:hazirla", [])).filter((k) => !sira.includes(k))]);
+    }
+    await env.KAYIT.put("selin:goc:fotografyok", String(sira.length));
+  } catch (e) {
+    // KV günlük yazma sınırı dolduysa sonraki gün kendiliğinden tekrar dener.
+  }
 }
 
 // GitHub anahtarının çalıştığını saatte bir dener (okuma, yazma, Actions); sonuç "selin:github".
@@ -594,11 +648,11 @@ export async function kareIste(env, kod, simdi, videolar) {
 
 // Elle istek (/kare 3104): her çalışmada bir model.
 async function kareSiraGuvenli(env, simdi) {
+  const sira = await oku(env, "selin:kareSira", []);
+  if (!sira.length || !env.GITHUB_TOKEN) return;
+  const kod = sira[0];
+  await yazKV(env, "selin:kareSira", sira.slice(1));
   try {
-    const sira = await oku(env, "selin:kareSira", []);
-    if (!sira.length || !env.GITHUB_TOKEN) return;
-    const kod = sira[0];
-    await yazKV(env, "selin:kareSira", sira.slice(1));
     const bilgi = await kanalBilgisi(env);
     const { fotolar, videolar } = await medyaTopla(env, bilgi, kod);
     if (fotolar.length && !videolar.length) return herkese(env, `${kod}: kanalda fotoğrafı var, kareye gerek yok.`);
@@ -612,7 +666,13 @@ async function kareSiraGuvenli(env, simdi) {
       if (k.yeni) await herkese(env, `🎞 ${kod}: videodan en net kareleri çıkarıyorum (ücretsiz, yapay zekâsız); birkaç dakika içinde onayınıza gelecek.`);
     } else if (k.durum === "onayli") await herkese(env, `${kod}: bu model için onaylı kare zaten var (bir kez üretilir).`);
   } catch (e) {
-    await yazKV(env, "selin:hata", { zaman: simdi, hata: `kare: ${String(e && e.message).slice(0, 400)}` }, 7 * 86400);
+    // Geçici hata: model kaybolmasın, en fazla 3 kez yeniden denenir.
+    await yazKV(env, "selin:hata", { zaman: simdi, hata: `kare ${kod}: ${String(e && e.message).slice(0, 400)}` }, 7 * 86400);
+    const deneme = await oku(env, "selin:kareDeneme", {});
+    deneme[kod] = (deneme[kod] || 0) + 1;
+    await yazKV(env, "selin:kareDeneme", deneme, 7 * 86400);
+    if (deneme[kod] < 3) await yazKV(env, "selin:kareSira", [...(await oku(env, "selin:kareSira", [])).filter((k) => k !== kod), kod]);
+    else await herkese(env, `⚠️ ${kod}: videodan kare isteği 3 kez başarısız oldu (${String(e && e.message).slice(0, 150)}).`);
   }
 }
 
