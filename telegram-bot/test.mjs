@@ -412,6 +412,19 @@ test("beden: paylaşımda alt yazının beden satırı seçilen grupla değişir
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
 
+test("videodan kare: sadece videosu olan paylaşımda onaylı kare başa eklenir (bir kez üretilen ortak kare)", async () => {
+  const o = markaOrtami();
+  o.depo.set("kare:3300", JSON.stringify({ durum: "onayli", url: "https://raw.githubusercontent.com/x/y/z/kareler/3300/aday-2.jpg", w: 1080, h: 1440 }));
+  const r = await kanaldaPaylas(o.env, "3300", [302], o.simdi);
+  assert.equal(r.ok, true);
+  const medya = JSON.parse(o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup")).govde.media);
+  assert.deepEqual(medya.map((m) => [m.type, m.media]), [["photo", "https://raw.githubusercontent.com/x/y/z/kareler/3300/aday-2.jpg"], ["video", "vid302"]]);
+  o.depo.set("kare:3300", JSON.stringify({ durum: "onayda" })); // onaylanmamış kare kullanılmaz
+  o.gonderilen.length = 0;
+  await kanaldaPaylas(o.env, "3300", [302], o.simdi + 5);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
+});
+
 test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan geçerli; ayar, harcama ve yapay zekâ yok", async () => {
   const o = turOrtami();
   o.env.EKIP_IDS = "333";

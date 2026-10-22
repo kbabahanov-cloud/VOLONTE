@@ -602,10 +602,13 @@ export async function kanaldaPaylas(env, kod, ids, simdi, beden = null) {
   // Marka açıksa ya da beden seçildiyse paylaşım yeniden yüklenir (alt yazının beden satırı
   // seçilen grupla değişir); olmazsa aynen kopyalanır.
   const marka = (await env.KAYIT.get("marka")) === "acik" && Boolean(env.IMAGES);
-  if (marka || BEDEN_GRUPLARI[beden]) {
-    const m = await markaliGonder(env, kanal.id, kod, ids, null, { marka, beden });
+  // Sadece videosu olan modelde Selin'in ürettiği ve onaylanan kare (kare:<kod>) eklenir.
+  const kare = await env.KAYIT.get(`kare:${kod}`, "json");
+  const onayliKare = kare && kare.durum === "onayli" ? kare : null;
+  if (marka || BEDEN_GRUPLARI[beden] || onayliKare) {
+    const m = await markaliGonder(env, kanal.id, kod, ids, null, { marka, beden, kare: onayliKare });
     if (m.ok) sonuc = { ok: true, result: m.mesajlar.map((id) => ({ message_id: id })) };
-    else markaNotu = `${marka ? "marka basılamadı" : "beden yazılamadı"} (${m.hata}), olduğu gibi paylaşıldı`;
+    else markaNotu = `${marka ? "marka basılamadı" : onayliKare ? "kare eklenemedi" : "beden yazılamadı"} (${m.hata}), olduğu gibi paylaşıldı`;
   }
   if (!sonuc) sonuc = await telegram(env, "copyMessages", { chat_id: kanal.id, from_chat_id: kanal.id, message_ids: ids });
   if (!sonuc.ok) {
@@ -636,7 +639,7 @@ async function telegramForm(env, metod, form) {
 
 // Kanal paylaşımını fotoğraflara marka basarak yeniden yükler (videolar olduğu gibi).
 // Medya ve yazı, mesajlar arşiv kanalına iletilerek okunur.
-export async function markaliGonder(env, hedef, kod, ids, ekYazi = null, { marka = true, beden = null } = {}) {
+export async function markaliGonder(env, hedef, kod, ids, ekYazi = null, { marka = true, beden = null, kare = null } = {}) {
   try {
     const kanal = await env.KAYIT.get("kanal", "json");
     const arsiv = await env.KAYIT.get("arsiv", "json");
@@ -661,6 +664,14 @@ export async function markaliGonder(env, hedef, kod, ids, ekYazi = null, { marka
       } else if (m.video) medya.push({ type: "video", media: m.video.file_id });
       else if (m.document) medya.push({ type: "document", media: m.document.file_id });
       else if (m.animation) medya.push({ type: "video", media: m.animation.file_id });
+    }
+    // Paylaşımda hiç fotoğraf yoksa onaylı kare (videodan) başa eklenir.
+    if (kare && kare.url && !medya.some((x) => x.type === "photo")) {
+      if (marka) {
+        const foto = new Uint8Array(await (await fetch(kare.url)).arrayBuffer());
+        form.append("kare", new Blob([await markaBas(env, foto, kare.w || 1280, kod)], { type: "image/jpeg" }), "kare.jpg");
+        medya.unshift({ type: "photo", media: "attach://kare" });
+      } else medya.unshift({ type: "photo", media: kare.url });
     }
     if (!medya.length) return { ok: false, hata: "medya yok" };
     if (BEDEN_GRUPLARI[beden]) yazi = bedenYaz(yazi || `✅ CODE.${kod}`, beden);

@@ -81,6 +81,8 @@ export default {
       await guncelleme(await istek.json(), env);
       return new Response("ok");
     }
+    if (istek.method === "GET" && url.pathname === "/video") return videoVer(env, url.searchParams.get("t"));
+    if (istek.method === "POST" && url.pathname === "/kare") return kareGeldi(env, await istek.json().catch(() => ({})), Math.floor(Date.now() / 1000));
     return new Response("Selin çalışıyor.");
   },
   async scheduled(olay, env) {
@@ -91,15 +93,23 @@ export default {
     const gonderilen = await eksikleriGonder(env, simdi);
     await listeAdimi(env, simdi, LISTE_BUTCE - gonderilen);
     // Yapay zekâ adımı Anthropic'in kabul ettiği bölgede çalışsın diye sabit nesnede.
-    if (env.SELIN) await env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" }).fetch("https://selin/hazirla");
-    else await hazirlaGuvenli(env, simdi);
+    if (env.SELIN) {
+      const nesne = env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
+      await nesne.fetch("https://selin/hazirla");
+      await nesne.fetch("https://selin/kare"); // ayrı çalışma: kendi istek sınırı
+    } else {
+      await hazirlaGuvenli(env, simdi);
+      await kareSiraGuvenli(env, simdi);
+    }
   },
 };
 
 export class SelinDO {
   constructor(state, env) { this.env = env; }
-  async fetch() {
-    await hazirlaGuvenli(this.env, Math.floor(Date.now() / 1000));
+  async fetch(istek) {
+    const simdi = Math.floor(Date.now() / 1000);
+    if (new URL(istek.url).pathname === "/kare") await kareSiraGuvenli(this.env, simdi);
+    else await hazirlaGuvenli(this.env, simdi);
     return new Response("ok");
   }
 }
@@ -287,7 +297,7 @@ export async function medyaTopla(env, bilgi, kod) {
         if (fotolar.length < POZ_EN_FAZLA) fotolar.push({ id, buyuk, orta: enYakinBoyut(m.photo, 800), tarih: sec.tarih });
       } else if (m.video && !gorulen.has(m.video.file_unique_id)) {
         gorulen.add(m.video.file_unique_id);
-        videolar.push({ id, sure: m.video.duration });
+        videolar.push({ id, sure: m.video.duration, file_id: m.video.file_id, boyut: m.video.file_size || 0, w: m.video.width || 0 });
       }
     }
   }
@@ -371,6 +381,26 @@ async function taslakHazirla(env, kod, simdi, duzeltme) {
     fotolar = onceki.fotolar.filter((f) => f.net);
   } else {
     ({ fotolar, videolar, yazilar } = await medyaTopla(env, bilgi, kod));
+  }
+  // Sadece videosu olan model: onaylı kare varsa o kullanılır; yoksa videodan kare istenir.
+  if (!fotolar.length) {
+    const kare = await oku(env, `kare:${kod}`, null);
+    if (kare && kare.durum === "onayli") {
+      fotolar = [{ id: null, buyuk: { file_id: kare.file_id, width: kare.w, height: kare.h }, orta: null, tarih: simdi, kare: true }];
+    } else if (videolar.length) {
+      let k = { durum: "hata" };
+      try {
+        k = await kareIste(env, kod, simdi, videolar);
+      } catch (e) {
+        await yazKV(env, "selin:hata", { zaman: simdi, hata: `kare isteği ${kod}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
+      }
+      if (k.durum === "isleniyor" || k.durum === "onayda") {
+        modeller[kod] = { ...(modeller[kod] || {}), durum: "kare-bekliyor", zaman: simdi };
+        await yazKV(env, "selin:modeller", modeller);
+        if (k.yeni) await herkese(env, `🎞 ${kod}: sadece videosu var. Videodan en net kareleri çıkarıyorum (ücretsiz, yapay zekâsız); birkaç dakika içinde onayınıza gelecek.`);
+        return;
+      }
+    }
   }
   if (!fotolar.length) {
     modeller[kod] = { ...(modeller[kod] || {}), durum: "eklenmeyecek", zaman: simdi, not: "fotoğraf yok" };
@@ -531,6 +561,131 @@ async function sitedenKaldir(env, kod, kim, simdi) {
   return true;
 }
 
+// ---------- 5) Videodan kare (sadece videosu olan modeller) ----------
+// Selin isteği "kareler" dalına yazar → GitHub Actions (ücretsiz, telegram-bot/kare/) videoyu bu
+// Worker'dan tek kullanımlık bağlantıyla indirir, en net kareleri seçer, dala kaydeder ve /kare'ye
+// haber verir → adaylar Telegram'da onaya gelir. Onaylanan kare "kare:<kod>" (ortak beyin) olur:
+// Selin sitede, Kemal kanal paylaşımında videolarla birlikte kullanır. Bir model için bir kez üretilir.
+const KARE_DALI = "kareler";
+const VIDEO_SINIR = 20 * 1024 * 1024; // Telegram botlar 20 MB'tan büyük dosyayı indiremez
+
+export async function kareIste(env, kod, simdi, videolar) {
+  const kayit = await oku(env, `kare:${kod}`, null);
+  // Bir kez üretilir: onaylı/onayda/reddedilmiş ya da son 1 saatte istenmişse tekrar istenmez.
+  if (kayit && (["onayli", "onayda", "reddedildi"].includes(kayit.durum) || (kayit.durum === "isleniyor" && simdi - kayit.zaman < 3600))) return kayit;
+  const uygun = videolar.filter((v) => v.file_id && (!v.boyut || v.boyut <= VIDEO_SINIR)).sort((a, b) => b.w - a.w);
+  if (!uygun.length) {
+    const k = { durum: "basarisiz", zaman: simdi, hata: videolar.length ? "video 20 MB'tan büyük; Telegram botların bu boyutta dosya indirmesine izin vermiyor" : "modelin videosu yok" };
+    await yazKV(env, `kare:${kod}`, k);
+    await herkese(env, `⚠️ ${kod}: videodan kare çıkarılamadı (${k.hata}).`);
+    return k;
+  }
+  const t = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await yazKV(env, `selin:kareIstek:${t}`, { kod, file_id: uygun[0].file_id }, 3 * 3600);
+  const yol = `/contents/istekler/${encodeURIComponent(kod)}.json`;
+  let sha;
+  try { sha = (await gh(env, `${yol}?ref=${KARE_DALI}`)).sha; } catch { sha = undefined; }
+  const icerik = { kod, t, video: `${env.SELF_URL}/video?t=${t}`, geri: `${env.SELF_URL}/kare` };
+  await gh(env, yol, { method: "PUT", body: JSON.stringify({ message: `Selin: ${kod} için videodan kare isteği`, branch: KARE_DALI, content: btoa(JSON.stringify(icerik)), ...(sha ? { sha } : {}) }) });
+  const k = { durum: "isleniyor", zaman: simdi };
+  await yazKV(env, `kare:${kod}`, k);
+  return { ...k, yeni: true };
+}
+
+// Elle istek (/kare 3104): her çalışmada bir model.
+async function kareSiraGuvenli(env, simdi) {
+  try {
+    const sira = await oku(env, "selin:kareSira", []);
+    if (!sira.length || !env.GITHUB_TOKEN) return;
+    const kod = sira[0];
+    await yazKV(env, "selin:kareSira", sira.slice(1));
+    const bilgi = await kanalBilgisi(env);
+    const { fotolar, videolar } = await medyaTopla(env, bilgi, kod);
+    if (fotolar.length && !videolar.length) return herkese(env, `${kod}: kanalda fotoğrafı var, kareye gerek yok.`);
+    const k = await kareIste(env, kod, simdi, videolar);
+    const modeller = await oku(env, "selin:modeller", {});
+    if (k.durum === "isleniyor" || k.durum === "onayda") {
+      if (!modeller[kod] || !["sitede", "onayda", "yukleniyor"].includes(modeller[kod].durum)) {
+        modeller[kod] = { ...(modeller[kod] || {}), durum: "kare-bekliyor", zaman: simdi };
+        await yazKV(env, "selin:modeller", modeller);
+      }
+      if (k.yeni) await herkese(env, `🎞 ${kod}: videodan en net kareleri çıkarıyorum (ücretsiz, yapay zekâsız); birkaç dakika içinde onayınıza gelecek.`);
+    } else if (k.durum === "onayli") await herkese(env, `${kod}: bu model için onaylı kare zaten var (bir kez üretilir).`);
+  } catch (e) {
+    await yazKV(env, "selin:hata", { zaman: simdi, hata: `kare: ${String(e && e.message).slice(0, 400)}` }, 7 * 86400);
+  }
+}
+
+// GitHub Actions videoyu buradan indirir (tek kullanımlık bağlantı; bot anahtarı dışarı çıkmaz).
+async function videoVer(env, t) {
+  const kayit = t && (await oku(env, `selin:kareIstek:${t}`, null));
+  if (!kayit) return new Response("geçersiz", { status: 404 });
+  const f = await tg(env, "getFile", { file_id: kayit.file_id });
+  if (!f.ok) return new Response(`indirilemedi: ${f.description}`, { status: 413 });
+  const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`);
+  return new Response(r.body, { status: r.status, headers: { "content-type": "video/mp4" } });
+}
+
+// GitHub Actions bitince: adaylar Telegram'da onaya gönderilir.
+export async function kareGeldi(env, govde, simdi) {
+  const kayit = govde.t && (await oku(env, `selin:kareIstek:${govde.t}`, null));
+  if (!kayit || kayit.kod !== govde.kod) return new Response("yetkisiz", { status: 403 });
+  await env.KAYIT.delete(`selin:kareIstek:${govde.t}`);
+  const kod = kayit.kod;
+  const onEk = `https://raw.githubusercontent.com/${env.GITHUB_REPO}/`;
+  const dosyalar = (govde.dosyalar || []).filter((d) => String(d.url || "").startsWith(onEk)).slice(0, 3);
+  if (govde.hata || !dosyalar.length) {
+    await yazKV(env, `kare:${kod}`, { durum: "basarisiz", zaman: simdi, hata: govde.hata || "aday yok" });
+    await herkese(env, `⚠️ ${kod}: videodan net kare çıkarılamadı (${govde.hata || "aday yok"}). Ücretli araçlar kapalı olduğu için bu model şimdilik fotoğrafsız.`);
+    return new Response("ok");
+  }
+  let adaylar = null;
+  for (const k of kisiler(env)) {
+    const baslik = `🎞 ${kod} — videodan seçilen kareler`;
+    // Albüm en az 2 fotoğraf ister; tek aday tek fotoğraf olarak gider.
+    const r = dosyalar.length > 1
+      ? await tg(env, "sendMediaGroup", { chat_id: k, media: dosyalar.map((d, i) => ({ type: "photo", media: d.url, ...(i === 0 ? { caption: baslik } : {}) })) })
+      : await tg(env, "sendPhoto", { chat_id: k, photo: dosyalar[0].url, caption: baslik }).then((x) => (x.ok ? { ok: true, result: [x.result] } : x));
+    if (r.ok && !adaylar) {
+      adaylar = r.result.map((mesaj, i) => {
+        const b = mesaj.photo[mesaj.photo.length - 1];
+        return { url: dosyalar[i].url, file_id: b.file_id, w: b.width, h: b.height };
+      });
+    }
+  }
+  if (!adaylar) return new Response("gönderilemedi", { status: 502 });
+  const kart = await herkese(env, `🎞 ${kod}: sadece videosu olan model. Videodan en net ${adaylar.length} kareyi seçtim (yapay zekâ yok; kare videonun kendisi, ürün olduğu gibi). Hangisi kullanılsın?\nOnaylanan fotoğraf sitede ve Kemal'in kanal paylaşımında videolarla ve bedenlerle birlikte kullanılır.`, {
+    reply_markup: { inline_keyboard: [adaylar.map((_, i) => ({ text: `✅ ${i + 1}. kare`, callback_data: `kk:${kod}:${i + 1}` })), [{ text: "❌ Hiçbiri", callback_data: `kk:${kod}:0` }]] },
+  });
+  await yazKV(env, `kare:${kod}`, { durum: "onayda", zaman: simdi, adaylar, kart });
+  return new Response("ok");
+}
+
+async function kareSecildi(env, cq, kod, n, kim, simdi, cevapla) {
+  const k = await oku(env, `kare:${kod}`, null);
+  if (!k || k.durum !== "onayda") return cevapla(k && k.kim ? `${k.kim} zaten seçti.` : "Bu seçim artık geçerli değil.");
+  const secilen = n > 0 && k.adaylar[n - 1];
+  if (n > 0 && !secilen) return cevapla("Geçersiz düğme.");
+  const yeni = secilen
+    ? { durum: "onayli", zaman: simdi, kim, url: secilen.url, file_id: secilen.file_id, w: secilen.w, h: secilen.h }
+    : { durum: "reddedildi", zaman: simdi, kim };
+  await yazKV(env, `kare:${kod}`, yeni);
+  await cevapla(secilen ? "Kare onaylandı" : "Tamam");
+  const metin = secilen
+    ? `✅ ${kod}: ${n}. kare seçildi (${kim}). Selin siteye hazırlıyor; Kemal kanalda videolarla birlikte kullanacak.`
+    : `❌ ${kod}: kare kullanılmayacak (${kim}). Ücretli araçlar kapalı; model şimdilik fotoğrafsız.`;
+  for (const [kisi, id] of k.kart || []) await tg(env, "editMessageText", { chat_id: kisi, message_id: id, text: metin });
+  if (!secilen) return;
+  const modeller = await oku(env, "selin:modeller", {});
+  const m = modeller[kod];
+  if (!m || m.durum === "kare-bekliyor" || (m.durum === "eklenmeyecek" && m.not === "fotoğraf yok")) {
+    modeller[kod] = { ...(m || {}), durum: "hazirlaniyor", zaman: simdi, kim };
+    await yazKV(env, "selin:modeller", modeller);
+    const sira = await oku(env, "selin:hazirla", []);
+    if (!sira.includes(kod)) await yazKV(env, "selin:hazirla", [kod, ...sira]);
+  }
+}
+
 // ---------- 4) Telegram: düğmeler ve komutlar ----------
 
 export async function guncelleme(u, env) {
@@ -564,6 +719,13 @@ export async function guncelleme(u, env) {
     return yaz(`✅ ${kod} bedenleri: ${bedenler}. Karttaki "✅ Onayla, siteye yükle"ye basabilirsiniz.`);
   }
   if (komut === "/site") return siteListesi(env, m.chat.id, Number(arg[0] || 1));
+  if (komut === "/kare") {
+    const kod = String(arg[0] || "").toUpperCase();
+    if (!kod) return yaz("Örnek: /kare 3104 — sadece videosu olan modelde videodan net kare çıkarır.");
+    const sira = await oku(env, "selin:kareSira", []);
+    if (!sira.includes(kod)) await yazKV(env, "selin:kareSira", [...sira, kod]);
+    return yaz(`🎞 ${kod} sıraya alındı; videodan kareler birkaç dakika içinde onayınıza gelecek.`);
+  }
   if (komut === "/liste") {
     if (!yoneticiMi(m.from.id, env)) return yaz("Bu ayar sadece Murat ve Merdan'da.");
     const gun = gunAnahtari(simdi);
@@ -600,10 +762,11 @@ async function siteListesi(env, sohbet, sayfa) {
 async function dugme(cq, env) {
   const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   if (!izinli(cq.from.id, env)) return cevapla("Yetkiniz yok.");
-  const [islem, kod] = String(cq.data || "").split(":");
+  const [islem, kod, ek] = String(cq.data || "").split(":");
   const kim = kisiAdi(cq.from);
   const simdi = Math.floor(Date.now() / 1000);
   const benim = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
+  if (islem === "kk") return kareSecildi(env, cq, kod, Number(ek), kim, simdi, cevapla);
   const modeller = await oku(env, "selin:modeller", {});
   const m = modeller[kod];
 
@@ -620,7 +783,7 @@ async function dugme(cq, env) {
     return cevapla(islem === "sv" ? "Hazırlığa alındı" : "Tamam");
   }
   if (islem === "sb") {
-    const grup = String(cq.data).split(":")[2];
+    const grup = ek;
     if (!m || m.durum !== "onayda" || !BEDEN_GRUPLARI[grup]) return cevapla("Bu taslak artık geçerli değil.");
     m.taslak.bedenGrubu = grup;
     m.taslak.bedenler = BEDEN_GRUPLARI[grup].bedenler;

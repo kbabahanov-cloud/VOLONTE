@@ -10,7 +10,7 @@ function ortam() {
   const depo = new Map();
   const g = [];
   const istekler = [];
-  const github = { dosyalar: new Map(), commitler: [] };
+  const github = { dosyalar: new Map(), commitler: [], istekler: [] };
   const env = {
     BOT_TOKEN: "selin-token", WEBHOOK_SECRET: "s", ALLOWED_IDS: "111,222", ANTHROPIC_API_KEY: "k",
     GITHUB_TOKEN: "gh", GITHUB_REPO: "kbabahanov-cloud/VOLONTE", SITE_URL: "https://kbabahanov-cloud.github.io/VOLONTE",
@@ -43,6 +43,11 @@ function ortam() {
         const v = github.dosyalar.get("veri/urunler.json");
         return v ? cevap({ content: Buffer.from(v).toString("base64"), sha: "x" }) : cevap({ message: "Not Found" }, 404);
       }
+      if (yol.startsWith("/contents/istekler/")) {
+        if ((istek.method || "GET") === "GET") return cevap({ message: "Not Found" }, 404);
+        github.istekler.push(govde);
+        return cevap({ content: { sha: "i1" } }, 201);
+      }
       if (yol === "/git/ref/heads/main") return cevap({ object: { sha: "c0" } });
       if (yol === "/git/commits/c0") return cevap({ tree: { sha: "t0" } });
       if (yol === "/git/blobs") return cevap({ sha: `b${n++}` });
@@ -73,6 +78,7 @@ function ortam() {
       return new Response(JSON.stringify({ ok: true, result: { message_id: 1, ...m } }));
     }
     if (metod === "getFile") return new Response(JSON.stringify({ ok: true, result: { file_path: `p/${govde.file_id}.jpg` } }));
+    if (metod === "sendMediaGroup") return new Response(JSON.stringify({ ok: true, result: govde.media.map((m, i) => ({ message_id: n++, photo: [{ file_id: `kk${i}`, width: 320, height: 427 }, { file_id: `K${i}`, width: 1080, height: 1440 }] })) }));
     return new Response(JSON.stringify({ ok: true, result: { message_id: n++ } }));
   };
   return { env, depo, g, istekler, github, simdi };
@@ -164,6 +170,60 @@ test("kanaldan silinmiş paylaşım liste takılmasın: model atlanır, sıradak
   assert.equal(m["3100"].durum, "soruldu");
   assert.deepEqual(Object.keys(JSON.parse(o.depo.get("selin:ulasilamayan"))), ["333"]);
   assert.equal(o.depo.get(`selin:liste:2026-10-22`), "1");
+});
+
+test("videodan kare: sadece videosu olan model → GitHub'a istek, tek kullanımlık video bağlantısı; adaylar onaya gelir; ilk seçen geçerli; onaylı kare sitede kullanılır, bir kez üretilir", async () => {
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  const kodlar = JSON.parse(o.depo.get("kodlar"));
+  kodlar["3300"] = [{ ids: [301], tarih: o.simdi - 20 * GUN }]; // 301: video
+  o.depo.set("kodlar", JSON.stringify(kodlar));
+  o.depo.set("selin:modeller", JSON.stringify({ "3300": { durum: "hazirlaniyor", zaman: 1 } }));
+  o.depo.set("selin:hazirla", JSON.stringify(["3300"]));
+  await hazirlaAdimi(o.env, o.simdi);
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3300"].durum, "kare-bekliyor");
+  assert.equal(o.istekler.length, 0); // yapay zekâ çağrılmadı
+  const istek = o.github.istekler[0];
+  assert.equal(istek.branch, "kareler");
+  const icerik = JSON.parse(Buffer.from(istek.content, "base64").toString());
+  assert.equal(icerik.geri, "https://selin.test/kare");
+  const t = icerik.t;
+  assert.equal(icerik.video, `https://selin.test/video?t=${t}`);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /3300: sadece videosu var/);
+
+  // GitHub Actions videoyu indirir
+  const v = await selin.fetch(new Request(icerik.video), o.env);
+  assert.equal(v.status, 200);
+  assert.equal(cagri(o.g, "getFile").at(-1).govde.file_id, "v301");
+  assert.equal((await selin.fetch(new Request("https://selin.test/video?t=yanlis"), o.env)).status, 404);
+
+  // Sonuç: yabancı adres süzülür; yanlış anahtar reddedilir
+  const ham = "https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/abc/kareler/3300/";
+  const geri = (govde) => selin.fetch(new Request("https://selin.test/kare", { method: "POST", body: JSON.stringify(govde) }), o.env);
+  assert.equal((await geri({ t: "yanlis", kod: "3300", dosyalar: [] })).status, 403);
+  o.g.length = 0;
+  assert.equal((await geri({ t, kod: "3300", dosyalar: [{ url: ham + "aday-1.jpg" }, { url: "https://kotu.example/x.jpg" }, { url: ham + "aday-2.jpg" }] })).status, 200);
+  const album = cagri(o.g, "sendMediaGroup");
+  assert.equal(album.length, 2); // iki kişiye
+  assert.deepEqual(album[0].govde.media.map((m) => m.media), [ham + "aday-1.jpg", ham + "aday-2.jpg"]);
+  const kart = cagri(o.g, "sendMessage")[0];
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ 1. kare", "✅ 2. kare", "❌ Hiçbiri"]);
+  assert.equal((await geri({ t, kod: "3300", dosyalar: [] })).status, 403); // anahtar tek kullanımlık
+
+  await bas(o.env, 222, "kk:3300:2");
+  const kare = JSON.parse(o.depo.get("kare:3300"));
+  assert.deepEqual([kare.durum, kare.file_id, kare.url, kare.kim], ["onayli", "K1", ham + "aday-2.jpg", "Merdan"]);
+  assert.equal(cagri(o.g, "editMessageText").length, 2);
+  await bas(o.env, 111, "kk:3300:1");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Merdan zaten seçti/);
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3300"].durum, "hazirlaniyor");
+
+  // Hazırlık onaylı kareyle devam eder; yeniden kare istenmez
+  o.g.length = 0;
+  await hazirlaAdimi(o.env, o.simdi);
+  assert.equal(o.github.istekler.length, 1);
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3300"].taslak.fotolar[0].buyuk.file_id, "K1");
+  assert.ok(cagri(o.g, "sendMessage").some((m) => /3300 — siteye hazır taslak/.test(m.govde.text)));
 });
 
 test("günlük hedef: ilk 7 gün 50, sonra 10", async () => {
