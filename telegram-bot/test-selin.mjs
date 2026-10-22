@@ -91,7 +91,7 @@ test("rehber onaylanmadan liste gelmez; onaydan sonra en yeni modeller sorulur (
   const kartlar = cagri(o.g, "copyMessage");
   assert.deepEqual(kartlar.filter((k) => k.govde.chat_id === "111").map((k) => k.govde.caption.split(" ")[0]), ["3194", "3100"]);
   assert.deepEqual(kartlar[0].govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Mağazada var", "❌ Yok"]);
-  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Ben Selin\. Bugün 30 model/);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Ben Selin\. Bugün 50 model/);
 });
 
 test("kimse /start yazmadıysa model 'soruldu' sayılmaz, günlük hak harcanmaz", async () => {
@@ -166,10 +166,10 @@ test("kanaldan silinmiş paylaşım liste takılmasın: model atlanır, sıradak
   assert.equal(o.depo.get(`selin:liste:2026-10-22`), "1");
 });
 
-test("günlük hedef: ilk 7 gün 30, sonra 10", async () => {
+test("günlük hedef: ilk 7 gün 50, sonra 10", async () => {
   const o = ortam();
-  assert.equal(await gunlukHedef(o.env, o.simdi), 30);
-  assert.equal(await gunlukHedef(o.env, o.simdi + 6 * GUN), 30);
+  assert.equal(await gunlukHedef(o.env, o.simdi), 50);
+  assert.equal(await gunlukHedef(o.env, o.simdi + 6 * GUN), 50);
   assert.equal(await gunlukHedef(o.env, o.simdi + 7 * GUN + 1), 10);
 });
 
@@ -198,6 +198,7 @@ test("var → hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video g
   assert.equal(o.istekler[0].messages[0].content.filter((c) => c.type === "image").length, 1);
   assert.match(o.istekler[0].messages[0].content.at(-1).text, /VOLONTE yazı rehberi/);
   const kart = cagri(o.g, "sendMessage").find((m) => /siteye hazır taslak/.test(m.govde.text));
+  assert.match(kart.govde.text, /Kategori: Elbise \(yanlışsa/);
   assert.match(kart.govde.text, /Bedenler: 38-40-42-44/);
   assert.match(kart.govde.text, /Videolar: 1/);
   assert.equal(cagri(o.g, "sendPhoto")[0].govde.photo, "b300"); // en yüksek çözünürlük

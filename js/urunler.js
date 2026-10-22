@@ -20,7 +20,9 @@ const KATEGORILER = [
   { id: "tops",     ad: "Tops & Blouses", aciklama: "Blouses, shirts and tunics" },
   { id: "skirts",   ad: "Skirts",         aciklama: "Pleated, pencil and maxi skirts" },
   { id: "trousers", ad: "Trousers",       aciklama: "Wide-leg, palazzo and tailored" },
-  { id: "evening",  ad: "Evening Wear",   aciklama: "Occasion and evening dresses" }
+  { id: "evening",  ad: "Evening Wear",   aciklama: "Occasion and evening dresses" },
+  { id: "jumpsuits", ad: "Jumpsuits",      aciklama: "One-piece jumpsuits and playsuits" },
+  { id: "outerwear", ad: "Jackets & Coats", aciklama: "Jackets, blazers and coats" }
 ];
 
 const URUNLER = [

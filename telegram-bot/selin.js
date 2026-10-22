@@ -18,7 +18,7 @@ import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler } from "./altyazi.js";
 
 const SAAT_FARKI = 3 * 3600;
-const ILK_HAFTA_GUNLUK = 30; // kullanıcı kararı: ilk hafta günde 30 model
+const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
 const SONRA_GUNLUK = 10;
 const LISTE_PARTI = 8; // bir çalışmada sorulan model
 const PAYLASIM_EN_FAZLA = 4; // bir modelin en yeni kaç paylaşımından poz toplanır
@@ -27,7 +27,12 @@ const ILETME_EN_FAZLA = 12; // bir hazırlıkta arşive iletilen mesaj (ücretsi
 const LISTE_BUTCE = 24; // bir çalışmada liste için en fazla Telegram çağrısı
 const DUSUK_COZUNURLUK = 700; // piksel (genişlik ya da yükseklik); altı "düşük çözünürlük"
 const GUNCELLEMELER = ["message", "callback_query"];
-const KATEGORILER = ["dresses", "sets", "tops", "skirts", "trousers", "evening"];
+// Sitedeki kategoriler (js/urunler.js ile aynı kimlikler) ve kartta gösterilen Türkçe adları.
+export const KATEGORI_ADI = {
+  dresses: "Elbise", evening: "Abiye", sets: "Takım", jumpsuits: "Tulum",
+  tops: "Bluz / Gömlek / Tunik", skirts: "Etek", trousers: "Pantolon", outerwear: "Ceket / Kaban",
+};
+const KATEGORILER = Object.keys(KATEGORI_ADI);
 
 export const REHBER = `VOLONTE yazı rehberi (özet): Toptancı kadın alıcılar için sakin özgüvenli, modern ve şık ton; abartı ve ünlem yok.
 Site açıklaması 2–4 cümle (40–70 kelime): 1) ne olduğu ve kesimi (net, sade) 2) öne çıkan 2–3 detay (yaka, kol, kemer, taş, desen, doku) 3) nerede/nasıl giyilir 4) sakin bir kalite cümlesi (İstanbul'da üretim, özenli işçilik).
@@ -302,7 +307,8 @@ Katalog tarifi: ${tarif || "yok"}
 Kanal alt yazıları: ${yazilar.slice(0, 3).join(" | ").slice(0, 1200) || "yok"}
 ${onceki ? `Önceki taslak: ${JSON.stringify(onceki)}` : ""}
 ${duzeltme ? `Sahibin düzeltme isteği (uygula): ${duzeltme}` : ""}
-Her poz için net mi (bulanık/odak dışı/çok karanlık değil mi) değerlendir; ürün görünmüyorsa da net=false. kategori: ${KATEGORILER.join(", ")}.`,
+Her poz için net mi (bulanık/odak dışı/çok karanlık değil mi) değerlendir; ürün görünmüyorsa da net=false.
+kategori: katalog tarifine ve fotoğraflara bakarak tek birini seç: ${KATEGORILER.map((k) => `${k} (${KATEGORI_ADI[k]})`).join(", ")}. Gece/özel gün elbisesi evening; iki ya da üç parça uyumlu set sets; tek parça üst-alt birleşik jumpsuits.`,
   });
   const r = await client.beta.messages.create({
     model, max_tokens: 3000, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
@@ -398,7 +404,8 @@ async function onayKartiGonder(env, kod, t, bilgi) {
   const kanalAdi = bilgi.kanal && bilgi.kanal.kullanici;
   const metin = [
     `🌸 ${kod} — siteye hazır taslak`,
-    `Başlık: ${t.baslik} (${t.kategori})`,
+    `Başlık: ${t.baslik}`,
+    `Kategori: ${KATEGORI_ADI[t.kategori] || t.kategori} (yanlışsa ✏️ Düzelt → "kategori: takım" yazın)`,
     `Bedenler: ${t.bedenler || "BULUNAMADI — /beden " + kod + " 38-40-42 şeklinde yazın"}`,
     `Pozlar: ${netler.length} net${atilan.length ? `; konmayacak ${atilan.length}: ${atilan.map((f) => `${kanalAdi ? `t.me/${kanalAdi}/${f.id}` : f.id} (${f.not})`).join(", ")}` : ""}`,
     `Videolar: ${t.videolar.length ? `${t.videolar.length} (sitede Telegram oynatıcısıyla)` : "yok"}`,
