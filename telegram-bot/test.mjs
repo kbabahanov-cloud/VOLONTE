@@ -367,6 +367,41 @@ test("onay ikisinde de görünür; ikinci basış ve izinsiz kişi işlemez", as
   assert.deepEqual(tur(o.depo).onaylar, ["4013"]);
 });
 
+test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan geçerli; ayar, harcama ve yapay zekâ yok", async () => {
+  const o = turOrtami();
+  o.env.EKIP_IDS = "333";
+  await rotasyon(o.env, o.simdi);
+  assert.equal(turMesajlari(o.gonderilen, "333").length, 10);
+
+  o.env.EKIP_IDS = "333,444"; // yeni ekip üyesi
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, o.simdi + 300);
+  assert.equal(turMesajlari(o.gonderilen, "444").length, 10);
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 10); // diğerlerine tekrar gitmez
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, o.simdi + 600);
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length, 0);
+
+  await bas(o.env, 444, "t1:1:4013:0");
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 4); // dört kişide de kapandı
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, "t1:1:4013:0");
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /zaten işaretledi/);
+  assert.deepEqual(tur(o.depo).onaylar, ["4013"]);
+
+  o.gonderilen.length = 0;
+  await bas(o.env, 333, "mk:acik");
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /sadece Murat ve Merdan/);
+  assert.equal(o.depo.get("marka"), undefined);
+
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(333), from: { id: 333, first_name: "Hemra" }, text: "bu ay ne kadar harcadık?" } }, o.env);
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").length, 1);
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /Ekiptesiniz[\s\S]*sadece Murat ve Merdan/);
+  assert.ok(!o.gonderilen.some((g) => String(g.url).includes("anthropic")));
+  assert.equal(o.depo.get("bekleyen:333"), undefined); // müşteri moduna düşmez
+});
+
 test("Beklesin: 7 gün sonra sorulur, yerine hemen sıradaki model gelir", async () => {
   const o = turOrtami();
   await rotasyon(o.env, o.simdi);
@@ -1145,9 +1180,10 @@ test("müşteri: '/paylas' ve düğme gibi yönetici işleri müşteriden çalı
 
 test("müşteri: satış ekibine iletir; yönetici yanıtı müşteriye gider", async () => {
   const o = asistanOrtami([aracCagrisi("satis_ekibine_ilet", { ozet: "3100 fiyatını soruyor, 10 seri" }), mesaj(1, "Nossa equipe de vendas vai responder em breve.")]);
+  o.env.EKIP_IDS = "333";
   await musteriYaz(o.env, "Quanto custa o 3100? Quero 10 séries");
   const bildirim = cagrilar(o.gonderilen, "sendMessage").filter((m) => /📩/.test(m.govde.text));
-  assert.equal(bildirim.length, 2);
+  assert.equal(bildirim.length, 2); // sadece yöneticilere (ekibe değil)
   assert.match(bildirim[0].govde.text, /Müşteri satış ekibini bekliyor\nMüşteri: Awa \(@awa_ao\) · dil: pt · id 999\nÖzet: 3100 fiyatını soruyor/);
   const anahtar = [...o.depo.keys()].find((k) => k.startsWith("iletim:111:"));
   const iletimId = Number(anahtar.split(":")[2]);

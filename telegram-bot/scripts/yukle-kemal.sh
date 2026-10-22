@@ -19,6 +19,7 @@ cat > "$META" <<'JSON'
              {"type":"durable_object_namespace","name":"KATALOG","class_name":"KatalogDO"},
              {"type":"images","name":"IMAGES"},
              {"type":"plain_text","name":"ALLOWED_IDS","text":"2005113508,6113852976"},
+             {"type":"plain_text","name":"EKIP_IDS","text":"6448681578,8369444291"},
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-asistan.volonte.workers.dev"},
              {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},
              {"type":"plain_text","name":"MUSTERI_MODEL","text":"claude-sonnet-5-5"}]}

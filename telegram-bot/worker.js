@@ -22,7 +22,9 @@
 // Ayarlar (Cloudflare'de):
 //  BOT_TOKEN       secret — kullanıcı kendisi girer, hiçbir yere yazılmaz.
 //  WEBHOOK_SECRET  secret — Telegram'ın gönderdiği istekleri doğrulamak için.
-//  ALLOWED_IDS     düz metin — virgülle ayrılmış Telegram kimlikleri.
+//  ALLOWED_IDS     düz metin — yöneticiler (sahip, Merdan): her şey, ayarlar, harcama, müşteri iletileri.
+//  EKIP_IDS        düz metin, isteğe bağlı — ekip: bildirimleri görür, düğmelere basar (onay, beklesin,
+//                  sil, alt yazı), /son /hafta /kuyruk /paylas. Ayar, harcama, yapay zekâ sohbeti yok.
 //  SELF_URL        düz metin — bu Worker'ın adresi (webhook için).
 //  Zamanlanmış görev (5 dakikada bir) webhook'u kendisi kurar.
 //  KAYIT           KV bağlantısı.
@@ -136,7 +138,7 @@ async function durumKontrol(env) {
     const uyariAnahtari = `${ayAnahtari(kayit.zaman)}:uyari`;
     if (env.BOT_TOKEN && harcanan >= AYLIK_SINIR_USD * UYARI_ORANI && !(await env.KAYIT.get(uyariAnahtari))) {
       await env.KAYIT.put(uyariAnahtari, "1", { expirationTtl: 70 * 86400 });
-      await herkese(env, `⚠️ Bu ay yapay zekâya yaklaşık ${harcanan.toFixed(2)} $ harcandı (sınır ${AYLIK_SINIR_USD} $). Sınıra gelince yapay zekâ cevapları ve fotoğraf tanıma ay sonuna kadar durur; turlar ve komutlar çalışır.`);
+      for (const kisi of yoneticilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: `⚠️ Bu ay yapay zekâya yaklaşık ${harcanan.toFixed(2)} $ harcandı (sınır ${AYLIK_SINIR_USD} $). Sınıra gelince yapay zekâ cevapları ve fotoğraf tanıma ay sonuna kadar durur; turlar ve komutlar çalışır.` });
     }
 }
 
@@ -373,18 +375,20 @@ async function paylasimKaydet(post, env, duzenleme) {
 
 // ---------- Kullanıcı mesajları ----------
 
+const kimlikler = (yazi) => String(yazi || "").split(",").map((s) => s.trim()).filter(Boolean);
+// Yönetici (sahip, Merdan): her şey. Ekip: bildirimler + düğmeler (ayar ve harcama yok).
 function izinliMi(id, env) {
-  return String(env.ALLOWED_IDS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .includes(String(id));
+  return kimlikler(env.ALLOWED_IDS).includes(String(id));
+}
+function ekipMi(id, env) {
+  return !izinliMi(id, env) && kimlikler(env.EKIP_IDS).includes(String(id));
 }
 
 async function mesajIsle(msg, env) {
   const kimden = msg.from || {};
   if (msg.chat.type !== "private") return;
 
+  if (ekipMi(kimden.id, env)) return ekipMesaji(msg, env);
   if (!izinliMi(kimden.id, env)) {
     await env.KAYIT.put(
       `bekleyen:${kimden.id}`,
@@ -425,6 +429,26 @@ async function mesajIsle(msg, env) {
   }
   await telegram(env, "sendMessage", { chat_id: msg.chat.id, text: cevap, disable_web_page_preview: true });
 }
+
+// Ekip üyesi: sadece bilgi komutları ve paylaşım önizlemesi (paylaşım yine düğmeyle onaylanır).
+async function ekipMesaji(msg, env) {
+  const komut = (msg.text || "").trim().split(/[\s@]/)[0].toLowerCase();
+  if (komut === "/paylas" || komut === "/paylaş") return paylasOnizle(msg, env);
+  if (komut === "/kuyruk") return kuyrukGoster(msg.chat.id, env);
+  const cevap = komut === "/son" ? await sonPaylasimlar(env) : komut === "/hafta" ? await haftaOzeti(env) : EKIP_YARDIM;
+  return telegram(env, "sendMessage", { chat_id: msg.chat.id, text: cevap, disable_web_page_preview: true });
+}
+
+const EKIP_YARDIM = [
+  "Ben Kemal 👋 VOLONTE'nin Telegram asistanıyım. Ekiptesiniz: turların ve paylaşımların bildirimlerini görür, düğmelere basabilirsiniz (kim önce basarsa o geçerli).",
+  "",
+  "/son — kanaldaki son 5 paylaşım",
+  "/hafta — son 7 günde kaç paylaşım yapıldı",
+  "/kuyruk — onaylanıp paylaşılmayı bekleyenler",
+  "/paylas 3329 — o kodun son paylaşımını önizle, onaylarsan kanalda tekrar paylaş",
+  "",
+  "Ayarlar, harcama ve yapay zekâ sohbeti sadece Murat ve Merdan'da.",
+].join("\n");
 
 const YARDIM = [
   "Ben Kemal 👋 VOLONTE'nin Telegram asistanıyım.",
@@ -513,9 +537,10 @@ async function paylasOnizle(msg, env) {
 
 async function dugmeIsle(cq, env) {
   const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  if (!izinliMi(cq.from.id, env)) return cevapla("Yetkiniz yok.");
+  if (!izinliMi(cq.from.id, env) && !ekipMi(cq.from.id, env)) return cevapla("Yetkiniz yok.");
 
   const veri = String(cq.data || "");
+  if (veri.startsWith("mk:") && !izinliMi(cq.from.id, env)) return cevapla("Bu ayar sadece Murat ve Merdan'da.");
   if (/^(t1|t7|tx|ty|tv|tg):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
@@ -679,7 +704,9 @@ async function bugunSayac(env, simdi) {
 // ---------- Günlük yeniden paylaşım ----------
 
 const saat = (simdi) => ((simdi + SAAT_FARKI) % 86400) / 3600;
-const kisilerden = (env) => String(env.ALLOWED_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+// Bildirim alanlar: yöneticiler + ekip. Harcama ve müşteri iletileri sadece yöneticilere.
+const kisilerden = (env) => [...new Set([...kimlikler(env.ALLOWED_IDS), ...kimlikler(env.EKIP_IDS)])];
+const yoneticilerden = (env) => kimlikler(env.ALLOWED_IDS);
 const kisiAdi = (from) => [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || "Biri";
 
 // Zamanlanmış görevden her 5 dakikada çağrılır.
@@ -716,6 +743,7 @@ export async function rotasyon(env, simdi) {
     const bekleyen = Object.values(tur.ogeler).filter((o) => !o.karar).length;
     await herkese(env, `☀️ Günaydın, ben Kemal! ${tur.no}. turda ${tur.onaylar.length}/${TUR_ADET} onay var; ${bekleyen} model cevap bekliyor (yukarıdaki mesajlarda). 10 onay tamamlanınca bu turun paylaşımları başlar.`);
   }
+  await turEksikleriGonder(env);
   await siradakiniPaylas(env, simdi);
 }
 
@@ -836,6 +864,42 @@ async function modelGonder(env, tur, adet, simdi) {
     }
   }
   return gonderilen;
+}
+
+// Turda cevap bekleyen modelleri, o anda ulaşılamamış ya da sonradan eklenmiş kişilere de
+// gönderir (ör. ekibe yeni katılan, /start'ı geç yazan). Kim önce basarsa geçerli olur.
+const EKSIK_PARTI = 10;
+export async function turEksikleriGonder(env) {
+  const tur = await env.KAYIT.get("tur", "json");
+  if (!tur || tur.durum !== "toplaniyor") return;
+  const kanal = await env.KAYIT.get("kanal", "json");
+  if (!kanal) return;
+  const ulasilamayan = new Set();
+  const yeni = {};
+  let gonderilen = 0;
+  for (const [kod, oge] of Object.entries(tur.ogeler)) {
+    if (oge.karar) continue;
+    const sahip = new Set((oge.mesajlar || []).map(([k]) => String(k)));
+    const secenekler = oge.secenekler || [{ ids: oge.ids, tarih: oge.tarih }];
+    for (const kisi of kisilerden(env)) {
+      if (sahip.has(kisi) || ulasilamayan.has(kisi) || gonderilen >= EKSIK_PARTI) continue;
+      gonderilen += 1;
+      const r = await telegram(env, "copyMessage", {
+        chat_id: kisi, from_chat_id: kanal.id, message_id: secenekler[0].ids[0], caption: oge.yazi, reply_markup: turKlavye(tur.no, kod, secenekler),
+      });
+      if (r.ok) (yeni[kod] = yeni[kod] || []).push([kisi, r.result.message_id]);
+      else ulasilamayan.add(kisi); // bu çalışmada bir daha denenmez
+    }
+  }
+  if (!Object.keys(yeni).length) return;
+  // Gönderirken biri düğmeye basmış olabilir: güncel turu okuyup sadece mesajları ekle.
+  const guncel = await env.KAYIT.get("tur", "json");
+  for (const [kod, liste] of Object.entries(yeni)) {
+    const oge = guncel && guncel.no === tur.no && guncel.ogeler[kod];
+    if (oge && !oge.karar) oge.mesajlar = [...(oge.mesajlar || []), ...liste];
+    else for (const [kisi, id] of liste) await telegram(env, "editMessageReplyMarkup", { chat_id: kisi, message_id: id, reply_markup: { inline_keyboard: [] } });
+  }
+  if (guncel) await env.KAYIT.put("tur", JSON.stringify(guncel));
 }
 
 export async function atla(env, kod, gunSayisi, simdi) {
@@ -1462,7 +1526,7 @@ function musteriYardimcilari(env) {
         msg.text ? `Son mesajı: "${String(msg.text).slice(0, 500)}"` : null,
         "↩️ Bu mesajı yanıtlayın, yazdığınızı Kemal müşteriye iletir.",
       ].filter(Boolean).join("\n");
-      for (const kisi of kisilerden(env)) {
+      for (const kisi of yoneticilerden(env)) {
         const r = await telegram(env, "sendMessage", { chat_id: kisi, text: metin, disable_web_page_preview: true });
         if (r.ok) await env.KAYIT.put(`iletim:${kisi}:${r.result.message_id}`, String(msg.chat.id), { expirationTtl: 7 * 86400 });
         if (fotoMesaj) {

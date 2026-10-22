@@ -8,7 +8,8 @@
 //
 // Ayarlar (volonte-selin Worker'ında):
 //  BOT_TOKEN, WEBHOOK_SECRET, ANTHROPIC_API_KEY, GITHUB_TOKEN  secret
-//  ALLOWED_IDS, SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
+//  ALLOWED_IDS (yöneticiler: sahip, Merdan), EKIP_IDS (ekip: mesajları görür, düğmelere basar),
+//  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -34,8 +35,11 @@ Başlık: 2–4 kelime İngilizce, tür + ayırt edici detay (ör. "Belted Wrap 
 
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
 const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
-const kisiler = (env) => String(env.ALLOWED_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+const kimlikler = (yazi) => String(yazi || "").split(",").map((x) => x.trim()).filter(Boolean);
+// Yöneticiler + ekip: hepsi listeleri görür ve düğmelere basar. Ayar işleri sadece yöneticide.
+const kisiler = (env) => [...new Set([...kimlikler(env.ALLOWED_IDS), ...kimlikler(env.EKIP_IDS)])];
 const izinli = (id, env) => kisiler(env).includes(String(id));
+const yoneticiMi = (id, env) => kimlikler(env.ALLOWED_IDS).includes(String(id));
 const kisiAdi = (f) => [f.first_name, f.last_name].filter(Boolean).join(" ") || f.username || "Biri";
 const oku = async (env, k, bos) => (await env.KAYIT.get(k, "json")) ?? bos;
 const yazKV = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { expirationTtl: ttl } : undefined);
@@ -76,6 +80,7 @@ export default {
     if (!env.BOT_TOKEN) return;
     await webhookKur(env);
     const simdi = Math.floor(Date.now() / 1000);
+    await eksikleriGonder(env, simdi);
     await listeAdimi(env, simdi);
     // Yapay zekâ adımı Anthropic'in kabul ettiği bölgede çalışsın diye sabit nesnede.
     if (env.SELIN) await env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" }).fetch("https://selin/hazirla");
@@ -124,6 +129,53 @@ export function listeAdaylari(bilgi, modeller, simdi) {
     .sort((a, b) => b.sec.tarih - a.sec.tarih); // en yeni paylaşılan önce (mağazada olma ihtimali yüksek)
 }
 
+function soruKarti(env, bilgi, kod, sec, kisi) {
+  return tg(env, "copyMessage", {
+    chat_id: kisi, from_chat_id: bilgi.kanal.id, message_id: sec.ids[0],
+    caption: `${kod} · son paylaşım ${tarihUzun(sec.tarih)}\nMağazada var mı?`,
+    reply_markup: { inline_keyboard: [[{ text: "✅ Mağazada var", callback_data: `sv:${kod}` }, { text: "❌ Yok", callback_data: `sy:${kod}` }]] },
+  });
+}
+
+// Cevap bekleyen modelleri, o anda ulaşılamamış ya da sonradan eklenmiş kişilere de gönderir
+// (ör. /start'ı geç yazan). Kim önce basarsa geçerli; diğerlerinde düğmeler kapanır.
+const EKSIK_PARTI = 10;
+export async function eksikleriGonder(env, simdi) {
+  const s = saat(simdi);
+  if (s < 9 || s >= 21) return;
+  const modeller = await oku(env, "selin:modeller", {});
+  const bekleyen = Object.entries(modeller).filter(([, m]) => m.durum === "soruldu");
+  if (!bekleyen.length) return;
+  const bilgi = await kanalBilgisi(env);
+  if (!bilgi.kanal) return;
+  const ulasilamayan = new Set();
+  const yeni = {}; // kod → bu çalışmada gönderilen [kişi, mesaj]
+  let gonderilen = 0;
+  for (const [kod, m] of bekleyen) {
+    const sahip = new Set((m.mesajlar || []).map(([k]) => String(k)));
+    const eksik = kisiler(env).filter((k) => !sahip.has(k) && !ulasilamayan.has(k));
+    if (!eksik.length) continue;
+    const sec = modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz)[0];
+    if (!sec) continue;
+    for (const k of eksik) {
+      if (gonderilen >= EKSIK_PARTI) break;
+      const r = await soruKarti(env, bilgi, kod, sec, k);
+      gonderilen++;
+      if (r.ok) (yeni[kod] = yeni[kod] || []).push([k, r.result.message_id]);
+      else ulasilamayan.add(k); // bu çalışmada bir daha denenmez (ör. /start yazmamış)
+    }
+  }
+  if (!Object.keys(yeni).length) return;
+  // Gönderirken biri düğmeye basmış olabilir: güncel kaydı okuyup sadece mesajları ekle.
+  const guncel = await oku(env, "selin:modeller", {});
+  for (const [kod, liste] of Object.entries(yeni)) {
+    const m = guncel[kod];
+    if (m && m.durum === "soruldu") m.mesajlar = [...(m.mesajlar || []), ...liste];
+    else for (const [k, id] of liste) await tg(env, "editMessageReplyMarkup", { chat_id: k, message_id: id, reply_markup: { inline_keyboard: [] } });
+  }
+  await yazKV(env, "selin:modeller", guncel);
+}
+
 export async function listeAdimi(env, simdi) {
   if (!(await env.KAYIT.get("selin:rehberOnay"))) return; // rehber onaylanmadan başlamaz
   const s = saat(simdi);
@@ -138,17 +190,22 @@ export async function listeAdimi(env, simdi) {
   if (!adaylar.length) return;
   if (sayac === 0) await herkese(env, `🌸 Ben Selin. Bugün ${hedef} model soracağım: mağazada olanlar için siteye hazırlık yapacağım. Her modelde ✅ Mağazada var / ❌ Yok'a basın.`);
   let sorulan = 0;
+  const ulasilamayan = {};
   for (const { kod, sec } of adaylar) {
     const mesajlar = [];
     let sorun = null;
     for (const k of kisiler(env)) {
-      const r = await tg(env, "copyMessage", {
-        chat_id: k, from_chat_id: bilgi.kanal.id, message_id: sec.ids[0],
-        caption: `${kod} · son paylaşım ${tarihUzun(sec.tarih)}\nMağazada var mı?`,
-        reply_markup: { inline_keyboard: [[{ text: "✅ Mağazada var", callback_data: `sv:${kod}` }, { text: "❌ Yok", callback_data: `sy:${kod}` }]] },
-      });
+      const r = await soruKarti(env, bilgi, kod, sec, k);
       if (r.ok) mesajlar.push([k, r.result.message_id]);
-      else sorun = r.description || "gönderilemedi";
+      else {
+        sorun = r.description || "gönderilemedi";
+        if (!/message to copy not found|message_id_invalid/i.test(sorun)) ulasilamayan[k] = sorun;
+      }
+    }
+    // Paylaşım kanaldan silinmiş: bu model bir daha sorulmaz, sıradakine geçilir.
+    if (!mesajlar.length && /message to copy not found|message_id_invalid/i.test(sorun)) {
+      modeller[kod] = { durum: "kanaldayok", zaman: simdi, mesajlar: [] };
+      continue;
     }
     // Kimseye ulaşmadıysa (ör. kimse Selin'e /start yazmadı) model "soruldu" sayılmaz, günlük hak harcanmaz.
     if (!mesajlar.length) {
@@ -158,8 +215,14 @@ export async function listeAdimi(env, simdi) {
     modeller[kod] = { durum: "soruldu", zaman: simdi, mesajlar };
     sorulan++;
   }
-  if (!sorulan) return;
-  await yazKV(env, "selin:modeller", modeller);
+  // Kime neden ulaşılamadığı (ör. /start yazmamış) — sadece değişince yazılır.
+  const onceki = await oku(env, "selin:ulasilamayan", {});
+  if (JSON.stringify(Object.keys(onceki).sort()) !== JSON.stringify(Object.keys(ulasilamayan).sort())) await yazKV(env, "selin:ulasilamayan", ulasilamayan);
+  if (!sorulan && !Object.values(modeller).some((m) => m.durum === "kanaldayok" && m.zaman === simdi)) return;
+  // Gönderirken başka modellerde düğmeye basılmış olabilir: güncel kayda sadece yenileri ekle.
+  const guncel = await oku(env, "selin:modeller", {});
+  for (const { kod } of adaylar) if (modeller[kod] && modeller[kod].zaman === simdi) guncel[kod] = modeller[kod];
+  await yazKV(env, "selin:modeller", guncel);
   await env.KAYIT.put(`selin:liste:${gun}`, String(sayac + sorulan), { expirationTtl: 3 * 86400 });
 }
 
@@ -429,7 +492,7 @@ export async function guncelleme(u, env) {
   if (!m || m.chat.type !== "private" || !m.from) return;
   if (!izinli(m.from.id, env)) {
     await env.KAYIT.put(`selin:bekleyen:${m.from.id}`, JSON.stringify({ ad: kisiAdi(m.from), kullanici: m.from.username || null }), { expirationTtl: 7 * 86400 });
-    return; // Selin sadece sahip ve Merdan'la konuşur
+    return; // Selin sadece yöneticiler ve ekiple konuşur
   }
   const simdi = Math.floor(Date.now() / 1000);
   const yaz = (text, ek = {}) => tg(env, "sendMessage", { chat_id: m.chat.id, text, disable_web_page_preview: true, ...ek });
@@ -454,6 +517,7 @@ export async function guncelleme(u, env) {
   }
   if (komut === "/site") return siteListesi(env, m.chat.id, Number(arg[0] || 1));
   if (komut === "/liste") {
+    if (!yoneticiMi(m.from.id, env)) return yaz("Bu ayar sadece Murat ve Merdan'da.");
     const gun = gunAnahtari(simdi);
     await env.KAYIT.put(`selin:liste:${gun}`, "0", { expirationTtl: 3 * 86400 });
     return yaz("Tamam, liste birkaç dakika içinde gelecek (09:00–21:00 arası).");

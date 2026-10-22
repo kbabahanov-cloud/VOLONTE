@@ -1,7 +1,7 @@
 // Çalıştırma: node --test test-selin.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import selin, { guncelleme, listeAdimi, hazirlaAdimi, listeAdaylari, bedenBul, gunlukHedef } from "./selin.js";
+import selin, { guncelleme, listeAdimi, hazirlaAdimi, listeAdaylari, bedenBul, gunlukHedef, eksikleriGonder } from "./selin.js";
 
 const GUN = 86400;
 const ist = (hh, mm = 0, gunEk = 0) => Date.UTC(2026, 9, 22 + gunEk, hh - 3, mm) / 1000;
@@ -107,6 +107,63 @@ test("kimse /start yazmadıysa model 'soruldu' sayılmaz, günlük hak harcanmaz
   assert.match(JSON.parse(o.depo.get("selin:hata")).hata, /initiate conversation/);
   await listeAdimi(o.env, o.simdi); // /start sonrası normal akış
   assert.equal(Object.keys(JSON.parse(o.depo.get("selin:modeller"))).length, 2);
+});
+
+test("ekip: listeyi alır, düğmeye basar; geç gelene eksikler gönderilir, ilk basan geçerli; /liste sadece yöneticide", async () => {
+  const o = ortam();
+  o.env.EKIP_IDS = "333";
+  o.depo.set("selin:rehberOnay", "1");
+  // 222 (Merdan) henüz /start yazmamış
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) =>
+    String(url).includes("/copyMessage") && JSON.parse(istek.body).chat_id === "222"
+      ? new Response(JSON.stringify({ ok: false, description: "Bad Request: chat not found" })) : asil(url, istek);
+  await listeAdimi(o.env, o.simdi);
+  globalThis.fetch = asil;
+  const alan = (g) => [...new Set(cagri(g, "copyMessage").map((k) => k.govde.chat_id))];
+  assert.deepEqual(alan(o.g), ["111", "333"]); // 222 denendi ama ulaşılamadı
+  let m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.deepEqual(m["3194"].mesajlar.map(([k]) => k), ["111", "333"]);
+
+  o.g.length = 0;
+  await eksikleriGonder(o.env, o.simdi); // Merdan /start yazdı
+  assert.deepEqual(alan(o.g), ["222"]);
+  m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.deepEqual(m["3194"].mesajlar.map(([k]) => k), ["111", "333", "222"]);
+  o.g.length = 0;
+  await eksikleriGonder(o.env, o.simdi);
+  assert.equal(o.g.length, 0); // herkeste var, tekrar gönderilmez
+
+  await bas(o.env, 333, "sy:3194");
+  assert.equal(cagri(o.g, "editMessageCaption").length, 3); // üç kişide de düğmeler kapandı
+  await bas(o.env, 111, "sv:3194");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /zaten işaretledi/);
+
+  o.g.length = 0;
+  await guncelleme({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "/liste" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /sadece Murat ve Merdan/);
+  await bas(o.env, 444, "sv:3100");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Yetkiniz yok/);
+});
+
+test("kanaldan silinmiş paylaşım liste takılmasın: model atlanır, sıradaki sorulur; ulaşılamayan kişi not edilir", async () => {
+  const o = ortam();
+  o.env.EKIP_IDS = "333";
+  o.depo.set("selin:rehberOnay", "1");
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const b = istek && istek.body && String(url).includes("/copyMessage") ? JSON.parse(istek.body) : null;
+    if (b && b.message_id === 300) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message to copy not found" }));
+    if (b && b.chat_id === "333") return new Response(JSON.stringify({ ok: false, description: "Bad Request: chat not found" }));
+    return asil(url, istek);
+  };
+  await listeAdimi(o.env, o.simdi);
+  globalThis.fetch = asil;
+  const m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.equal(m["3194"].durum, "kanaldayok");
+  assert.equal(m["3100"].durum, "soruldu");
+  assert.deepEqual(Object.keys(JSON.parse(o.depo.get("selin:ulasilamayan"))), ["333"]);
+  assert.equal(o.depo.get(`selin:liste:2026-10-22`), "1");
 });
 
 test("günlük hedef: ilk 7 gün 30, sonra 10", async () => {
