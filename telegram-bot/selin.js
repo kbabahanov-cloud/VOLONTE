@@ -87,6 +87,7 @@ export default {
     if (!env.BOT_TOKEN) return;
     await webhookKur(env);
     const simdi = Math.floor(Date.now() / 1000);
+    await githubKontrol(env, simdi);
     const gonderilen = await eksikleriGonder(env, simdi);
     await listeAdimi(env, simdi, LISTE_BUTCE - gonderilen);
     // Yapay zekâ adımı Anthropic'in kabul ettiği bölgede çalışsın diye sabit nesnede.
@@ -434,6 +435,20 @@ async function gh(env, yol, secenek = {}) {
   const govde = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`GitHub ${r.status}: ${govde.message || ""}`);
   return govde;
+}
+
+// GitHub anahtarının çalıştığını saatte bir dener (okuma, yazma, Actions); sonuç "selin:github".
+// Yazma denemesi depoya bağlanmayan boş bir parça (blob) oluşturur; siteye ve dosyalara dokunmaz.
+export async function githubKontrol(env, simdi) {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPO || (await env.KAYIT.get("selin:github"))) return;
+  const dene = async (yol, secenek) => { try { await gh(env, yol, secenek); return true; } catch (e) { return e.message; } };
+  const sonuc = {
+    zaman: simdi,
+    okuma: await dene(""),
+    yazma: await dene("/git/blobs", { method: "POST", body: JSON.stringify({ content: "selin-kontrol", encoding: "utf-8" }) }),
+    actions: await dene("/actions/workflows"),
+  };
+  await yazKV(env, "selin:github", sonuc, 3600);
 }
 
 async function siteVerisi(env) {
