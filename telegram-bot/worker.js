@@ -1035,7 +1035,8 @@ async function turDugmesi(cq, env) {
     for (const [kisi, mesajId] of oge.mesajlar) await telegram(env, "editMessageReplyMarkup", { chat_id: kisi, message_id: mesajId, reply_markup: klavye });
     return;
   }
-  if (islem === "t1" && !oge.beden) return cevapla("Önce beden seçin: 📏 Küçük / Büyük / İkisi de");
+  // Beden düğmesi olmayan eski tur mesajları (bedenOneri alanı yok) bedensiz onaylanabilir.
+  if (islem === "t1" && !oge.beden && "bedenOneri" in oge) return cevapla("Önce beden seçin: 📏 Küçük / Büyük / İkisi de");
 
   // "Sil": önce sadece basan kişiye "Emin misiniz?" sorulur, kilit konmaz.
   if (islem === "tx") {
