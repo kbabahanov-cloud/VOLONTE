@@ -100,9 +100,18 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - [x] **403 sorunu (21 Ekim):** katalog çağrıları aralıklı "403 Request not allowed" aldı. Sebep: zamanlanmış görev farklı ülkelerdeki veri merkezlerinde çalışıyor (KIX, HKG...), Anthropic bazı bölgeleri reddediyor. `placement: {region: "aws:us-east-1"}` sadece fetch (webhook) için geçerli, cron'a uygulanmıyor. Çözüm: katalog adımı **Durable Object `KatalogDO`** içinde (`locationHint: "enam"`, ücretsiz SQLite DO; binding `KATALOG`, migration v1). Sonrası 3 parti üst üste hatasız. Yükleme metadata'sında `placement` + `migrations` + `KATALOG` binding'i olmalı.
 - Katalog maliyeti gerçek: parti (8 görsel) başına ~0,04 $ (düşünme tokenları) → ~680 model ≈ 3,5 $ (önceki 1–2 $ tahmini düşüktü). Bitiş tahmini ~01:40 İstanbul.
 
+- [x] **VENOM – Kemal + Selin (22 Ekim; kullanıcı kararı: "Onay. K1: Sonnet, tüm müşteriler için günde 30 mesaj. K2: A." + Selin ilk hafta 30/gün sonra 10, ortak sınır 80 $ uyarı 64 $):**
+  - Ortak beyin: `notlar/ortak-beyin.md`, `telegram-bot/ortak.js`. Her eleman ayrı Worker; herkes okur, sahibi yazar; `harcama:<ay>` ortak (80 $).
+  - Kemal: 08–20, 50–60 dk; istek defteri (`istekler`), tepki sayıları (KatalogDO deposu), 20:00 raporu (`rapor:<gün>`); alt yazı önerisi (`altyazi.js`, `altyaziSira`, `oneri:<n>`, ✅ Değiştir/❌ Kalsın; kod/beden/fiyat/iletişim eski yazıdan); marka (`marka.js`, Cloudflare Images binding `IMAGES`, `/marka`, KV `marka` = acik/kapali — KAPALI, kullanıcı önizleyip açacak); müşteri modu (`musteri.js`, `MUSTERI_MODEL` = Sonnet 5.5, kişi 15 mesaj + 3 foto, toplam 30 mesaj + 10 foto, `iletim:<admin>:<mesaj>` yanıt köprüsü). Yükleme: `telegram-bot/scripts/yukle-kemal.sh`.
+  - Tur önerisindeki "eski/yeni yazıyla" yerine: paylaşım kanala düşünce alt yazı önerisi gelir (✅ Değiştir / ❌ Kalsın) — daha basit ve eski yazıdaki bedenler korunur.
+  - Selin (`telegram-bot/selin.js`, Worker `volonte-selin`, `https://volonte-selin.volonte.workers.dev`, DO `SelinDO`, 5 dk görev): rehber onayı (`selin:rehberOnay`) olmadan başlamaz; 09–21 arası liste (✅ Mağazada var / ❌ Yok), hazırlık (arşive iletip en büyük foto, tekrarsız, netlik + açıklama TR/EN/FR/PT, bedenler alt yazıdan), onay kartı (✅ Onayla, siteye yükle / ✏️ Düzelt / ❌ Ekleme), GitHub Git Data API ile main'e tek commit (`galeri/<kod>/<n>.jpg` + `veri/urunler.json`), `/site` + 🗑 kaldır (onaylı), `/beden`. Fiyat alanı `null` (Vegawin sonra). Yükleme: `telegram-bot/scripts/yukle-selin.sh`.
+  - Site: `urun.html` + `js/urun.js` (pozlar, Telegram video gömme, EN/FR/PT, WhatsApp), `js/site.js` `veri/urunler.json`'dan gerçek modelleri okur (boşsa örnekler). **main'e birleşmesi gerekiyor** (PR, kullanıcı onayı).
+  - Yazı rehberi taslağı: `notlar/yazi-rehberi.md` (kullanıcı onayı bekliyor).
+  - Bekleyen kullanıcı işleri: rehber onayı; Selin botu (BotFather) + kanal ve arşivde yönetici; Selin secret'ları (BOT_TOKEN, ANTHROPIC_API_KEY, GITHUB_TOKEN); GitHub ince ayarlı token; site PR onayı; `/marka 3194` denemesi.
+
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: K4 — katalog bitince ("✅ Katalog hazır" mesajı) kullanıcı bir müşteri fotoğrafını Kemal'e gönderir, sonucu bildirir. Bekleyen: ANA PLAN → Komut 4d (Volonte CRM'e WhatsApp ekleme).**
+**Sıradaki komut: S1 — yazı rehberi onayı + Selin botunu açma (BotFather). Sonra S2 kanala/arşive ekleme + secret'lar, S3 GitHub token, S4 site PR. Ardından Defne (WhatsApp).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
