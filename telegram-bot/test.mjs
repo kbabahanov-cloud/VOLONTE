@@ -295,6 +295,18 @@ function turOrtami(n = 14) {
   for (let i = 0; i < n; i++) kodlar[String(4000 + i)] = [{ ids: [5000 + i * 10, 5001 + i * 10], tarih: o.simdi - (40 + i) * GUN }];
   o.depo.set("kodlar", JSON.stringify(kodlar));
   o.depo.set("kodsuz", "{}");
+  // Beden önerisi için alt yazı arşive iletilerek okunur (4005'in alt yazısında beden yok).
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    if (String(url).endsWith("/forwardMessage")) {
+      const govde = JSON.parse(istek.body);
+      o.gonderilen.push({ url, govde });
+      const kod = String(4000 + Math.floor((govde.message_id - 5000) / 10));
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1, caption: kod === "4005" ? `✅CODE.${kod}` : `✅CODE.${kod}\n✅SIZE.  38/40/42/44` } }));
+    }
+    return onceki(url, istek);
+  };
   return o;
 }
 const turMesajlari = (g, kisi = "111") => cagrilar(g, "copyMessage").filter((k) => String(k.govde.chat_id) === kisi);
@@ -310,8 +322,11 @@ test("tur 08:00'dan önce başlamaz; başlayınca en eski 10 model tarihleri ve 
   assert.equal(m.length, 10);
   assert.equal(turMesajlari(o.gonderilen, "222").length, 10);
   assert.deepEqual(m.map((k) => k.govde.caption.split(" ")[0]), ["4013", "4012", "4011", "4010", "4009", "4008", "4007", "4006", "4005", "4004"]);
-  assert.deepEqual(m[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text.split(" ")[0]), ["✅", "🖼", "⏳", "🗑️"]);
-  assert.match(m[0].govde.reply_markup.inline_keyboard[0][0].text, /^✅ Onaylıyorum \(\d\d\.\d\d\.2026\)$/);
+  assert.deepEqual(m[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✓ 📏 Küçük", "📏 Büyük", "📏 İkisi de", m[0].govde.reply_markup.inline_keyboard[1][0].text, "🖼 Hepsini göster", "⏳ Beklesin", "🗑️ Sil"]);
+  assert.match(m[0].govde.reply_markup.inline_keyboard[1][0].text, /^✅ Onaylıyorum \(\d\d\.\d\d\.2026\)$/);
+  assert.match(m[8].govde.caption, /^4005 [\s\S]*📏 Alt yazıda beden yok — onaydan önce beden seçin/);
+  assert.match(m[0].govde.caption, /📏 Alt yazıdaki beden: Küçük \(öneri/);
+  assert.equal(m[0].govde.reply_markup.inline_keyboard[0][0].text, "✓ 📏 Küçük");
   assert.match(m[0].govde.caption, /^4013 · son paylaşım \d\d\.\d\d\.2026 \(5[23] gün önce\)\nKanaldaki paylaşımları \(1\):\n1\) \d\d\.\d\d\.2026 · 2 medya · t\.me\/Volonteroseoffical\/5130/);
   assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /Ben Kemal/);
   assert.equal(tur(o.depo).no, 1);
@@ -345,7 +360,7 @@ test("bir modelin bütün paylaşımları: her tarih için düğme, seçilen pay
 
   await bas(o.env, 111, onaylar[1].callback_data); // ikinci tarih
   assert.equal(tur(o.depo).ogeler["4013"].secilen, 1);
-  assert.match(cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.caption, /Murat onayladı: .* paylaşımı — bugün paylaşım sırasına girdi/);
+  assert.match(cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.caption, /Murat onayladı: .* paylaşımı.* — bugün paylaşım sırasına girdi/);
   // onaylanınca seçilen paylaşım hemen (bugün) sıraya girer
   assert.deepEqual(JSON.parse(o.depo.get("kuyruk:4013")).ids, [3001, 3002, 3003]);
 });
@@ -360,11 +375,41 @@ test("onay ikisinde de görünür; ikinci basış ve izinsiz kişi işlemez", as
   await bas(o.env, 222, onay);
   const d = cagrilar(o.gonderilen, "editMessageCaption");
   assert.equal(d.length, 2);
-  assert.match(d[0].govde.caption, /Merdan onayladı: \d\d\.\d\d\.2026 paylaşımı — bugün paylaşım sırasına girdi/);
+  assert.match(d[0].govde.caption, /Merdan onayladı: \d\d\.\d\d\.2026 paylaşımı.* — bugün paylaşım sırasına girdi/);
   o.gonderilen.length = 0;
   await bas(o.env, 111, onay);
   assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Merdan zaten işaretledi/);
   assert.deepEqual(tur(o.depo).onaylar, ["4013"]);
+});
+
+test("beden: öneri seçili gelir, düğmeyle değişir (herkeste ✓ güncellenir); bedensiz model seçilmeden onaylanmaz; seçilen beden sıraya yazılır", async () => {
+  const o = turOrtami();
+  await rotasyon(o.env, o.simdi);
+  o.gonderilen.length = 0;
+  await bas(o.env, 222, "t1:1:4005:0");
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Önce beden seçin/);
+  assert.equal(o.depo.get("kuyruk:4005"), undefined);
+  await bas(o.env, 222, "tb:1:4005:b");
+  const d = cagrilar(o.gonderilen, "editMessageReplyMarkup");
+  assert.equal(d.length, 2);
+  assert.deepEqual(d[0].govde.reply_markup.inline_keyboard[0].map((x) => x.text), ["📏 Küçük", "✓ 📏 Büyük", "📏 İkisi de"]);
+  await bas(o.env, 111, "t1:1:4005:0");
+  assert.equal(JSON.parse(o.depo.get("kuyruk:4005")).beden, "b");
+  assert.match(cagrilar(o.gonderilen, "editMessageCaption").at(-1).govde.caption, /beden Büyük \(44-46-48-50\)/);
+  await bas(o.env, 111, "t1:1:4013:0"); // öneriyle (Küçük) onay
+  assert.equal(JSON.parse(o.depo.get("kuyruk:4013")).beden, "k");
+});
+
+test("beden: paylaşımda alt yazının beden satırı seçilen grupla değişir; marka kapalıyken fotoğraflar işlenmez", async () => {
+  const o = markaOrtami();
+  const r = await kanaldaPaylas(o.env, "3100", [300, 301, 302], o.simdi, "b");
+  assert.equal(r.ok, true);
+  const grup = o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup"));
+  const medya = JSON.parse(grup.govde.media);
+  assert.deepEqual(medya.map((m) => m.media), ["b300", "b301", "vid302"]);
+  assert.equal(medya[0].caption, "CODE.3100\n📏 SIZE: 44-46-48-50");
+  assert.equal(o.islenen.length, 0); // marka yok: görsel aracı kullanılmadı
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
 
 test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan geçerli; ayar, harcama ve yapay zekâ yok", async () => {

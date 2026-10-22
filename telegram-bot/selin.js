@@ -15,7 +15,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
-import { eskiBilgiler } from "./altyazi.js";
+import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 
 const SAAT_FARKI = 3 * 3600;
 const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
@@ -385,9 +385,13 @@ async function taslakHazirla(env, kod, simdi, duzeltme) {
     const dusuk = Math.max(f.buyuk.width, f.buyuk.height) < DUSUK_COZUNURLUK;
     return { id: f.id, buyuk: f.buyuk, orta: f.orta, net: (!n || n.net) && !dusuk, not: dusuk ? "düşük çözünürlük" : n && !n.net ? n.not || "bulanık" : "" };
   });
+  // Beden: alt yazıdan öneri (Küçük/Büyük/İkisi de); karttaki 📏 düğmesiyle değişir.
+  const oneri = yazilar.map(bedenOnerisi).find(Boolean) || null;
+  const bedenGrubu = onceki ? onceki.bedenGrubu ?? null : oneri;
   const taslak = {
     baslik: ai.baslik, kategori: ai.kategori, aciklama: ai.aciklama,
-    bedenler: (onceki && onceki.bedenler) || bedenBul(yazilar),
+    bedenGrubu, bedenOneri: oneri,
+    bedenler: onceki ? onceki.bedenler : bedenGrubu ? BEDEN_GRUPLARI[bedenGrubu].bedenler : null,
     fotolar: pozlar, videolar, yazilar: yazilar.slice(0, 3),
   };
   modeller[kod] = { ...(modeller[kod] || {}), durum: "onayda", zaman: simdi, taslak };
@@ -395,29 +399,41 @@ async function taslakHazirla(env, kod, simdi, duzeltme) {
   await onayKartiGonder(env, kod, taslak, bilgi);
 }
 
-async function onayKartiGonder(env, kod, t, bilgi) {
+function kartMetni(kod, t, kanalAdi) {
   const netler = t.fotolar.filter((f) => f.net);
   const atilan = t.fotolar.filter((f) => !f.net);
-  for (const k of kisiler(env)) {
-    if (netler.length > 1) await tg(env, "sendMediaGroup", { chat_id: k, media: netler.slice(0, 10).map((f) => ({ type: "photo", media: f.buyuk.file_id })) });
-    else if (netler.length === 1) await tg(env, "sendPhoto", { chat_id: k, photo: netler[0].buyuk.file_id });
-  }
-  const kanalAdi = bilgi.kanal && bilgi.kanal.kullanici;
-  const metin = [
+  const grup = BEDEN_GRUPLARI[t.bedenGrubu];
+  const beden = grup ? `${t.bedenler} — ${grup.ad}${t.bedenGrubu === t.bedenOneri ? " (alt yazıdan öneri)" : ""}`
+    : t.bedenler || "SEÇİLMEDİ — 📏 düğmesiyle seçin";
+  return [
     `🌸 ${kod} — siteye hazır taslak`,
     `Başlık: ${t.baslik}`,
     `Kategori: ${KATEGORI_ADI[t.kategori] || t.kategori} (yanlışsa ✏️ Düzelt → "kategori: takım" yazın)`,
-    `Bedenler: ${t.bedenler || "BULUNAMADI — /beden " + kod + " 38-40-42 şeklinde yazın"}`,
+    `Bedenler: ${beden}`,
     `Pozlar: ${netler.length} net${atilan.length ? `; konmayacak ${atilan.length}: ${atilan.map((f) => `${kanalAdi ? `t.me/${kanalAdi}/${f.id}` : f.id} (${f.not})`).join(", ")}` : ""}`,
     `Videolar: ${t.videolar.length ? `${t.videolar.length} (sitede Telegram oynatıcısıyla)` : "yok"}`,
     "",
     `EN: ${t.aciklama.en}`,
     "",
     `TR (kontrol için): ${t.aciklama.tr}`,
-  ].join("\n");
-  const mesajlar = await herkese(env, metin.slice(0, 4000), {
-    reply_markup: { inline_keyboard: [[{ text: "✅ Onayla, siteye yükle", callback_data: `so:${kod}` }], [{ text: "✏️ Düzelt", callback_data: `sd:${kod}` }, { text: "❌ Ekleme", callback_data: `sx:${kod}` }]] },
-  });
+  ].join("\n").slice(0, 4000);
+}
+
+function kartKlavye(kod, t) {
+  return { inline_keyboard: [
+    Object.entries(BEDEN_GRUPLARI).map(([k, g]) => ({ text: `${t.bedenGrubu === k ? "✓ " : ""}📏 ${g.ad}`, callback_data: `sb:${kod}:${k}` })),
+    [{ text: "✅ Onayla, siteye yükle", callback_data: `so:${kod}` }],
+    [{ text: "✏️ Düzelt", callback_data: `sd:${kod}` }, { text: "❌ Ekleme", callback_data: `sx:${kod}` }],
+  ] };
+}
+
+async function onayKartiGonder(env, kod, t, bilgi) {
+  const netler = t.fotolar.filter((f) => f.net);
+  for (const k of kisiler(env)) {
+    if (netler.length > 1) await tg(env, "sendMediaGroup", { chat_id: k, media: netler.slice(0, 10).map((f) => ({ type: "photo", media: f.buyuk.file_id })) });
+    else if (netler.length === 1) await tg(env, "sendPhoto", { chat_id: k, photo: netler[0].buyuk.file_id });
+  }
+  const mesajlar = await herkese(env, kartMetni(kod, t, bilgi.kanal && bilgi.kanal.kullanici), { reply_markup: kartKlavye(kod, t) });
   const modeller = await oku(env, "selin:modeller", {});
   if (modeller[kod]) {
     modeller[kod].kart = mesajlar;
@@ -543,6 +559,7 @@ export async function guncelleme(u, env) {
     const modeller = await oku(env, "selin:modeller", {});
     if (!modeller[kod] || !modeller[kod].taslak || !bedenler) return yaz("Örnek: /beden 3194 38-40-42-44");
     modeller[kod].taslak.bedenler = bedenler;
+    modeller[kod].taslak.bedenGrubu = Object.keys(BEDEN_GRUPLARI).find((k) => BEDEN_GRUPLARI[k].bedenler === bedenler) || null;
     await yazKV(env, "selin:modeller", modeller);
     return yaz(`✅ ${kod} bedenleri: ${bedenler}. Karttaki "✅ Onayla, siteye yükle"ye basabilirsiniz.`);
   }
@@ -602,6 +619,19 @@ async function dugme(cq, env) {
     }
     return cevapla(islem === "sv" ? "Hazırlığa alındı" : "Tamam");
   }
+  if (islem === "sb") {
+    const grup = String(cq.data).split(":")[2];
+    if (!m || m.durum !== "onayda" || !BEDEN_GRUPLARI[grup]) return cevapla("Bu taslak artık geçerli değil.");
+    m.taslak.bedenGrubu = grup;
+    m.taslak.bedenler = BEDEN_GRUPLARI[grup].bedenler;
+    await yazKV(env, "selin:modeller", modeller);
+    await cevapla(`Beden: ${BEDEN_GRUPLARI[grup].ad} (${BEDEN_GRUPLARI[grup].bedenler})`);
+    const kanal = await oku(env, "kanal", null);
+    for (const [k, id] of m.kart || []) {
+      await tg(env, "editMessageText", { chat_id: k, message_id: id, text: kartMetni(kod, m.taslak, kanal && kanal.kullanici), disable_web_page_preview: true, reply_markup: kartKlavye(kod, m.taslak) });
+    }
+    return;
+  }
   if (islem === "so" || islem === "sx" || islem === "sd") {
     if (!m || m.durum !== "onayda") return cevapla("Bu taslak artık geçerli değil.");
     if (islem === "sd") {
@@ -609,7 +639,7 @@ async function dugme(cq, env) {
       await cevapla("Ne değişsin?");
       return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${kod}: ne değişsin? Yazın (ör. "açıklamada saten kumaş geçsin", "başlık: Satin Wrap Dress", "2. pozu çıkar").` });
     }
-    if (islem === "so" && !m.taslak.bedenler) return cevapla(`Önce bedenleri yazın: /beden ${kod} 38-40-42`);
+    if (islem === "so" && !m.taslak.bedenler) return cevapla("Önce beden seçin: 📏 Küçük / Büyük / İkisi de");
     m.durum = islem === "so" ? "yukleniyor" : "eklenmeyecek";
     m.kim = kim;
     await yazKV(env, "selin:modeller", modeller); // önce kilitle

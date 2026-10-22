@@ -199,7 +199,8 @@ test("var → hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video g
   assert.match(o.istekler[0].messages[0].content.at(-1).text, /VOLONTE yazı rehberi/);
   const kart = cagri(o.g, "sendMessage").find((m) => /siteye hazır taslak/.test(m.govde.text));
   assert.match(kart.govde.text, /Kategori: Elbise \(yanlışsa/);
-  assert.match(kart.govde.text, /Bedenler: 38-40-42-44/);
+  assert.match(kart.govde.text, /Bedenler: 38-40-42-44 — Küçük \(alt yazıdan öneri\)/);
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✓ 📏 Küçük", "📏 Büyük", "📏 İkisi de"]);
   assert.match(kart.govde.text, /Videolar: 1/);
   assert.equal(cagri(o.g, "sendPhoto")[0].govde.photo, "b300"); // en yüksek çözünürlük
   assert.equal(o.github.commitler.length, 0); // onaysız siteye bir şey gitmez
@@ -222,7 +223,9 @@ test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazd
   o.depo.set("selin:rehberOnay", "1");
   o.depo.set("selin:modeller", JSON.stringify({ "3100": { durum: "onayda", zaman: 1, taslak: { baslik: "X", kategori: "sets", aciklama: { en: "a", fr: "b", pt: "c", tr: "d" }, bedenler: null, fotolar: [{ id: 400, buyuk: { file_id: "b400", width: 1280, height: 1700 }, net: true }], videolar: [], yazilar: [] } } }));
   await bas(o.env, 111, "so:3100");
-  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Önce bedenleri yazın/);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Önce beden seçin/);
+  await bas(o.env, 222, "sb:3100:b");
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3100"].taslak.bedenler, "44-46-48-50");
   await guncelleme({ message: { message_id: 9, chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/beden 3100 S M L" } }, o.env);
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3100"].taslak.bedenler, "S-M-L");
   await bas(o.env, 111, "sd:3100");

@@ -43,7 +43,7 @@ import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir
 import { markaBas } from "./marka.js";
 import { musteriIsle, dilSec } from "./musteri.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
-import { altyaziOlustur, ETIKET } from "./altyazi.js";
+import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
@@ -542,7 +542,7 @@ async function dugmeIsle(cq, env) {
 
   const veri = String(cq.data || "");
   if (veri.startsWith("mk:") && !izinliMi(cq.from.id, env)) return cevapla("Bu ayar sadece Murat ve Merdan'da.");
-  if (/^(t1|t7|tx|ty|tv|tg):/.test(veri)) return turDugmesi(cq, env);
+  if (/^(t1|t7|tx|ty|tv|tg|tb):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
   if (/^(ay|an):/.test(veri)) return altyaziKarar(cq, env);
@@ -592,17 +592,20 @@ async function dugmeIsle(cq, env) {
 
 // Kanala yeniden paylaşımın tek yolu. Bot kendi kanal paylaşımlarını güncelleme
 // olarak almadığı için kod dizinini, günlük sayacı ve /hafta sayısını burada günceller.
-export async function kanaldaPaylas(env, kod, ids, simdi) {
+export async function kanaldaPaylas(env, kod, ids, simdi, beden = null) {
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // Kopyalar kanala düşünce channel_post olarak gelir; hangi modele ait olduklarını bilmek için işaret.
   await env.KAYIT.put("kopya", JSON.stringify({ kod, zaman: simdi, kalan: ids.length }), { expirationTtl: 600 });
   let sonuc = null;
   let markaNotu = null;
-  if ((await env.KAYIT.get("marka")) === "acik" && env.IMAGES) {
-    const m = await markaliGonder(env, kanal.id, kod, ids);
+  // Marka açıksa ya da beden seçildiyse paylaşım yeniden yüklenir (alt yazının beden satırı
+  // seçilen grupla değişir); olmazsa aynen kopyalanır.
+  const marka = (await env.KAYIT.get("marka")) === "acik" && Boolean(env.IMAGES);
+  if (marka || BEDEN_GRUPLARI[beden]) {
+    const m = await markaliGonder(env, kanal.id, kod, ids, null, { marka, beden });
     if (m.ok) sonuc = { ok: true, result: m.mesajlar.map((id) => ({ message_id: id })) };
-    else markaNotu = `marka basılamadı (${m.hata}), markasız paylaşıldı`;
+    else markaNotu = `${marka ? "marka basılamadı" : "beden yazılamadı"} (${m.hata}), olduğu gibi paylaşıldı`;
   }
   if (!sonuc) sonuc = await telegram(env, "copyMessages", { chat_id: kanal.id, from_chat_id: kanal.id, message_ids: ids });
   if (!sonuc.ok) {
@@ -633,7 +636,7 @@ async function telegramForm(env, metod, form) {
 
 // Kanal paylaşımını fotoğraflara marka basarak yeniden yükler (videolar olduğu gibi).
 // Medya ve yazı, mesajlar arşiv kanalına iletilerek okunur.
-export async function markaliGonder(env, hedef, kod, ids, ekYazi = null) {
+export async function markaliGonder(env, hedef, kod, ids, ekYazi = null, { marka = true, beden = null } = {}) {
   try {
     const kanal = await env.KAYIT.get("kanal", "json");
     const arsiv = await env.KAYIT.get("arsiv", "json");
@@ -647,7 +650,9 @@ export async function markaliGonder(env, hedef, kod, ids, ekYazi = null) {
       if (!r.ok) return { ok: false, hata: r.description };
       const m = r.result;
       if (!yazi && m.caption) yazi = m.caption;
-      if (m.photo) {
+      if (m.photo && !marka) {
+        medya.push({ type: "photo", media: m.photo[m.photo.length - 1].file_id });
+      } else if (m.photo) {
         const buyuk = m.photo[m.photo.length - 1];
         const foto = await dosyaBaytIndir(env, tg, buyuk.file_id);
         const ad = `f${medya.length}`;
@@ -658,6 +663,7 @@ export async function markaliGonder(env, hedef, kod, ids, ekYazi = null) {
       else if (m.animation) medya.push({ type: "video", media: m.animation.file_id });
     }
     if (!medya.length) return { ok: false, hata: "medya yok" };
+    if (BEDEN_GRUPLARI[beden]) yazi = bedenYaz(yazi || `✅ CODE.${kod}`, beden);
     const altYazi = [ekYazi, yazi].filter(Boolean).join("\n\n").slice(0, 1024);
     if (altYazi) medya[0].caption = altYazi;
     form.append("chat_id", String(hedef));
@@ -794,7 +800,7 @@ async function kuyrukListesi(env) {
 }
 
 // Her paylaşım tarihi için bir "✅" düğmesi; hangisine basılırsa o paylaşım paylaşılır.
-export function turKlavye(no, kod, secenekler) {
+export function turKlavye(no, kod, secenekler, beden = null) {
   const onay = secenekler.length === 1
     ? [[{ text: `✅ Onaylıyorum (${tarihUzun(secenekler[0].tarih)})`, callback_data: `t1:${no}:${kod}:0` }]]
     : secenekler.reduce((satirlar, sec, i) => {
@@ -803,7 +809,9 @@ export function turKlavye(no, kod, secenekler) {
       else satirlar[satirlar.length - 1].push(d);
       return satirlar;
     }, []);
+  const bedenler = Object.entries(BEDEN_GRUPLARI).map(([k, g]) => ({ text: `${beden === k ? "✓ " : ""}📏 ${g.ad}`, callback_data: `tb:${no}:${kod}:${k}` }));
   return { inline_keyboard: [
+    bedenler,
     ...onay,
     [{ text: "🖼 Hepsini göster", callback_data: `tg:${no}:${kod}` }],
     [{ text: "⏳ Beklesin", callback_data: `t7:${no}:${kod}` }, { text: "🗑️ Sil", callback_data: `tx:${no}:${kod}` }],
@@ -829,20 +837,30 @@ async function turBaslat(env, onceki, simdi) {
   const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
   const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
   const kuyruk = await kuyrukListesi(env);
+  const arsiv = await env.KAYIT.get("arsiv", "json");
   const hazir = [];
   // Kanalda bulunamayan çıkarsa diye 4 yedek.
   for (const aday of kanal ? adaylar(kodlar, kodsuz, atlananlar, kuyruk.map((k) => k.kod), simdi, sonpaylasim).slice(0, TUR_ADET + 4) : []) {
     const secenekler = modelSecenekleri(aday.kod, kodlar, kodsuz);
     if (!secenekler.length) continue;
+    if (hazir.length >= TUR_ADET + 4) break;
     const gunOnce = Math.floor((simdi - aday.tarih) / 86400);
     const kopyaSayisi = kodsuzMu(aday.kod) ? (kodsuz[aday.kod].kopyalar || []).length : 0;
+    // Beden önerisi: en yeni paylaşımın alt yazısından (arşive iletilerek okunur).
+    let beden = null;
+    if (arsiv) {
+      const yId = ((kodlar[aday.kod] || []).find((g) => g.tarih === secenekler[0].tarih) || {}).y || secenekler[0].ids[0];
+      const r = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: yId, disable_notification: true });
+      if (r.ok) beden = bedenOnerisi(r.result.caption || r.result.text || "");
+    }
     const yazi = [
       `${kodGoster(aday.kod)} · son paylaşım ${tarihUzun(aday.tarih)} (${gunOnce} gün önce)`,
       `Kanaldaki paylaşımları (${secenekler.length}):`,
       ...secenekler.map((sec, i) => `${i + 1}) ${tarihUzun(sec.tarih)} · ${sec.ids.length} medya${kanal.kullanici ? ` · t.me/${kanal.kullanici}/${sec.ids[0]}` : ""}`),
       ...(kopyaSayisi ? [`(Kemal bunu daha önce yeniden paylaştı.)`] : []),
+      beden ? `📏 Alt yazıdaki beden: ${BEDEN_GRUPLARI[beden].ad} (öneri; değiştirebilirsiniz)` : "📏 Alt yazıda beden yok — onaydan önce beden seçin",
     ].join("\n");
-    hazir.push({ kod: aday.kod, mesaj: secenekler[0].ids[0], yazi, secenekler, tarih: aday.tarih });
+    hazir.push({ kod: aday.kod, mesaj: secenekler[0].ids[0], yazi, secenekler, tarih: aday.tarih, beden });
   }
   if (!hazir.length) {
     tur.durum = "bitti";
@@ -850,13 +868,13 @@ async function turBaslat(env, onceki, simdi) {
     await env.KAYIT.put("tur", JSON.stringify(tur));
     return herkese(env, "Bugün önerecek model yok (hepsi son 30 günde paylaşılmış, beklemede ya da silinmiş). Yarın sabah tekrar bakacağım.");
   }
-  await herkese(env, `🆕 Günaydın! Ben Kemal — bugünün turu (${tur.no}. tur). Uzun süredir paylaşılmayan ${Math.min(TUR_ADET, hazir.length)} model aşağıda; her birinin altında kanaldaki bütün paylaşım tarihleri var.\n✅ <tarih> → o paylaşım bugün paylaşılır · 🖼 Hepsini göster · ⏳ Beklesin (${BEKLESIN_GUN} gün sonra tekrar sorarım) · 🗑️ Sil (onayınızla kanaldaki tüm paylaşımları silinir).\nOnaylananlar ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla paylaşılır. Yarının turu yarın sabah gelir.`);
+  await herkese(env, `🆕 Günaydın! Ben Kemal — bugünün turu (${tur.no}. tur). Uzun süredir paylaşılmayan ${Math.min(TUR_ADET, hazir.length)} model aşağıda; her birinin altında kanaldaki bütün paylaşım tarihleri var.\n✅ <tarih> → o paylaşım bugün paylaşılır · 🖼 Hepsini göster · ⏳ Beklesin (${BEKLESIN_GUN} gün sonra tekrar sorarım) · 🗑️ Sil (onayınızla kanaldaki tüm paylaşımları silinir).\n📏 Küçük (38-44) / Büyük (44-50) / İkisi de: alt yazıdaki beden öneri olarak seçili gelir; seçtiğiniz beden paylaşımın alt yazısına yazılır.\nOnaylananlar ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla paylaşılır. Yarının turu yarın sabah gelir.`);
 
   let secilen = null; // ilk ulaşılan kişide giden modeller; diğerlerine aynıları gider
   const bulunamayan = [];
   for (const kisi of kisilerden(env)) {
     const gidecek = secilen ? hazir.filter((h) => secilen.includes(h.kod)) : hazir;
-    const r = await turParcasiGonder(env, { kisi, kanal: kanal.id, no: tur.no, hedef: TUR_ADET, ogeler: gidecek.map(({ kod, mesaj, yazi, secenekler }) => ({ kod, mesaj, yazi, secenekler })) });
+    const r = await turParcasiGonder(env, { kisi, kanal: kanal.id, no: tur.no, hedef: TUR_ADET, ogeler: gidecek.map(({ kod, mesaj, yazi, secenekler, beden }) => ({ kod, mesaj, yazi, secenekler, beden })) });
     if (!secilen && r.gonderilen.length) {
       secilen = r.gonderilen.map(([kod]) => kod);
       bulunamayan.push(...r.bulunamayan);
@@ -867,7 +885,7 @@ async function turBaslat(env, onceki, simdi) {
     if (guncel.no !== tur.no) return;
     for (const [kod, id] of r.gonderilen) {
       const h = hazir.find((x) => x.kod === kod);
-      const oge = guncel.ogeler[kod] || (guncel.ogeler[kod] = { ids: h.secenekler[0].ids, secenekler: h.secenekler, tarih: h.tarih, yazi: h.yazi, mesajlar: [], karar: null, kim: null, secilen: null });
+      const oge = guncel.ogeler[kod] || (guncel.ogeler[kod] = { ids: h.secenekler[0].ids, secenekler: h.secenekler, tarih: h.tarih, yazi: h.yazi, mesajlar: [], karar: null, kim: null, secilen: null, beden: h.beden, bedenOneri: h.beden });
       oge.mesajlar.push([kisi, id]);
       if (oge.karar) await telegram(env, "editMessageReplyMarkup", { chat_id: kisi, message_id: id, reply_markup: { inline_keyboard: [] } });
     }
@@ -894,7 +912,7 @@ export async function turParcasiIsle(env, { kisi, kanal, no, hedef, ogeler }) {
   for (const o of ogeler) {
     if (gonderilen.length >= hedef) break;
     if (gonderilen.length) await bekle(ara);
-    const r = await telegram(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal, message_id: o.mesaj, caption: o.yazi, reply_markup: turKlavye(no, o.kod, o.secenekler) });
+    const r = await telegram(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal, message_id: o.mesaj, caption: o.yazi, reply_markup: turKlavye(no, o.kod, o.secenekler, o.beden) });
     if (r.ok) gonderilen.push([o.kod, r.result.message_id]);
     else if (/message to copy not found|message_id_invalid|to copy/i.test(r.description || "")) bulunamayan.push(o.kod);
     else break; // kişiye ulaşılamıyor (ör. /start yazmamış): sonraki çalışmada eksikler gönderilir
@@ -920,7 +938,7 @@ export async function turEksikleriGonder(env, enFazla = 10) {
       if (sahip.has(kisi) || ulasilamayan.has(kisi) || gonderilen >= enFazla) continue;
       gonderilen += 1;
       const r = await telegram(env, "copyMessage", {
-        chat_id: kisi, from_chat_id: kanal.id, message_id: secenekler[0].ids[0], caption: oge.yazi, reply_markup: turKlavye(tur.no, kod, secenekler),
+        chat_id: kisi, from_chat_id: kanal.id, message_id: secenekler[0].ids[0], caption: oge.yazi, reply_markup: turKlavye(tur.no, kod, secenekler, oge.beden),
       });
       if (r.ok) (yeni[kod] = yeni[kod] || []).push([kisi, r.result.message_id]);
       else ulasilamayan.add(kisi); // bu çalışmada bir daha denenmez
@@ -960,7 +978,7 @@ export async function turKarar(env, kod, islem, kim, simdi, secim = 0) {
   }
   await env.KAYIT.put("tur", JSON.stringify(tur)); // önce kilitle: iki kez işlenmesin
 
-  const ek = islem === "t1" ? `✅ ${kim} onayladı: ${tarihUzun(secenekler[secim].tarih)} paylaşımı — bugün paylaşım sırasına girdi.`
+  const ek = islem === "t1" ? `✅ ${kim} onayladı: ${tarihUzun(secenekler[secim].tarih)} paylaşımı${oge.beden ? `, beden ${BEDEN_GRUPLARI[oge.beden].ad} (${BEDEN_GRUPLARI[oge.beden].bedenler})` : ""} — bugün paylaşım sırasına girdi.`
     : islem === "t7" ? `⏳ ${kim}: beklesin — ${BEKLESIN_GUN} gün sonra tekrar sorulacak.`
     : `🗑️ ${kim}: sil — kanaldaki paylaşımları siliniyor.`;
   for (const [kisi, mesajId] of oge.mesajlar) {
@@ -971,7 +989,7 @@ export async function turKarar(env, kod, islem, kim, simdi, secim = 0) {
   // yerine yeni model gelmez: günde sadece sabahki 10 model sorulur.
   if (islem === "t1") {
     const sec = secenekler[secim];
-    await env.KAYIT.put(`kuyruk:${kod}`, JSON.stringify({ kod, ids: sec.ids, tarih: sec.tarih, kim, zaman: simdi + tur.onaylar.length / 1000, tur: tur.no })); // onay sırası korunur
+    await env.KAYIT.put(`kuyruk:${kod}`, JSON.stringify({ kod, ids: sec.ids, tarih: sec.tarih, kim, zaman: simdi + tur.onaylar.length / 1000, tur: tur.no, beden: oge.beden || null })); // onay sırası korunur
   } else if (islem === "t7") await atla(env, kod, BEKLESIN_GUN, simdi);
   else await hicGelmeyecek(env, kod, kim, simdi);
   return { ok: true };
@@ -1008,6 +1026,16 @@ async function turDugmesi(cq, env) {
   if (!oge || tur.durum !== "toplaniyor") return cevapla("Bu tur artık geçerli değil.");
   if (islem === "tg") return hepsiniGoster(cq, env, kod, oge);
   if (oge.karar) return cevapla(`${oge.kim} zaten işaretledi.`);
+  if (islem === "tb") {
+    if (!BEDEN_GRUPLARI[secimYazi]) return cevapla("Geçersiz düğme.");
+    oge.beden = secimYazi;
+    await env.KAYIT.put("tur", JSON.stringify(tur));
+    await cevapla(`Beden: ${BEDEN_GRUPLARI[secimYazi].ad} (${BEDEN_GRUPLARI[secimYazi].bedenler})`);
+    const klavye = turKlavye(no, kod, oge.secenekler || [{ ids: oge.ids, tarih: oge.tarih }], oge.beden);
+    for (const [kisi, mesajId] of oge.mesajlar) await telegram(env, "editMessageReplyMarkup", { chat_id: kisi, message_id: mesajId, reply_markup: klavye });
+    return;
+  }
+  if (islem === "t1" && !oge.beden) return cevapla("Önce beden seçin: 📏 Küçük / Büyük / İkisi de");
 
   // "Sil": önce sadece basan kişiye "Emin misiniz?" sorulur, kilit konmaz.
   if (islem === "tx") {
@@ -1016,7 +1044,7 @@ async function turDugmesi(cq, env) {
   }
   if (islem === "tv") {
     await cevapla("Vazgeçildi");
-    return telegram(env, "editMessageCaption", { ...benim, caption: oge.yazi, reply_markup: turKlavye(no, kod, oge.secenekler || [{ ids: oge.ids, tarih: oge.tarih }]) });
+    return telegram(env, "editMessageCaption", { ...benim, caption: oge.yazi, reply_markup: turKlavye(no, kod, oge.secenekler || [{ ids: oge.ids, tarih: oge.tarih }], oge.beden) });
   }
   if (!["t1", "t7", "ty"].includes(islem)) return cevapla("Geçersiz düğme.");
   await cevapla(islem === "t1" ? "Onaylandı ✅" : islem === "t7" ? "Beklesin ⏳" : "Siliniyor 🗑️");
@@ -1118,7 +1146,7 @@ async function siradakiniPaylas(env, simdi) {
   const aralik = (en + Math.floor(Math.random() * (ek - en + 1))) * 60;
   await env.KAYIT.put("sonraki", String(simdi + aralik));
 
-  const sonuc = await kanaldaPaylas(env, oge.kod, oge.ids, simdi);
+  const sonuc = await kanaldaPaylas(env, oge.kod, oge.ids, simdi, oge.beden);
   const ad = kodGoster(oge.kod);
   const metin = sonuc.ok
     ? `✅ ${ad} kanalda paylaşıldı (${oge.kim} onaylamıştı).${sonuc.markaNotu ? ` ⚠️ ${sonuc.markaNotu}.` : ""}${sonuc.link ? "\n" + sonuc.link : ""}`

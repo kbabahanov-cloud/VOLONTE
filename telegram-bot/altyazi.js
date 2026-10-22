@@ -18,6 +18,46 @@ export function eskiBilgiler(metin) {
   return { beden: beden ? temiz(beden) : null, fiyat: fiyat ? temiz(fiyat) : null, iletisim };
 }
 
+// Beden grupları (kullanıcı kararı, 22 Ekim): 44 iki grupta da var.
+export const BEDEN_GRUPLARI = {
+  k: { ad: "Küçük", bedenler: "38-40-42-44" },
+  b: { ad: "Büyük", bedenler: "44-46-48-50" },
+  i: { ad: "İkisi de", bedenler: "38-40-42-44-46-48-50" },
+};
+const BEDEN_SATIRI = /\b(size|taille|beden|tamanho|размер)\b|\b\d{2}\s*[-/]\s*\d{2}\b/i;
+
+// Alt yazıdaki bedenden öneri: hepsi ≤44 → Küçük, hepsi ≥44 → Büyük, ikisine yayılıyorsa İkisi de.
+export function bedenOnerisi(metin) {
+  const b = eskiBilgiler(metin).beden;
+  if (!b) return null;
+  const sayilar = (b.match(/\b\d{2}\b/g) || []).map(Number).filter((n) => n >= 32 && n <= 60);
+  if (sayilar.length) {
+    const en = Math.min(...sayilar);
+    const ek = Math.max(...sayilar);
+    return ek <= 44 ? "k" : en >= 44 ? "b" : "i";
+  }
+  const harf = (b.match(/\b(XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL)\b/gi) || []).map((x) => x.toUpperCase());
+  if (!harf.length) return null;
+  const buyuk = harf.some((x) => /XL/.test(x));
+  const kucuk = harf.some((x) => !/XL/.test(x));
+  return buyuk && kucuk ? "i" : buyuk ? "b" : "k";
+}
+
+// Alt yazının beden satırını seçilen grupla değiştirir (yoksa CODE satırının altına ekler).
+export function bedenYaz(metin, grup) {
+  const g = BEDEN_GRUPLARI[grup];
+  if (!g) return metin;
+  const satir = `📏 SIZE: ${g.bedenler}`;
+  const satirlar = String(metin || "").split("\n");
+  const i = satirlar.findIndex((s) => BEDEN_SATIRI.test(s) && !/wa\.me|tel/i.test(s));
+  if (i >= 0) satirlar[i] = satir;
+  else {
+    const kod = satirlar.findIndex((s) => /CODE/i.test(s));
+    satirlar.splice(kod >= 0 ? kod + 1 : 0, 0, satir);
+  }
+  return satirlar.join("\n").slice(0, TELEGRAM_SINIR);
+}
+
 export function altyaziBirlestir({ etiket, kod, eski, diller }) {
   const b = eskiBilgiler(eski);
   const ust = [etiket, `✅ CODE.${kod}`];
