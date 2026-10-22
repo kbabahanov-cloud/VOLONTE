@@ -11,7 +11,7 @@
 //     her birinin kanaldaki bütün paylaşım tarihleriyle yollar ("✅ <tarih>" hangisi
 //     onaylanırsa o paylaşılır; "🖼 Hepsini göster"; "⏳ Beklesin"; "🗑️ Sil"). Beklesin
 //     ya da Sil denince yerine sıradaki model gelir. 10 onay tamamlanınca paylaşım
-//     başlar (08:00–23:00, 90–100 dk arayla: günde 10) ve hemen sonraki turun listesi gelir.
+//     başlar (08:00–20:00, 50–60 dk arayla: günde 10) ve hemen sonraki turun listesi gelir.
 //     Günde en fazla 10 paylaşım (elle /paylas dahil). /kuyruk. Bot hiçbir
 //     paylaşımı silmez. Son 1 yılın kodlu ve kodsuz ("AVAILABLE AGAIN" /
 //     "DISPONIBLE") paylaşımları önerilir; kodsuzlar "~<ilk mesaj id>" ile tutulur.
@@ -50,14 +50,14 @@ const TANIMA_ADAY = 5;
 
 // Günlük yeniden paylaşım ayarları
 const SABAH_SAATI = 8; // paylaşım bu saatte başlar (ilk tur / hatırlatma da)
-const AKSAM_SAATI = 23; // bu saatten sonra paylaşım yapılmaz
+const AKSAM_SAATI = 20; // paylaşımlar en geç bu saatte biter
 const GUNLUK_SINIR = 10;
 const TUR_ADET = 10; // bir turda toplanacak onay sayısı
 const BEKLEME_GUN = 30; // bu kadar gündür paylaşılmayan modeller önerilir
 const BEKLESIN_GUN = 7; // "Beklesin" denen model bu kadar gün sonra tekrar sorulur
 export const KALICI = 4102444800; // 2100 yılı: "Sil" denen model bir daha önerilmez
 const SILME_ADIM = 20; // bir çalışmada en fazla bu kadar mesaj silinir (Telegram çağrı sınırı 50)
-const ARALIK_DK = [90, 100]; // tur paylaşımları arası (08–23 arası günde 10 sığsın)
+const ARALIK_DK = [50, 60]; // tur paylaşımları arası (~saatte bir; 08–20 arası günde 10 rahat sığar)
 const SECENEK_EN_FAZLA = 8; // bir modelin düğmeyle seçilebilen en fazla paylaşımı
 const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim) sıradakiler
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir

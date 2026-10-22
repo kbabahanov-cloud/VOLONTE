@@ -2,8 +2,8 @@
 // Her çağrının gerçek token kullanımından tahmini dolar maliyeti hesaplanır ve
 // KV "harcama:<YYYY-AA>" (İstanbul ayı) altında mikro-dolar olarak toplanır.
 
-export const AYLIK_SINIR_USD = 60;
-export const UYARI_ORANI = 0.8;
+export const AYLIK_SINIR_USD = 80; // Kemal + Selin (+ Defne) toplamı; kullanıcı kararı 22 Ekim
+export const UYARI_ORANI = 0.8; // 64 $'da uyarı
 
 // $ / milyon token: giriş, çıkış, önbellekten okuma (yazma = giriş × 1,25)
 const FIYAT = {

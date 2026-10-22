@@ -455,7 +455,7 @@ test("çok mesajlı silme 5 dakikalık görevle parça parça biter (gece de)", 
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /45 mesaj kanaldan silindi/);
 });
 
-test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 90–100 dk arayla başlar ve sonraki tur hemen açılır", async () => {
+test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 50–60 dk arayla başlar ve sonraki tur hemen açılır", async () => {
   const o = turOrtami(25);
   await rotasyon(o.env, o.simdi);
   const kodlar10 = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
@@ -482,20 +482,20 @@ test("10 onay tamamlanmadan paylaşım başlamaz; 10. onayla 90–100 dk arayla 
   assert.equal(ilk.length, 1);
   assert.deepEqual(ilk[0].govde.message_ids, [5240, 5241]); // 1. turun ilk onaylananı (4024), albümün tamamı
   const ara = Number(o.depo.get("sonraki")) - t;
-  assert.ok(ara >= 90 * 60 && ara <= 100 * 60, `aralık ${ara / 60} dk`);
+  assert.ok(ara >= 50 * 60 && ara <= 60 * 60, `aralık ${ara / 60} dk`);
   o.gonderilen.length = 0;
-  await rotasyon(o.env, t + 80 * 60);
+  await rotasyon(o.env, t + 45 * 60);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
 
-test("paylaşım penceresi 08:00–23:00", async () => {
+test("paylaşım penceresi 08:00–20:00", async () => {
   const o = turOrtami();
   o.depo.set("tur", JSON.stringify({ no: 1, durum: "toplaniyor", basla: o.simdi, onaylar: [], ogeler: {} }));
   o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
-  await rotasyon(o.env, ist(23, 5));
+  await rotasyon(o.env, ist(20, 5));
   await rotasyon(o.env, ist(7, 55, 1));
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
-  await rotasyon(o.env, ist(22, 40));
+  await rotasyon(o.env, ist(19, 50));
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
 });
 
@@ -538,7 +538,9 @@ test("önerecek model kalmazsa onaylananlarla paylaşıma geçer, ertesi gün ye
   assert.equal(tur(o.depo).durum, "bitti");
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /onaylanan 2 modelle paylaşıma geçiyorum/.test(m.govde.text)));
   assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:")).length, 2);
-  await rotasyon(o.env, ist(20));
+  const t1 = tur(o.depo);
+  o.depo.set("tur", JSON.stringify({ ...t1, bitis: o.simdi })); // düğme gerçek saatle bastı; testi saatten bağımsız yap
+  await rotasyon(o.env, ist(19));
   assert.equal(tur(o.depo).no, 1); // aynı gün yeni tur yok
   await rotasyon(o.env, ist(8, 0, 1));
   assert.equal(tur(o.depo).no, 2);
@@ -558,11 +560,11 @@ test("kanalda bulunamayan model atlanır, yerine sıradaki gelir", async () => {
   assert.ok(!tur(o.depo).ogeler["4013"]);
 });
 
-test("21:00'dan sonra ve günlük 10 sınırında paylaşım yok", async () => {
+test("20:00'dan sonra ve günlük 10 sınırında paylaşım yok", async () => {
   const o = turOrtami();
   o.depo.set("tur", JSON.stringify({ no: 1, durum: "paylasiliyor", basla: o.simdi, onaylar: [], ogeler: {} }));
   o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
-  await rotasyon(o.env, ist(21, 5));
+  await rotasyon(o.env, ist(20, 5));
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   o.depo.set(`sayac:${gunAnahtari(o.simdi)}`, "10");
   await rotasyon(o.env, ist(15));
@@ -895,7 +897,7 @@ test("fotoğraf tanıma: katalog yoksa söyler, yapay zekâ çağrılmaz", async
 
 // ---------- Aylık harcama sınırı ----------
 
-test("harcama: her çağrının maliyeti toplanır; 60 $ dolunca asistan, tanıma ve katalog durur", async () => {
+test("harcama: her çağrının maliyeti toplanır; 80 $ dolunca asistan, tanıma ve katalog durur", async () => {
   const { maliyetUsd, ayAnahtari } = await import("./harcama.js");
   assert.equal(maliyetUsd("claude-opus-5-5", { input_tokens: 1_000_000 }), 4);
   assert.equal(maliyetUsd("claude-opus-5-5", { output_tokens: 1000, cache_read_input_tokens: 1_000_000, cache_creation_input_tokens: 1_000_000 }), 0.02 + 0.2 + 5);
@@ -903,10 +905,10 @@ test("harcama: her çağrının maliyeti toplanır; 60 $ dolunca asistan, tanım
   const su = Math.floor(Date.now() / 1000);
   await yazi(o.env, 111, "merhaba");
   assert.equal(o.depo.get(ayAnahtari(su)), String(2000 * 4 + 500 * 20)); // mikro-dolar: 0,018 $
-  o.depo.set(ayAnahtari(su), String(60_000_000));
+  o.depo.set(ayAnahtari(su), String(80_000_000));
   await yazi(o.env, 111, "tekrar merhaba");
   assert.equal(o.istekler.length, 1);
-  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /60 \$ yapay zekâ harcama sınırına ulaşıldı/);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /80 \$ yapay zekâ harcama sınırına ulaşıldı/);
   tanimaHazir(o);
   await foto(o.env, 111);
   assert.equal(o.istekler.length, 1);
