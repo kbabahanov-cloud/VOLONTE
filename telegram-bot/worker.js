@@ -38,6 +38,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
 import { markaBas } from "./marka.js";
+import { musteriIsle, dilSec } from "./musteri.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
 import { altyaziOlustur, ETIKET } from "./altyazi.js";
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -390,7 +391,17 @@ async function mesajIsle(msg, env) {
       JSON.stringify({ ad: [kimden.first_name, kimden.last_name].filter(Boolean).join(" "), kullanici: kimden.username || null, zaman: msg.date, metin: (msg.text || "").slice(0, 50) }),
       { expirationTtl: 7 * 24 * 60 * 60 }
     );
-    return;
+    // Müşteri modu: ayrı dosya, yönetici işlerine erişimi yok (musteri.js).
+    return musteriIsle(msg, env, musteriYardimcilari(env), Math.floor(Date.now() / 1000));
+  }
+
+  // Yönetici, Kemal'in ilettiği müşteri mesajını yanıtlarsa: müşteriye iletilir.
+  if (msg.reply_to_message) {
+    const musteri = await env.KAYIT.get(`iletim:${msg.chat.id}:${msg.reply_to_message.message_id}`);
+    if (musteri) {
+      const r = await telegram(env, "copyMessage", { chat_id: Number(musteri), from_chat_id: msg.chat.id, message_id: msg.message_id });
+      return telegram(env, "sendMessage", { chat_id: msg.chat.id, text: r.ok ? "✅ Müşteriye iletildi (Kemal'in ağzından)." : `⚠️ İletilemedi: ${r.description}`, reply_to_message_id: msg.message_id });
+    }
   }
 
   const komut = (msg.text || "").trim().split(/[\s@]/)[0].toLowerCase();
@@ -1435,6 +1446,33 @@ async function fotoTani(msg, env, simdi) {
 }
 
 const kac = (t) => String(t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// ---------- Müşteri modunun dışarıyla tek bağlantısı ----------
+
+function musteriYardimcilari(env) {
+  return {
+    gonder: (metod, govde) => telegram(env, metod, govde),
+    // Konuşmayı sahibe ve Merdan'a iletir; yanıtlarsanız müşteriye gider.
+    async ekibeIlet(msg, baslik, ozet, fotoMesaj = null) {
+      const k = msg.from;
+      const metin = [
+        `📩 ${baslik}`,
+        `Müşteri: ${[k.first_name, k.last_name].filter(Boolean).join(" ") || "?"}${k.username ? ` (@${k.username})` : ""} · dil: ${dilSec(k)} · id ${k.id}`,
+        ozet ? `Özet: ${ozet}` : null,
+        msg.text ? `Son mesajı: "${String(msg.text).slice(0, 500)}"` : null,
+        "↩️ Bu mesajı yanıtlayın, yazdığınızı Kemal müşteriye iletir.",
+      ].filter(Boolean).join("\n");
+      for (const kisi of kisilerden(env)) {
+        const r = await telegram(env, "sendMessage", { chat_id: kisi, text: metin, disable_web_page_preview: true });
+        if (r.ok) await env.KAYIT.put(`iletim:${kisi}:${r.result.message_id}`, String(msg.chat.id), { expirationTtl: 7 * 86400 });
+        if (fotoMesaj) {
+          const f = await telegram(env, "copyMessage", { chat_id: kisi, from_chat_id: msg.chat.id, message_id: fotoMesaj });
+          if (f.ok) await env.KAYIT.put(`iletim:${kisi}:${f.result.message_id}`, String(msg.chat.id), { expirationTtl: 7 * 86400 });
+        }
+      }
+    },
+  };
+}
 
 // ---------- Yapay zekâ asistanının araçları ----------
 

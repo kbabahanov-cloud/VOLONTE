@@ -39,10 +39,10 @@ export async function dosyaIndir(env, tg, fileId) {
 
 const gorsel = (data) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
 
-async function jsonIste(env, { system, content, schema, maxTokens = 2000 }) {
+async function jsonIste(env, { system, content, schema, maxTokens = 2000, model: secilenModel }) {
   if (await sinirAsildiMi(env)) throw new Error(SINIR_MESAJI);
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 50_000 });
-  const model = env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;
+  const model = secilenModel || env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;
   const response = await client.beta.messages.create({
     model,
     max_tokens: maxTokens,
@@ -88,7 +88,7 @@ export async function tarifle(env, gorseller) {
 }
 
 // Adım 1: tarif listesinden en yakın adaylar.
-export async function adaySec(env, musteriB64, katalogSatirlari, ipucu) {
+export async function adaySec(env, musteriB64, katalogSatirlari, ipucu, model) {
   const sonuc = await jsonIste(env, {
     system: [{
       type: "text",
@@ -106,12 +106,13 @@ export async function adaySec(env, musteriB64, katalogSatirlari, ipucu) {
       additionalProperties: false,
     },
     maxTokens: 1000,
+    model,
   });
   return (sonuc.adaylar || []).slice(0, 5);
 }
 
 // Adım 2: müşteri fotoğrafı adayların gerçek fotoğraflarıyla karşılaştırılır.
-export async function karsilastir(env, musteriB64, adaylar, ipucu) {
+export async function karsilastir(env, musteriB64, adaylar, ipucu, model) {
   const content = [{ type: "text", text: "Müşteri fotoğrafı:" }, gorsel(musteriB64)];
   for (const a of adaylar) content.push({ type: "text", text: `Aday — kimlik: ${a.kimlik}` }, gorsel(a.b64));
   content.push({
@@ -132,6 +133,7 @@ export async function karsilastir(env, musteriB64, adaylar, ipucu) {
       additionalProperties: false,
     },
     maxTokens: 1000,
+    model,
   });
 }
 

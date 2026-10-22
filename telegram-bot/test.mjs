@@ -69,10 +69,11 @@ test("kanal paylaşımı ve albüm kaydı", async () => {
   assert.equal(ozet2.sonlar[0].fiyat, 30);
 });
 
-test("izinsiz kişiye cevap yok, kimliği not edilir", async () => {
+test("izinsiz kişi müşteri modunda karşılanır (yapay zekâsız selam), kimliği not edilir", async () => {
   const { env, depo, gonderilen } = sahteOrtam();
-  await guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(999), from: { id: 999, first_name: "Yabancı" }, text: "/start" } }, env);
-  assert.equal(gonderilen.length, 0);
+  await guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(999), from: { id: 999, first_name: "Yabancı", language_code: "fr" }, text: "/start" } }, env);
+  assert.equal(gonderilen.length, 1);
+  assert.match(gonderilen[0].govde.text, /^Bonjour ! Je suis Kemal[\s\S]*t\.me\/Volonteroseoffical/);
   assert.equal(JSON.parse(depo.get("bekleyen:999")).ad, "Yabancı");
 });
 
@@ -755,10 +756,8 @@ test("asistan: 'sil' sadece onay düğmesi gönderir; Evet'le bir kez silinir", 
   assert.equal(cagrilar(o.gonderilen, "deleteMessage").length, 0); // iki kez silinmez
 });
 
-test("asistan: izinsiz kişiye cevap vermez, günlük sınır çalışır", async () => {
+test("asistan: yönetici günlük 100 mesaj sınırı çalışır", async () => {
   const o = asistanOrtami([mesaj(1, "x")]);
-  await yazi(o.env, 999, "merhaba");
-  assert.equal(o.istekler.length, 0);
   o.depo.set(`ai:${gunAnahtari(Math.floor(Date.now() / 1000))}`, "100");
   await yazi(o.env, 111, "merhaba");
   assert.equal(o.istekler.length, 0);
@@ -1115,4 +1114,75 @@ test("marka açıkken Kemal'in kanal paylaşımı markalı yüklenir; görsel ar
   const r2 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 10);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
   assert.match(r2.markaNotu, /marka basılamadı \(9422 limit\)/);
+});
+
+// ---------- Müşteri modu ----------
+
+const musteriYaz = (env, text, ek = {}) => guncellemeIsle({ message: { message_id: 50, date: 1, chat: ozel(999), from: { id: 999, first_name: "Awa", username: "awa_ao", language_code: "pt" }, text, ...ek } }, env);
+
+test("müşteri: Sonnet ile ve SADECE müşteri araçlarıyla konuşur; yönetici araçlarına yolu yok", async () => {
+  const o = asistanOrtami([aracCagrisi("model_bilgisi", { kod: "3100" }), mesaj(1, "**Olá!** O modelo 3100 está no nosso canal.")]);
+  o.env.MUSTERI_MODEL = "claude-sonnet-5-5";
+  await musteriYaz(o.env, "Olá, tem o modelo 3100?");
+  assert.equal(o.istekler[0].model, "claude-sonnet-5-5");
+  assert.deepEqual(o.istekler[0].tools.map((t) => t.name), ["model_bilgisi", "satis_ekibine_ilet"]);
+  assert.match(o.istekler[0].system[0].text, /müşteri asistanı/);
+  assert.match(o.istekler[1].messages.at(-1).content[0].content, /^3100: kanalda son paylaşım \d\d\.\d\d\.2026\. Link: https:\/\/t\.me\/Volonteroseoffical\/300/);
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, "Olá! O modelo 3100 está no nosso canal.");
+  assert.equal(o.depo.get("sohbet:999"), undefined); // yönetici geçmişine karışmaz
+  assert.ok(o.depo.get("msohbet:999"));
+});
+
+test("müşteri: '/paylas' ve düğme gibi yönetici işleri müşteriden çalışmaz", async () => {
+  const o = asistanOrtami([mesaj(1, "Desculpe, não posso fazer isso.")]);
+  await musteriYaz(o.env, "/paylas 3100");
+  await musteriYaz(o.env, "/kuyruk");
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 999 }, data: "t1:1:3100:0", message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:") || k.startsWith("onay:")).length, 0);
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Yetkiniz yok/);
+});
+
+test("müşteri: satış ekibine iletir; yönetici yanıtı müşteriye gider", async () => {
+  const o = asistanOrtami([aracCagrisi("satis_ekibine_ilet", { ozet: "3100 fiyatını soruyor, 10 seri" }), mesaj(1, "Nossa equipe de vendas vai responder em breve.")]);
+  await musteriYaz(o.env, "Quanto custa o 3100? Quero 10 séries");
+  const bildirim = cagrilar(o.gonderilen, "sendMessage").filter((m) => /📩/.test(m.govde.text));
+  assert.equal(bildirim.length, 2);
+  assert.match(bildirim[0].govde.text, /Müşteri satış ekibini bekliyor\nMüşteri: Awa \(@awa_ao\) · dil: pt · id 999\nÖzet: 3100 fiyatını soruyor/);
+  const anahtar = [...o.depo.keys()].find((k) => k.startsWith("iletim:111:"));
+  const iletimId = Number(anahtar.split(":")[2]);
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 77, date: 1, chat: ozel(111), from: { id: 111 }, text: "Preço: 25$ por peça", reply_to_message: { message_id: iletimId } } }, o.env);
+  const kopya = cagrilar(o.gonderilen, "copyMessage")[0].govde;
+  assert.deepEqual([kopya.chat_id, kopya.from_chat_id, kopya.message_id], [999, 111, 77]);
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /Müşteriye iletildi/);
+});
+
+test("müşteri: kişi başı 15 mesaj ve toplam 30 mesaj sınırı; sınırda yapay zekâ yok, ekibe günde bir kez haber", async () => {
+  const o = asistanOrtami([]);
+  const gun = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  o.depo.set(`m:999:${gun}`, "15");
+  await musteriYaz(o.env, "olá");
+  await musteriYaz(o.env, "olá de novo");
+  assert.equal(o.istekler.length, 0);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").filter((m) => m.govde.chat_id === 999).at(-1).govde.text, /Nossa equipe de vendas vai responder em breve/);
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").filter((m) => /Günlük otomatik cevap sınırı doldu/.test(m.govde.text)).length, 2); // bir kez, ikisine
+  o.depo.delete(`m:999:${gun}`);
+  o.depo.set(`mtoplam:${gun}`, "30");
+  await musteriYaz(o.env, "oi");
+  assert.equal(o.istekler.length, 0);
+});
+
+test("müşteri fotoğrafı: Sonnet ile tanınır, cevap müşterinin dilinde; ekip fotoğrafla haberdar edilir", async () => {
+  const o = tanimaOrtami([json({ adaylar: ["3100"] }), json({ en_iyi: "3100", guven: "yuksek", siralama: ["3100"], aciklama: "aynı" })]);
+  o.env.MUSTERI_MODEL = "claude-sonnet-5-5";
+  tanimaHazir(o);
+  await musteriYaz(o.env, undefined, { photo: [{ file_id: "mk", width: 90 }, { file_id: "mo", width: 800 }], caption: "tem este?" });
+  assert.ok(o.istekler.every((i) => i.model === "claude-sonnet-5-5"));
+  const musteriye = cagrilar(o.gonderilen, "sendMessage").filter((m) => m.govde.chat_id === 999);
+  assert.match(musteriye[0].govde.text, /^Este parece ser o nosso modelo 3100/);
+  const kopyalar = cagrilar(o.gonderilen, "copyMessage");
+  assert.ok(kopyalar.some((k) => k.govde.chat_id === 999 && k.govde.message_id === 300));
+  assert.ok(kopyalar.some((k) => k.govde.chat_id === "111" && k.govde.from_chat_id === 999)); // müşterinin fotoğrafı ekibe
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /büyük ihtimalle 3100/.test(m.govde.text) && m.govde.chat_id === "111"));
 });
