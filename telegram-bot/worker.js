@@ -36,7 +36,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
-import { medyaDosyasi, dosyaIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
+import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
+import { markaBas } from "./marka.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
 import { altyaziOlustur, ETIKET } from "./altyazi.js";
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -402,6 +403,8 @@ async function mesajIsle(msg, env) {
     cevap = await haftaOzeti(env);
   } else if (komut === "/paylas" || komut === "/paylaş") {
     return paylasOnizle(msg, env);
+  } else if (komut === "/marka") {
+    return markaOnizle(msg, env);
   } else if (komut === "/kuyruk") {
     return kuyrukGoster(msg.chat.id, env);
   } else if (msg.text && !msg.text.startsWith("/")) {
@@ -420,6 +423,7 @@ const YARDIM = [
   "/paylas 3329 — o kodun son paylaşımını önizle, onaylarsan kanalda tekrar paylaş",
   "/paylas 3329 2 — aynı kodun bir önceki paylaşımı",
   "/kuyruk — onaylanıp paylaşılmayı bekleyenler (iptal edilebilir)",
+  "/marka 3194 — fotoğrafa \"VOLONTE · kod\" basılmış hâlini sadece size gösterir; kanalda açma/kapatma",
   "/yardim — bu liste",
   "",
   "",
@@ -505,6 +509,12 @@ async function dugmeIsle(cq, env) {
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
   if (/^(ay|an):/.test(veri)) return altyaziKarar(cq, env);
+  if (veri === "mk:acik" || veri === "mk:kapali") {
+    const acik = veri === "mk:acik";
+    await env.KAYIT.put("marka", acik ? "acik" : "kapali");
+    await cevapla(acik ? "Marka açık" : "Marka kapalı");
+    return herkese(env, acik ? `🖼 Marka basma AÇILDI (${kisiAdi(cq.from)}): Kemal'in kanala paylaştığı fotoğraflarda "VOLONTE · kod" olacak. Kapatmak için: /marka` : `🖼 Marka basma KAPALI (${kisiAdi(cq.from)}).`);
+  }
   if (veri.startsWith("rp:")) {
     await cevapla("Önizleme hazırlanıyor");
     return paylasOnizle({ chat: cq.message.chat, from: cq.from, text: `/paylas ${veri.slice(3)}` }, env);
@@ -550,7 +560,14 @@ export async function kanaldaPaylas(env, kod, ids, simdi) {
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // Kopyalar kanala düşünce channel_post olarak gelir; hangi modele ait olduklarını bilmek için işaret.
   await env.KAYIT.put("kopya", JSON.stringify({ kod, zaman: simdi, kalan: ids.length }), { expirationTtl: 600 });
-  const sonuc = await telegram(env, "copyMessages", { chat_id: kanal.id, from_chat_id: kanal.id, message_ids: ids });
+  let sonuc = null;
+  let markaNotu = null;
+  if ((await env.KAYIT.get("marka")) === "acik" && env.IMAGES) {
+    const m = await markaliGonder(env, kanal.id, kod, ids);
+    if (m.ok) sonuc = { ok: true, result: m.mesajlar.map((id) => ({ message_id: id })) };
+    else markaNotu = `marka basılamadı (${m.hata}), markasız paylaşıldı`;
+  }
+  if (!sonuc) sonuc = await telegram(env, "copyMessages", { chat_id: kanal.id, from_chat_id: kanal.id, message_ids: ids });
   if (!sonuc.ok) {
     await env.KAYIT.delete("kopya");
     const ipucu = /rights|admin|not enough|forbidden/i.test(sonuc.description || "")
@@ -569,7 +586,79 @@ export async function kanaldaPaylas(env, kod, ids, simdi) {
   await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
 
   const link = kanal.kullanici && yeniIds.length ? `https://t.me/${kanal.kullanici}/${yeniIds[0]}` : null;
-  return { ok: true, link, ids: yeniIds };
+  return { ok: true, link, ids: yeniIds, markaNotu };
+}
+
+async function telegramForm(env, metod, form) {
+  const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", body: form });
+  return r.json();
+}
+
+// Kanal paylaşımını fotoğraflara marka basarak yeniden yükler (videolar olduğu gibi).
+// Medya ve yazı, mesajlar arşiv kanalına iletilerek okunur.
+export async function markaliGonder(env, hedef, kod, ids, ekYazi = null) {
+  try {
+    const kanal = await env.KAYIT.get("kanal", "json");
+    const arsiv = await env.KAYIT.get("arsiv", "json");
+    if (!arsiv) return { ok: false, hata: "arşiv kanalı yok" };
+    const tg = (metod, govde) => telegram(env, metod, govde);
+    const form = new FormData();
+    const medya = [];
+    let yazi = null;
+    for (const id of ids.slice(0, 10)) {
+      const r = await tg("forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true });
+      if (!r.ok) return { ok: false, hata: r.description };
+      const m = r.result;
+      if (!yazi && m.caption) yazi = m.caption;
+      if (m.photo) {
+        const buyuk = m.photo[m.photo.length - 1];
+        const foto = await dosyaBaytIndir(env, tg, buyuk.file_id);
+        const ad = `f${medya.length}`;
+        form.append(ad, new Blob([await markaBas(env, foto, buyuk.width || 1280, kod)], { type: "image/jpeg" }), `${ad}.jpg`);
+        medya.push({ type: "photo", media: `attach://${ad}` });
+      } else if (m.video) medya.push({ type: "video", media: m.video.file_id });
+      else if (m.document) medya.push({ type: "document", media: m.document.file_id });
+      else if (m.animation) medya.push({ type: "video", media: m.animation.file_id });
+    }
+    if (!medya.length) return { ok: false, hata: "medya yok" };
+    const altYazi = [ekYazi, yazi].filter(Boolean).join("\n\n").slice(0, 1024);
+    if (altYazi) medya[0].caption = altYazi;
+    form.append("chat_id", String(hedef));
+    let r;
+    if (medya.length === 1) {
+      const tek = medya[0];
+      const alan = tek.type === "photo" ? "photo" : tek.type === "document" ? "document" : "video";
+      form.append(alan, tek.media.startsWith("attach://") ? form.get(tek.media.slice(9)) : tek.media);
+      if (tek.caption) form.append("caption", tek.caption);
+      r = await telegramForm(env, tek.type === "photo" ? "sendPhoto" : tek.type === "document" ? "sendDocument" : "sendVideo", form);
+      if (r.ok) r.result = [r.result];
+    } else {
+      form.append("media", JSON.stringify(medya));
+      r = await telegramForm(env, "sendMediaGroup", form);
+    }
+    if (!r.ok) return { ok: false, hata: r.description };
+    return { ok: true, mesajlar: r.result.map((x) => x.message_id) };
+  } catch (e) {
+    return { ok: false, hata: e.message };
+  }
+}
+
+// /marka [kod]: markalı hâlini sadece isteyene gösterir; "✅ Kanalda kullan" ile açılır.
+async function markaOnizle(msg, env) {
+  const sohbet = msg.chat.id;
+  const yaz = (text, ek = {}) => telegram(env, "sendMessage", { chat_id: sohbet, text, ...ek });
+  const kod = kodNormal((msg.text || "").split(/\s+/)[1] || "");
+  const durum = (await env.KAYIT.get("marka")) === "acik" ? "AÇIK" : "KAPALI";
+  if (!kod) return yaz(`Marka basma şu an ${durum}. Önizleme için: /marka 3194`);
+  if (!env.IMAGES) return yaz("Görsel aracı bağlı değil.");
+  const sec = modelSecenekleri(kod, (await env.KAYIT.get("kodlar", "json")) || {}, (await env.KAYIT.get("kodsuz", "json")) || {})[0];
+  if (!sec) return yaz(`${kod} kodlu paylaşım bulamadım.`);
+  await telegram(env, "sendChatAction", { chat_id: sohbet, action: "upload_photo" });
+  const m = await markaliGonder(env, sohbet, kod, sec.ids, `🖼 Marka önizlemesi — ${kod} (kanala gitmedi)`);
+  if (!m.ok) return yaz(`⚠️ Marka basılamadı: ${m.hata}`);
+  return yaz(`Marka basma şu an ${durum}. Kemal'in kanala yaptığı paylaşımlarda bu marka kullanılsın mı? (Sizin elle yaptığınız paylaşımlara dokunulmaz; videolara marka basılmaz.)`, {
+    reply_markup: { inline_keyboard: [[{ text: "✅ Kanalda kullan", callback_data: "mk:acik" }, { text: "❌ Kullanma", callback_data: "mk:kapali" }]] },
+  });
 }
 
 async function bugunSayac(env, simdi) {
@@ -942,7 +1031,7 @@ async function siradakiniPaylas(env, simdi) {
   const ad = kodGoster(oge.kod);
   const turBitti = oge.tur && !(await kuyrukListesi(env)).some((o) => o.tur === oge.tur);
   const metin = sonuc.ok
-    ? `✅ ${ad} kanalda paylaşıldı (${oge.kim} onaylamıştı).${sonuc.link ? "\n" + sonuc.link : ""}`
+    ? `✅ ${ad} kanalda paylaşıldı (${oge.kim} onaylamıştı).${sonuc.markaNotu ? ` ⚠️ ${sonuc.markaNotu}.` : ""}${sonuc.link ? "\n" + sonuc.link : ""}`
     : `⚠️ ${ad} paylaşılamadı: ${sonuc.hata}`;
   for (const kisi of kisilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: metin + (turBitti ? `\n🏁 ${oge.tur}. turun paylaşımları tamamlandı.` : ""), disable_web_page_preview: true });
 }

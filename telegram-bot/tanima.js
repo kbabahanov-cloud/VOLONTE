@@ -134,3 +134,11 @@ export async function karsilastir(env, musteriB64, adaylar, ipucu) {
     maxTokens: 1000,
   });
 }
+
+export async function dosyaBaytIndir(env, tg, fileId) {
+  const f = await tg("getFile", { file_id: fileId });
+  if (!f.ok) throw new Error(`getFile: ${f.description}`);
+  const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN || "").trim()}/${f.result.file_path}`);
+  if (!r.ok) throw new Error(`indirme: ${r.status}`);
+  return new Uint8Array(await r.arrayBuffer());
+}

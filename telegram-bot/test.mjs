@@ -1027,3 +1027,92 @@ test("alt yazı: Kemal'in yeniden paylaşımı 🔁; eski paylaşımın yazısı
   assert.match(oneri.govde.text, /🔁 Repete geldi\n✅ CODE\.3200\n📏 SIZE: 40\/42[\s\S]*wa\.me\/905362390091/);
   assert.equal(cagrilar(o.gonderilen, "forwardMessage")[0].govde.chat_id, -555);
 });
+
+// ---------- Marka basma ----------
+
+const { etiketPng } = await import("./marka.js");
+const zlib = await import("node:zlib");
+
+test("etiket PNG'si geçerli: imza, boyut, sıkıştırılmış veri açılıyor", () => {
+  const png = etiketPng("3194");
+  assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  const dv = new DataView(png.buffer);
+  const W = dv.getUint32(16);
+  const H = dv.getUint32(20);
+  assert.ok(W > 300 && W < 500 && H === 73, `${W}x${H}`);
+  const idatUz = dv.getUint32(33);
+  const ham = zlib.inflateSync(Buffer.from(png.slice(41, 41 + idatUz)));
+  assert.equal(ham.length, H * (W * 4 + 1));
+  assert.ok(etiketPng("~55").length < png.length); // kodsuzda sadece VOLONTE
+});
+
+function markaOrtami() {
+  const o = tanimaOrtami([]);
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
+  o.islenen = [];
+  o.env.IMAGES = {
+    input: (akis) => {
+      const zincir = { akis, islem: [], transform(t) { this.islem.push(["transform", t]); return this; }, draw(e, s) { this.islem.push(["draw", e, s]); return this; },
+        async output(f) { o.islenen.push({ islem: this.islem, f }); return { response: () => new Response(new Uint8Array([9, 9, 9])) }; } };
+      return zincir;
+    },
+  };
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (istek && istek.body instanceof FormData) {
+      const alanlar = Object.fromEntries([...istek.body.entries()].map(([k, v]) => [k, typeof v === "string" ? v : `dosya:${v.size}`]));
+      o.gonderilen.push({ url: adres, govde: alanlar });
+      const sayi = alanlar.media ? JSON.parse(alanlar.media).length : 1;
+      const sonuc = Array.from({ length: sayi }, (_, i) => ({ message_id: 7000 + i }));
+      return new Response(JSON.stringify({ ok: true, result: alanlar.media ? sonuc : sonuc[0] }));
+    }
+    if (adres.endsWith("/forwardMessage")) {
+      const govde = JSON.parse(istek.body);
+      o.gonderilen.push({ url: adres, govde });
+      const id = govde.message_id;
+      const m = id === 302 ? { message_id: 1, video: { file_id: "vid302" } } : { message_id: 1, photo: [{ file_id: `k${id}`, width: 90 }, { file_id: `b${id}`, width: 1280 }], ...(id === 300 ? { caption: "CODE.3100\nSIZE 38/40" } : {}) };
+      return new Response(JSON.stringify({ ok: true, result: m }));
+    }
+    return onceki(url, istek);
+  };
+  return o;
+}
+
+test("marka: /marka önizlemesi sadece isteyene gider, kanala değil; fotoğraflar işlenir, video aynen", async () => {
+  const o = markaOrtami();
+  await guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(111), from: { id: 111 }, text: "/marka 3100" } }, o.env);
+  const grup = o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup"));
+  assert.equal(grup.govde.chat_id, "111");
+  const medya = JSON.parse(grup.govde.media);
+  assert.deepEqual(medya.map((m) => [m.type, m.media]), [["photo", "attach://f0"], ["photo", "attach://f1"], ["video", "vid302"]]);
+  assert.match(medya[0].caption, /Marka önizlemesi — 3100 \(kanala gitmedi\)\n\nCODE\.3100/);
+  assert.equal(grup.govde.f0, "dosya:3");
+  assert.deepEqual(cagrilar(o.gonderilen, "getFile").map((g) => g.govde.file_id), ["b300", "b301"]); // en büyük boyut
+  assert.equal(o.islenen.length, 2);
+  const [, etiket, yer] = o.islenen[0].islem[0];
+  assert.deepEqual(etiket.islem, [["transform", { width: 384 }]]); // 1280 × 0,30
+  assert.deepEqual(yer, { bottom: 38, right: 38 });
+  assert.equal(o.islenen[0].f.format, "image/jpeg");
+  assert.equal(o.depo.get("marka"), undefined); // açılmadı
+  const dugme = cagrilar(o.gonderilen, "sendMessage").at(-1).govde.reply_markup.inline_keyboard[0][0];
+  assert.equal(dugme.callback_data, "mk:acik");
+  await bas(o.env, 111, "mk:acik");
+  assert.equal(o.depo.get("marka"), "acik");
+});
+
+test("marka açıkken Kemal'in kanal paylaşımı markalı yüklenir; görsel aracı hata verirse markasız kopyaya döner", async () => {
+  const o = markaOrtami();
+  o.depo.set("marka", "acik");
+  const r = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi);
+  assert.equal(r.ok, true);
+  const grup = o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup"));
+  assert.equal(grup.govde.chat_id, "-100");
+  assert.equal(r.link, "https://t.me/Volonteroseoffical/7000");
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  o.env.IMAGES = { input: () => ({ transform() { return this; }, draw() { return this; }, async output() { throw new Error("9422 limit"); } }) };
+  o.gonderilen.length = 0;
+  const r2 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 10);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
+  assert.match(r2.markaNotu, /marka basılamadı \(9422 limit\)/);
+});
