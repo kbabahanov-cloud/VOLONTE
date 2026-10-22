@@ -1,4 +1,4 @@
-# VOLONTE yazı rehberi (Selin için) — TASLAK, kullanıcı onayı bekliyor
+# VOLONTE yazı rehberi (Selin için) — ONAYLANDI (22 Ekim 2026)
 
 > Hazırlayan: Claude, 22 Ekim 2026. Zara, Mango, Massimo Dutti ve Louis Vuitton'un **genel olarak bilinen yazı tarzı** incelenerek çıkarıldı. Hiçbir markanın metni kopyalanmadı; sadece tarz, uzunluk ve yapı ilkeleri alındı. (Markaların kendi sayfalarına bu ortamdan ulaşılamadı; kullanıcı beğendiği örnekleri gönderirse rehber güncellenir.)
 

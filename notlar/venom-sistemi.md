@@ -111,7 +111,9 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 **Telegram botu "hızlı başarı" tamam (20 Ekim).** Not: bot kendi kanal paylaşımlarını güncelleme olarak almaz → yeniden paylaşımlar /hafta sayısına ve `kodlar`'a girmez (istenirse copyMessages sonucundaki yeni id'ler dizine eklenebilir). Açık karar: bota yazan yabancılara "Sipariş için WhatsApp" otomatik cevabı (kullanıcı henüz cevap vermedi). Reklam analizi: ekran görüntüleri sohbette Claude'a.
 
-**Sıradaki komut: S1 — yazı rehberi onayı + Selin botunu açma (BotFather). Sonra S2 kanala/arşive ekleme + secret'lar, S3 GitHub token, S4 site PR. Ardından Defne (WhatsApp).**
+- ✅ S1 (22 Ekim): rehber onaylandı (KV selin:rehberOnay=1), bot açıldı: @VolonteSelinBot.
+
+**Sıradaki komut: S2 — Selin'i kanala (tüm yetkiler kapalı) ve 'Kemal Ofis' arşivine (Mesaj gönderme açık) yönetici ekleme + BOT_TOKEN ve ANTHROPIC_API_KEY secret'larını volonte-selin'e girme. Sonra S3 GitHub token, S4 site PR. Ardından Defne (WhatsApp).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
