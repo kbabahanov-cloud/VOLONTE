@@ -119,7 +119,16 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - ✅ Ekip yetkisi (22 Ekim, kullanıcı kararı): Hemra (6448681578) ve Aziz (8369444291) → EKIP_IDS (Kemal + Selin). Bildirimleri görür, düğmelere basar (tur onay/beklesin/sil, alt yazı, Selin var/yok/onayla/düzelt/siteden kaldır), /son /hafta /kuyruk /paylas, Selin /site /beden. YOK: /marka ayarı, Selin /liste, yapay zekâ sohbeti, fotoğraf tanıma, harcama uyarısı, müşteri iletileri (sadece ALLOWED_IDS = Murat, Merdan). İlk basan geçerli, diğerlerinde düğmeler kapanır. Sonradan eklenen / geç /start yazan kişiye bekleyen modeller otomatik gönderilir.
 - ⚠️ Ders: Cloudflare ücretsiz paket çalışma başına 50 dış istek. 4 kişiyle 4. tur boş açıldı → tur modelleri ve Selin listesi artık parça parça (çalışma başına ~24 Telegram çağrısı), paylaşım/silme yapılan çalışmada tur mesajı yok. Kişi sayısı artarsa bunu hatırla.
 
-**Sıradaki komut: S3 — GitHub izin anahtarı (sadece VOLONTE deposu, Contents: Read and write) → volonte-selin'e GITHUB_TOKEN secret. Sonra S4 site PR. Ardından Defne (WhatsApp).**
+- ✅ S3 (22 Ekim): GitHub anahtarı (SELİN, 1 yıl, sadece VOLONTE, Contents + Actions RW) volonte-selin'de. Kontrol: KV selin:github → okuma/yazma/actions true.
+- ✅ Kullanıcı kararları (22 Ekim akşam):
+  - Selin ilk hafta günde 50 model, sonra 10. Kategoriler: Elbise, Abiye, Takım, Tulum, Bluz/Gömlek/Tunik, Etek, Pantolon, Ceket/Kaban (kartta Türkçe, Düzelt ile değişir).
+  - Beden düğmeleri: Küçük = 38-40-42-44, Büyük = 44-46-48-50, İkisi de. Alt yazıdaki beden öneri (✓), seçilen grup paylaşımda (beden satırı değişir) ve sitede yazılır. Bedensiz model seçilmeden onaylanmaz. (altyazi.js BEDEN_GRUPLARI)
+  - Kemal: GÜNDE TEK TUR. Sabah 08:00'de 10 model, her kişiye art arda (kişi başı ayrı DO çağrısı, 1 sn arayla). 10 onay beklenmez: onaylanan hemen sıraya girer, aynı gün 50–60 dk arayla. Beklesin/Sil yerine yeni model gelmez. 20:00'de paylaşılamayan onaylılar sıradan çıkar (ileride yeniden sorulur), tur kapanır; akşam raporu söyler.
+  - Videodan kare: ücretsiz yol onaylı. Ücretli araçlar KAPALI (Claid ~0,06–0,35 $/foto netleştirme; Gemini/Imagen ~0,02–0,04 $/foto üretim — ürünü değiştirebilir, önerilmedi).
+- Videodan kare düzeni: Selin isteği `kareler` dalına (istekler/<kod>.json) yazar → GitHub Actions (telegram-bot/kare/kare.yml + kare.py, ffmpeg + Laplace netlik) videoyu Selin'in tek kullanımlık /video?t= bağlantısından indirir (≤20 MB, Telegram bot sınırı), en net ≤3 kareyi kareler/<kod>/ altına kaydeder, /kare'ye bildirir → Telegram'da "✅ N. kare / ❌ Hiçbiri" → KV kare:<kod> (Selin yazar). Selin sitede, Kemal kanal paylaşımında (videolarla, başa) kullanır. Bir model için bir kez. Elle: Selin'de /kare 3104. KV selin:kareSira.
+  - ⏳ BEKLİYOR: `kareler` dalını açmak için kullanıcı izni (dal + .github/workflows/kare.yml + kare.py). İzin gelince 3104 ve 3204 selin:kareSira'ya eklenecek.
+
+**Sıradaki komut: K1 — `kareler` dalı izni (videodan kare). Sonra S4 site PR (ürün sayfası yayına). Ardından Defne (WhatsApp).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
