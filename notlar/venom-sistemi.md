@@ -115,7 +115,11 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ✅ S2 (22 Ekim): kanal/arşiv yöneticiliği + secret'lar girildi, webhook bağlandı. Düzeltme: mesaj kimseye ulaşmazsa model 'soruldu' sayılmıyor.
 
-**Sıradaki komut: S2b — sahip ve Merdan @VolonteSelinBot'a /start yazsın (yoksa 'chat not found'). Sonra S3 GitHub token, S4 site PR. Ardından Defne (WhatsApp).**
+- ✅ S2b (22 Ekim): Selin listesi çalışıyor (Murat ve Hemra cevaplıyor).
+- ✅ Ekip yetkisi (22 Ekim, kullanıcı kararı): Hemra (6448681578) ve Aziz (8369444291) → EKIP_IDS (Kemal + Selin). Bildirimleri görür, düğmelere basar (tur onay/beklesin/sil, alt yazı, Selin var/yok/onayla/düzelt/siteden kaldır), /son /hafta /kuyruk /paylas, Selin /site /beden. YOK: /marka ayarı, Selin /liste, yapay zekâ sohbeti, fotoğraf tanıma, harcama uyarısı, müşteri iletileri (sadece ALLOWED_IDS = Murat, Merdan). İlk basan geçerli, diğerlerinde düğmeler kapanır. Sonradan eklenen / geç /start yazan kişiye bekleyen modeller otomatik gönderilir.
+- ⚠️ Ders: Cloudflare ücretsiz paket çalışma başına 50 dış istek. 4 kişiyle 4. tur boş açıldı → tur modelleri ve Selin listesi artık parça parça (çalışma başına ~24 Telegram çağrısı), paylaşım/silme yapılan çalışmada tur mesajı yok. Kişi sayısı artarsa bunu hatırla.
+
+**Sıradaki komut: S3 — GitHub izin anahtarı (sadece VOLONTE deposu, Contents: Read and write) → volonte-selin'e GITHUB_TOKEN secret. Sonra S4 site PR. Ardından Defne (WhatsApp).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
