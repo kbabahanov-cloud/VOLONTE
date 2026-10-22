@@ -42,9 +42,10 @@ import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, 
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
 const KANAL_ADI = "Volonteroseoffical";
-const OZET_UZUNLUK = 30;
+const OZET_UZUNLUK = 150; // son paylaşımlar (akşam raporu ~1 haftaya bakar)
 const KOD_BASINA = 200; // her kod için saklanan paylaşım sayısı ("Sil" hepsini silebilsin)
-const GUNCELLEMELER = ["message", "channel_post", "edited_channel_post", "callback_query", "my_chat_member"];
+const GUNCELLEMELER = ["message", "channel_post", "edited_channel_post", "callback_query", "my_chat_member", "message_reaction_count"];
+const RAPOR_SAATI = 20; // akşam raporu
 const KATALOG_PARTI = 8; // bir çalışmada tarif edilen görsel
 const KATALOG_GUNLUK_CAGRI = 150; // fatura güvenliği: günde en fazla katalog çağrısı
 const TANIMA_ADAY = 5;
@@ -161,6 +162,11 @@ export async function guncellemeIsle(update, env) {
     return paylasimKaydet(post, env, Boolean(update.edited_channel_post));
   }
   if (update.my_chat_member) return uyelikIsle(update.my_chat_member, env);
+  if (update.message_reaction_count) {
+    const t = update.message_reaction_count;
+    if (!(await anaKanalMi(t.chat, env))) return;
+    return tepkiKaydet(env, t.message_id, (t.reactions || []).reduce((top, r) => top + (r.total_count || 0), 0));
+  }
   if (update.message) return mesajIsle(update.message, env);
   if (update.callback_query) return dugmeIsle(update.callback_query, env);
 }
@@ -308,6 +314,7 @@ async function paylasimKaydet(post, env, duzenleme) {
     }
   }
   if (degisti) await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
+  if (kod && !duzenleme) await istekHatirlat(env, kod, kayit);
 
   // Botun kendi yeniden paylaşımı mı? (kanaldaPaylas `kopya` işareti bırakır)
   let kopya = null;
@@ -486,6 +493,10 @@ async function dugmeIsle(cq, env) {
   if (/^(t1|t7|tx|ty|tv|tg):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
+  if (veri.startsWith("rp:")) {
+    await cevapla("Önizleme hazırlanıyor");
+    return paylasOnizle({ chat: cq.message.chat, from: cq.from, text: `/paylas ${veri.slice(3)}` }, env);
+  }
 
   const [islem, anahtar] = veri.split(":");
   const sohbet = cq.message && cq.message.chat.id;
@@ -566,8 +577,7 @@ export async function rotasyon(env, simdi) {
   // Anthropic bazılarından gelen istekleri reddediyor (403). Katalog adımı bu yüzden
   // Kuzey Amerika'ya sabitlenmiş bir Durable Object içinde çalışır.
   if (env.KATALOG) {
-    const nesne = env.KATALOG.get(env.KATALOG.idFromName("katalog"), { locationHint: "enam" });
-    await nesne.fetch("https://katalog/adim");
+    await sabitNesne(env).fetch("https://katalog/adim");
   } else {
     await katalogGuvenli(env, simdi);
   }
@@ -575,6 +585,10 @@ export async function rotasyon(env, simdi) {
   const gun = gunAnahtari(simdi);
 
   const s = saat(simdi);
+  if (s >= RAPOR_SAATI && s < RAPOR_SAATI + 3 && !(await env.KAYIT.get(`rapor:${gun}`))) {
+    await env.KAYIT.put(`rapor:${gun}`, "1", { expirationTtl: 3 * 86400 });
+    await aksamRaporu(env, simdi);
+  }
   if (s < SABAH_SAATI || s >= AKSAM_SAATI) return;
 
   // Normalde yeni tur, önceki tur 10 onayı tamamlayınca hemen açılır (turKarar).
@@ -970,13 +984,118 @@ async function kuyrukIptal(cq, env) {
 
 // ---------- Fotoğraf tanıma: katalog ve tanıma ----------
 
+// Kuzey Amerika'ya sabit nesne: katalog adımı (Anthropic 403 sorunu) ve tepki sayıları
+// (sık yazıldığı için KV'nin günlük 1000 yazma sınırını harcamasın diye kendi deposunda).
 export class KatalogDO {
   constructor(state, env) {
+    this.state = state;
     this.env = env;
   }
-  async fetch() {
+  async fetch(istek) {
+    const yol = new URL(istek.url).pathname;
+    if (yol === "/tepki") {
+      const { id, toplam } = await istek.json();
+      await this.state.storage.put(`t:${id}`, toplam);
+      return new Response("ok");
+    }
+    if (yol === "/tepkiler") {
+      const { ids } = await istek.json();
+      const sonuc = {};
+      for (let i = 0; i < ids.length; i += 128) {
+        const parca = await this.state.storage.get(ids.slice(i, i + 128).map((id) => `t:${id}`));
+        for (const [k, v] of parca) sonuc[k.slice(2)] = v;
+      }
+      return Response.json(sonuc);
+    }
     await katalogGuvenli(this.env, Math.floor(Date.now() / 1000));
     return new Response("ok");
+  }
+}
+
+const sabitNesne = (env) => env.KATALOG.get(env.KATALOG.idFromName("katalog"), { locationHint: "enam" });
+
+async function tepkiKaydet(env, id, toplam) {
+  if (env.KATALOG) return sabitNesne(env).fetch("https://katalog/tepki", { method: "POST", body: JSON.stringify({ id, toplam }) });
+  return env.KAYIT.put(`tepki:${id}`, String(toplam), { expirationTtl: 60 * 86400 });
+}
+
+export async function tepkileriOku(env, ids) {
+  if (!ids.length) return {};
+  if (env.KATALOG) return (await sabitNesne(env).fetch("https://katalog/tepkiler", { method: "POST", body: JSON.stringify({ ids }) })).json();
+  const sonuc = {};
+  for (const id of ids) {
+    const v = await env.KAYIT.get(`tepki:${id}`);
+    if (v != null) sonuc[id] = Number(v);
+  }
+  return sonuc;
+}
+
+// ---------- Müşteri istek defteri ----------
+
+export async function istekKaydet(env, kod, musteri, not, kim, simdi) {
+  const istekler = (await env.KAYIT.get("istekler", "json")) || [];
+  const id = istekler.reduce((en, i) => Math.max(en, i.id), 0) + 1;
+  istekler.push({ id, kod, musteri, not, kim, zaman: simdi, durum: "bekliyor" });
+  await env.KAYIT.put("istekler", JSON.stringify(istekler));
+  return id;
+}
+
+// Model kanala gelince (insan ya da Kemal paylaşınca) bekleyen istekleri hatırlat.
+async function istekHatirlat(env, kod, kayit) {
+  const istekler = (await env.KAYIT.get("istekler", "json")) || [];
+  const bekleyen = istekler.filter((i) => i.kod === kod && i.durum === "bekliyor");
+  if (!bekleyen.length) return;
+  const link = kayit.link ? `\n${kayit.link}` : "";
+  await herkese(env, [
+    `🔔 ${kod} kanala geldi!${link}`,
+    `Bu modeli isteyen müşteriler (${bekleyen.length}) — haber verin:`,
+    ...bekleyen.map((i) => `• ${i.musteri}${i.not ? ` — ${i.not}` : ""} (${i.kim}, ${tarihUzun(i.zaman)})`),
+  ].join("\n"));
+  for (const i of bekleyen) {
+    i.durum = "bildirildi";
+    i.bildirim = kayit.tarih;
+  }
+  await env.KAYIT.put("istekler", JSON.stringify(istekler));
+}
+
+// ---------- Akşam raporu (20:00) ----------
+
+export async function aksamRaporu(env, simdi) {
+  const gun = gunAnahtari(simdi);
+  const ozet = (await env.KAYIT.get("ozet", "json")) || { sonlar: [] };
+  const hafta = ozet.sonlar.filter((p) => p.tarih >= simdi - 7 * 86400);
+  const tepkiler = await tepkileriOku(env, [...new Set(hafta.flatMap((p) => p.ids))]);
+  const puan = (p) => p.ids.reduce((t, id) => t + (tepkiler[id] || 0), 0);
+  const ad = (p) => kodBul(p.metin || "") || "kodsuz";
+  const bugun = hafta.filter((p) => gunAnahtari(p.tarih) === gun).sort((a, b) => a.tarih - b.tarih);
+  const enIyi = [...hafta].filter((p) => puan(p) > 0).sort((a, b) => puan(b) - puan(a)).slice(0, 3);
+  const kuyruk = await kuyrukListesi(env);
+  const tur = await env.KAYIT.get("tur", "json");
+  const istekler = ((await env.KAYIT.get("istekler", "json")) || []).filter((i) => i.durum === "bekliyor");
+
+  const satirlar = [`🌙 Kemal — ${tarihUzun(simdi)} akşam raporu`, ""];
+  satirlar.push(bugun.length ? `Bugün kanala ${bugun.length} paylaşım yapıldı:` : "Bugün kanala paylaşım yapılmadı.");
+  for (const p of bugun) satirlar.push(`• ${tarihYaz(p.tarih).slice(6)} ${ad(p)} — ❤️ ${puan(p)}`);
+  satirlar.push("");
+  if (enIyi.length) {
+    satirlar.push("En çok tepki alanlar (son 7 gün):");
+    for (const p of enIyi) satirlar.push(`• ${ad(p)} — ❤️ ${puan(p)} (${tarihUzun(p.tarih)})${p.link ? ` ${p.link}` : ""}`);
+  } else {
+    satirlar.push("Son 7 günde tepki verisi yok.");
+  }
+  satirlar.push("(Görüntülenme sayısını Telegram botlara vermiyor; tepki sayıları gösteriliyor.)", "");
+  satirlar.push("Yarın için:");
+  satirlar.push(`• Sırada ${kuyruk.length} onaylı paylaşım var${kuyruk.length ? `; ilki ${SABAH_SAATI}:00'da` : ""}.`);
+  if (tur && tur.durum === "toplaniyor") satirlar.push(`• ${tur.no}. tur: ${tur.onaylar.length}/${TUR_ADET} onay — ${TUR_ADET - tur.onaylar.length} onay daha gerekiyor.`);
+  if (istekler.length) satirlar.push(`• İstek defterinde ${istekler.length} bekleyen müşteri isteği var.`);
+  const tekrar = enIyi.filter((p) => kodBul(p.metin || ""));
+  if (tekrar.length) satirlar.push(`• Çok ilgi görenleri tekrar paylaşmak isterseniz aşağıdaki düğmeler önizleme açar (onaysız paylaşılmaz).`);
+
+  const reply_markup = tekrar.length
+    ? { inline_keyboard: tekrar.map((p) => [{ text: `🔁 ${ad(p)} tekrar paylaş`, callback_data: `rp:${ad(p)}` }]) }
+    : undefined;
+  for (const kisi of kisilerden(env)) {
+    await telegram(env, "sendMessage", { chat_id: kisi, text: satirlar.join("\n"), disable_web_page_preview: true, ...(reply_markup ? { reply_markup } : {}) });
   }
 }
 
@@ -1202,6 +1321,20 @@ function asistanYardimcilari(env) {
       if (kodsuzMu(kod)) return "Kodsuz paylaşımlar tur mesajlarından onaylanır; tek başına önizlenemez.";
       await paylasOnizle({ ...msg, text: `/paylas ${kod}` }, env);
       return "Önizleme ve Onayla/İptal düğmeleri kullanıcıya gönderildi (kod bulunamadıysa bot bunu yazdı). Kanala henüz hiçbir şey paylaşılmadı.";
+    },
+
+    async istekKaydet(kod, musteri, not, kim, simdi) {
+      if (!kod) return "Kod belirtilmedi; kaydedilmedi.";
+      const id = await istekKaydet(env, kod, musteri, not, kim, simdi);
+      const kayitli = await kayitliMi(kod);
+      return `İstek #${id} kaydedildi: ${kod} — ${musteri}${not ? ` (${not})` : ""}. Model kanala gelince ikinize hatırlatacağım.${kayitli ? "" : " Not: bu kod kanal kayıtlarında yok; kodu kontrol edin."}`;
+    },
+
+    async istekleriGoster(kod) {
+      const istekler = (await env.KAYIT.get("istekler", "json")) || [];
+      const liste = istekler.filter((i) => (!kod || i.kod === kod) && i.durum === "bekliyor");
+      if (!liste.length) return kod ? `${kod} için bekleyen istek yok.` : "Bekleyen müşteri isteği yok.";
+      return liste.map((i) => `#${i.id} ${i.kod} — ${i.musteri}${i.not ? ` (${i.not})` : ""}, ${i.kim}, ${tarihUzun(i.zaman)}`).join("\n");
     },
 
     async kuyrukGoster(sohbet) {

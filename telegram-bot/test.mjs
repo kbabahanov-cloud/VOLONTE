@@ -727,7 +727,7 @@ test("asistan: paylaşma/silme aracı yok; 'beklesin' turdaki modelin yerine yen
   o.gonderilen.length = 0;
   await yazi(o.env, 111, "4013 beklesin");
   const adlar = o.istekler[0].tools.map((t) => t.name);
-  assert.deepEqual(adlar, ["durum_ozeti", "model_bilgisi", "beklesin", "sil_onayi_iste", "paylasim_onizle", "kuyruk_goster"]);
+  assert.deepEqual(adlar, ["durum_ozeti", "model_bilgisi", "beklesin", "sil_onayi_iste", "paylasim_onizle", "istek_kaydet", "istekleri_goster", "kuyruk_goster"]);
   assert.ok(o.istekler[0].tools.every((t) => t.strict === true));
   assert.equal(o.istekler[0].model, "claude-opus-5-5");
   assert.equal(o.istekler[0].fallbacks, "default");
@@ -917,4 +917,55 @@ test("harcama: her çağrının maliyeti toplanır; 80 $ dolunca asistan, tanım
   await katalogAdimi(o.env, su);
   assert.equal(o.istekler.length, 1);
   assert.equal(cagrilar(o.gonderilen, "forwardMessage").length, 0);
+});
+
+// ---------- İstek defteri ve akşam raporu ----------
+
+const { aksamRaporu } = await import("./worker.js");
+
+test("istek defteri: asistan kaydeder; model kanala gelince ikisine kimlere haber verileceği gider (bir kez)", async () => {
+  const o = asistanOrtami([aracCagrisi("istek_kaydet", { kod: "3100", musteri: "Angolalı müşteri", not: "siyah, 2 seri" }), mesaj(1, "Kaydettim.")]);
+  await yazi(o.env, 222, "3100'ü Angolalı müşteri istedi, siyah 2 seri");
+  const istekler = JSON.parse(o.depo.get("istekler"));
+  assert.deepEqual([istekler[0].kod, istekler[0].musteri, istekler[0].durum], ["3100", "Angolalı müşteri", "bekliyor"]);
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ channel_post: { message_id: 960, date: o.simdi, chat: kanal, photo: [{ file_id: "f" }], caption: "🔁 CODE.3100" } }, o.env);
+  const h = cagrilar(o.gonderilen, "sendMessage").map((m) => m.govde.text);
+  assert.equal(h.length, 2);
+  assert.match(h[0], /3100 kanala geldi![\s\S]*t\.me\/Volonteroseoffical\/960[\s\S]*• Angolalı müşteri — siyah, 2 seri/);
+  assert.equal(JSON.parse(o.depo.get("istekler"))[0].durum, "bildirildi");
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ channel_post: { message_id: 961, date: o.simdi + 99, chat: kanal, photo: [{ file_id: "f" }], caption: "CODE.3100" } }, o.env);
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").length, 0);
+});
+
+test("tepki sayıları kaydedilir; 20:00 raporu bugünkü paylaşımları, en çok tepki alanları ve yarını gösterir", async () => {
+  const o = turOrtami();
+  const t = ist(10);
+  await guncellemeIsle({ channel_post: { message_id: 970, date: t, chat: kanal, photo: [{ file_id: "f" }], caption: "CODE.3100", media_group_id: "R" } }, o.env);
+  await guncellemeIsle({ channel_post: { message_id: 971, date: t, chat: kanal, photo: [{ file_id: "f" }], media_group_id: "R" } }, o.env);
+  await guncellemeIsle({ channel_post: { message_id: 972, date: ist(12), chat: kanal, photo: [{ file_id: "f" }], caption: "CODE.3200" } }, o.env);
+  const tepki = (id, n) => guncellemeIsle({ message_reaction_count: { chat: kanal, message_id: id, date: t, reactions: [{ type: { type: "emoji", emoji: "❤" }, total_count: n }, { type: { type: "emoji", emoji: "🔥" }, total_count: 1 }] } }, o.env);
+  await tepki(970, 7);
+  await tepki(971, 2);
+  await tepki(972, 3);
+  await guncellemeIsle({ message_reaction_count: { chat: { id: -555 }, message_id: 972, date: t, reactions: [{ total_count: 99 }] } }, o.env); // başka kanal
+  o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, ist(19, 55));
+  assert.ok(!cagrilar(o.gonderilen, "sendMessage").some((m) => /akşam raporu/.test(m.govde.text)));
+  await rotasyon(o.env, ist(20));
+  await rotasyon(o.env, ist(20, 5));
+  const r = cagrilar(o.gonderilen, "sendMessage").filter((m) => /akşam raporu/.test(m.govde.text));
+  assert.equal(r.length, 2); // bir kez, ikisine
+  const metin = r[0].govde.text;
+  assert.match(metin, /Bugün kanala 2 paylaşım yapıldı:\n• 10:00 3100 — ❤️ 11\n• 12:00 3200 — ❤️ 4/);
+  assert.match(metin, /En çok tepki alanlar \(son 7 gün\):\n• 3100 — ❤️ 11/);
+  assert.match(metin, /Sırada 1 onaylı paylaşım var/);
+  assert.match(metin, /Görüntülenme sayısını Telegram botlara vermiyor/);
+  const dugme = r[0].govde.reply_markup.inline_keyboard[0][0];
+  assert.equal(dugme.callback_data, "rp:3100");
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, "rp:3100");
+  assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.chat_id, 111); // sadece önizleme, kanala değil
 });

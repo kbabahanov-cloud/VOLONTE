@@ -55,6 +55,21 @@ const ARACLAR = [
     input_schema: { type: "object", properties: { kod: { type: "string" } }, required: ["kod"], additionalProperties: false },
   },
   {
+    name: "istek_kaydet",
+    description: "Müşteri istek defterine kayıt: bir müşteri bir modeli istediğinde (örn. '3194'ü Angolalı müşteri istedi'). Model kanala tekrar gelince Kemal hatırlatır ve kimlere haber verileceğini listeler.",
+    input_schema: {
+      type: "object",
+      properties: { kod: { type: "string" }, musteri: { type: "string", description: "Müşteriyi tanıtan kısa ifade (ülke, isim, telefon vb.)" }, not: { type: "string", description: "Renk, beden, adet gibi ek bilgi; yoksa boş" } },
+      required: ["kod", "musteri", "not"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "istekleri_goster",
+    description: "Bekleyen müşteri isteklerini listeler. kod boşsa hepsi.",
+    input_schema: { type: "object", properties: { kod: { type: "string" } }, required: ["kod"], additionalProperties: false },
+  },
+  {
     name: "kuyruk_goster",
     description: "Sıradaki paylaşımları tahmini saatleri ve iptal düğmeleriyle kullanıcıya gönderir.",
     input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
@@ -188,6 +203,10 @@ async function araciCalistir(ad, girdi, msg, y, simdi) {
       return y.hicOnayIste(msg.chat.id, kod);
     case "paylasim_onizle":
       return y.paylasimOnizle(msg, kod);
+    case "istek_kaydet":
+      return y.istekKaydet(kod, String(girdi.musteri || "müşteri").slice(0, 100), String(girdi.not || "").slice(0, 200), y.kisiAdi(msg.from), simdi);
+    case "istekleri_goster":
+      return y.istekleriGoster(kod);
     case "kuyruk_goster":
       return y.kuyrukGoster(msg.chat.id);
     default:
