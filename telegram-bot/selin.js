@@ -80,12 +80,23 @@ function gizliEsit(a, b) {
   return f === 0;
 }
 
+// Kullanıcı kararı (22 Ekim gece): KV günlük yazma sınırı dolduğu için Selin 23 Ekim 08:00'e
+// (İstanbul) kadar durur: liste/hazırlık/mesaj yok, KV'ye hiçbir şey yazılmaz, kayıtlara dokunulmaz.
+const DURAKLAT_BITIS = Date.UTC(2026, 9, 23, 5, 0) / 1000;
+export const duraklatildi = (simdi) => simdi < DURAKLAT_BITIS;
+
 export default {
   async fetch(istek, env) {
     const url = new URL(istek.url);
     if (istek.method === "POST" && url.pathname === "/telegram") {
       if (!gizliEsit(istek.headers.get("X-Telegram-Bot-Api-Secret-Token"), env.WEBHOOK_SECRET)) return new Response("yetkisiz", { status: 401 });
-      await guncelleme(await istek.json(), env);
+      const u = await istek.json();
+      if (duraklatildi(Math.floor(Date.now() / 1000))) {
+        // Mesaj gönderilmez, kayıt yazılmaz; düğmeye basana sadece kısa bir uyarı (sohbete düşmez).
+        if (u.callback_query) await tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "Selin bu gece durduruldu; sabah 08:00'de devam edecek.", show_alert: true });
+        return new Response("ok");
+      }
+      await guncelleme(u, env);
       return new Response("ok");
     }
     if (istek.method === "GET" && url.pathname === "/video") return videoVer(env, url.searchParams.get("t"));
@@ -93,7 +104,7 @@ export default {
     return new Response("Selin çalışıyor.");
   },
   async scheduled(olay, env) {
-    if (!env.BOT_TOKEN) return;
+    if (!env.BOT_TOKEN || duraklatildi(Math.floor(Date.now() / 1000))) return;
     await webhookKur(env);
     const simdi = Math.floor(Date.now() / 1000);
     await githubKontrol(env, simdi);

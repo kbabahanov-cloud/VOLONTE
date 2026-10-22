@@ -1,7 +1,7 @@
 // Çalıştırma: node --test test-selin.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import selin, { guncelleme, listeAdimi, hazirlaAdimi, listeAdaylari, bedenBul, gunlukHedef, eksikleriGonder } from "./selin.js";
+import selin, { duraklatildi, guncelleme, listeAdimi, hazirlaAdimi, listeAdaylari, bedenBul, gunlukHedef, eksikleriGonder } from "./selin.js";
 
 const GUN = 86400;
 const ist = (hh, mm = 0, gunEk = 0) => Date.UTC(2026, 9, 22 + gunEk, hh - 3, mm) / 1000;
@@ -311,4 +311,10 @@ test("Selin izinsiz kişiye cevap vermez; düğmeleri çalışmaz", async () => 
   assert.equal(o.github.commitler.length, 0);
   const r = await selin.fetch(new Request("https://x/telegram", { method: "POST", body: "{}" }), o.env);
   assert.equal(r.status, 401);
+});
+
+test("gece duraklatma: 23 Ekim 08:00'e (İstanbul) kadar durur, sonra devam eder", () => {
+  assert.equal(duraklatildi(ist(22, 0)), true);
+  assert.equal(duraklatildi(ist(7, 59, 1)), true);
+  assert.equal(duraklatildi(ist(8, 0, 1)), false);
 });
