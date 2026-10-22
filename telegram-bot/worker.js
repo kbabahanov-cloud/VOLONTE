@@ -37,6 +37,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
+import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
@@ -58,7 +59,6 @@ const BEKLESIN_GUN = 7; // "Beklesin" denen model bu kadar gün sonra tekrar sor
 export const KALICI = 4102444800; // 2100 yılı: "Sil" denen model bir daha önerilmez
 const SILME_ADIM = 20; // bir çalışmada en fazla bu kadar mesaj silinir (Telegram çağrı sınırı 50)
 const ARALIK_DK = [50, 60]; // tur paylaşımları arası (~saatte bir; 08–20 arası günde 10 rahat sığar)
-const SECENEK_EN_FAZLA = 8; // bir modelin düğmeyle seçilebilen en fazla paylaşımı
 const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim) sıradakiler
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
@@ -596,8 +596,6 @@ const herkese = async (env, text) => {
   for (const kisi of kisilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text, disable_web_page_preview: true });
 };
 
-const kodsuzMu = (kod) => kod.startsWith("~");
-const kodGoster = (kod) => (kodsuzMu(kod) ? "Kodsuz paylaşım" : kod);
 
 // En uzun süredir paylaşılmayan önce. Son paylaşımı 30 günden eski, 1 yıldan yeni olanlar.
 // sonpaylasim: botun yeniden paylaşım tarihleri (kod → tarih); kayıttaki tarihten yeniyse o geçerli.
@@ -641,18 +639,7 @@ export function turKlavye(no, kod, secenekler) {
   ] };
 }
 
-// Bir modelin kanaldaki paylaşımları (en yeni önce). Kodlu: tüm kayıtlar; kodsuz: kaydın kendisi.
-export function modelSecenekleri(kod, kodlar, kodsuz) {
-  if (kodsuzMu(kod)) {
-    const g = kodsuz[kod];
-    return g ? [{ ids: g.ids.filter((id) => id > 0), tarih: g.tarih }] : [];
-  }
-  return (kodlar[kod] || [])
-    .map((g) => ({ ids: g.ids.filter((id) => id > 0), tarih: g.tarih }))
-    .filter((g) => g.ids.length)
-    .sort((a, b) => b.tarih - a.tarih)
-    .slice(0, SECENEK_EN_FAZLA);
-}
+export { modelSecenekleri };
 // no "-" = turdan bağımsız (asistandan gelen) silme onayı
 const eminMisin = (no, kod) => ({ inline_keyboard: [[
   { text: "🗑️ Evet, hepsini sil", callback_data: `ty:${no}:${kod}` },
@@ -1247,9 +1234,6 @@ export function gunAnahtari(unix) {
   return new Date((unix + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
 }
 
-function tarihUzun(unix) {
-  return new Date((unix + SAAT_FARKI) * 1000).toISOString().slice(0, 10).split("-").reverse().join(".");
-}
 
 function tarihYaz(unix) {
   const s = new Date((unix + SAAT_FARKI) * 1000).toISOString();
