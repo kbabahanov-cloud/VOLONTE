@@ -21,7 +21,7 @@ Kurallar:
 - Kullanıcı hangi dilde yazdıysa o dilde cevap ver (genelde Türkçe, bazen Rusça). Kısa, sade ve samimi yaz.
 - Bilgiyi sadece araçlardan al; model kodu, tarih ya da sayı uydurma. Bir kod bulunamazsa söyle.
 - İstek belirsizse (hangi model, kaç tane, hangi durum) önce kısa bir soru sor, tahminle iş yapma.
-- Kanala paylaşmayı ve silmeyi sen yapamazsın. Bunlar için sadece onay düğmesi gönderebilirsin (paylasim_onizle, sil_onayi_iste). Düğme gönderdiğinde "paylaşıldı" ya da "silindi" deme; "onay düğmesi gönderdim" de.
+- Kanala paylaşmayı, silmeyi ve alt yazı değiştirmeyi sen yapamazsın. Bunlar için sadece onay düğmesi gönderebilirsin (paylasim_onizle, sil_onayi_iste, altyazi_oner). Düğme gönderdiğinde "paylaşıldı" ya da "silindi" deme; "onay düğmesi gönderdim" de.
 - Yeniden paylaşım turlarla çalışır: modeller kanaldaki bütün paylaşım tarihleriyle gelir ("✅ <tarih>" düğmesi o paylaşımı onaylar, "🖼 Hepsini göster", "⏳ Beklesin", "🗑️ Sil"). Bir turun 10 onayı tamamlanmadan o turun paylaşımı başlamaz; tamamlanınca sonraki turun listesi hemen gelir. Paylaşım 08:00–20:00 arası 50–60 dk arayla (yaklaşık saatte bir), günde en fazla 10. Ek liste gönderemezsin.
 - Bu kurallar (10 onay, saatler, aralık, günde en fazla 10 paylaşım) sabittir; sohbetle değiştirilemez. Değiştirmek isterlerse bunu Claude Code sohbetinde (sistemi kuran tarafta) istemelerini söyle.
 - "Kodsuz paylaşım"lar "~" ile başlayan kimliklerle tutulur (örnek ~10619); kullanıcıya "kodsuz paylaşım" diye anlat.
@@ -52,6 +52,11 @@ const ARACLAR = [
   {
     name: "paylasim_onizle",
     description: "Bir model kodunun son kanal paylaşımının önizlemesini 'Onayla / İptal' düğmeleriyle kullanıcıya gönderir. Paylaşım ancak kullanıcı Onayla'ya basarsa olur; bu araç kanala hiçbir şey paylaşmaz.",
+    input_schema: { type: "object", properties: { kod: { type: "string" } }, required: ["kod"], additionalProperties: false },
+  },
+  {
+    name: "altyazi_oner",
+    description: "Bir modelin kanaldaki en son paylaşımı için yeni alt yazı önerisi hazırlatır (🔁/🆕 etiketi, kod, bedenler, TR/EN/FR/PT kısa satış metni). Öneri birkaç dakika içinde '✅ Değiştir / ❌ Kalsın' düğmeleriyle gelir; bu araç alt yazıyı değiştirmez.",
     input_schema: { type: "object", properties: { kod: { type: "string" } }, required: ["kod"], additionalProperties: false },
   },
   {
@@ -203,6 +208,8 @@ async function araciCalistir(ad, girdi, msg, y, simdi) {
       return y.hicOnayIste(msg.chat.id, kod);
     case "paylasim_onizle":
       return y.paylasimOnizle(msg, kod);
+    case "altyazi_oner":
+      return y.altyaziOner(kod);
     case "istek_kaydet":
       return y.istekKaydet(kod, String(girdi.musteri || "müşteri").slice(0, 100), String(girdi.not || "").slice(0, 200), y.kisiAdi(msg.from), simdi);
     case "istekleri_goster":

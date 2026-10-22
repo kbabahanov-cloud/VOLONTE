@@ -38,6 +38,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
+import { altyaziOlustur, ETIKET } from "./altyazi.js";
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
@@ -46,6 +47,8 @@ const OZET_UZUNLUK = 150; // son paylaşımlar (akşam raporu ~1 haftaya bakar)
 const KOD_BASINA = 200; // her kod için saklanan paylaşım sayısı ("Sil" hepsini silebilsin)
 const GUNCELLEMELER = ["message", "channel_post", "edited_channel_post", "callback_query", "my_chat_member", "message_reaction_count"];
 const RAPOR_SAATI = 20; // akşam raporu
+const ALTYAZI_PARTI = 3; // bir çalışmada hazırlanan alt yazı önerisi
+const ALTYAZI_GUNLUK = 30; // fatura güvenliği: günde en fazla öneri
 const KATALOG_PARTI = 8; // bir çalışmada tarif edilen görsel
 const KATALOG_GUNLUK_CAGRI = 150; // fatura güvenliği: günde en fazla katalog çağrısı
 const TANIMA_ADAY = 5;
@@ -293,15 +296,30 @@ async function paylasimKaydet(post, env, duzenleme) {
   }
   await env.KAYIT.put("ozet", JSON.stringify(ozet));
 
+  // Botun kendi yeniden paylaşımı mı? (kanaldaPaylas `kopya` işareti bırakır)
+  let kopya = null;
+  if (!duzenleme) {
+    const isaret = await env.KAYIT.get("kopya", "json");
+    if (isaret && isaret.kalan > 0 && Math.abs(kayit.tarih - isaret.zaman) <= 180) {
+      kopya = isaret;
+      isaret.kalan -= 1;
+      if (isaret.kalan > 0) await env.KAYIT.put("kopya", JSON.stringify(isaret), { expirationTtl: 600 });
+      else await env.KAYIT.delete("kopya");
+    }
+  }
+
   // Kod dizini: yazıda kod varsa albümün tüm parçalarıyla kaydet; kodsuz albüm
   // parçası gelirse, aynı albüm zaten bir koda bağlıysa ona ekle.
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const kod = kodBul(metin);
   let degisti = false;
+  let oncedenVar = false;
   if (kod) {
     const ozetGirisi = ozet.sonlar.find((s) => s.ids.includes(kayit.id));
     const ids = ozetGirisi ? [...ozetGirisi.ids].sort((a, b) => a - b) : [kayit.id];
-    kodEkle(kodlar, kod, { ids, tarih: kayit.tarih, album: kayit.album });
+    oncedenVar = (kodlar[kod] || []).some((g) => !g.ids.includes(kayit.id));
+    // y: alt yazının durduğu mesaj (albümde yazı tek parçadadır)
+    kodEkle(kodlar, kod, { ids, tarih: kayit.tarih, album: kayit.album, y: kayit.id });
     degisti = true;
   } else if (kayit.album) {
     for (const liste of Object.values(kodlar)) {
@@ -314,19 +332,12 @@ async function paylasimKaydet(post, env, duzenleme) {
     }
   }
   if (degisti) await env.KAYIT.put("kodlar", JSON.stringify(kodlar));
-  if (kod && !duzenleme) await istekHatirlat(env, kod, kayit);
-
-  // Botun kendi yeniden paylaşımı mı? (kanaldaPaylas `kopya` işareti bırakır)
-  let kopya = null;
-  if (!duzenleme) {
-    const isaret = await env.KAYIT.get("kopya", "json");
-    if (isaret && isaret.kalan > 0 && Math.abs(kayit.tarih - isaret.zaman) <= 180) {
-      kopya = isaret;
-      isaret.kalan -= 1;
-      if (isaret.kalan > 0) await env.KAYIT.put("kopya", JSON.stringify(isaret), { expirationTtl: 600 });
-      else await env.KAYIT.delete("kopya");
-    }
+  if (kod && !duzenleme) {
+    await istekHatirlat(env, kod, kayit);
+    // Yeni alt yazı önerisi (5 dk'lık görevde hazırlanır, onaysız değişmez).
+    await altyaziSirayaEkle(env, { kod, mesaj: kayit.id, eski: metin, etiket: kopya || oncedenVar ? ETIKET.repete : ETIKET.yeni });
   }
+
   // Kodsuz paylaşımın kopyası yeni kayıt açmaz; asıl kaydın `kopyalar` listesine girer ("Sil" bunları da siler).
   if (kopya && kodsuzMu(kopya.kod)) {
     const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
@@ -493,6 +504,7 @@ async function dugmeIsle(cq, env) {
   if (/^(t1|t7|tx|ty|tv|tg):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
+  if (/^(ay|an):/.test(veri)) return altyaziKarar(cq, env);
   if (veri.startsWith("rp:")) {
     await cevapla("Önizleme hazırlanıyor");
     return paylasOnizle({ chat: cq.message.chat, from: cq.from, text: `/paylas ${veri.slice(3)}` }, env);
@@ -580,6 +592,7 @@ export async function rotasyon(env, simdi) {
     await sabitNesne(env).fetch("https://katalog/adim");
   } else {
     await katalogGuvenli(env, simdi);
+    await altyaziGuvenli(env, simdi);
   }
   let tur = await env.KAYIT.get("tur", "json");
   const gun = gunAnahtari(simdi);
@@ -1008,6 +1021,7 @@ export class KatalogDO {
       return Response.json(sonuc);
     }
     await katalogGuvenli(this.env, Math.floor(Date.now() / 1000));
+    await altyaziGuvenli(this.env, Math.floor(Date.now() / 1000));
     return new Response("ok");
   }
 }
@@ -1028,6 +1042,106 @@ export async function tepkileriOku(env, ids) {
     if (v != null) sonuc[id] = Number(v);
   }
   return sonuc;
+}
+
+// ---------- Alt yazı önerisi (✅ Değiştir / ❌ Kalsın) ----------
+
+export async function altyaziSirayaEkle(env, oge) {
+  const sira = (await env.KAYIT.get("altyaziSira", "json")) || [];
+  if (sira.some((x) => x.mesaj && x.mesaj === oge.mesaj)) return;
+  sira.push({ ...oge, deneme: 0 });
+  await env.KAYIT.put("altyaziSira", JSON.stringify(sira.slice(-30)));
+}
+
+// Yazısı bilinmeyen eski paylaşım: albüm parçalarını arşive iletip yazılı olanı bulur.
+async function yaziMesajiBul(env, ids, arsiv, kanal) {
+  for (const id of ids.slice(0, 10)) {
+    const r = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true });
+    if (r.ok && (r.result.caption || r.result.text)) return { mesaj: id, eski: r.result.caption || r.result.text };
+  }
+  return null;
+}
+
+async function altyaziGuvenli(env, simdi) {
+  try {
+    await altyaziAdimi(env, simdi);
+  } catch (e) {
+    await env.KAYIT.put("altyaziHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 500) }), { expirationTtl: 7 * 86400 });
+  }
+}
+
+export async function altyaziAdimi(env, simdi) {
+  if (!env.ANTHROPIC_API_KEY || !env.BOT_TOKEN) return;
+  const sira = (await env.KAYIT.get("altyaziSira", "json")) || [];
+  if (!sira.length) return;
+  const gunAn = `altyazi:${gunAnahtari(simdi)}`;
+  let yapilan = Number((await env.KAYIT.get(gunAn)) || 0);
+  if (yapilan >= ALTYAZI_GUNLUK) return;
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const arsiv = await env.KAYIT.get("arsiv", "json");
+  const tarifler = (await env.KAYIT.get("tarifler", "json")) || {};
+  const kalan = [];
+  let islenen = 0;
+  for (const oge of sira) {
+    if (islenen >= ALTYAZI_PARTI || yapilan >= ALTYAZI_GUNLUK) { kalan.push(oge); continue; }
+    islenen += 1;
+    try {
+      let { mesaj, eski } = oge;
+      if (!mesaj || eski == null) {
+        const bulunan = arsiv && (await yaziMesajiBul(env, oge.ids || [], arsiv, kanal));
+        if (!bulunan) continue; // yazısı bulunamayan paylaşım atlanır
+        ({ mesaj, eski } = bulunan);
+      }
+      const metin = await altyaziOlustur(env, { kod: oge.kod, eski, tarif: tarifler[oge.kod] && tarifler[oge.kod].t, etiket: oge.etiket });
+      yapilan += 1;
+      if (metin.trim() === String(eski || "").trim()) continue;
+      const no = Number((await env.KAYIT.get("altyaziNo")) || 0) + 1;
+      await env.KAYIT.put("altyaziNo", String(no));
+      const oneri = { kod: oge.kod, mesaj, metin, eski, durum: null, mesajlar: [] };
+      const link = kanal.kullanici ? `https://t.me/${kanal.kullanici}/${mesaj}` : "";
+      for (const kisi of kisilerden(env)) {
+        const r = await telegram(env, "sendMessage", {
+          chat_id: kisi,
+          text: `✍️ ${oge.kod} için yeni alt yazı önerisi\n${link}\n\n${metin}`,
+          disable_web_page_preview: true,
+          reply_markup: { inline_keyboard: [[{ text: "✅ Değiştir", callback_data: `ay:${no}` }, { text: "❌ Kalsın", callback_data: `an:${no}` }]] },
+        });
+        if (r.ok) oneri.mesajlar.push([kisi, r.result.message_id]);
+      }
+      await env.KAYIT.put(`oneri:${no}`, JSON.stringify(oneri), { expirationTtl: 14 * 86400 });
+    } catch (e) {
+      if ((oge.deneme || 0) < 2) kalan.push({ ...oge, deneme: (oge.deneme || 0) + 1 });
+      await env.KAYIT.put("altyaziHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 500) }), { expirationTtl: 7 * 86400 });
+    }
+  }
+  await env.KAYIT.put(gunAn, String(yapilan), { expirationTtl: 2 * 86400 });
+  await env.KAYIT.put("altyaziSira", JSON.stringify(kalan));
+}
+
+async function altyaziKarar(cq, env) {
+  const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  const [islem, no] = cq.data.split(":");
+  const anahtar = `oneri:${no}`;
+  const oneri = await env.KAYIT.get(anahtar, "json");
+  if (!oneri) return cevapla("Bu öneri artık geçerli değil.");
+  if (oneri.durum) return cevapla(`${oneri.kim} zaten karar verdi.`);
+  const kim = kisiAdi(cq.from);
+  oneri.durum = islem;
+  oneri.kim = kim;
+  await env.KAYIT.put(anahtar, JSON.stringify(oneri), { expirationTtl: 14 * 86400 }); // önce kilitle
+  let sonuc;
+  if (islem === "ay") {
+    const kanal = await env.KAYIT.get("kanal", "json");
+    const r = await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: oneri.mesaj, caption: oneri.metin });
+    sonuc = r.ok ? `✅ ${oneri.kod}: alt yazı değiştirildi (${kim}).` : `⚠️ ${oneri.kod}: alt yazı değiştirilemedi (${r.description}).`;
+    await cevapla(r.ok ? "Değiştirildi ✅" : "Değiştirilemedi");
+  } else {
+    sonuc = `❌ ${oneri.kod}: eski alt yazı kaldı (${kim}).`;
+    await cevapla("Kalsın");
+  }
+  for (const [kisi, mesajId] of oneri.mesajlar) {
+    await telegram(env, "editMessageText", { chat_id: kisi, message_id: mesajId, text: `${sonuc}\n\n${oneri.metin}`, disable_web_page_preview: true });
+  }
 }
 
 // ---------- Müşteri istek defteri ----------
@@ -1321,6 +1435,13 @@ function asistanYardimcilari(env) {
       if (kodsuzMu(kod)) return "Kodsuz paylaşımlar tur mesajlarından onaylanır; tek başına önizlenemez.";
       await paylasOnizle({ ...msg, text: `/paylas ${kod}` }, env);
       return "Önizleme ve Onayla/İptal düğmeleri kullanıcıya gönderildi (kod bulunamadıysa bot bunu yazdı). Kanala henüz hiçbir şey paylaşılmadı.";
+    },
+
+    async altyaziOner(kod) {
+      if (!(await kayitliMi(kod)) || kodsuzMu(kod)) return `${kod} için kanal paylaşımı bulunamadı (kodsuz paylaşımlarda alt yazı önerilmez).`;
+      const g = ((await env.KAYIT.get("kodlar", "json")) || {})[kod].filter((x) => x.ids.some((id) => id > 0)).sort((a, b) => b.tarih - a.tarih)[0];
+      await altyaziSirayaEkle(env, g.y ? { kod, mesaj: g.y, eski: null, ids: [g.y], etiket: ETIKET.repete } : { kod, ids: g.ids.filter((id) => id > 0), eski: null, etiket: ETIKET.repete });
+      return `${kod} için alt yazı önerisi sıraya alındı; birkaç dakika içinde "✅ Değiştir / ❌ Kalsın" düğmeleriyle gelecek. Onaylanmadan değişmez.`;
     },
 
     async istekKaydet(kod, musteri, not, kim, simdi) {

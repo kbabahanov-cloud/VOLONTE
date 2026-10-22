@@ -727,7 +727,7 @@ test("asistan: paylaşma/silme aracı yok; 'beklesin' turdaki modelin yerine yen
   o.gonderilen.length = 0;
   await yazi(o.env, 111, "4013 beklesin");
   const adlar = o.istekler[0].tools.map((t) => t.name);
-  assert.deepEqual(adlar, ["durum_ozeti", "model_bilgisi", "beklesin", "sil_onayi_iste", "paylasim_onizle", "istek_kaydet", "istekleri_goster", "kuyruk_goster"]);
+  assert.deepEqual(adlar, ["durum_ozeti", "model_bilgisi", "beklesin", "sil_onayi_iste", "paylasim_onizle", "altyazi_oner", "istek_kaydet", "istekleri_goster", "kuyruk_goster"]);
   assert.ok(o.istekler[0].tools.every((t) => t.strict === true));
   assert.equal(o.istekler[0].model, "claude-opus-5-5");
   assert.equal(o.istekler[0].fallbacks, "default");
@@ -968,4 +968,62 @@ test("tepki sayıları kaydedilir; 20:00 raporu bugünkü paylaşımları, en ç
   o.gonderilen.length = 0;
   await bas(o.env, 111, "rp:3100");
   assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.chat_id, 111); // sadece önizleme, kanala değil
+});
+
+// ---------- Alt yazı önerisi ----------
+
+const { altyaziAdimi } = await import("./worker.js");
+const { altyaziBirlestir, eskiBilgiler } = await import("./altyazi.js");
+
+test("alt yazı: kod, beden, fiyat ve iletişim satırları eski yazıdan aynen; 4 dil; 1024 sınırı", () => {
+  const eski = "✅ AVAILABLE NOW\n\n✅ TWO PIECE\n\n✅CODE.3329\n\n✅PRICE. 25$\n\n✅SIZE.  38/40/42/44\n📞TEL. wa.me/905362390091";
+  assert.deepEqual(eskiBilgiler(eski), { beden: "SIZE.  38/40/42/44", fiyat: "PRICE. 25$", iletisim: ["📞TEL. wa.me/905362390091"] });
+  const m = altyaziBirlestir({ etiket: "🔁 Repete geldi", kod: "3329", eski, diller: { tr: "Şık takım.", en: "Elegant set.", fr: "Ensemble élégant.", pt: "Conjunto elegante." } });
+  assert.equal(m, "🔁 Repete geldi\n✅ CODE.3329\n📏 SIZE: 38/40/42/44\n💲 PRICE. 25$\n\n🇹🇷 Şık takım.\n🇬🇧 Elegant set.\n🇫🇷 Ensemble élégant.\n🇵🇹 Conjunto elegante.\n\n📞TEL. wa.me/905362390091");
+  assert.equal(kodBul(m), "3329"); // dizin kodu okumaya devam eder
+  const uzun = altyaziBirlestir({ etiket: "🆕 Yeni geldi", kod: "1", eski: "", diller: { tr: "x".repeat(400), en: "y".repeat(400), fr: "z".repeat(400), pt: "w".repeat(400) } });
+  assert.ok(uzun.length <= 1024);
+});
+
+test("alt yazı: yeni kod 🆕, bilinen kod 🔁; öneri ikisine gelir, ✅ ile kanaldaki yazı değişir, ikinci basış işlemez", async () => {
+  const o = tanimaOrtami([json({ tr: "Yeni şık takım.", en: "New chic set.", fr: "Nouvel ensemble chic.", pt: "Novo conjunto chique." })]);
+  await guncellemeIsle({ channel_post: { message_id: 980, date: o.simdi, chat: kanal, photo: [{ file_id: "f" }], caption: "AVAILABLE NOW\nCODE.7001\nSIZE 38/40" } }, o.env);
+  await guncellemeIsle({ channel_post: { message_id: 981, date: o.simdi, chat: kanal, photo: [{ file_id: "f" }], caption: "CODE.3100" } }, o.env);
+  const sira = JSON.parse(o.depo.get("altyaziSira"));
+  assert.deepEqual(sira.map((x) => [x.kod, x.mesaj, x.etiket]), [["7001", 980, "🆕 Yeni geldi"], ["3100", 981, "🔁 Repete geldi"]]);
+  o.depo.set("altyaziSira", JSON.stringify([sira[0]]));
+  o.gonderilen.length = 0;
+  await altyaziAdimi(o.env, o.simdi);
+  const oneriler = cagrilar(o.gonderilen, "sendMessage");
+  assert.equal(oneriler.length, 2);
+  assert.match(oneriler[0].govde.text, /7001 için yeni alt yazı önerisi[\s\S]*🆕 Yeni geldi\n✅ CODE\.7001\n📏 SIZE: 38\/40[\s\S]*🇵🇹 Novo conjunto chique\./);
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 0); // onaysız değişmez
+  const [degistir] = oneriler[0].govde.reply_markup.inline_keyboard[0];
+  await bas(o.env, 222, degistir.callback_data);
+  const d = cagrilar(o.gonderilen, "editMessageCaption");
+  assert.equal(d.length, 1);
+  assert.deepEqual([d[0].govde.chat_id, d[0].govde.message_id], [-100, 980]);
+  assert.match(d[0].govde.caption, /^🆕 Yeni geldi\n✅ CODE\.7001/);
+  assert.equal(cagrilar(o.gonderilen, "editMessageText").length, 2);
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, degistir.callback_data);
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Merdan zaten karar verdi/);
+  assert.equal(JSON.parse(o.depo.get("altyaziSira")).length, 0);
+});
+
+test("alt yazı: Kemal'in yeniden paylaşımı 🔁; eski paylaşımın yazısı arşivden okunur; asistan sadece sıraya alır", async () => {
+  const o = tanimaOrtami([aracCagrisi("altyazi_oner", { kod: "3200" }), mesaj(1, "Öneri hazırlanıyor."), json({ tr: "a", en: "b", fr: "c", pt: "d" })]);
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
+  await yazi(o.env, 111, "3200'ün yazısını güzelleştir");
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 0);
+  const sira = JSON.parse(o.depo.get("altyaziSira"));
+  assert.deepEqual([sira[0].kod, sira[0].ids, sira[0].eski], ["3200", [400], null]);
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => String(url).endsWith("/forwardMessage")
+    ? (o.gonderilen.push({ url: String(url), govde: JSON.parse(istek.body) }), new Response(JSON.stringify({ ok: true, result: { message_id: 5, photo: [{ file_id: "x" }], caption: "CODE.3200\nSIZE 40/42\nwa.me/905362390091" } })))
+    : onceki(url, istek);
+  await altyaziAdimi(o.env, o.simdi);
+  const oneri = cagrilar(o.gonderilen, "sendMessage").find((m) => /yeni alt yazı önerisi/.test(m.govde.text));
+  assert.match(oneri.govde.text, /🔁 Repete geldi\n✅ CODE\.3200\n📏 SIZE: 40\/42[\s\S]*wa\.me\/905362390091/);
+  assert.equal(cagrilar(o.gonderilen, "forwardMessage")[0].govde.chat_id, -555);
 });
