@@ -128,7 +128,9 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - Videodan kare düzeni: Selin isteği `kareler` dalına (istekler/<kod>.json) yazar → GitHub Actions (telegram-bot/kare/kare.yml + kare.py, ffmpeg + Laplace netlik) videoyu Selin'in tek kullanımlık /video?t= bağlantısından indirir (≤20 MB, Telegram bot sınırı), en net ≤3 kareyi kareler/<kod>/ altına kaydeder, /kare'ye bildirir → Telegram'da "✅ N. kare / ❌ Hiçbiri" → KV kare:<kod> (Selin yazar). Selin sitede, Kemal kanal paylaşımında (videolarla, başa) kullanır. Bir model için bir kez. Elle: Selin'de /kare 3104. KV selin:kareSira.
   - ⏳ BEKLİYOR: `kareler` dalını açmak için kullanıcı izni (dal + .github/workflows/kare.yml + kare.py). İzin gelince 3104 ve 3204 selin:kareSira'ya eklenecek.
 
-**Sıradaki komut: K1 — `kareler` dalı izni (videodan kare). Sonra S4 site PR (ürün sayfası yayına). Ardından Defne (WhatsApp).**
+- ⚠️ 22 Ekim: KV günlük yazma sınırı doldu (1639 yazma; dün 637). Selin kodla 23 Ekim 08:00'e kadar duraklatıldı (selin.js DURAKLAT_BITIS; KV'ye yazmaz, mesaj göndermez, düğmeye sadece uyarı). 08:00'de kendiliğinden devam; "fotoğraf yok" 13 model bir kez yeniden hazırlığa alınır (selin:goc:fotografyok). Kalıcı çözüm önerisi: sık yazılan durumları Durable Object deposuna taşıma (kullanıcı onayı bekliyor). `kareler` dalı açıldı (kullanıcı izniyle).
+
+**Sıradaki komut: D1 — Kalıcı çözüm onayı (KV → Durable Object taşıma, ücretsiz). Sonra 3522–3576 kareleri, S4 site PR. Ardından Defne (WhatsApp).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
