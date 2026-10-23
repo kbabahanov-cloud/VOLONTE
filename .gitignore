@@ -1,0 +1,3 @@
+# Gizli bilgiler (şifreler) depoya gitmez
+.env
+*.env
