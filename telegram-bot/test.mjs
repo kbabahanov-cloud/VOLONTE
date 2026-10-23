@@ -1275,3 +1275,81 @@ test("müşteri fotoğrafı: Sonnet ile tanınır, cevap müşterinin dilinde; e
   assert.ok(kopyalar.some((k) => k.govde.chat_id === "111" && k.govde.from_chat_id === 999)); // müşterinin fotoğrafı ekibe
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /büyük ihtimalle 3100/.test(m.govde.text) && m.govde.chat_id === "111"));
 });
+
+// ---------- Sayım Sami: Vegawin stok köprüsü ----------
+
+import { DatabaseSync } from "node:sqlite";
+import { StokDO } from "./stok.js";
+
+function stokBagla(o) {
+  const db = new DatabaseSync(":memory:");
+  const sql = {
+    exec(q, ...p) {
+      if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; }
+      const st = db.prepare(q);
+      const satirlar = /^\s*SELECT/i.test(q) ? st.all(...p).map((r) => ({ ...r })) : (st.run(...p), []);
+      return { toArray: () => satirlar };
+    },
+  };
+  const nesne = new StokDO({ storage: { sql } });
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: (url, init) => nesne.fetch(new Request(url, init)) }) };
+  o.env.KOPRU_VOLONTE = "kopru-anahtari-123";
+}
+const kopru = (env, urunler, anahtar = "kopru-anahtari-123", magaza = "VOLONTE") =>
+  worker.fetch(new Request("https://x/kopru", { method: "POST", headers: { "X-Magaza": magaza, Authorization: `Bearer ${anahtar}` }, body: JSON.stringify({ urunler }) }), env);
+
+test("stok köprüsü: anahtarsız veri alınmaz; ilk veride soru yok; adet 0'a düşünce 3 düğmeli soru; ilk basan geçerli", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  assert.equal((await kopru(o.env, [{ kod: "3100", adet: 3 }], "yanlis")).status, 401);
+  assert.equal((await kopru(o.env, [{ kod: "3100", adet: 3 }], "kopru-anahtari-123", "BLACKROSE")).status, 401); // kendi anahtarı yok
+  let r = await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 3, fiyat: 25 }, { kod: "3200", adet: 0, fiyat: 30 }, { kod: "3329", adet: -2 }]);
+  assert.equal(r.status, 200);
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length + cagrilar(o.gonderilen, "sendMessage").length, 0); // ilk veride soru yok
+
+  r = await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 0, fiyat: 25 }]);
+  assert.deepEqual(await r.json(), { ok: true, yazilan: 1, yeniSoru: 1 });
+  const sorular = cagrilar(o.gonderilen, "copyMessage");
+  assert.equal(sorular.length, 2); // ikisine, modelin fotoğrafıyla
+  assert.match(sorular[0].govde.caption, /📦 3100 — ELBISE\nVegawin: stok bitti \(adet 0\)/);
+  assert.deepEqual(sorular[0].govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["🔁 Repete olacak", "🗑 Sil", "⏳ Beklesin"]);
+
+  o.gonderilen.length = 0;
+  await bas(o.env, 222, "sz:r:3100");
+  const d = cagrilar(o.gonderilen, "editMessageCaption");
+  assert.equal(d.length, 2);
+  assert.match(d[0].govde.caption, /🔁 Merdan: repete olacak/);
+  await bas(o.env, 111, "sz:s:3100");
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery").at(-1).govde.text, /Merdan zaten karar verdi/);
+
+  // Stoksuz/eksi modeller turda sorulmaz
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, ist(8, 0, 1));
+  const tur = JSON.parse(o.depo.get("tur"));
+  assert.deepEqual(Object.keys(tur.ogeler), ["~200"]); // 3100 (0), 3200 (0) gizli; 3329 yeni
+
+  // Repete: stok gelince kendiliğinden görünür
+  await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 4, fiyat: 25 }]);
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 3, date: 1, chat: ozel(111), from: { id: 111 }, text: "/stok 3100" } }, o.env);
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /📦 3100 — ELBISE\n• VOLONTE: 4 adet · 25 \$[\s\S]*Toplam: 4 → görünür/);
+});
+
+test("stok köprüsü: Sil gizler (stok gelse de); Beklesin 7 gün sonra tekrar sorar; ekip de cevaplayabilir", async () => {
+  const o = rotasyonOrtami();
+  o.env.EKIP_IDS = "333";
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "3100", adet: 2 }, { kod: "3200", adet: 1 }]);
+  await kopru(o.env, [{ kod: "3100", adet: 0 }, { kod: "3200", adet: 0 }]);
+  await bas(o.env, 333, "sz:s:3100");
+  await bas(o.env, 111, "sz:b:3200");
+  await kopru(o.env, [{ kod: "3100", adet: 5 }]);
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 3, date: 1, chat: ozel(333), from: { id: 333 }, text: "/stok 3100" } }, o.env);
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /gizli[\s\S]*silindi\/gizli/);
+  // 7 gün sonra: 3200 hâlâ stoksuz → tekrar sorulur (5 dakikalık görevde)
+  o.gonderilen.length = 0;
+  const sonra = Math.floor(Date.now() / 1000) + 7 * GUN + 60;
+  const st = await o.env.STOK.get().fetch("https://stok/sorular", { method: "POST", body: JSON.stringify({ simdi: sonra, enFazla: 6 }) });
+  assert.deepEqual((await st.json()).map((x) => x.kod), ["3200"]);
+});

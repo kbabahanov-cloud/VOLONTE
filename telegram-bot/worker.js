@@ -44,6 +44,9 @@ import { markaBas } from "./marka.js";
 import { musteriIsle, dilSec } from "./musteri.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
+import { StokDO, stokKodu, BEKLESIN_STOK_GUN } from "./stok.js";
+
+export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
@@ -84,6 +87,7 @@ export default {
       await guncellemeIsle(update, env);
       return new Response("ok");
     }
+    if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
 
     return new Response("VOLONTE asistanı çalışıyor.");
   },
@@ -421,6 +425,8 @@ async function mesajIsle(msg, env) {
     return paylasOnizle(msg, env);
   } else if (komut === "/marka") {
     return markaOnizle(msg, env);
+  } else if (komut === "/stok") {
+    return stokGoster(msg, env);
   } else if (komut === "/kuyruk") {
     return kuyrukGoster(msg.chat.id, env);
   } else if (msg.text && !msg.text.startsWith("/")) {
@@ -436,6 +442,7 @@ async function ekipMesaji(msg, env) {
   const komut = (msg.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   if (komut === "/paylas" || komut === "/paylaş") return paylasOnizle(msg, env);
   if (komut === "/kuyruk") return kuyrukGoster(msg.chat.id, env);
+  if (komut === "/stok") return stokGoster(msg, env);
   const cevap = komut === "/son" ? await sonPaylasimlar(env) : komut === "/hafta" ? await haftaOzeti(env) : EKIP_YARDIM;
   return telegram(env, "sendMessage", { chat_id: msg.chat.id, text: cevap, disable_web_page_preview: true });
 }
@@ -447,6 +454,7 @@ const EKIP_YARDIM = [
   "/hafta — son 7 günde kaç paylaşım yapıldı",
   "/kuyruk — onaylanıp paylaşılmayı bekleyenler",
   "/paylas 3329 — o kodun son paylaşımını önizle, onaylarsan kanalda tekrar paylaş",
+  "/stok 3329 — Vegawin stok adedi ve durumu",
   "",
   "Ayarlar, harcama ve yapay zekâ sohbeti sadece Murat ve Merdan'da.",
 ].join("\n");
@@ -459,6 +467,7 @@ const YARDIM = [
   "/paylas 3329 — o kodun son paylaşımını önizle, onaylarsan kanalda tekrar paylaş",
   "/paylas 3329 2 — aynı kodun bir önceki paylaşımı",
   "/kuyruk — onaylanıp paylaşılmayı bekleyenler (iptal edilebilir)",
+  "/stok — Vegawin köprüsünün durumu; /stok 3329 — o modelin stok adedi",
   "/marka 3194 — fotoğrafa \"VOLONTE · kod\" basılmış hâlini sadece size gösterir; kanalda açma/kapatma",
   "/yardim — bu liste",
   "",
@@ -545,6 +554,7 @@ async function dugmeIsle(cq, env) {
   if (/^(t1|t7|tx|ty|tv|tg|tb):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
+  if (veri.startsWith("sz:")) return stokKarari(cq, env);
   if (/^(ay|an):/.test(veri)) return altyaziKarar(cq, env);
   if (veri === "mk:acik" || veri === "mk:kapali") {
     const acik = veri === "mk:acik";
@@ -765,6 +775,8 @@ export async function rotasyon(env, simdi) {
   // Sonradan eklenen / geç /start yazan kişiye bugünün bekleyen modelleri (istek sınırı için
   // paylaşım ya da silme yapılan çalışmada değil).
   if (!paylasti && !siliyor) await turEksikleriGonder(env, 10);
+  // Stok soruları (Beklesin süresi dolanlar ya da köprü çalışmasında gönderilemeyenler).
+  if (!paylasti && !siliyor) await stokSorulariGonder(env, simdi);
 }
 
 const turGunu = (tur) => tur.gun || gunAnahtari(tur.basla);
@@ -851,9 +863,11 @@ async function turBaslat(env, onceki, simdi) {
   const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
   const kuyruk = await kuyrukListesi(env);
   const arsiv = await env.KAYIT.get("arsiv", "json");
+  // Vegawin'de stoğu 0/eksi olan ya da "Sil" ile gizlenen modeller sorulmaz (köprü bağlıysa).
+  const stoksuz = await stokGizliler(env);
   const hazir = [];
   // Kanalda bulunamayan çıkarsa diye 4 yedek.
-  for (const aday of kanal ? adaylar(kodlar, kodsuz, atlananlar, kuyruk.map((k) => k.kod), simdi, sonpaylasim).slice(0, TUR_ADET + 4) : []) {
+  for (const aday of kanal ? adaylar(kodlar, kodsuz, atlananlar, [...kuyruk.map((k) => k.kod), ...stoksuz], simdi, sonpaylasim).slice(0, TUR_ADET + 4) : []) {
     const secenekler = modelSecenekleri(aday.kod, kodlar, kodsuz);
     if (!secenekler.length) continue;
     if (hazir.length >= TUR_ADET + 4) break;
@@ -1221,6 +1235,112 @@ async function kuyrukIptal(cq, env) {
 
 // Kuzey Amerika'ya sabit nesne: katalog adımı (Anthropic 403 sorunu) ve tepki sayıları
 // (sık yazıldığı için KV'nin günlük 1000 yazma sınırını harcamasın diye kendi deposunda).
+// ---------- Sayım Sami: Vegawin stok köprüsü (stok.js) ----------
+
+const stokNesne = (env) => env.STOK.get(env.STOK.idFromName("stok"), { locationHint: "enam" });
+async function stokIste(env, yol, govde = {}) {
+  const r = await stokNesne(env).fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(govde) });
+  return r.json();
+}
+async function stokGizliler(env) {
+  if (!env.STOK) return [];
+  try { return await stokIste(env, "/gizliler"); } catch { return []; }
+}
+
+// Köprüden gelen değişiklikler. Her mağazanın kendi gizli anahtarı var: KOPRU_<MAĞAZA> (secret).
+async function kopruAl(request, env) {
+  const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
+  const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !env.STOK || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
+  const govde = await request.json().catch(() => null);
+  if (!govde || !Array.isArray(govde.urunler) || govde.urunler.length > 2000) return new Response("geçersiz", { status: 400 });
+  const simdi = Math.floor(Date.now() / 1000);
+  const urunler = govde.urunler.map((u) => (u.yok ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat) }));
+  const sonuc = await stokIste(env, "/yaz", { magaza, urunler, simdi });
+  if (sonuc.yeniSoru && env.BOT_TOKEN) await stokSorulariGonder(env, simdi);
+  return Response.json({ ok: true, ...sonuc });
+}
+
+const STOK_SORU_PARTI = 6; // bir çalışmada en fazla soru (istek sınırı)
+const stokKlavye = (kod) => ({ inline_keyboard: [[
+  { text: "🔁 Repete olacak", callback_data: `sz:r:${kod}` },
+  { text: "🗑 Sil", callback_data: `sz:s:${kod}` },
+  { text: "⏳ Beklesin", callback_data: `sz:b:${kod}` },
+]] });
+
+export async function stokSorulariGonder(env, simdi) {
+  if (!env.STOK) return;
+  const sorular = await stokIste(env, "/sorular", { simdi, enFazla: STOK_SORU_PARTI });
+  if (!sorular.length) return;
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+  for (const s of sorular) {
+    const metin = [
+      `📦 ${s.kod}${s.ad ? ` — ${s.ad}` : ""}`,
+      `Vegawin: stok bitti (adet ${s.adet}). Ne yapalım?`,
+      "🔁 Repete olacak → gizli bekler, stok gelince kendiliğinden geri döner",
+      "🗑 Sil → siteden ve Telegram turlarından kaldırılır (kanal paylaşımlarına ve Vegawin'e dokunulmaz)",
+      `⏳ Beklesin → ${BEKLESIN_STOK_GUN} gün sonra hâlâ stok yoksa tekrar sorarım`,
+    ].join("\n");
+    const sec = kanal && modelSecenekleri(s.kod, kodlar, {})[0];
+    const mesajlar = [];
+    for (const kisi of kisilerden(env)) {
+      let r = sec ? await telegram(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal.id, message_id: sec.ids[0], caption: metin, reply_markup: stokKlavye(s.kod) }) : { ok: false };
+      let tur = "c";
+      if (!r.ok) {
+        r = await telegram(env, "sendMessage", { chat_id: kisi, text: metin, reply_markup: stokKlavye(s.kod) });
+        tur = "t";
+      }
+      if (r.ok) mesajlar.push([kisi, r.result.message_id, tur, metin]);
+    }
+    await stokIste(env, "/soru-gonderildi", { kod: s.kod, mesajlar });
+  }
+}
+
+async function stokKarari(cq, env) {
+  const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  const [, islem, kod] = String(cq.data).split(":");
+  const kim = kisiAdi(cq.from);
+  if (!env.STOK) return cevapla("Stok köprüsü bağlı değil.");
+  const r = await stokIste(env, "/karar", { kod, islem, kim, simdi: Math.floor(Date.now() / 1000) });
+  if (!r.ok) return cevapla(r.kim ? `${r.kim} zaten karar verdi.` : "Bu soru artık geçerli değil.");
+  const ek = r.durum === "repete" ? `🔁 ${kim}: repete olacak — gizli bekliyor, stok gelince geri döner.`
+    : r.durum === "gizli" ? `🗑 ${kim}: sil — siteden ve Telegram turlarından kaldırıldı (kanal ve Vegawin'e dokunulmadı).`
+    : `⏳ ${kim}: beklesin — ${BEKLESIN_STOK_GUN} gün sonra tekrar sorulacak.`;
+  await cevapla("Tamam");
+  for (const [kisi, id, tur, metin] of r.mesajlar) {
+    const yeni = `${metin}\n\n${ek}`;
+    if (tur === "c") await telegram(env, "editMessageCaption", { chat_id: kisi, message_id: id, caption: yeni.slice(0, 1024), reply_markup: { inline_keyboard: [] } });
+    else await telegram(env, "editMessageText", { chat_id: kisi, message_id: id, text: yeni, reply_markup: { inline_keyboard: [] } });
+  }
+}
+
+async function stokGoster(msg, env) {
+  const yaz = (text) => telegram(env, "sendMessage", { chat_id: msg.chat.id, text, disable_web_page_preview: true });
+  if (!env.STOK) return yaz("Stok köprüsü henüz bağlı değil.");
+  const kod = stokKodu((msg.text || "").split(/\s+/)[1] || "");
+  if (!kod) {
+    const o = await stokIste(env, "/ozet");
+    if (!o.kopruler.length) return yaz("📦 Vegawin köprüsünden henüz veri gelmedi.");
+    const durum = { soru: "cevap bekleyen soru", repete: "repete bekleyen", gizli: "silinen (gizli)", beklesin: "beklesin" };
+    return yaz([
+      "📦 Vegawin stok köprüsü",
+      ...o.kopruler.map((k) => `• ${k.magaza}: ${k.adet} ürün · son veri ${tarihYaz(k.son)}`),
+      `Stokta: ${o.stokta} model · stoksuz (gizli): ${o.stoksuz}`,
+      ...o.kararlar.map((k) => `• ${durum[k.durum] || k.durum}: ${k.n}`),
+    ].join("\n"));
+  }
+  const b = await stokIste(env, "/bilgi", { kod });
+  if (!b.satirlar.length) return yaz(`${kod}: Vegawin'de bu kodla stok kaydı yok.`);
+  const karar = b.karar ? { soru: "stok bitti, cevap bekliyor", repete: `repete olacak (${b.karar.kim})`, gizli: `silindi/gizli (${b.karar.kim})`, beklesin: `beklesin (${b.karar.kim})` }[b.karar.durum] : null;
+  return yaz([
+    `📦 ${kod} — ${b.satirlar[0].ad || ""}`,
+    ...b.satirlar.map((x) => `• ${x.magaza}: ${x.adet} adet${x.fiyat != null ? ` · ${x.fiyat} $` : ""} (${tarihYaz(x.guncel)})`),
+    `Toplam: ${b.toplam} → ${b.toplam > 0 && !(b.karar && b.karar.durum === "gizli") ? "görünür" : "gizli (sitede ve Telegram'da görünmez)"}`,
+    karar ? `Durum: ${karar}` : null,
+  ].filter(Boolean).join("\n"));
+}
+
 export class KatalogDO {
   constructor(state, env) {
     this.state = state;

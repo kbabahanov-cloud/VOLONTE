@@ -12,11 +12,16 @@ rm -f test-dist.mjs
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-asistan
 META=$(mktemp)
-cat > "$META" <<'JSON'
+# StokDO (Sayım Sami, SQLite) ilk kez eklenirken göç (v1 → v2) bir kez gönderilir.
+ETIKET=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts" | python3 -c 'import sys,json;print(next((s.get("migration_tag") or "") for s in json.load(sys.stdin)["result"] if s["id"]=="volonte-asistan"))')
+GOC=""
+[ "$ETIKET" = "v1" ] && GOC='"migrations":{"old_tag":"v1","new_tag":"v2","new_sqlite_classes":["StokDO"]},'
+cat > "$META" <<JSON
 {"main_module":"worker.js","compatibility_date":"2026-10-01","keep_bindings":["secret_text"],
- "placement":{"region":"aws:us-east-1"},
+ "placement":{"region":"aws:us-east-1"}, $GOC
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"KATALOG","class_name":"KatalogDO"},
+             {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO"},
              {"type":"images","name":"IMAGES"},
              {"type":"plain_text","name":"ALLOWED_IDS","text":"2005113508,6113852976"},
              {"type":"plain_text","name":"EKIP_IDS","text":"6448681578,8369444291"},
