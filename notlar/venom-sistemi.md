@@ -130,7 +130,10 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ⚠️ 22 Ekim: KV günlük yazma sınırı doldu (1639 yazma; dün 637). Selin kodla 23 Ekim 08:00'e kadar duraklatıldı (selin.js DURAKLAT_BITIS; KV'ye yazmaz, mesaj göndermez, düğmeye sadece uyarı). 08:00'de kendiliğinden devam; "fotoğraf yok" 13 model bir kez yeniden hazırlığa alınır (selin:goc:fotografyok). Kalıcı çözüm önerisi: sık yazılan durumları Durable Object deposuna taşıma (kullanıcı onayı bekliyor). `kareler` dalı açıldı (kullanıcı izniyle).
 
-**Sıradaki komut: D1 — Kalıcı çözüm onayı (KV → Durable Object taşıma, ücretsiz). Sonra 3522–3576 kareleri, S4 site PR. Ardından Defne (WhatsApp).**
+- 🆕 23 Ekim: SAYIM SAMİ — Vegawin stok köprüsü (kullanıcı onayı). Kurallar: Vegawin'e ASLA yazma (sadece SELECT; köprüde 4 kilit). Okunan: STOKKODU, MALINCINSI, adet (F0101D0005TBLDEPOENVANTER SUM(ENVANTER), DEPO=1, BELGETIPI≠67), SATISFIYATI1 (F0101TBLBIRIMLEREX); stok kartı F0101TBLSTOKLAR STATUS=1, IND≥100. Kod eki (B20) köprüde silinir (ayar.json kodKalibi ^(\d{3,6})). 09–19 arası 5 dk, sadece değişenler. Şifre mağaza PC'sinde DPAPI. Venom: Kemal'de POST /kopru (X-Magaza + Bearer KOPRU_<MAĞAZA> secret) → StokDO (SQLite, KV değil). Stok ≤0 → gizli (Kemal turunda sorulmaz). >0'dan ≤0'a düşünce ekibe 🔁 Repete / 🗑 Sil (sadece gizle, kanal ve Vegawin'e dokunma) / ⏳ Beklesin (7 gün). İlk veride soru yok. /stok, /stok <kod>. Dosyalar: sami/ (indirme: sami/Sami-kopru.zip). Black Rose: ayar.json magaza/firma/donem değiştirilip ikinci kopya + KOPRU_BLACKROSE. 2. aşama satış analizi (belge 20/21/22/23), vergi no/TC asla.
+  - ⏳ Bekliyor: köprü kurulum + deneme fotoğrafı (bağ sütunu STOKNO vb. doğrulanacak). Selin durdurulmuş; site fiyat/gizleme Selin açılınca bağlanacak.
+
+**Sıradaki komut: SAMİ-1 — mağaza PC'sinde kurulum.bat + Cloudflare KOPRU_VOLONTE + deneme.bat fotoğrafı. Sonra D1 (KV → Durable Object taşıma onayı), kareler, S4. Selin "başlat" bekliyor.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
