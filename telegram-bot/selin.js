@@ -80,9 +80,9 @@ function gizliEsit(a, b) {
   return f === 0;
 }
 
-// Kullanıcı kararı (22 Ekim gece): KV günlük yazma sınırı dolduğu için Selin 23 Ekim 08:00'e
-// (İstanbul) kadar durur: liste/hazırlık/mesaj yok, KV'ye hiçbir şey yazılmaz, kayıtlara dokunulmaz.
-const DURAKLAT_BITIS = Date.UTC(2026, 9, 23, 5, 0) / 1000;
+// Kullanıcı kararı (23 Ekim 09:36): Selin süresiz durduruldu — liste/hazırlık/kare/mesaj yok, komutlar
+// işlenmez, KV'ye hiçbir şey yazılmaz, kayıt ve sıralara dokunulmaz. Kullanıcı "başlat" deyince kaldırılır.
+const DURAKLAT_BITIS = Infinity;
 export const duraklatildi = (simdi) => simdi < DURAKLAT_BITIS;
 
 export default {
@@ -93,7 +93,7 @@ export default {
       const u = await istek.json();
       if (duraklatildi(Math.floor(Date.now() / 1000))) {
         // Mesaj gönderilmez, kayıt yazılmaz; düğmeye basana sadece kısa bir uyarı (sohbete düşmez).
-        if (u.callback_query) await tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "Selin bu gece durduruldu; sabah 08:00'de devam edecek.", show_alert: true });
+        if (u.callback_query) await tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "Selin şu an durduruldu; yeniden başlatılınca devam edecek.", show_alert: true });
         return new Response("ok");
       }
       await guncelleme(u, env);

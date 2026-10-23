@@ -313,8 +313,7 @@ test("Selin izinsiz kişiye cevap vermez; düğmeleri çalışmaz", async () => 
   assert.equal(r.status, 401);
 });
 
-test("gece duraklatma: 23 Ekim 08:00'e (İstanbul) kadar durur, sonra devam eder", () => {
+test("duraklatma: Selin süresiz durdurulmuş", () => {
   assert.equal(duraklatildi(ist(22, 0)), true);
-  assert.equal(duraklatildi(ist(7, 59, 1)), true);
-  assert.equal(duraklatildi(ist(8, 0, 1)), false);
+  assert.equal(duraklatildi(ist(8, 0, 30)), true);
 });
