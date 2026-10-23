@@ -1,0 +1,13 @@
+{
+  "magaza": "VOLONTE",
+  "sunucu": "127.0.0.1",
+  "port": 1433,
+  "veritabani": "VEGADB",
+  "kullanici": "volonte_okuma",
+  "firma": "F0101",
+  "donem": "D0005",
+  "kodKalibi": "^(\\d{3,6})",
+  "baslangicSaati": 9,
+  "bitisSaati": 19,
+  "venom": "https://volonte-asistan.volonte.workers.dev"
+}

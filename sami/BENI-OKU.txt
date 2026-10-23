@@ -1,0 +1,21 @@
+SAYIM SAMİ — Vegawin stok köprüsü (VOLONTE)
+
+Bu program Vegawin'den SADECE OKUR. Hiçbir şeyi silmez, eklemez, değiştirmez.
+Okuduğu: model kodu, ürün adı, adet (Merkez depo) ve satış fiyatı ($).
+Alış fiyatı, maliyet, kâr, vergi no ve TC kimlik no okunmaz.
+Şifre bu bilgisayarda Windows'un kasasında şifreli durur; hiçbir yere gönderilmez.
+
+KURULUM (Vegawin'in kurulu olduğu bilgisayarda, tek seferlik):
+1) Bu klasörü masaüstüne açın (zip'e sağ tık > Tümünü ayıkla).
+2) kurulum.bat'a çift tıklayın. "Windows bilgisayarınızı korudu" derse: Ek bilgi > Yine de çalıştır.
+   Şifreyi sorunca volonte_okuma şifresini yazın (yazarken görünmez, normal) > Enter.
+   Ekranda bir KÖPRÜ ANAHTARI çıkar (panoya da kopyalanır).
+3) Cloudflare'de: volonte-asistan > Settings > Variables and Secrets > Add
+   Type: Secret, Name: KOPRU_VOLONTE, Value: (yapıştır) > Deploy.
+4) deneme.bat'a çift tıklayın. Ekranın fotoğrafını Claude'a gönderin. (Bu adım hiçbir şey göndermez.)
+5) Claude onay verince baslat.bat'a çift tıklayın. Bundan sonra kendisi çalışır:
+   09:00-19:00 arası 5 dakikada bir, sadece değişen ürünler gider.
+   Bilgisayar kapalıysa bekler, açılınca kaldığı yerden devam eder.
+
+DURDURMAK: durdur.bat
+GÜNLÜK (sorun olursa): Windows'ta  %LOCALAPPDATA%\Sami  klasörü
