@@ -1354,3 +1354,44 @@ test("stok köprüsü: Sil gizler (stok gelse de); Beklesin 7 gün sonra tekrar 
   const st = await o.env.STOK.get().fetch("https://stok/sorular", { method: "POST", body: JSON.stringify({ simdi: sonra, enFazla: 6 }) });
   assert.deepEqual((await st.json()).map((x) => x.kod), ["3200"]);
 });
+
+// ---------- Karma depo: Kemal kendi nesnesinde ----------
+import { KatalogDO } from "./worker.js";
+
+test("Kemal nesnesi: Telegram güncellemesi ve 5 dk görevi DO'da çalışır; tur/sıra DO'ya, kodlar KV'ye; ilk seferde KV'den kopyalanır (silinmez)", async () => {
+  const o = turOrtami();
+  o.depo.set("kuyruk:3999", JSON.stringify({ kod: "3999", ids: [7000], kim: "Murat", zaman: 0 })); // eski kayıt (KV)
+  o.depo.set("sohbet:111", JSON.stringify([{ role: "user", content: "merhaba" }]));
+  const depolar = new Map();
+  const nesneler = new Map();
+  const sahteDepo = () => {
+    const m = new Map();
+    return { m, async get(k) { return Array.isArray(k) ? new Map(k.filter((x) => m.has(x)).map((x) => [x, m.get(x)])) : m.get(k); }, async put(k, v) { m.set(k, structuredClone(v)); }, async delete(k) { return m.delete(k); }, async list({ prefix = "" } = {}) { return new Map([...m].filter(([k]) => k.startsWith(prefix)).sort()); } };
+  };
+  o.env.KATALOG = {
+    idFromName: (ad) => ad,
+    get: (ad) => {
+      if (!nesneler.has(ad)) {
+        const storage = sahteDepo();
+        depolar.set(ad, storage);
+        nesneler.set(ad, new KatalogDO({ storage, blockConcurrencyWhile: (f) => f() }, o.env));
+      }
+      return { fetch: (url, init) => nesneler.get(ad).fetch(new Request(url, init)) };
+    },
+  };
+  o.env.KAYIT.list = async ({ prefix }) => ({ keys: [...o.depo.keys()].filter((k) => k.startsWith(prefix)).sort().map((name) => ({ name })), list_complete: true });
+  await worker.scheduled({}, o.env);
+  const kemal = depolar.get("kemal").m;
+  assert.ok(kemal.has("kv:tur"));                       // tur DO'da
+  assert.equal(JSON.parse(kemal.get("kv:sohbet:111").v)[0].content, "merhaba"); // eski kayıt kopyalandı
+  assert.ok(o.depo.has("kuyruk:3999") && o.depo.has("sohbet:111")); // eski KV kayıtları silinmedi
+  assert.equal(kemal.has("kv:kuyruk:3999"), false); // dünden kalan sıra yeni turda (DO'da) temizlendi
+  const rapor = JSON.parse(o.depo.get("goc:kemal"));
+  assert.deepEqual([rapor.kopyalanan, rapor.esit, rapor.farkliSayi], [2, 2, 0]);
+  assert.equal(turMesajlari(o.gonderilen).length, 10);
+  // Telegram düğmesi de aynı nesnede: onay DO'daki tura ve sıraya yazılır
+  const r = await worker.fetch(new Request("https://x/telegram", { method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": "gizli123" }, body: JSON.stringify({ callback_query: { id: "c", from: { id: 111, first_name: "Murat" }, data: "t1:1:4013:0", message: { chat: { id: 111 }, message_id: 1 } } }) }), o.env);
+  assert.equal(r.status, 200);
+  assert.ok(kemal.has("kv:kuyruk:4013"));
+  assert.equal(o.depo.get("kuyruk:4013"), undefined); // KV'ye yazılmadı
+});

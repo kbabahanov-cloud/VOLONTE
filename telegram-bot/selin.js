@@ -16,6 +16,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
+import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
 
 const SAAT_FARKI = 3 * 3600;
 const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
@@ -85,6 +86,10 @@ function gizliEsit(a, b) {
 const DURAKLAT_BITIS = Infinity;
 export const duraklatildi = (simdi) => simdi < DURAKLAT_BITIS;
 
+// Selin'in bütün işleri kendi Durable Object'inde ("selin") çalışır: "selin:*" kayıtları orada
+// (KV günlük yazma sınırı). Hata/durum kayıtları izlenebilsin diye KV'de kalır (depo.js).
+const selinNesne = (env) => env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
+
 export default {
   async fetch(istek, env) {
     const url = new URL(istek.url);
@@ -96,40 +101,63 @@ export default {
         if (u.callback_query) await tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "Selin şu an durduruldu; yeniden başlatılınca devam edecek.", show_alert: true });
         return new Response("ok");
       }
-      await guncelleme(u, env);
+      if (env.SELIN) await selinNesne(env).fetch("https://selin/guncelleme", { method: "POST", body: JSON.stringify(u) });
+      else await guncelleme(u, env);
       return new Response("ok");
     }
-    if (istek.method === "GET" && url.pathname === "/video") return videoVer(env, url.searchParams.get("t"));
-    if (istek.method === "POST" && url.pathname === "/kare") return kareGeldi(env, await istek.json().catch(() => ({})), Math.floor(Date.now() / 1000));
+    if (istek.method === "GET" && url.pathname === "/video") {
+      if (env.SELIN) return selinNesne(env).fetch(`https://selin/video?t=${encodeURIComponent(url.searchParams.get("t") || "")}`);
+      return videoVer(env, url.searchParams.get("t"));
+    }
+    if (istek.method === "POST" && url.pathname === "/kare") {
+      const govde = await istek.json().catch(() => ({}));
+      if (env.SELIN) return selinNesne(env).fetch("https://selin/kare-geldi", { method: "POST", body: JSON.stringify(govde) });
+      return kareGeldi(env, govde, Math.floor(Date.now() / 1000));
+    }
     return new Response("Selin çalışıyor.");
   },
   async scheduled(olay, env) {
-    if (!env.BOT_TOKEN || duraklatildi(Math.floor(Date.now() / 1000))) return;
-    await webhookKur(env);
-    const simdi = Math.floor(Date.now() / 1000);
-    await githubKontrol(env, simdi);
-    await fotografYokGocu(env, simdi);
-    const gonderilen = await eksikleriGonder(env, simdi);
-    await listeAdimi(env, simdi, LISTE_BUTCE - gonderilen);
-    // Yapay zekâ adımı Anthropic'in kabul ettiği bölgede çalışsın diye sabit nesnede.
+    if (!env.BOT_TOKEN) return;
     if (env.SELIN) {
-      const nesne = env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
-      await nesne.fetch("https://selin/hazirla");
-      await nesne.fetch("https://selin/kare"); // ayrı çalışma: kendi istek sınırı
-    } else {
-      await hazirlaGuvenli(env, simdi);
-      await kareSiraGuvenli(env, simdi);
+      const nesne = selinNesne(env);
+      // Durduruluyken bile kayıtlar bir kez kopyalanıp kontrol edilir (mesaj gönderilmez).
+      if (duraklatildi(Math.floor(Date.now() / 1000))) return void (await nesne.fetch("https://selin/goc", { method: "POST" }));
+      await nesne.fetch("https://selin/cron", { method: "POST" });
+      await nesne.fetch("https://selin/hazirla", { method: "POST" }); // ayrı istekler: her birinin kendi istek sınırı
+      await nesne.fetch("https://selin/kare", { method: "POST" });
+      return;
     }
+    if (duraklatildi(Math.floor(Date.now() / 1000))) return;
+    await selinCron(env, Math.floor(Date.now() / 1000));
+    await hazirlaGuvenli(env, Math.floor(Date.now() / 1000));
+    await kareSiraGuvenli(env, Math.floor(Date.now() / 1000));
   },
 };
 
+async function selinCron(env, simdi) {
+  await webhookKur(env);
+  await githubKontrol(env, simdi);
+  await fotografYokGocu(env, simdi);
+  const gonderilen = await eksikleriGonder(env, simdi);
+  await listeAdimi(env, simdi, LISTE_BUTCE - gonderilen);
+}
+
 export class SelinDO {
-  constructor(state, env) { this.env = env; }
+  constructor(state, env) { this.state = state; this.env = env; }
   async fetch(istek) {
+    const url = new URL(istek.url);
+    await gocBirKez(this.state, this.env.KAYIT, SELIN_YEREL, "selin"); // ilk seferde KV'den kopyala + kontrol (silmez)
+    const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, SELIN_YEREL) };
     const simdi = Math.floor(Date.now() / 1000);
-    if (new URL(istek.url).pathname === "/kare") await kareSiraGuvenli(this.env, simdi);
-    else await hazirlaGuvenli(this.env, simdi);
-    return new Response("ok");
+    switch (url.pathname) {
+      case "/goc": return new Response("ok");
+      case "/guncelleme": await guncelleme(await istek.json(), env); return new Response("ok");
+      case "/cron": await selinCron(env, simdi); return new Response("ok");
+      case "/kare": await kareSiraGuvenli(env, simdi); return new Response("ok");
+      case "/video": return videoVer(env, url.searchParams.get("t"));
+      case "/kare-geldi": return kareGeldi(env, await istek.json().catch(() => ({})), simdi);
+      default: await hazirlaGuvenli(env, simdi); return new Response("ok");
+    }
   }
 }
 
@@ -559,7 +587,7 @@ export async function githubKontrol(env, simdi) {
     yazma: await dene("/git/blobs", { method: "POST", body: JSON.stringify({ content: "selin-kontrol", encoding: "utf-8" }) }),
     actions: await dene("/actions/workflows"),
   };
-  await yazKV(env, "selin:github", sonuc, 3600);
+  await yazKV(env, "selin:github", sonuc, 6 * 3600); // KV'de (izleme); 6 saatte bir
 }
 
 async function siteVerisi(env) {

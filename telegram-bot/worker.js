@@ -45,6 +45,7 @@ import { musteriIsle, dilSec } from "./musteri.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
 import { StokDO, stokKodu, BEKLESIN_STOK_GUN } from "./stok.js";
+import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 
 export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -84,7 +85,9 @@ export default {
         return new Response("yetkisiz", { status: 401 });
       }
       const update = await request.json();
-      await guncellemeIsle(update, env);
+      // Kemal'in işleri kendi Durable Object'inde çalışır (sık yazılan kayıtlar orada; KV sınırı).
+      if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
+      else await guncellemeIsle(update, env);
       return new Response("ok");
     }
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
@@ -95,6 +98,12 @@ export default {
   // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
+    if (env.KATALOG) {
+      const nesne = kemalNesne(env);
+      await nesne.fetch("https://kemal/kemal/cron", { method: "POST" });
+      await nesne.fetch("https://kemal/kemal/adim", { method: "POST" }); // katalog + alt yazı: ayrı istek sınırı
+      return;
+    }
     await durumKontrol(env);
     if (env.BOT_TOKEN) await rotasyon(env, Math.floor(Date.now() / 1000));
   },
@@ -743,7 +752,10 @@ export async function rotasyon(env, simdi) {
   // Zamanlanmış görev her seferinde farklı ülkedeki bir veri merkezinde çalışıyor ve
   // Anthropic bazılarından gelen istekleri reddediyor (403). Katalog adımı bu yüzden
   // Kuzey Amerika'ya sabitlenmiş bir Durable Object içinde çalışır.
-  if (env.KATALOG) {
+  // Kemal kendi nesnesinde çalışırken katalog adımı zamanlanmış görevden ayrı istek olarak gelir.
+  if (env.KEMAL_ICERDE) {
+    // (scheduled → /kemal/adim)
+  } else if (env.KATALOG) {
     await sabitNesne(env).fetch("https://katalog/adim");
   } else {
     await katalogGuvenli(env, simdi);
@@ -1350,6 +1362,7 @@ export class KatalogDO {
   }
   async fetch(istek) {
     const yol = new URL(istek.url).pathname;
+    if (yol.startsWith("/kemal/")) return this.kemal(yol, istek);
     if (yol === "/tepki") {
       const { id, toplam } = await istek.json();
       await this.state.storage.put(`t:${id}`, toplam);
@@ -1369,7 +1382,25 @@ export class KatalogDO {
     await altyaziGuvenli(this.env, Math.floor(Date.now() / 1000));
     return new Response("ok");
   }
+
+  // "kemal" nesnesi: Kemal'in bütün işleri burada, sık yazılan kayıtlar bu nesnenin deposunda.
+  async kemal(yol, istek) {
+    await gocBirKez(this.state, this.env.KAYIT, KEMAL_YEREL, "kemal"); // ilk seferde KV'den kopyala + kontrol (silmez)
+    const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, KEMAL_YEREL), KEMAL_ICERDE: true };
+    const simdi = Math.floor(Date.now() / 1000);
+    if (yol === "/kemal/guncelleme") await guncellemeIsle(await istek.json(), env);
+    else if (yol === "/kemal/cron") {
+      await durumKontrol(env);
+      if (env.BOT_TOKEN) await rotasyon(env, simdi);
+    } else if (yol === "/kemal/adim") {
+      await katalogGuvenli(env, simdi);
+      await altyaziGuvenli(env, simdi);
+    }
+    return new Response("ok");
+  }
 }
+
+const kemalNesne = (env) => env.KATALOG.get(env.KATALOG.idFromName("kemal"), { locationHint: "enam" });
 
 const sabitNesne = (env) => env.KATALOG.get(env.KATALOG.idFromName("katalog"), { locationHint: "enam" });
 

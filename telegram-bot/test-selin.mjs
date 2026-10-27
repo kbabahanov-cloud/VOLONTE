@@ -317,3 +317,22 @@ test("duraklatma: Selin süresiz durdurulmuş", () => {
   assert.equal(duraklatildi(ist(22, 0)), true);
   assert.equal(duraklatildi(ist(8, 0, 30)), true);
 });
+
+test("Selin durduruluyken: 5 dk görevi sadece kayıtları DO'ya kopyalar ve kontrol eder; mesaj göndermez, KV'deki eski kayıtlar silinmez", async () => {
+  const { SelinDO } = await import("./selin.js");
+  const o = ortam();
+  o.depo.set("selin:modeller", JSON.stringify({ "3194": { durum: "soruldu" } }));
+  o.depo.set("selin:hazirla", JSON.stringify(["3100"]));
+  o.depo.set("selin:hata", JSON.stringify({ hata: "x" }));
+  o.env.KAYIT.list = async ({ prefix }) => ({ keys: [...o.depo.keys()].filter((k) => k.startsWith(prefix)).sort().map((name) => ({ name })), list_complete: true });
+  const m = new Map();
+  const storage = { async get(k) { return m.get(k); }, async put(k, v) { m.set(k, structuredClone(v)); }, async delete(k) { return m.delete(k); }, async list({ prefix }) { return new Map([...m].filter(([k]) => k.startsWith(prefix))); } };
+  const nesne = new SelinDO({ storage, blockConcurrencyWhile: (f) => f() }, o.env);
+  o.env.SELIN = { idFromName: () => "selin", get: () => ({ fetch: (url, init) => nesne.fetch(new Request(url, init)) }) };
+  await selin.scheduled({}, o.env);
+  assert.equal(o.g.length, 0); // hiçbir Telegram mesajı yok
+  const rapor = JSON.parse(o.depo.get("goc:selin"));
+  assert.deepEqual([rapor.kopyalanan, rapor.esit, rapor.farkliSayi], [2, 2, 0]);
+  assert.ok(m.has("kv:selin:modeller") && m.has("kv:selin:hazirla") && !m.has("kv:selin:hata")); // hata KV'de kalır
+  assert.ok(o.depo.has("selin:modeller") && o.depo.has("selin:hazirla")); // eski kayıtlar silinmedi
+});
