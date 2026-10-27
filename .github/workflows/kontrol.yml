@@ -1,0 +1,30 @@
+# "kareler" dalında çalışır: Selin istekler/kontrol/<sürüm>.json yazınca toplu listedeki modellerin
+# kanal fotoğrafları kontrol/<sürüm>/ altına indirilir (fotoğraf karışıklığı kontrolü). Ücretsiz.
+name: kontrol
+on:
+  push:
+    branches: [kareler]
+    paths: ["istekler/kontrol/*.json"]
+permissions:
+  contents: write
+concurrency:
+  group: kontrol
+  cancel-in-progress: false
+jobs:
+  kontrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: kareler
+      - name: Fotoğrafları indir
+        run: python kontrol.py
+      - name: Kaydet
+        run: |
+          git config user.name "Selin (VOLONTE)"
+          git config user.email "selin@users.noreply.github.com"
+          git add kontrol
+          git commit -m "Selin: fotoğraf kontrolü" || true
+          git pull --rebase -q origin kareler
+          git push -q origin HEAD:kareler
