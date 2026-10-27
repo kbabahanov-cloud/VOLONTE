@@ -71,18 +71,26 @@ function urunKarti(u) {
     return '<span class="dot" style="background:' + r + '"></span>';
   }).join("");
 
-  const mesaj = "Hello VOLONTE, I am interested in " + u.kod + " – " + u.ad + ". Could you send me the price and available colours?";
+  // Fiyat Vegawin'den gelir (Selin); fiyatı olan modelde "Order", olmayanda "Ask price".
+  const mesaj = u.fiyat
+    ? "Hello VOLONTE, I would like to order " + u.kod + " – " + u.ad + " ($" + u.fiyat + "). Which colours are available?"
+    : "Hello VOLONTE, I am interested in " + u.kod + " – " + u.ad + ". Could you send me the price and available colours?";
+  // Selin'in eklediği gerçek modellerin kendi sayfası var; örnek ürünler WhatsApp'a gider.
+  const medyaLink = u.sayfa
+    ? '<a class="product-media" href="' + yaziTemizle(u.sayfa) + '" aria-label="' + yaziTemizle(u.ad) + '">'
+    : '<a class="product-media" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '" aria-label="Ask price for ' + yaziTemizle(u.ad) + '">';
 
   return (
     '<article class="product">' +
-      '<a class="product-media" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '" aria-label="Ask price for ' + yaziTemizle(u.ad) + '">' + gorsel +
+      medyaLink + gorsel +
         (u.yeni ? '<span class="badge">New</span>' : "") +
       "</a>" +
       '<div class="product-body">' +
         '<div class="product-row"><h3>' + yaziTemizle(u.ad) + '</h3><span class="product-code">' + yaziTemizle(u.kod) + "</span></div>" +
-        '<p class="product-meta">' + yaziTemizle(u.bedenler) + " · " + u.seri + " pcs / series</p>" +
+        '<p class="product-meta">' + yaziTemizle(u.bedenler) + (u.seri ? " · " + u.seri + " pcs / series" : " · sold by series") + "</p>" +
+        (u.fiyat ? '<p class="product-price">$' + yaziTemizle(String(u.fiyat)) + "</p>" : "") +
         '<div class="dots">' + noktalar + "</div>" +
-        '<a class="product-link" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '">Ask price</a>' +
+        '<a class="product-link" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '">' + (u.fiyat ? "Order" : "Ask price") + "</a>" +
       "</div>" +
     "</article>"
   );
@@ -151,9 +159,39 @@ function anaSayfayiKur() {
   }
 }
 
+// ---------- Selin'in eklediği gerçek modeller (veri/urunler.json) ----------
+// Dosyada model varsa örnek ürünlerin yerine onlar gösterilir.
+function gercekUrunleriYukle() {
+  return fetch("veri/urunler.json", { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : []; })
+    .then(function (liste) {
+      if (!Array.isArray(liste) || !liste.length) return;
+      const ikiHafta = Date.now() - 14 * 86400000;
+      URUNLER.length = 0;
+      liste.forEach(function (u) {
+        if (u.gizli) return; // stoğu bitti (Vegawin): sitede görünmez
+        URUNLER.push({
+          kod: u.kod,
+          ad: u.baslik || u.kod,
+          kategori: u.kategori,
+          bedenler: u.bedenler || "",
+          fiyat: u.fiyat || null,
+          seri: null,
+          renkler: [],
+          resim: (u.fotolar || [])[0] || "",
+          yeni: u.eklenme ? new Date(u.eklenme).getTime() > ikiHafta : false,
+          sayfa: "urun.html?kod=" + encodeURIComponent(u.kod)
+        });
+      });
+    })
+    .catch(function () { /* dosya yoksa örnek ürünler kalır */ });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   menuyuKur();
   iletisimBilgileriniDoldur();
-  anaSayfayiKur();
-  urunlerSayfasiniKur();
+  gercekUrunleriYukle().then(function () {
+    anaSayfayiKur();
+    urunlerSayfasiniKur();
+  });
 });

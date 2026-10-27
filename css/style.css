@@ -317,6 +317,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 400; }
 .product h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
 .product-code { font-size: 11px; color: var(--ink-soft); flex-shrink: 0; }
 .product-meta { margin: 2px 0 8px; font-size: 11px; color: var(--ink-soft); }
+.product-price { margin: -4px 0 8px; font-size: 13px; letter-spacing: .02em; color: var(--ink, #111); }
 .dots { display: flex; gap: 5px; margin-bottom: 10px; }
 .dot { width: 10px; height: 10px; border: 1px solid rgba(0, 0, 0, 0.2); }
 .product-link {
@@ -464,4 +465,22 @@ h1, h2, h3, h4 { margin: 0; font-weight: 400; }
   .count { display: none; }
   .cta { padding: 72px 0; }
   .wa-float { right: 16px; bottom: 16px; }
+}
+
+/* ---------- Model sayfası (urun.html) ---------- */
+.model-geri { font-size: 13px; margin: 0 0 20px; }
+.model-geri a { color: var(--ink-soft); text-decoration: none; }
+.model-izgara { display: grid; grid-template-columns: 1.4fr 1fr; gap: 48px; align-items: start; }
+.model-galeri { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.model-foto img { width: 100%; height: auto; display: block; background: #f3f0eb; }
+.model-video { grid-column: 1 / -1; }
+.model-bilgi { position: sticky; top: 96px; }
+.model-bilgi h1 { font-family: "Bodoni Moda", serif; font-weight: 400; font-size: 34px; line-height: 1.15; margin: 6px 0 12px; }
+.model-diller { margin: 24px 0 12px; }
+.model-aciklama { line-height: 1.7; color: var(--ink-soft); margin: 0 0 28px; white-space: pre-line; }
+.model-fiyat { font-size: 20px; margin: 8px 0 0; }
+@media (max-width: 860px) {
+  .model-izgara { grid-template-columns: 1fr; gap: 28px; }
+  .model-galeri { grid-template-columns: 1fr; }
+  .model-bilgi { position: static; }
 }

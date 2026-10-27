@@ -1,0 +1,18 @@
+{
+  "name": "volonte-asistan",
+  "version": "1.0.0",
+  "description": "VOLONTE Telegram asistanı (Cloudflare Worker)",
+  "scripts": {
+    "test": "node --test test.mjs test-selin.mjs test-depo.mjs",
+    "build": "esbuild worker.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --outfile=dist/worker.js",
+    "build:selin": "esbuild selin.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --outfile=dist/selin.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.137.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "type": "module",
+  "private": true
+}
