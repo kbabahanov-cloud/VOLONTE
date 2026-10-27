@@ -86,6 +86,13 @@ function gizliEsit(a, b) {
 const DURAKLAT_BITIS = 0;
 export const duraklatildi = (simdi) => simdi < DURAKLAT_BITIS;
 
+// Site yükleme kilidi (kullanıcı kararı, 28 Ekim: önizlemede başka modellerin fotoğrafları görüldü).
+// true iken hiçbir model siteye yüklenmez (toplu düğmesi ve tek kart onayı dahil); taslaklar ve
+// liste kaybolmaz. Kullanıcı onayıyla false yapılır.
+export const SITE_KILIDI = true;
+const kilitli = (env) => SITE_KILIDI && env.KILIT_TEST_ACIK !== "1"; // testler kilidi açabilir
+const KILIT_MESAJI = "🔒 Siteye yükleme şu an kilitli (fotoğraflar kontrol ediliyor). Hiçbir şey siteye çıkmadı.";
+
 // Selin'in bütün işleri kendi Durable Object'inde ("selin") çalışır: "selin:*" kayıtları orada
 // (KV günlük yazma sınırı). Hata/durum kayıtları izlenebilsin diye KV'de kalır (depo.js).
 const selinNesne = (env) => env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
@@ -159,7 +166,7 @@ export default {
 
 // Her adım ayrı korunur: biri hata verirse diğerleri yine çalışır, hata KV'de "selin:hata".
 async function selinCron(env, simdi) {
-  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle, selinSabahRaporu, onizlemeDuyur };
+  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle, selinSabahRaporu, onizlemeDuyur, kontrolIstegi };
   for (const [ad, f] of Object.entries(adimlar)) {
     try {
       await f(env, simdi);
@@ -761,6 +768,7 @@ async function sha256(metin) {
 }
 
 async function siteyeYukle(env, kod, kim, simdi) {
+  if (kilitli(env)) throw new Error("siteye yükleme kilitli");
   const modeller = await oku(env, "selin:modeller", {});
   const t = modeller[kod] && modeller[kod].taslak;
   const bilgi = await kanalBilgisi(env);
@@ -891,12 +899,65 @@ export async function onizlemeMesaji(env) {
   ].join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
+// ---------- Fotoğraf karışıklığı kontrolü (28 Ekim) ----------
+// Toplu listedeki her modelin kanal paylaşım grupları (hangi mesajlar), taslağa giren fotoğraflar ve
+// her mesajın kendi yazısı GitHub Actions'a verilir; Actions hepsini "kareler" dalına kaydeder
+// (kontrol/<sürüm>/). Böylece her fotoğrafın hangi gönderiden geldiği tek tek incelenir.
+// Siteye hiçbir şey yazmaz; Telegram'a mesaj göndermez (sadece arşiv kanalına iletme).
+const KONTROL_SURUM = "k1";
+async function kontrolListesi(env) {
+  const t = await oku(env, "selin:toplu", null);
+  const modeller = await oku(env, "selin:modeller", {});
+  const bilgi = await kanalBilgisi(env);
+  return (t ? t.kodlar : []).map((kod) => {
+    const x = modeller[kod] && modeller[kod].taslak;
+    return {
+      kod, durum: modeller[kod] && modeller[kod].durum,
+      gruplar: (bilgi.kodlar[kod] || []).map((g) => ({ ids: g.ids, tarih: g.tarih, album: g.album || null, y: g.y || null })),
+      secilen: modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, PAYLASIM_EN_FAZLA).map((g) => g.ids),
+      fotolar: x ? x.fotolar.map((f, i) => ({ sira: i, id: f.id, net: f.net, not: f.not, belge: Boolean(f.buyuk.belge) })) : [],
+      videolar: x ? x.videolar.map((v) => v.id) : [],
+    };
+  });
+}
+// Tek kanal mesajı: fotoğrafsa en büyük hâli; yazısı başlıkta. Sadece toplu listedeki modellerin mesajları.
+async function kontrolMesaji(env, idYazi) {
+  const id = Number(idYazi);
+  const liste = await kontrolListesi(env);
+  if (!liste.some((m) => m.gruplar.some((g) => g.ids.includes(id)))) return new Response("yok", { status: 404 });
+  const arsiv = await oku(env, "arsiv", null);
+  const kanal = await oku(env, "kanal", null);
+  const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true });
+  if (!r.ok) return new Response(null, { status: 204, headers: { "x-tur": "hata", "x-yazi": encodeURIComponent(r.description || "") } });
+  const m = r.result;
+  const h = { "x-yazi": encodeURIComponent((m.caption || m.text || "").slice(0, 600)), "x-grup": String(m.media_group_id || "") };
+  const resim = m.photo ? m.photo[m.photo.length - 1] : m.document && /^image\//.test(m.document.mime_type || "") ? m.document : null;
+  if (!resim) return new Response(null, { status: 204, headers: { ...h, "x-tur": m.video ? "video" : "diger" } });
+  const f = await tg(env, "getFile", { file_id: resim.file_id });
+  if (!f.ok) return new Response(null, { status: 204, headers: { ...h, "x-tur": "buyuk" } });
+  const dosya = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`);
+  return new Response(dosya.body, { headers: { ...h, "x-tur": "foto", "x-benzersiz": resim.file_unique_id, "content-type": "image/jpeg" } });
+}
+// Bir kez: geçici jeton (6 saat) + Actions isteği.
+export async function kontrolIstegi(env) {
+  if (!env.GITHUB_TOKEN || !env.SELF_URL) return;
+  if ((await env.KAYIT.get("selin:kontrolSurum")) === KONTROL_SURUM) return;
+  await env.KAYIT.put("selin:kontrolSurum", KONTROL_SURUM);
+  const jeton = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await env.KAYIT.put("selin:kontrolJeton", jeton, { expirationTtl: 6 * 3600 });
+  const icerik = { surum: KONTROL_SURUM, kok: `${env.SELF_URL}/onizleme/${jeton}` };
+  await gh(env, `/contents/istekler/kontrol/${KONTROL_SURUM}.json`, { method: "PUT", body: JSON.stringify({ message: "Selin: fotoğraf kontrolü isteği", branch: KARE_DALI, content: btoa(JSON.stringify(icerik)) }) });
+}
+
 // /onizleme/<anahtar>            → sayfa
 // /onizleme/<anahtar>/f/<kod>/<n> → fotoğraf (sitede görünecek n. net poz)
 // /onizleme/<anahtar>/v/<kod>/<n> → video (Telegram'dan akış)
 export async function onizleme(env, yol, aralik) {
   const [anahtar, tur, kod, sira] = String(yol || "").split("/").filter(Boolean);
-  if (!gizliEsit(anahtar || "", await onizlemeAnahtari(env))) return new Response("yok", { status: 404 });
+  const jeton = await env.KAYIT.get("selin:kontrolJeton");
+  if (!gizliEsit(anahtar || "", await onizlemeAnahtari(env)) && !(jeton && gizliEsit(anahtar || "", jeton))) return new Response("yok", { status: 404 });
+  if (tur === "json") return Response.json(await kontrolListesi(env));
+  if (tur === "m") return kontrolMesaji(env, kod);
   if (tur === "f" || tur === "v") {
     const t = await oku(env, "selin:toplu", null);
     const modeller = await oku(env, "selin:modeller", {});
@@ -1028,7 +1089,7 @@ export async function topluAdimi(env, simdi) {
     await yazKV(env, "selin:toplu", t);
     return topluListeGonder(env, t, modeller);
   }
-  if (t.durum === "yukleniyor") {
+  if (t.durum === "yukleniyor" && !kilitli(env)) {
     const kalan = t.kodlar.filter((k) => !t.haric.includes(k) && !t.basarisiz.includes(k) && !t.yuklenen.includes(k));
     for (const kod of kalan.slice(0, TOPLU_PARTI)) {
       try {
@@ -1072,6 +1133,7 @@ async function topluListeGonder(env, t, modeller) {
 async function topluOnay(env, cq, kim, simdi, cevapla) {
   const t = await oku(env, "selin:toplu", null);
   if (!t || t.durum !== "onayda") return cevapla(t && t.onaylayan ? `${t.onaylayan} zaten onayladı.` : "Onay bekleyen toplu liste yok.");
+  if (kilitli(env)) return cevapla(KILIT_MESAJI);
   t.durum = "yukleniyor";
   t.onaylayan = kim;
   t.onayZaman = simdi;
@@ -1454,6 +1516,7 @@ async function dugme(cq, env) {
       return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${kod}: ne değişsin? Yazın (ör. "açıklamada saten kumaş geçsin", "başlık: Satin Wrap Dress", "2. pozu çıkar").` });
     }
     if (islem === "so" && !m.taslak.bedenler) return cevapla("Önce beden seçin: 📏 Küçük / Büyük / İkisi de");
+    if (islem === "so" && kilitli(env)) return cevapla(KILIT_MESAJI);
     m.durum = islem === "so" ? "yukleniyor" : "eklenmeyecek";
     m.kim = kim;
     await yazKV(env, "selin:modeller", modeller); // önce kilitle

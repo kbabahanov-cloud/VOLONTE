@@ -12,7 +12,7 @@ function ortam() {
   const istekler = [];
   const github = { dosyalar: new Map(), commitler: [], istekler: [] };
   const env = {
-    BOT_TOKEN: "selin-token", WEBHOOK_SECRET: "s", ALLOWED_IDS: "111,222", ANTHROPIC_API_KEY: "k",
+    BOT_TOKEN: "selin-token", WEBHOOK_SECRET: "s", KILIT_TEST_ACIK: "1", ALLOWED_IDS: "111,222", ANTHROPIC_API_KEY: "k",
     GITHUB_TOKEN: "gh", GITHUB_REPO: "kbabahanov-cloud/VOLONTE", SITE_URL: "https://kbabahanov-cloud.github.io/VOLONTE",
     KAYIT: {
       async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; },
@@ -495,4 +495,44 @@ test("önizleme: gizli anahtarlı tek link; toplu listedeki modeller sitedeki gi
   o.g.length = 0;
   await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/onizleme" } }, o.env);
   assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Toplu liste: 2 model — hazır 2\.\nBu listenin dışında onay bekleyen: 0 tek taslak \+ 0 videodan kare/);
+});
+
+test("site kilidi: kilit açıkken (kullanıcı kararı 28 Ekim) toplu düğme de tek kart onayı da siteye hiçbir şey yüklemez", async () => {
+  const { topluAdimi } = await import("./selin.js");
+  const o = ortam();
+  delete o.env.KILIT_TEST_ACIK;
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 1, telegramda: ["3194"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 } } }));
+  await topluAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  await topluAdimi(o.env, o.simdi);
+  await bas(o.env, 111, "tu:evet");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /kilitli/);
+  assert.equal(JSON.parse(o.depo.get("selin:toplu")).durum, "onayda");
+  await topluAdimi(o.env, o.simdi + 300);
+  assert.equal(o.github.dosyalar.size, 0);
+});
+
+test("fotoğraf kontrolü: bir kez geçici jetonla Actions isteği; liste ve tek mesaj sadece toplu modellerin gruplarından", async () => {
+  const { topluAdimi, onizleme, kontrolIstegi } = await import("./selin.js");
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 1, telegramda: ["3194"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 } } }));
+  await topluAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  await kontrolIstegi(o.env);
+  await kontrolIstegi(o.env);
+  const istek = o.github.commitler.filter(([m, y]) => m === "PUT" && y.startsWith("/contents/istekler/kontrol/"));
+  assert.equal(istek.length, 1);
+  assert.equal(istek[0][2].branch, "kareler");
+  const jeton = o.depo.get("selin:kontrolJeton");
+  const liste = await (await onizleme(o.env, `${jeton}/json`)).json();
+  assert.deepEqual(liste[0].gruplar.map((g) => g.ids), [[300, 301], [200]]);
+  assert.ok(liste[0].fotolar.length >= 1);
+  const m = await onizleme(o.env, `${jeton}/m/300`);
+  assert.equal(m.headers.get("x-tur"), "foto");
+  assert.match(decodeURIComponent(m.headers.get("x-yazi")), /CODE\.3194/);
+  assert.equal((await onizleme(o.env, `${jeton}/m/999`)).status, 404);
+  assert.equal((await onizleme(o.env, "baskajeton/json")).status, 404);
 });
