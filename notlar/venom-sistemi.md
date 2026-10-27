@@ -170,7 +170,7 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - Grup kurulana kadar raporlar Murat ve Merdan'a özel mesajla gider.
 - Yarın sabah BotFather adımları (tek tek): 1) /newbot "Sayım Sami" 2) token → Cloudflare volonte-sami Secret BOT_TOKEN 3) herkes Sami'ye /start 4) Sami'yi kanala yönetici ekle 5) "Venom Ekip" grubu, Kemal+Selin+Sami+ekip (botları yönetici eklesin).
 
-**Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Paralel: toplu liste gelince kullanıcı onayı; beceri/bağlayıcı ekleme (birlikte). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
+**Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Sonra: 24 modelin toplu listesini kullanıcı onaylar (Selin gece hazırlıyor). Sonra 3 ücretsiz beceri birlikte eklenecek (onaylı): Design, Website Design, Marketing (ücretli bağlantılar olmadan). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
