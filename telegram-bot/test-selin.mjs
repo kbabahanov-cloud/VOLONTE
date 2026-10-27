@@ -1,7 +1,7 @@
 // Çalıştırma: node --test test-selin.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import selin, { duraklatildi, guncelleme, listeAdimi, hazirlaAdimi, listeAdaylari, bedenBul, gunlukHedef, eksikleriGonder } from "./selin.js";
+import selin, { duraklatildi, guncelleme, listeAdimi, hazirlaAdimi, listeAdaylari, bedenBul, gunlukHedef } from "./selin.js";
 
 const GUN = 86400;
 const ist = (hh, mm = 0, gunEk = 0) => Date.UTC(2026, 9, 22 + gunEk, hh - 3, mm) / 1000;
@@ -86,93 +86,75 @@ function ortam() {
 const cagri = (g, m) => g.filter((x) => x.metod === m);
 const bas = (env, kisi, data) => guncelleme({ callback_query: { id: "c", from: { id: kisi, first_name: kisi === 222 ? "Merdan" : "Murat" }, data, message: { chat: { id: kisi }, message_id: 5 } } }, env);
 
-test("rehber onaylanmadan liste gelmez; onaydan sonra en yeni modeller sorulur (silinenler hariç)", async () => {
+// Vegawin (Sayım Sami) stok deposunun sahtesi: kod → { toplam, fiyat, gizli }
+function stokBagla(o, harita) {
+  o.stok = harita;
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => {
+    const { kodlar } = JSON.parse(init.body);
+    return Response.json(Object.fromEntries(kodlar.filter((k) => o.stok[k]).map((k) => [k, o.stok[k]])));
+  } }) };
+}
+
+test("liste: rehber onaylanmadan başlamaz; Vegawin'de stokta olan sorulmadan hazırlığa girer, olmayan 'sorulacak' olur; kimseye mesaj gitmez", async () => {
   const o = ortam();
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false } });
   await listeAdimi(o.env, o.simdi);
-  assert.equal(o.g.length, 0);
+  assert.equal(o.depo.get("selin:modeller"), undefined);
   o.depo.set("selin:rehberOnay", "1");
   await listeAdimi(o.env, ist(8));
-  assert.equal(o.g.length, 0); // 09:00'dan önce yok
+  assert.equal(o.depo.get("selin:modeller"), undefined); // 09:00'dan önce yok
   await listeAdimi(o.env, o.simdi);
-  const kartlar = cagri(o.g, "copyMessage");
-  assert.deepEqual(kartlar.filter((k) => k.govde.chat_id === "111").map((k) => k.govde.caption.split(" ")[0]), ["3194", "3100"]);
-  assert.deepEqual(kartlar[0].govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Mağazada var", "❌ Yok"]);
-  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Ben Selin\. Bugün 50 model/);
+  const m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.deepEqual([m["3194"].durum, m["3194"].kim, m["3100"].durum], ["hazirlaniyor", "Vegawin (stokta)", "sorulacak"]);
+  assert.equal(m["2900"], undefined); // silinen
+  assert.deepEqual(JSON.parse(o.depo.get("selin:hazirla")), ["3194"]);
+  assert.equal(o.g.length, 0); // hiçbir Telegram mesajı yok
 });
 
-test("kimse /start yazmadıysa model 'soruldu' sayılmaz, günlük hak harcanmaz", async () => {
+test("liste: Vegawin'de stoğu bitmiş ya da 'Sil' ile gizlenmiş model hiç sorulmaz", async () => {
   const o = ortam();
   o.depo.set("selin:rehberOnay", "1");
-  const asil = globalThis.fetch;
-  globalThis.fetch = async (url, istek) =>
-    String(url).includes("api.telegram.org") ? new Response(JSON.stringify({ ok: false, description: "Forbidden: bot can't initiate conversation with a user" })) : asil(url, istek);
+  stokBagla(o, { "3194": { toplam: 0, fiyat: 69, gizli: true }, "3100": { toplam: 4, fiyat: 30, gizli: true } });
   await listeAdimi(o.env, o.simdi);
-  globalThis.fetch = asil;
   assert.equal(o.depo.get("selin:modeller"), undefined);
-  assert.ok(![...o.depo.keys()].some((k) => k.startsWith("selin:liste:")));
-  assert.match(JSON.parse(o.depo.get("selin:hata")).hata, /initiate conversation/);
-  await listeAdimi(o.env, o.simdi); // /start sonrası normal akış
-  assert.equal(Object.keys(JSON.parse(o.depo.get("selin:modeller"))).length, 2);
 });
 
-test("ekip: listeyi alır, düğmeye basar; geç gelene eksikler gönderilir, ilk basan geçerli; /liste sadece yöneticide", async () => {
+test("özet: günde iki kez (11:00, 16:00) tek mesaj; 'Sorular' sadece basana 5'er gelir; ilk basan geçerli; ekip basabilir; /liste sadece yöneticide", async () => {
   const o = ortam();
   o.env.EKIP_IDS = "333";
   o.depo.set("selin:rehberOnay", "1");
-  // 222 (Merdan) henüz /start yazmamış
-  const asil = globalThis.fetch;
-  globalThis.fetch = async (url, istek) =>
-    String(url).includes("/copyMessage") && JSON.parse(istek.body).chat_id === "222"
-      ? new Response(JSON.stringify({ ok: false, description: "Bad Request: chat not found" })) : asil(url, istek);
-  await listeAdimi(o.env, o.simdi);
-  globalThis.fetch = asil;
-  const alan = (g) => [...new Set(cagri(g, "copyMessage").map((k) => k.govde.chat_id))];
-  assert.deepEqual(alan(o.g), ["111", "333"]); // 222 denendi ama ulaşılamadı
-  let m = JSON.parse(o.depo.get("selin:modeller"));
-  assert.deepEqual(m["3194"].mesajlar.map(([k]) => k), ["111", "333"]);
+  await listeAdimi(o.env, o.simdi); // köprü yok: ikisi de "sorulacak"
+  const { ozetAdimi } = await import("./selin.js");
+  await ozetAdimi(o.env, o.simdi);
+  assert.equal(o.g.length, 0); // 10:00: özet saati değil
+  await ozetAdimi(o.env, ist(11));
+  await ozetAdimi(o.env, ist(11, 5)); // aynı saatte ikinci kez yok
+  const ozet = cagri(o.g, "sendMessage");
+  assert.equal(ozet.length, 3);
+  assert.match(ozet[0].govde.text, /🌸 Selin — özet[\s\S]*mağazada var mı\?" sorusu: 2/);
+  assert.deepEqual(ozet[0].govde.reply_markup.inline_keyboard[0].map((d) => d.callback_data), ["sg:s"]);
 
   o.g.length = 0;
-  await eksikleriGonder(o.env, o.simdi); // Merdan /start yazdı
-  assert.deepEqual(alan(o.g), ["222"]);
-  m = JSON.parse(o.depo.get("selin:modeller"));
-  assert.deepEqual(m["3194"].mesajlar.map(([k]) => k), ["111", "333", "222"]);
-  o.g.length = 0;
-  await eksikleriGonder(o.env, o.simdi);
-  assert.equal(o.g.length, 0); // herkeste var, tekrar gönderilmez
-
-  await bas(o.env, 333, "sy:3194");
-  assert.equal(cagri(o.g, "editMessageCaption").length, 3); // üç kişide de düğmeler kapandı
-  await bas(o.env, 111, "sv:3194");
+  await bas(o.env, 333, "sg:s");
+  const sorular = cagri(o.g, "copyMessage");
+  assert.deepEqual(sorular.map((k) => k.govde.chat_id), ["333", "333"]); // sadece basana
+  assert.deepEqual(sorular[0].govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Mağazada var", "❌ Yok"]);
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3194"].durum, "soruldu");
+  await bas(o.env, 111, "sy:3194"); // görmeyen yönetici de karar verebilir (ilk basan)
+  assert.equal(cagri(o.g, "editMessageCaption").length, 1); // 333'teki düğmeler kapandı
+  await bas(o.env, 333, "sv:3194");
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /zaten işaretledi/);
+  await bas(o.env, 333, "sg:s");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /yeni bir şey yok/);
 
   o.g.length = 0;
   await guncelleme({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "/liste" } }, o.env);
   assert.match(cagri(o.g, "sendMessage")[0].govde.text, /sadece Murat ve Merdan/);
-  await bas(o.env, 444, "sv:3100");
+  await bas(o.env, 444, "sg:s");
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Yetkiniz yok/);
 });
 
-test("kanaldan silinmiş paylaşım liste takılmasın: model atlanır, sıradaki sorulur; ulaşılamayan kişi not edilir", async () => {
-  const o = ortam();
-  o.env.EKIP_IDS = "333";
-  o.depo.set("selin:rehberOnay", "1");
-  const asil = globalThis.fetch;
-  globalThis.fetch = async (url, istek) => {
-    const b = istek && istek.body && String(url).includes("/copyMessage") ? JSON.parse(istek.body) : null;
-    if (b && b.message_id === 300) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message to copy not found" }));
-    if (b && b.chat_id === "333") return new Response(JSON.stringify({ ok: false, description: "Bad Request: chat not found" }));
-    return asil(url, istek);
-  };
-  await listeAdimi(o.env, o.simdi);
-  globalThis.fetch = asil;
-  const m = JSON.parse(o.depo.get("selin:modeller"));
-  assert.equal(m["3194"].durum, "kanaldayok");
-  assert.equal(m["3100"].durum, "soruldu");
-  assert.deepEqual(Object.keys(JSON.parse(o.depo.get("selin:ulasilamayan"))), ["333"]);
-  assert.equal(o.depo.get(`selin:liste:2026-10-22`), "1");
-});
-
-test("videodan kare: sadece videosu olan model → GitHub'a istek, tek kullanımlık video bağlantısı; adaylar onaya gelir; ilk seçen geçerli; onaylı kare sitede kullanılır, bir kez üretilir", async () => {
+test("videodan kare: sadece videosu olan model → GitHub'a istek, tek kullanımlık video bağlantısı; adaylar arşive gider, özetten isteyene gösterilir; ilk seçen geçerli; onaylı kare sitede kullanılır, bir kez üretilir", async () => {
   const o = ortam();
   o.env.SELF_URL = "https://selin.test";
   const kodlar = JSON.parse(o.depo.get("kodlar"));
@@ -189,7 +171,8 @@ test("videodan kare: sadece videosu olan model → GitHub'a istek, tek kullanım
   assert.equal(icerik.geri, "https://selin.test/kare");
   const t = icerik.t;
   assert.equal(icerik.video, `https://selin.test/video?t=${t}`);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /3300: sadece videosu var/);
+  assert.equal(cagri(o.g, "sendMessage").length, 0); // uyarı özete yazılır, mesaj gitmez
+  assert.match(JSON.parse(o.depo.get("selin:notlar"))[0], /3300: sadece videosu var/);
 
   // GitHub Actions videoyu indirir
   const v = await selin.fetch(new Request(icerik.video), o.env);
@@ -197,33 +180,47 @@ test("videodan kare: sadece videosu olan model → GitHub'a istek, tek kullanım
   assert.equal(cagri(o.g, "getFile").at(-1).govde.file_id, "v301");
   assert.equal((await selin.fetch(new Request("https://selin.test/video?t=yanlis"), o.env)).status, 404);
 
-  // Sonuç: yabancı adres süzülür; yanlış anahtar reddedilir
+  // Sonuç: yabancı adres süzülür; yanlış anahtar reddedilir; adaylar sadece arşive gider
   const ham = "https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/abc/kareler/3300/";
   const geri = (govde) => selin.fetch(new Request("https://selin.test/kare", { method: "POST", body: JSON.stringify(govde) }), o.env);
   assert.equal((await geri({ t: "yanlis", kod: "3300", dosyalar: [] })).status, 403);
   o.g.length = 0;
   assert.equal((await geri({ t, kod: "3300", dosyalar: [{ url: ham + "aday-1.jpg" }, { url: "https://kotu.example/x.jpg" }, { url: ham + "aday-2.jpg" }] })).status, 200);
   const album = cagri(o.g, "sendMediaGroup");
-  assert.equal(album.length, 2); // iki kişiye
+  assert.equal(album.length, 1);
+  assert.equal(album[0].govde.chat_id, -555); // arşiv kanalı
   assert.deepEqual(album[0].govde.media.map((m) => m.media), [ham + "aday-1.jpg", ham + "aday-2.jpg"]);
-  const kart = cagri(o.g, "sendMessage")[0];
-  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ 1. kare", "✅ 2. kare", "❌ Hiçbiri"]);
+  assert.equal(cagri(o.g, "sendMessage").length, 0);
   assert.equal((await geri({ t, kod: "3300", dosyalar: [] })).status, 403); // anahtar tek kullanımlık
+
+  // Özette görünür; "Kareler" sadece basana gelir
+  const { ozetAdimi } = await import("./selin.js");
+  o.g.length = 0;
+  await ozetAdimi(o.env, ist(16));
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Videodan kare seçilecek: 1[\s\S]*Notlar:\n• 3300: sadece videosu var/);
+  o.g.length = 0;
+  await bas(o.env, 222, "sg:f");
+  assert.deepEqual(cagri(o.g, "sendMediaGroup")[0].govde.media.map((m) => m.media), ["K0", "K1"]);
+  const kart = cagri(o.g, "sendMessage")[0];
+  assert.equal(kart.govde.chat_id, "222");
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ 1. kare", "✅ 2. kare", "❌ Hiçbiri"]);
 
   await bas(o.env, 222, "kk:3300:2");
   const kare = JSON.parse(o.depo.get("kare:3300"));
   assert.deepEqual([kare.durum, kare.file_id, kare.url, kare.kim], ["onayli", "K1", ham + "aday-2.jpg", "Merdan"]);
-  assert.equal(cagri(o.g, "editMessageText").length, 2);
+  assert.equal(cagri(o.g, "editMessageText").length, 1);
   await bas(o.env, 111, "kk:3300:1");
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Merdan zaten seçti/);
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3300"].durum, "hazirlaniyor");
+  assert.deepEqual(JSON.parse(o.depo.get("selin:kareBekleyen")), []);
 
-  // Hazırlık onaylı kareyle devam eder; yeniden kare istenmez
+  // Hazırlık onaylı kareyle devam eder; yeniden kare istenmez; taslak kendiliğinden gönderilmez
   o.g.length = 0;
   await hazirlaAdimi(o.env, o.simdi);
   assert.equal(o.github.istekler.length, 1);
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3300"].taslak.fotolar[0].buyuk.file_id, "K1");
-  assert.ok(cagri(o.g, "sendMessage").some((m) => /3300 — siteye hazır taslak/.test(m.govde.text)));
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3300"].durum, "onayda");
+  assert.equal(cagri(o.g, "sendMessage").length, 0);
 });
 
 test("günlük hedef: ilk 7 gün 50, sonra 10", async () => {
@@ -240,26 +237,26 @@ test("bedenler kanal yazısından okunur; 'yok' denen 30 gün sonra tekrar sorul
   assert.equal(listeAdaylari({ kodlar: { A: [{ ids: [1], tarih: 5 }] }, kodsuz: {}, silinenler: {}, atlananlar: {} }, { A: { durum: "yok", zaman: 0 } }, 20 * GUN).length, 0);
 });
 
-test("var → hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülür, onay kartı; onaylanınca GitHub'a tek commit + link", async () => {
+test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülür; Vegawin fiyatı; taslak isteyene gösterilir; onaylanınca GitHub'a tek commit + link; saatlik stok eşitlemesi stoğu biteni gizler", async () => {
   const o = ortam();
-  o.depo.set("selin:rehberOnay", "1");
-  await listeAdimi(o.env, o.simdi);
-  await bas(o.env, 222, "sv:3194");
-  assert.deepEqual(JSON.parse(o.depo.get("selin:hazirla")), ["3194"]);
-  assert.equal(cagri(o.g, "editMessageCaption").length, 2); // ikisinde de güncellendi
-  await bas(o.env, 111, "sv:3194");
-  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Merdan zaten işaretledi/);
-
-  o.g.length = 0;
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false } });
+  o.depo.set("selin:modeller", JSON.stringify({ "3194": { durum: "hazirlaniyor", zaman: 1, kim: "Vegawin (stokta)" } }));
+  o.depo.set("selin:hazirla", JSON.stringify(["3194"]));
   await hazirlaAdimi(o.env, o.simdi);
   // 300 (foto), 301 (video), 200 (300'ün aynısı → tekrarsız)
   assert.deepEqual(cagri(o.g, "forwardMessage").map((f) => f.govde.message_id), [300, 301, 200]);
   assert.equal(o.istekler.length, 1);
   assert.equal(o.istekler[0].messages[0].content.filter((c) => c.type === "image").length, 1);
   assert.match(o.istekler[0].messages[0].content.at(-1).text, /VOLONTE yazı rehberi/);
+  assert.equal(cagri(o.g, "sendMessage").length, 0); // taslak kendiliğinden gönderilmez
+
+  o.g.length = 0;
+  await bas(o.env, 111, "sg:k");
   const kart = cagri(o.g, "sendMessage").find((m) => /siteye hazır taslak/.test(m.govde.text));
+  assert.equal(kart.govde.chat_id, "111");
   assert.match(kart.govde.text, /Kategori: Elbise \(yanlışsa/);
   assert.match(kart.govde.text, /Bedenler: 38-40-42-44 — Küçük \(alt yazıdan öneri\)/);
+  assert.match(kart.govde.text, /Fiyat: 69 \$ \(Vegawin\)/);
   assert.deepEqual(kart.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✓ 📏 Küçük", "📏 Büyük", "📏 İkisi de"]);
   assert.match(kart.govde.text, /Videolar: 1/);
   assert.equal(cagri(o.g, "sendPhoto")[0].govde.photo, "b300"); // en yüksek çözünürlük
@@ -270,12 +267,28 @@ test("var → hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video g
   assert.equal(liste[0].kod, "3194");
   assert.deepEqual(liste[0].fotolar, ["galeri/3194/1.jpg"]);
   assert.deepEqual(liste[0].videolar, ["Volonteroseoffical/301"]);
-  assert.equal(liste[0].fiyat, null);
+  assert.deepEqual([liste[0].fiyat, liste[0].gizli], [69, false]);
   assert.ok(o.github.dosyalar.get("galeri/3194/1.jpg").startsWith("blob:"));
   assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH" && y === "/git/refs/heads/main").length, 1);
   const son = cagri(o.g, "editMessageText").at(-1).govde.text;
   assert.match(son, /3194 siteye eklendi \(Murat\)[\s\S]*urun\.html\?kod=3194/);
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3194"].durum, "sitede");
+
+  // Saatlik eşitleme: stok biterse sitede gizlenir (silinmez), fiyat güncellenir; değişiklik yoksa commit yok
+  const { siteStokEsitle } = await import("./selin.js");
+  o.stok["3194"] = { toplam: 0, fiyat: 72, gizli: true };
+  await siteStokEsitle(o.env, ist(12));
+  let site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual([site[0].gizli, site[0].fiyat, site[0].fotolar.length], [true, 72, 1]);
+  assert.match(JSON.parse(o.depo.get("selin:notlar")).at(-1), /3194 gizlendi 72 \$/);
+  const commitSayisi = o.github.commitler.length;
+  await siteStokEsitle(o.env, ist(13));
+  assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH").length, 2); // değişiklik yok → yeni commit yok
+  o.stok["3194"] = { toplam: 3, fiyat: 72, gizli: false };
+  await siteStokEsitle(o.env, ist(14));
+  site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.equal(site[0].gizli, false); // stok gelince yeniden görünür
+  assert.ok(o.github.commitler.length > commitSayisi);
 });
 
 test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazdırır. Siteden kaldırma onay sorar", async () => {

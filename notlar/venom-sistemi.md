@@ -137,7 +137,15 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ✅ D1 (27 Ekim 18:30): Karma depo (depo.js). Kemal'in işleri KatalogDO "kemal" nesnesinde (/kemal/guncelleme, /kemal/cron, /kemal/adim), Selin'in SelinDO "selin"de (/guncelleme, /cron, /hazirla, /kare, /video, /kare-geldi, /goc). Sık yazılan kayıtlar DO'da (KEMAL_YEREL, SELIN_YEREL); ortak olanlar (kanal, kodlar, kodsuz, tarifler, hicgelmeyecek, atlananlar, sonpaylasim, arsiv, harcama:*, kare:*) ve hata/durum kayıtları KV'de. Taşıma: kopyala + kontrol, eski KV silinmedi. Rapor: goc:kemal 56/56 eşit, goc:selin 7/7 eşit. NOT: DO'daki kayıtları Cloudflare panelinden/API'den okuyamam; izleme KV'deki hata/rapor kayıtlarından.
 
-**Sıradaki komut: Kullanıcı Kemal'e /kuyruk yazıp cevabı doğrulasın. Sonra Selin'i yeniden başlatma hazırlığı: sitede Vegawin fiyatı + stoksuz gizleme + mesaj sıklığını azaltma (kullanıcı Selin'i çok mesaj yüzünden durdurdu) → onay → "Selin'i başlat". Ardından kareler, S4, Black Rose köprüsü.**
+- ✅ Kemal yeni depoyla çalışıyor (/kuyruk doğrulandı, 27 Ekim).
+- ✅ Selin yeniden başlatma hazırlığı (27 Ekim, Selin hâlâ DURAKLATILMIŞ — kullanıcı "başlat" demeden açılmaz):
+  - Vegawin bağlantısı: Selin, Kemal'in StokDO'suna (script_name volonte-asistan) bağlı; /toplu → kod: {toplam, fiyat, gizli}.
+  - Liste: stokta olan sorulmadan hazırlığa; stoğu biten/gizli hiç sorulmaz; Vegawin'de olmayan "sorulacak".
+  - Mesaj azaltma: Selin kendiliğinden SADECE 11:00 ve 16:00'da tek özet gönderir (taslak/kare/soru sayıları + notlar). Ayrıntı "🖼 Taslaklar / 🎞 Kareler / ❓ Sorular" ile sadece basana 5'er. Uyarılar özete not olarak düşer. Kare adayları arşiv kanalına gider.
+  - Fiyat: taslak kartında "Fiyat: 69 $ (Vegawin)", siteye fiyat + gizli alanı. Saatlik (09–20) site eşitlemesi: stoğu biten sitede gizlenir (silinmez), stok gelince görünür, fiyat güncellenir; değişiklik yoksa commit yok.
+  - Site: site.js gizli olanı göstermez; urun.js "Wholesale price: $X" / "Currently out of stock". (S4 birleşince canlı.)
+
+**Sıradaki komut: Kullanıcı onayı → "Selin'i başlat" (DURAKLAT_BITIS kaldırılacak). Sonra kareler, S4 site PR, Black Rose köprüsü.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

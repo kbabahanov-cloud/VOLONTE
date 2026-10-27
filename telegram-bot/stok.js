@@ -109,6 +109,19 @@ export class StokDeposu {
     return [...new Set([...stoksuz, ...silinen])];
   }
 
+  // Selin için: kod → { toplam, fiyat (en yüksek satış $), gizli }. Vegawin'de olmayan kod listede yer almaz.
+  toplu(kodlar) {
+    const sonuc = {};
+    const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
+    for (const ham of kodlar.slice(0, 3000)) {
+      const kod = stokKodu(ham);
+      const r = this.tek("SELECT SUM(adet) AS t, MAX(fiyat) AS f, COUNT(*) AS n FROM urun WHERE kod = ?", kod);
+      if (!r || !r.n) continue;
+      sonuc[kod] = { toplam: r.t, fiyat: r.f, gizli: r.t <= 0 || silinen.has(kod) };
+    }
+    return sonuc;
+  }
+
   bilgi(kod) {
     const satirlar = this.hepsi("SELECT magaza, ad, adet, fiyat, guncel FROM urun WHERE kod = ?", kod);
     const karar = this.tek("SELECT durum, kim, zaman, sonraki FROM karar WHERE kod = ?", kod);
@@ -139,6 +152,7 @@ export class StokDO {
     if (yol === "/soru-gonderildi") return cevap(d.soruGonderildi(g.kod, g.mesajlar) || { ok: true });
     if (yol === "/karar") return cevap(d.karar(g.kod, g.islem, g.kim, g.simdi));
     if (yol === "/gizliler") return cevap(d.gizliler());
+    if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
     return new Response("?", { status: 404 });

@@ -33,7 +33,8 @@
         '<p class="product-code">' + yaziTemizle(u.kod) + "</p>" +
         "<h1>" + yaziTemizle(u.baslik || u.kod) + "</h1>" +
         (u.bedenler ? '<p class="product-meta">Sizes: ' + yaziTemizle(u.bedenler) + " · sold by series (mixed sizes)</p>" : "") +
-        (u.fiyat ? '<p class="model-fiyat">' + yaziTemizle(u.fiyat) + "</p>" : "") +
+        (u.gizli ? '<p class="model-fiyat">Currently out of stock</p>'
+          : u.fiyat ? '<p class="model-fiyat">Wholesale price: $' + yaziTemizle(String(u.fiyat)) + "</p>" : "") +
         '<div class="chips model-diller">' + sekmeler + "</div>" +
         '<p class="model-aciklama" id="aciklama"></p>' +
         '<a class="btn" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '">Ask price on WhatsApp</a>' +

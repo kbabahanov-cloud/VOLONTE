@@ -165,6 +165,7 @@ function gercekUrunleriYukle() {
       const ikiHafta = Date.now() - 14 * 86400000;
       URUNLER.length = 0;
       liste.forEach(function (u) {
+        if (u.gizli) return; // stoğu bitti (Vegawin): sitede görünmez
         URUNLER.push({
           kod: u.kod,
           ad: u.baslik || u.kod,
