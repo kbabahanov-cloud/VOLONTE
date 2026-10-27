@@ -317,6 +317,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 400; }
 .product h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
 .product-code { font-size: 11px; color: var(--ink-soft); flex-shrink: 0; }
 .product-meta { margin: 2px 0 8px; font-size: 11px; color: var(--ink-soft); }
+.product-price { margin: -4px 0 8px; font-size: 13px; letter-spacing: .02em; color: var(--ink, #111); }
 .dots { display: flex; gap: 5px; margin-bottom: 10px; }
 .dot { width: 10px; height: 10px; border: 1px solid rgba(0, 0, 0, 0.2); }
 .product-link {

@@ -26,7 +26,9 @@
     const sekmeler = DILLER.filter(function (d) { return u.aciklama && u.aciklama[d.id]; }).map(function (d, i) {
       return '<button type="button" class="chip' + (i === 0 ? " active" : "") + '" data-dil="' + d.id + '">' + d.ad + "</button>";
     }).join("");
-    const mesaj = "Hello VOLONTE, I am interested in " + u.kod + " – " + (u.baslik || "") + ". Could you send me the price and available colours?";
+    const mesaj = u.fiyat && !u.gizli
+      ? "Hello VOLONTE, I would like to order " + u.kod + " – " + (u.baslik || "") + " ($" + u.fiyat + "). Which colours are available?"
+      : "Hello VOLONTE, I am interested in " + u.kod + " – " + (u.baslik || "") + ". Could you send me the price and available colours?";
     alan.innerHTML =
       '<div class="model-galeri">' + fotolar + videolar + "</div>" +
       '<div class="model-bilgi">' +
@@ -37,7 +39,7 @@
           : u.fiyat ? '<p class="model-fiyat">Wholesale price: $' + yaziTemizle(String(u.fiyat)) + "</p>" : "") +
         '<div class="chips model-diller">' + sekmeler + "</div>" +
         '<p class="model-aciklama" id="aciklama"></p>' +
-        '<a class="btn" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '">Ask price on WhatsApp</a>' +
+        '<a class="btn" target="_blank" rel="noopener" href="' + whatsappLink(mesaj) + '">' + (u.fiyat && !u.gizli ? "Order on WhatsApp" : "Ask on WhatsApp") + "</a>" +
       "</div>";
     const aciklama = alan.querySelector("#aciklama");
     function dilSec(d) {
