@@ -347,3 +347,14 @@ test.skip("Selin durduruluyken: 5 dk görevi sadece kayıtları DO'ya kopyalar v
   assert.ok(m.has("kv:selin:modeller") && m.has("kv:selin:hazirla") && !m.has("kv:selin:hata")); // hata KV'de kalır
   assert.ok(o.depo.has("selin:modeller") && o.depo.has("selin:hazirla")); // eski kayıtlar silinmedi
 });
+
+test("siteye yüklerken içeriği aynı fotoğraflar bir kez konur (kanalda yeniden yüklenmiş tekrarlar)", async () => {
+  const o = ortam();
+  const t = { baslik: "X", kategori: "dresses", aciklama: { en: "a", fr: "b", pt: "c", tr: "d" }, bedenler: "38-40", bedenGrubu: "k", videolar: [], yazilar: [],
+    fotolar: [1, 2, 3].map((i) => ({ id: i, buyuk: { file_id: `f${i}`, width: 1280, height: 1700 }, net: true })) };
+  o.depo.set("selin:modeller", JSON.stringify({ "3100": { durum: "onayda", zaman: 1, taslak: t, kart: [] } }));
+  // f1 ve f3 aynı baytlar (sahte indirme her dosyaya [1,2,3,4] döner → üçü de aynı)
+  await bas(o.env, 111, "so:3100");
+  const liste = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual(liste[0].fotolar, ["galeri/3100/1.jpg"]);
+});
