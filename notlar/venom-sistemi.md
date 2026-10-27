@@ -153,7 +153,13 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   4) Analizci Arda: Instagram/internetteki benzer firmaların en çok tutan videoları, neden tuttuğu, fikirler Pelin'e.
   5) Video + analiz için aylık toplam 60 $ sınırı (Anthropic 80 $ sınırından ayrı).
 
-**Sıradaki komut: İş 1 (S4) planı + maliyet → onay.**
+- ✅ İş 1 (S4) tamam: PR #21 (ürün sayfası, fiyat, stok gizleme), #22 (3563 tekrar fotoğraflar; Selin SHA-256 + yapay zekâ "tekrar"), #23 (yazısız video oynatıcı deneme ?video=yeni; Selin /v/<id>; envanter taraması).
+- Bilgi (27 Ekim): Vegawin'de olmayan model hata değil (Black Rose / pasif kart) → gizlenmez, "Ask price". 3279 pasif, 3595 kartı yok. Sami kuralı değişmez.
+- 60 $ TEK KASA: Pelin (video) + Arda (analiz) + ChatGPT görsel. ChatGPT şimdilik BAĞLANMADI.
+- HD denemesi: FSRCNN/EDSR (ücretsiz) renk korur (ΔE≈0.8) ama netlik kazancı yok denecek kadar az (Telegram fotoğrafları 960×1280). Öneri: video-yalnız modellerde 1080p video karesi; yeni çekimleri Telegram'a "Dosya olarak" (sıkıştırmasız) gönderme alışkanlığı.
+- Envanter taraması (27 Ekim 20:45): Vegawin stok+fiyat 87; Telegram'da 62; sitede 2; fotoğraflı 24 (3183, 3186, 3322, 3335, 3360, 3403, 3407, 3411, 3429, 3439, 3475, 3481, 3506, 3520, 3558, 3565, 3567, 3577, 3578, 3583, 3592, 3593, 3618, 4211); son 2 paylaşımında sadece video 36.
+
+**Sıradaki komut: Kullanıcıya: B toplu yükleme (24 fotoğraflı model, tek liste onayı) + A video örneği linki (?video=yeni) + HD sonucu ve öneri → onaylar.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
