@@ -126,12 +126,18 @@ export default {
     if (!env.BOT_TOKEN) return;
     if (env.SELIN) {
       const nesne = selinNesne(env);
+      const cagir = async (yol) => {
+        try { await nesne.fetch(`https://selin${yol}`, { method: "POST" }); } catch (e) {
+          await env.KAYIT.put("selin:hata", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), hata: `${yol}: ${String(e && e.message).slice(0, 300)}` }), { expirationTtl: 7 * 86400 });
+        }
+      };
       // Durduruluyken bile kayıtlar bir kez kopyalanıp kontrol edilir (mesaj gönderilmez).
       if (duraklatildi(Math.floor(Date.now() / 1000))) return void (await nesne.fetch("https://selin/goc", { method: "POST" }));
-      await nesne.fetch("https://selin/cron", { method: "POST" });
-      await nesne.fetch("https://selin/hazirla", { method: "POST" }); // ayrı istekler: her birinin kendi istek sınırı
-      await nesne.fetch("https://selin/kare", { method: "POST" });
-      await nesne.fetch("https://selin/tarama", { method: "POST" });
+      // Ayrı istekler: her birinin kendi istek sınırı; biri hata verirse diğerleri yine çalışır.
+      await cagir("/cron");
+      await cagir("/hazirla");
+      await cagir("/kare");
+      await cagir("/tarama");
       return;
     }
     if (duraklatildi(Math.floor(Date.now() / 1000))) return;
@@ -141,13 +147,16 @@ export default {
   },
 };
 
+// Her adım ayrı korunur: biri hata verirse diğerleri yine çalışır, hata KV'de "selin:hata".
 async function selinCron(env, simdi) {
-  await webhookKur(env);
-  await githubKontrol(env, simdi);
-  await fotografYokGocu(env, simdi);
-  await listeAdimi(env, simdi);
-  await ozetAdimi(env, simdi);
-  await siteStokEsitle(env, simdi);
+  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle };
+  for (const [ad, f] of Object.entries(adimlar)) {
+    try {
+      await f(env, simdi);
+    } catch (e) {
+      await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
+    }
+  }
 }
 
 export class SelinDO {
@@ -834,7 +843,7 @@ export async function taramaAdimi(env, simdi) {
   if (d.bitti) return;
   const arsiv = await oku(env, "arsiv", null);
   const bilgi = await kanalBilgisi(env);
-  if (!arsiv || !bilgi.kanal) return;
+  if (!arsiv || !bilgi.kanal) return yazKV(env, "selin:hata", { zaman: simdi, hata: "tarama: arşiv ya da kanal bilgisi yok" }, 7 * 86400);
   let iletilen = 0;
   while (d.sira.length && iletilen < TARAMA_ILETME) {
     const kod = d.sira[0];
@@ -857,7 +866,7 @@ export async function taramaAdimi(env, simdi) {
     d.bitis = simdi;
   }
   await yazKV(env, "selin:tarama", d);
-  if (d.bitti || Object.keys(d.sonuc).length % 60 < 6) await yazKV(env, "selin:rapor", taramaOzeti(d)); // ara rapor (az KV yazımı)
+  await yazKV(env, "selin:rapor", { ...taramaOzeti(d), son: simdi, buCalisma: iletilen }); // tarama sürerken her çalışmada (kısa süreli)
 }
 
 // ---------- 5) Videodan kare (sadece videosu olan modeller) ----------
