@@ -133,7 +133,9 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - 🆕 23 Ekim: SAYIM SAMİ — Vegawin stok köprüsü (kullanıcı onayı). Kurallar: Vegawin'e ASLA yazma (sadece SELECT; köprüde 4 kilit). Okunan: STOKKODU, MALINCINSI, adet (F0101D0005TBLDEPOENVANTER SUM(ENVANTER), DEPO=1, BELGETIPI≠67), SATISFIYATI1 (F0101TBLBIRIMLEREX); stok kartı F0101TBLSTOKLAR STATUS=1, IND≥100. Kod eki (B20) köprüde silinir (ayar.json kodKalibi ^(\d{3,6})). 09–19 arası 5 dk, sadece değişenler. Şifre mağaza PC'sinde DPAPI. Venom: Kemal'de POST /kopru (X-Magaza + Bearer KOPRU_<MAĞAZA> secret) → StokDO (SQLite, KV değil). Stok ≤0 → gizli (Kemal turunda sorulmaz). >0'dan ≤0'a düşünce ekibe 🔁 Repete / 🗑 Sil (sadece gizle, kanal ve Vegawin'e dokunma) / ⏳ Beklesin (7 gün). İlk veride soru yok. /stok, /stok <kod>. Dosyalar: sami/ (indirme: sami/Sami-kopru.zip). Black Rose: ayar.json magaza/firma/donem değiştirilip ikinci kopya + KOPRU_BLACKROSE. 2. aşama satış analizi (belge 20/21/22/23), vergi no/TC asla.
   - ⏳ Bekliyor: köprü kurulum + deneme fotoğrafı (bağ sütunu STOKNO vb. doğrulanacak). Selin durdurulmuş; site fiyat/gizleme Selin açılınca bağlanacak.
 
-**Sıradaki komut: SAMİ-1 — mağaza PC'sinde kurulum.bat + Cloudflare KOPRU_VOLONTE + deneme.bat fotoğrafı. Sonra D1 (KV → Durable Object taşıma onayı), kareler, S4. Selin "başlat" bekliyor.**
+- ✅ SAMİ-1 (27 Ekim 17:01): Sami canlı. Deneme: STOKNO bağı doğru, 623 kart → 506 model, 92 kod kalıba uymuyor (gönderilmez; örnekleri yeni deneme.bat gösterir). 0 ile başlayan iç kartlar (000000, 001 TEKLEME, 0002 TRS) Venom'da alınmıyor. baslat.bat: 506 model gönderildi, görev kuruldu. /stok 3569 → 32 adet, 69 $, görünür.
+
+**Sıradaki komut: D1 — Kalıcı çözüm onayı (Kemal/Selin'in sık yazdığı KV kayıtlarını Durable Object'e taşıma, ücretsiz). Sonra Selin'i başlatma (fiyat + stoksuz gizleme Selin'e bağlanacak), kareler, S4. Black Rose köprüsü gelecek hafta.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
