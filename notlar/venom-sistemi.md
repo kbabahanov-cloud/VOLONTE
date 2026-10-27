@@ -145,7 +145,15 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   - Fiyat: taslak kartında "Fiyat: 69 $ (Vegawin)", siteye fiyat + gizli alanı. Saatlik (09–20) site eşitlemesi: stoğu biten sitede gizlenir (silinmez), stok gelince görünür, fiyat güncellenir; değişiklik yoksa commit yok.
   - Site: site.js gizli olanı göstermez; urun.js "Wholesale price: $X" / "Currently out of stock". (S4 birleşince canlı.)
 
-**Sıradaki komut: Kullanıcı onayı → "Selin'i başlat" (DURAKLAT_BITIS kaldırılacak). Sonra kareler, S4 site PR, Black Rose köprüsü.**
+- ✅ 27 Ekim 18:55: Selin BAŞLATILDI (DURAKLAT_BITIS = 0). Fiyat sitede herkese açık (kullanıcı kararı). İlk cron sorunsuz (selin:github ok, yeni hata yok).
+- Kullanıcının sıradaki işleri (her biri için ÖNCE kısa plan + maliyet, onaysız başlama):
+  1) S4: ürün sayfasını yayına al (fiyat + stok sitede). Not: main'de Selin'in eklediği 4 ürün var (3563, 3279, 3595, 3448) — birleştirirken main'deki veri/urunler.json ve galeri korunmalı.
+  2) Site görünüşünü Claude Design becerisiyle yenile, önce taslak.
+  3) Pelin (video): Selin fotoğrafı inceler, senaryo + yazı; OpenAI video aracı üretir, OpenAI modeli kontrol eder, onaylarsa kullanıcıya.
+  4) Analizci Arda: Instagram/internetteki benzer firmaların en çok tutan videoları, neden tuttuğu, fikirler Pelin'e.
+  5) Video + analiz için aylık toplam 60 $ sınırı (Anthropic 80 $ sınırından ayrı).
+
+**Sıradaki komut: İş 1 (S4) planı + maliyet → onay.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

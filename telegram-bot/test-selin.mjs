@@ -326,12 +326,10 @@ test("Selin izinsiz kişiye cevap vermez; düğmeleri çalışmaz", async () => 
   assert.equal(r.status, 401);
 });
 
-test("duraklatma: Selin süresiz durdurulmuş", () => {
-  assert.equal(duraklatildi(ist(22, 0)), true);
-  assert.equal(duraklatildi(ist(8, 0, 30)), true);
+test("duraklatma: Selin çalışıyor (27 Ekim'de başlatıldı)", () => {
+  assert.equal(duraklatildi(ist(22, 0)), false);
 });
-
-test("Selin durduruluyken: 5 dk görevi sadece kayıtları DO'ya kopyalar ve kontrol eder; mesaj göndermez, KV'deki eski kayıtlar silinmez", async () => {
+test.skip("Selin durduruluyken: 5 dk görevi sadece kayıtları DO'ya kopyalar ve kontrol eder; mesaj göndermez, KV'deki eski kayıtlar silinmez", async () => {
   const { SelinDO } = await import("./selin.js");
   const o = ortam();
   o.depo.set("selin:modeller", JSON.stringify({ "3194": { durum: "soruldu" } }));

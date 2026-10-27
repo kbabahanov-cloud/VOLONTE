@@ -80,9 +80,9 @@ function gizliEsit(a, b) {
   return f === 0;
 }
 
-// Kullanıcı kararı (23 Ekim 09:36): Selin süresiz durduruldu — liste/hazırlık/kare/mesaj yok, komutlar
-// işlenmez, KV'ye hiçbir şey yazılmaz, kayıt ve sıralara dokunulmaz. Kullanıcı "başlat" deyince kaldırılır.
-const DURAKLAT_BITIS = Infinity;
+// Duraklatma anahtarı: 0 = çalışıyor. (23 Ekim'de süresiz durdurulmuştu; kullanıcı 27 Ekim'de "Selin'i başlat" dedi.)
+// Yeniden durdurmak için Infinity yapılır: liste/hazırlık/mesaj olmaz, kayıtlara dokunulmaz.
+const DURAKLAT_BITIS = 0;
 export const duraklatildi = (simdi) => simdi < DURAKLAT_BITIS;
 
 // Selin'in bütün işleri kendi Durable Object'inde ("selin") çalışır: "selin:*" kayıtları orada
