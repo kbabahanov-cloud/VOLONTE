@@ -170,7 +170,18 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - Grup kurulana kadar raporlar Murat ve Merdan'a özel mesajla gider.
 - Yarın sabah BotFather adımları (tek tek): 1) /newbot "Sayım Sami" 2) token → Cloudflare volonte-sami Secret BOT_TOKEN 3) herkes Sami'ye /start 4) Sami'yi kanala yönetici ekle 5) "Venom Ekip" grubu, Kemal+Selin+Sami+ekip (botları yönetici eklesin).
 
-**Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Sonra: 24 modelin toplu listesini kullanıcı onaylar (Selin gece hazırlıyor). Sonra 3 ücretsiz beceri birlikte eklenecek (onaylı): Design, Website Design, Marketing (ücretli bağlantılar olmadan). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
+### Fotoğraf karışıklığı kontrolü + yeni üretim sistemi (28 Ekim gecesi)
+- Siteye yükleme KİLİTLİ (selin.js SITE_KILIDI). Kullanıcı açmadan hiçbir şey çıkmaz.
+- 24 modelin bütün fotoğrafları ve videoları tek tek incelendi (kareler dalı kontrol/k1, k2).
+  Sebep: Selin kanalda yazısında kodu geçen her paylaşımı alıyor; kanalda yanlış koda yazılmış video (3618'de çizgili korse-etek),
+  aynı kodla iki farklı kıyafet (3322: BLACK ROSE saçaklı ceket vs VOLONTE dantel takım), aynı modelin farklı renkleri (3567) ve eski
+  farklı baskılı görseller. Çıkarıldı: HARIC_MESAJ. Soruldu: 3322, 3567 (FOTO_SORUSU).
+- Sitedeki 4 model: karışıklık yok; kullanıcı kararı: yeni sistemle silinip baştan yüklenecek (henüz silinmedi).
+- Yeni görev (kullanıcı kararı): Selin, gerçek fotoğraf/videodan kıyafeti öğrenip aynı manken + aynı kıyafetle HD 3-4 fotoğraf + video ÜRETECEK.
+  Kural: renk/desen/kesim birebir; her üretim orijinalle yan yana onaya. Araçlar karşılaştırılacak (OpenAI görsel, Google Veo/Nano Banana,
+  Kling, Runway, FASHN). Sora API 24 Eylül 2026'da kapandı. 60 $ kasa; önce 1-2 model deneme.
+
+**Sıradaki komut: ÜRETİM DENEMESİ — kullanıcı 3322/3567 sorularını cevaplar; araç hesabı (öneri: tek fal.ai hesabı) + deneme bütçesi onayı. Sonra SAMİ-BOT BotFather adımları, 3 ücretsiz beceri.** (eski: Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Sonra: 24 modelin toplu listesini kullanıcı onaylar (Selin gece hazırlıyor). Sonra 3 ücretsiz beceri birlikte eklenecek (onaylı): Design, Website Design, Marketing (ücretli bağlantılar olmadan). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
