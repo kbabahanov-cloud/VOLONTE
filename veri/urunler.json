@@ -22,8 +22,9 @@
    "Volonteroseoffical/13382",
    "Volonteroseoffical/12265"
   ],
-  "fiyat": null,
-  "eklenme": "2026-10-22"
+  "fiyat": 69,
+  "eklenme": "2026-10-22",
+  "gizli": false
  },
  {
   "kod": "3279",
@@ -88,7 +89,8 @@
   "videolar": [
    "Volonteroseoffical/13719"
   ],
-  "fiyat": null,
-  "eklenme": "2026-10-22"
+  "fiyat": 38,
+  "eklenme": "2026-10-22",
+  "gizli": false
  }
 ]
