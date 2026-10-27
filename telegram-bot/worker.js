@@ -1255,7 +1255,9 @@ async function kopruAl(request, env) {
   const govde = await request.json().catch(() => null);
   if (!govde || !Array.isArray(govde.urunler) || govde.urunler.length > 2000) return new Response("geçersiz", { status: 400 });
   const simdi = Math.floor(Date.now() / 1000);
-  const urunler = govde.urunler.map((u) => (u.yok ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat) }));
+  // "0" ile başlayan kodlar (ör. 000000, 001 TEKLEME, 0002 TRS) model değil, iç kart: alınmaz.
+  const urunler = govde.urunler.filter((u) => !/^0/.test(stokKodu(u.kod)))
+    .map((u) => (u.yok ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat) }));
   const sonuc = await stokIste(env, "/yaz", { magaza, urunler, simdi });
   if (sonuc.yeniSoru && env.BOT_TOKEN) await stokSorulariGonder(env, simdi);
   return Response.json({ ok: true, ...sonuc });

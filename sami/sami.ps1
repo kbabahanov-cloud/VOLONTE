@@ -241,6 +241,13 @@ switch ($Mod) {
       $u.urunler.Values | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object {
         Write-Host ("  {0} | {1} | {2} | {3}" -f $_.kod, $_.ad, $_.adet, $_.fiyat)
       }
+      $ornekUymayan = Sorgu $sifre "SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD FROM $T_STOK S WHERE S.STATUS = 1 AND S.IND >= 100"
+      $liste = @($ornekUymayan.Rows | Where-Object { -not (ModelKodu ([string]$_.KOD)) } | Select-Object -First 20)
+      if ($liste.Count) {
+        Write-Host ""
+        Write-Host "Kod kalıbına uymayan kartlardan örnekler (gönderilmez):"
+        foreach ($r in $liste) { Write-Host ("  {0} | {1}" -f $r.KOD, $r.AD) }
+      }
       Write-Host ""
       Write-Host "Kod örnekleri (Vegawin kodu → dışarı giden model kodu):"
       $ham = Sorgu $sifre "SELECT TOP 8 S.STOKKODU AS KOD FROM $T_STOK S WHERE S.STATUS = 1 AND S.IND >= 100 ORDER BY S.IND DESC"

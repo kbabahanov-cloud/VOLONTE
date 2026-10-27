@@ -1303,8 +1303,9 @@ test("stok köprüsü: anahtarsız veri alınmaz; ilk veride soru yok; adet 0'a 
   stokBagla(o);
   assert.equal((await kopru(o.env, [{ kod: "3100", adet: 3 }], "yanlis")).status, 401);
   assert.equal((await kopru(o.env, [{ kod: "3100", adet: 3 }], "kopru-anahtari-123", "BLACKROSE")).status, 401); // kendi anahtarı yok
-  let r = await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 3, fiyat: 25 }, { kod: "3200", adet: 0, fiyat: 30 }, { kod: "3329", adet: -2 }]);
+  let r = await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 3, fiyat: 25 }, { kod: "3200", adet: 0, fiyat: 30 }, { kod: "3329", adet: -2 }, { kod: "001", ad: "001 TEKLEME", adet: 146 }]);
   assert.equal(r.status, 200);
+  assert.equal((await r.json()).yazilan, 3); // 0 ile başlayan iç kart alınmaz
   assert.equal(cagrilar(o.gonderilen, "copyMessage").length + cagrilar(o.gonderilen, "sendMessage").length, 0); // ilk veride soru yok
 
   r = await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 0, fiyat: 25 }]);
