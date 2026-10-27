@@ -18,6 +18,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: kareler
+      - name: Araçlar
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Fotoğrafları indir
         run: python kontrol.py
       - name: Kaydet
