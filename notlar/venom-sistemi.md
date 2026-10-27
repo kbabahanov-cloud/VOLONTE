@@ -135,7 +135,9 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ✅ SAMİ-1 (27 Ekim 17:01): Sami canlı. Deneme: STOKNO bağı doğru, 623 kart → 506 model, 92 kod kalıba uymuyor (gönderilmez; örnekleri yeni deneme.bat gösterir). 0 ile başlayan iç kartlar (000000, 001 TEKLEME, 0002 TRS) Venom'da alınmıyor. baslat.bat: 506 model gönderildi, görev kuruldu. /stok 3569 → 32 adet, 69 $, görünür.
 
-**Sıradaki komut: D1 — Kalıcı çözüm onayı (Kemal/Selin'in sık yazdığı KV kayıtlarını Durable Object'e taşıma, ücretsiz). Sonra Selin'i başlatma (fiyat + stoksuz gizleme Selin'e bağlanacak), kareler, S4. Black Rose köprüsü gelecek hafta.**
+- ✅ D1 (27 Ekim 18:30): Karma depo (depo.js). Kemal'in işleri KatalogDO "kemal" nesnesinde (/kemal/guncelleme, /kemal/cron, /kemal/adim), Selin'in SelinDO "selin"de (/guncelleme, /cron, /hazirla, /kare, /video, /kare-geldi, /goc). Sık yazılan kayıtlar DO'da (KEMAL_YEREL, SELIN_YEREL); ortak olanlar (kanal, kodlar, kodsuz, tarifler, hicgelmeyecek, atlananlar, sonpaylasim, arsiv, harcama:*, kare:*) ve hata/durum kayıtları KV'de. Taşıma: kopyala + kontrol, eski KV silinmedi. Rapor: goc:kemal 56/56 eşit, goc:selin 7/7 eşit. NOT: DO'daki kayıtları Cloudflare panelinden/API'den okuyamam; izleme KV'deki hata/rapor kayıtlarından.
+
+**Sıradaki komut: Kullanıcı Kemal'e /kuyruk yazıp cevabı doğrulasın. Sonra Selin'i yeniden başlatma hazırlığı: sitede Vegawin fiyatı + stoksuz gizleme + mesaj sıklığını azaltma (kullanıcı Selin'i çok mesaj yüzünden durdurdu) → onay → "Selin'i başlat". Ardından kareler, S4, Black Rose köprüsü.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
