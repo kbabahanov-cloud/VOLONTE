@@ -465,3 +465,34 @@ test("Selin sabah raporu: Kemal'in kanalı × Sami'nin stoğu karşılaştırıl
   await selinSabahRaporu(o.env, ist(9, 30)); // günde bir kez
   assert.equal(o.g.length, 0);
 });
+
+test("önizleme: gizli anahtarlı tek link; toplu listedeki modeller sitedeki gibi (foto, video, fiyat, beden); siteye hiçbir şey yazılmaz; 'onay bekleyen' ayrımı", async () => {
+  const { topluAdimi, onizleme, onizlemeLinki, onizlemeDuyur } = await import("./selin.js");
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false }, "3100": { toplam: 2, fiyat: 30, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 2, telegramda: ["3194", "3100"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 }, "3100": { foto: 1, video: 0 } } }));
+  await topluAdimi(o.env, o.simdi);
+  await onizlemeDuyur(o.env); // hazırlanırken bile link bir kez yöneticilere gider
+  await onizlemeDuyur(o.env);
+  const duyuru = cagri(o.g, "sendMessage");
+  assert.deepEqual(duyuru.map((x) => x.govde.chat_id), ["111", "222"]);
+  assert.match(duyuru[0].govde.text, /siteye ÇIKMADI[\s\S]*https:\/\/selin\.test\/onizleme\/[0-9a-f]{24}[\s\S]*hazır 0, hazırlanıyor 2/);
+  await hazirlaAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  const link = await onizlemeLinki(o.env);
+  const yol = link.split("/onizleme/")[1];
+  assert.equal((await onizleme(o.env, "yanlis-anahtar")).status, 404);
+  const html = await (await onizleme(o.env, yol)).text();
+  assert.match(html, /ÖNİZLEME — bu modeller henüz sitede DEĞİL[\s\S]*Hazır 2 \/ 2 model/);
+  assert.match(html, /<p class="product-code">3194<\/p>[\s\S]*Sizes: 38-40-42-44[\s\S]*Wholesale price: \$69[\s\S]*Kod: 3194<\/b> · Fiyat: 69 \$ \(Vegawin\) · Bedenler: 38-40-42-44/);
+  assert.match(html, new RegExp(`<img src="/onizleme/${yol}/f/3194/0"`));
+  assert.match(html, new RegExp(`<video[^>]+src="/onizleme/${yol}/v/3194/0#t=0.1"`));
+  const foto = await onizleme(o.env, `${yol}/f/3194/0`);
+  assert.equal(foto.headers.get("content-type"), "image/jpeg");
+  assert.equal((await onizleme(o.env, `${yol}/f/9999/0`)).status, 404); // listede olmayan model verilmez
+  assert.equal(o.github.dosyalar.size, 0); // siteye hiçbir şey yazılmadı
+  o.g.length = 0;
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/onizleme" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Toplu liste: 2 model — hazır 2\.\nBu listenin dışında onay bekleyen: 0 tek taslak \+ 0 videodan kare/);
+});
