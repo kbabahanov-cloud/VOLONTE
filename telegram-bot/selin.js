@@ -17,6 +17,7 @@ import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak } from "./venom.js";
 
 const SAAT_FARKI = 3 * 3600;
 const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
@@ -26,7 +27,7 @@ const PAYLASIM_EN_FAZLA = 4; // bir modelin en yeni kaç paylaşımından poz to
 const POZ_EN_FAZLA = 10;
 const ILETME_EN_FAZLA = 12; // bir hazırlıkta arşive iletilen mesaj (ücretsiz pakette çalışma başına 50 istek)
 const DUSUK_COZUNURLUK = 700; // piksel (genişlik ya da yükseklik); altı "düşük çözünürlük"
-const GUNCELLEMELER = ["message", "callback_query"];
+const GUNCELLEMELER = ["message", "callback_query", "my_chat_member"];
 // Sitedeki kategoriler (js/urunler.js ile aynı kimlikler) ve kartta gösterilen Türkçe adları.
 export const KATEGORI_ADI = {
   dresses: "Elbise", evening: "Abiye", sets: "Takım", jumpsuits: "Tulum",
@@ -151,7 +152,7 @@ export default {
 
 // Her adım ayrı korunur: biri hata verirse diğerleri yine çalışır, hata KV'de "selin:hata".
 async function selinCron(env, simdi) {
-  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle };
+  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle, selinSabahRaporu };
   for (const [ad, f] of Object.entries(adimlar)) {
     try {
       await f(env, simdi);
@@ -842,6 +843,20 @@ export async function siteVideo(env, id, aralik) {
 const TOPLU_SURUM = "v1";
 const TOPLU_PARTI = 2;
 
+// Yeni toplu parti (günlük karşılaştırmadaki eksikler). Aktif parti varken başlamaz.
+export async function topluBaslat(env, simdi, kodlar, kaynak) {
+  const t = await oku(env, "selin:toplu", null);
+  if (t && t.surum === TOPLU_SURUM && t.durum !== "bitti") return false;
+  if (!kodlar.length) return false;
+  const modeller = await oku(env, "selin:modeller", {});
+  for (const k of kodlar) modeller[k] = { ...(modeller[k] || {}), durum: "hazirlaniyor", zaman: simdi, kim: kaynak, toplu: true, kart: [] };
+  await yazKV(env, "selin:modeller", modeller);
+  const sira = await oku(env, "selin:hazirla", []);
+  await yazKV(env, "selin:hazirla", [...kodlar, ...sira.filter((k) => !kodlar.includes(k))]);
+  await yazKV(env, "selin:toplu", { surum: TOPLU_SURUM, durum: "hazirlaniyor", kodlar, haric: [], basarisiz: [], yuklenen: [], basla: simdi, kaynak });
+  return true;
+}
+
 export async function topluAdimi(env, simdi) {
   let t = await oku(env, "selin:toplu", null);
   if (!t || t.surum !== TOPLU_SURUM) {
@@ -861,7 +876,7 @@ export async function topluAdimi(env, simdi) {
   const modeller = await oku(env, "selin:modeller", {});
   if (t.durum === "hazirlaniyor") {
     // Hazırlık bitti mi? (onayda ya da fotoğrafsız/okunamadı → başarısız)
-    const bekleyen = t.kodlar.filter((k) => modeller[k] && ["hazirlaniyor", "kare-bekliyor"].includes(modeller[k].durum));
+    const bekleyen = t.kodlar.filter((k) => modeller[k] && modeller[k].durum === "hazirlaniyor"); // videodan kare bekleyenler listeyi bekletmez
     if (bekleyen.length) return;
     t.basarisiz = t.kodlar.filter((k) => !modeller[k] || modeller[k].durum !== "onayda");
     t.durum = "onayda";
@@ -919,6 +934,53 @@ async function topluOnay(env, cq, kim, simdi, cevapla) {
   const sayi = t.kodlar.length - t.haric.length - t.basarisiz.length;
   await cevapla("Yükleme başladı");
   return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ ${kim} onayladı: ${sayi} model 5 dakikada 2'şer siteye yükleniyor (yaklaşık ${Math.ceil(sayi / TOPLU_PARTI) * 5} dk).${t.haric.length ? ` Çıkarılan: ${t.haric.join(", ")}.` : ""}` });
+}
+
+// ---------- Sabah raporu (09:25) ve Kemal × Sami karşılaştırması ----------
+// Stok bilgisinin tek kaynağı Sami. Vegawin'de stok + fiyatı olan, Kemal'in kanalında paylaşılmış ama sitede
+// olmayan modeller "eksik" sayılır ve yeni toplu listeye hazırlanır (tek onayla siteye çıkar).
+const TOPLU_GUNLUK_EN_FAZLA = 30;
+const ISLEMDE = ["sitede", "yukleniyor", "onayda", "hazirlaniyor", "kare-bekliyor", "kanaldayok"];
+
+export async function eksikModeller(env) {
+  if (!env.STOK) return [];
+  const stok = await (await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/stoktakiler", { method: "POST", body: "{}" })).json();
+  const bilgi = await kanalBilgisi(env);
+  const sitede = new Set((await siteVerisi(env)).liste.map((u) => u.kod));
+  const modeller = await oku(env, "selin:modeller", {});
+  return stok.map((x) => x.kod).filter((k) => modelSecenekleri(k, bilgi.kodlar, bilgi.kodsuz).length && !sitede.has(k))
+    .filter((k) => !(modeller[k] && (ISLEMDE.includes(modeller[k].durum) || (modeller[k].durum === "eklenmeyecek" && !modeller[k].not))));
+}
+
+export async function selinSabahRaporu(env, simdi) {
+  if (!(await raporZamani(env, simdi, [9, 25], "selin:sabahRaporu"))) return;
+  const dun = gunAnahtari(simdi - 86400);
+  const site = (await siteVerisi(env)).liste;
+  const modeller = await oku(env, "selin:modeller", {});
+  const { kartlar, kareler } = await bekleyenler(env);
+  const t = await oku(env, "selin:toplu", null);
+  const eksik = await eksikModeller(env);
+  const yeni = eksik.slice(0, TOPLU_GUNLUK_EN_FAZLA);
+  const basladi = await topluBaslat(env, simdi, yeni, "Karşılaştırma (Kemal × Sami)");
+  const topluDurum = !t ? "yok" : { hazirlaniyor: "hazırlanıyor", onayda: "listesi onayınızı bekliyor", yukleniyor: "siteye yükleniyor", bitti: `bitti (${(t.yuklenen || []).length} model eklendi)` }[t.durum] || t.durum;
+  const satir = [`🌸 Selin — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`, ""];
+  satir.push(`Sitede: ${site.filter((u) => !u.gizli).length} model görünür, ${site.filter((u) => u.gizli).length} stoksuz (gizli).`);
+  const dunEklenen = site.filter((u) => u.eklenme === dun).map((u) => u.kod);
+  satir.push(`Dün eklenen: ${dunEklenen.length ? dunEklenen.join(", ") : "yok"}`);
+  satir.push(`Onay bekleyen: ${kartlar.length} taslak, ${kareler.length} videodan kare. Toplu yükleme: ${topluDurum}.`);
+  satir.push("", `🔎 Karşılaştırma (Kemal'in kanalı × Sami'nin stoğu): sitede eksik ${eksik.length} model.`);
+  if (basladi) satir.push(`→ ${yeni.length} tanesi yeni toplu listeye hazırlanıyor; bitince tek onay listesi gelecek.`);
+  else if (eksik.length) satir.push("→ Aktif toplu liste bitince hazırlanacak.");
+  const sorunlar = [];
+  const hazirlanamayan = Object.entries(modeller).filter(([, m]) => m.durum === "eklenmeyecek" && m.not).map(([k]) => k);
+  if (hazirlanamayan.length) sorunlar.push(`Fotoğrafı okunamayan ${hazirlanamayan.length} model (videodan kare ya da "Dosya olarak" paylaşım gerekiyor)`);
+  const metin = satir.join("\n");
+  await raporuBirak(env, "selin", simdi, {
+    ozet: `Sitede ${site.filter((u) => !u.gizli).length} model; onay bekleyen ${kartlar.length + kareler.length}; eksik ${eksik.length}${basladi ? ` (${yeni.length} hazırlanıyor)` : ""}.`,
+    sorunlar,
+    yapilacak: t && t.durum === "onayda" ? ["Selin'in toplu listesini onaylayın"] : [],
+  });
+  await grubaGonder(env, "selin", metin, tg);
 }
 
 // ---------- Envanter taraması: Vegawin'de stok + fiyat olan ve Telegram'da fotoğrafı bulunan modeller ----------
@@ -1120,6 +1182,7 @@ async function kareSecildi(env, cq, kod, n, kim, simdi, cevapla) {
 
 export async function guncelleme(u, env) {
   if (u.callback_query) return dugme(u.callback_query, env);
+  if (u.my_chat_member) return grupUyeligi(u.my_chat_member, env, "selin", "🌸 Selin (site)", tg);
   const m = u.message;
   if (!m || m.chat.type !== "private" || !m.from) return;
   if (!izinli(m.from.id, env)) {

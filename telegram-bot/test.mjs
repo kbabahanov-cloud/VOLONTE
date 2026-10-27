@@ -1397,3 +1397,13 @@ test("Kemal nesnesi: Telegram güncellemesi ve 5 dk görevi DO'da çalışır; t
   assert.ok(kemal.has("kv:kuyruk:4013"));
   assert.equal(o.depo.get("kuyruk:4013"), undefined); // KV'ye yazılmadı
 });
+
+test("stok soruları: Sami'nin botu açıksa ('sami:aktif') Kemal soru göndermez — tek kaynak Sami", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  o.depo.set("sami:aktif", "1");
+  await kopru(o.env, [{ kod: "3100", adet: 3 }]);
+  const r = await kopru(o.env, [{ kod: "3100", adet: 0 }]);
+  assert.equal((await r.json()).yeniSoru, 1); // soru Sami'nin deposunda bekliyor
+  assert.equal(cagrilar(o.gonderilen, "copyMessage").length + cagrilar(o.gonderilen, "sendMessage").length, 0);
+});

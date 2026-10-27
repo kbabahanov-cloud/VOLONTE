@@ -161,7 +161,16 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ✅ Kullanıcı onayları (27 Ekim akşam): (1) 24 fotoğraflı modelin TOPLU yüklemesi başladı (selin:toplu; tek liste + "✅ Hepsini siteye yükle", /cikar; onaydan sonra 5 dk'da 2 model). (2) Yazısız video oynatıcı VARSAYILAN (eski görünüm ?video=telegram). (3) Yeni çekimler Telegram'a "Dosya olarak" (sıkıştırmasız) gönderilecek — Selin belge-fotoğrafları okur, Cloudflare Images ile yapay zekâya 1024, siteye 2048 px küçültür.
 
-**Sıradaki komut: Toplu liste gelince kullanıcı onayı. Sonra 36 sadece-videolu model (videodan kare, tek liste). Ardından İş 2 (site tasarımı) planı, Pelin/Arda (60 $ tek kasa).**
+### Venom Ekip + Sayım Sami botu (27 Ekim 2026 gecesi hazırlandı, kullanıcı onaylı)
+- Stoğun TEK kaynağı Sami (StokDO). Kemal ve Selin stoğu her zaman Sami'den alır. Vegawin'de sadece okuma.
+- Yeni worker: volonte-sami (yüklendi, BOT_TOKEN bekliyor). Token girilince "stok bitti" soruları Kemal'den Sami'ye geçer (`sami:aktif`).
+- Üç bot da kanala eklenecek; Sami kanal paylaşımlarını o anki stokla kaydeder (`paylasim` tablosu).
+- Sabah raporları: 09:05 Sami (stok, dünkü biten/gelen/fiyat, kontroller) · 09:15 Kemal (kanal) · 09:25 Selin (site) · 09:40 toplu rapor + kısa yapay zekâ yorumu.
+- Kontroller: stokta olmayan model paylaşıldı mı (Kemal mi elle mi), sitede yanlış fiyat, sitede görünen ama stoğu biten model. Vegawin'de olmayan (Black Rose) hata sayılmaz.
+- Grup kurulana kadar raporlar Murat ve Merdan'a özel mesajla gider.
+- Yarın sabah BotFather adımları (tek tek): 1) /newbot "Sayım Sami" 2) token → Cloudflare volonte-sami Secret BOT_TOKEN 3) herkes Sami'ye /start 4) Sami'yi kanala yönetici ekle 5) "Venom Ekip" grubu, Kemal+Selin+Sami+ekip (botları yönetici eklesin).
+
+**Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Paralel: toplu liste gelince kullanıcı onayı; beceri/bağlayıcı ekleme (birlikte). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

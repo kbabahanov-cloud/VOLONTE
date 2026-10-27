@@ -448,3 +448,20 @@ test("'Dosya olarak' gönderilen fotoğraf (sıkıştırılmamış) kullanılır
   assert.deepEqual(boyutlar, [1024, 2048]);
   assert.deepEqual(JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0].fotolar, ["galeri/3100/1.jpg"]);
 });
+
+test("Selin sabah raporu: Kemal'in kanalı × Sami'nin stoğu karşılaştırılır; sitede eksik olanlar yeni toplu listeye hazırlanır", async () => {
+  const { selinSabahRaporu } = await import("./selin.js");
+  const o = ortam();
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3194", fiyat: 69, eklenme: "2026-10-21" }]));
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async () => Response.json([{ kod: "3194", toplam: 3, fiyat: 69 }, { kod: "3100", toplam: 2, fiyat: 30 }, { kod: "7777", toplam: 1, fiyat: 9 }]) }) };
+  await selinSabahRaporu(o.env, ist(9, 25));
+  const m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.deepEqual([m["3100"].durum, m["3100"].toplu], ["hazirlaniyor", true]); // 3194 sitede, 7777 Telegram'da yok
+  assert.equal(m["7777"], undefined);
+  const metin = cagri(o.g, "sendMessage")[0].govde.text;
+  assert.match(metin, /🌸 Selin — 22\.10\.2026 sabah raporu[\s\S]*Dün eklenen: 3194[\s\S]*sitede eksik 1 model\.\n→ 1 tanesi yeni toplu listeye/);
+  assert.ok(o.depo.get("venom:rapor:selin:2026-10-22"));
+  o.g.length = 0;
+  await selinSabahRaporu(o.env, ist(9, 30)); // günde bir kez
+  assert.equal(o.g.length, 0);
+});
