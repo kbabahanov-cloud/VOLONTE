@@ -536,3 +536,21 @@ test("fotoğraf kontrolü: bir kez geçici jetonla Actions isteği; liste ve tek
   assert.equal((await onizleme(o.env, `${jeton}/m/999`)).status, 404);
   assert.equal((await onizleme(o.env, "baskajeton/json")).status, 404);
 });
+
+test("fotoğraf düzeltmesi: hatalı mesaj taslaktan çıkar ve bir daha alınmaz; sorulan model önizlemede soru olarak görünür, yüklenmez", async () => {
+  const { fotoDuzeltmeGocu, HARIC_MESAJ, FOTO_SORUSU, onizleme, onizlemeLinki } = await import("./selin.js");
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  const taslak = (ids, vids) => ({ baslik: "X", kategori: "dresses", bedenler: "38-40", aciklama: { en: "x" }, fotolar: ids.map((id) => ({ id, net: true, buyuk: { file_id: "f" + id } })), videolar: vids.map((id) => ({ id, file_id: "v" + id, boyut: 1 })) });
+  o.depo.set("selin:toplu", JSON.stringify({ surum: "v1", kodlar: ["3618", "3322"], durum: "onayda", haric: [], basarisiz: [], yuklenen: [] }));
+  o.depo.set("selin:modeller", JSON.stringify({ "3618": { durum: "onayda", toplu: true, taslak: taslak([13076, 13077], [13457]) }, "3322": { durum: "onayda", toplu: true, taslak: taslak([12782], [13598]) } }));
+  assert.deepEqual(HARIC_MESAJ["3618"], [13457]);
+  await fotoDuzeltmeGocu(o.env);
+  const m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.deepEqual(m["3618"].taslak.videolar, []);
+  assert.equal(m["3322"].durum, "foto-soru");
+  const html = await (await onizleme(o.env, (await onizlemeLinki(o.env)).split("/onizleme/")[1])).text();
+  assert.match(html, /Hazır 1 \/ 2 model/);
+  assert.match(html, /❓ 3322 size soruldu/);
+  assert.ok(FOTO_SORUSU["3567"]);
+});

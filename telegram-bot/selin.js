@@ -166,7 +166,7 @@ export default {
 
 // Her adım ayrı korunur: biri hata verirse diğerleri yine çalışır, hata KV'de "selin:hata".
 async function selinCron(env, simdi) {
-  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle, selinSabahRaporu, onizlemeDuyur, kontrolIstegi };
+  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle, selinSabahRaporu, onizlemeDuyur, kontrolIstegi, fotoDuzeltmeGocu };
   for (const [ad, f] of Object.entries(adimlar)) {
     try {
       await f(env, simdi);
@@ -408,6 +408,20 @@ async function belgeB64(env, fileId, genislik) {
   return b64Yap(new Uint8Array(await sonuc.response().arrayBuffer()));
 }
 
+// Fotoğraf kontrolü (28 Ekim, tek tek incelendi): kanalda bu koda yazılmış ama başka kıyafet/baskı
+// gösteren mesajlar. Bunlar hiçbir zaman taslağa girmez.
+export const HARIC_MESAJ = {
+  "3618": [13457], // sarı-siyah çizgili korse üst + etek videosu (3618 ceket-pantolon)
+  "3403": [10673], // eski görsel, baskı farklı
+  "3407": [10646], // eski görsel, yaprak baskısı farklı
+  "3429": [11083], // eski görsel, turuncu renk (model pembe)
+};
+// Kullanıcıya sorulan modeller: cevap gelene kadar taslak onaya/siteye gitmez.
+export const FOTO_SORUSU = {
+  "3322": "Bu kodla iki farklı kıyafet var: beyaz/siyah saçaklı ceket-pantolon (videolarında BLACK ROSE yazıyor) ve siyah dantel üst-etek (VOLONTE videosu). Hangisi 3322?",
+  "3567": "Aynı korseli ceket-pantolon 3 renkte paylaşılmış: siyah, kırmızı, beyaz. Sitede hepsi mi görünsün, tek renk mi?",
+};
+
 // Modelin en yeni paylaşımlarındaki bütün medya (arşiv kanalına iletilerek okunur; aynı fotoğraf tekrarsız).
 export async function medyaTopla(env, bilgi, kod) {
   const arsiv = await oku(env, "arsiv", null);
@@ -420,6 +434,7 @@ export async function medyaTopla(env, bilgi, kod) {
   let iletilen = 0;
   for (const sec of modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, PAYLASIM_EN_FAZLA)) {
     for (const id of sec.ids) {
+      if ((HARIC_MESAJ[kod] || []).includes(id)) continue;
       if (iletilen >= ILETME_EN_FAZLA || fotolar.length >= POZ_EN_FAZLA) break;
       iletilen++;
       const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: bilgi.kanal.id, message_id: id, disable_notification: true });
@@ -868,8 +883,26 @@ async function onayDokumu(env) {
   const toplu = t ? t.kodlar : [];
   const hazir = toplu.filter((k) => modeller[k] && modeller[k].durum === "onayda");
   const hazirlaniyor = toplu.filter((k) => modeller[k] && modeller[k].durum === "hazirlaniyor");
-  const olmayan = toplu.filter((k) => !hazir.includes(k) && !hazirlaniyor.includes(k));
-  return { modeller, t, toplu, hazir, hazirlaniyor, olmayan, kartlar, kareler };
+  const soru = toplu.filter((k) => modeller[k] && modeller[k].durum === "foto-soru");
+  const olmayan = toplu.filter((k) => !hazir.includes(k) && !hazirlaniyor.includes(k) && !soru.includes(k));
+  return { modeller, t, toplu, hazir, hazirlaniyor, soru, olmayan, kartlar, kareler };
+}
+
+// Bir kez: kayıtlı taslaklardan hatalı mesajları çıkar; sorulan modelleri beklet (kayıt silinmez).
+export async function fotoDuzeltmeGocu(env) {
+  if ((await env.KAYIT.get("selin:fotoDuzeltme")) === "f1") return;
+  const modeller = await oku(env, "selin:modeller", {});
+  for (const [kod, idler] of Object.entries(HARIC_MESAJ)) {
+    const t = modeller[kod] && modeller[kod].taslak;
+    if (!t) continue;
+    t.fotolar = t.fotolar.filter((f) => !idler.includes(f.id));
+    t.videolar = t.videolar.filter((v) => !idler.includes(v.id));
+  }
+  for (const kod of Object.keys(FOTO_SORUSU)) {
+    if (modeller[kod] && modeller[kod].durum === "onayda") modeller[kod] = { ...modeller[kod], durum: "foto-soru" };
+  }
+  await yazKV(env, "selin:modeller", modeller);
+  await env.KAYIT.put("selin:fotoDuzeltme", "f1");
 }
 
 // Her toplu listenin önizleme linki yöneticilere bir kez kendiliğinden gider (sonra /onizleme ile).
@@ -1016,6 +1049,7 @@ export async function onizleme(env, yol, aralik) {
   }).join("\n");
   const diger = [
     d.hazirlaniyor.length ? `<p>⏳ Hâlâ hazırlanıyor (sayfayı sonra yenileyin): ${d.hazirlaniyor.join(", ")}</p>` : "",
+    d.soru.map((k) => `<p>❓ ${k} size soruldu, cevaba kadar listede yok: ${htmlKacir(FOTO_SORUSU[k])}</p>`).join(""),
     d.olmayan.length ? `<p>❌ Hazırlanamadı (fotoğraf okunamadı): ${d.olmayan.join(", ")}</p>` : "",
     `<p>Bu listenin dışında onay bekleyen: ${d.kartlar.length} tek taslak${d.kartlar.length ? ` (${d.kartlar.join(", ")})` : ""} ve ${d.kareler.length} videodan kare${d.kareler.length ? ` (${d.kareler.join(", ")})` : ""}. Bunlar Telegram'da ayrı kartlarla gelir.</p>`,
   ].join("");
@@ -1098,7 +1132,7 @@ export async function topluAdimi(env, simdi) {
     return topluListeGonder(env, t, modeller);
   }
   if (t.durum === "yukleniyor" && !kilitli(env)) {
-    const kalan = t.kodlar.filter((k) => !t.haric.includes(k) && !t.basarisiz.includes(k) && !t.yuklenen.includes(k));
+    const kalan = t.kodlar.filter((k) => !t.haric.includes(k) && !t.basarisiz.includes(k) && !t.yuklenen.includes(k) && modeller[k] && modeller[k].durum === "onayda"); // sorulan model yüklenmez
     for (const kod of kalan.slice(0, TOPLU_PARTI)) {
       try {
         await siteyeYukle(env, kod, t.onaylayan, simdi);
