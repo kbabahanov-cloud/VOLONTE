@@ -1380,7 +1380,9 @@ test("Kemal nesnesi: Telegram güncellemesi ve 5 dk görevi DO'da çalışır; t
     },
   };
   o.env.KAYIT.list = async ({ prefix }) => ({ keys: [...o.depo.keys()].filter((k) => k.startsWith(prefix)).sort().map((name) => ({ name })), list_complete: true });
-  await worker.scheduled({}, o.env);
+  const gercekSaat = Date.now;
+  Date.now = () => o.simdi * 1000; // test gerçek saatten bağımsız (09:00)
+  try { await worker.scheduled({}, o.env); } finally { Date.now = gercekSaat; }
   const kemal = depolar.get("kemal").m;
   assert.ok(kemal.has("kv:tur"));                       // tur DO'da
   assert.equal(JSON.parse(kemal.get("kv:sohbet:111").v)[0].content, "merhaba"); // eski kayıt kopyalandı
