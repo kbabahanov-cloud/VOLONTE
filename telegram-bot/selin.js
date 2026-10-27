@@ -904,7 +904,7 @@ export async function onizlemeMesaji(env) {
 // her mesajın kendi yazısı GitHub Actions'a verilir; Actions hepsini "kareler" dalına kaydeder
 // (kontrol/<sürüm>/). Böylece her fotoğrafın hangi gönderiden geldiği tek tek incelenir.
 // Siteye hiçbir şey yazmaz; Telegram'a mesaj göndermez (sadece arşiv kanalına iletme).
-const KONTROL_SURUM = "k1";
+const KONTROL_SURUM = "k2"; // k1: fotoğraflar, k2: videolardan kareler
 async function kontrolListesi(env) {
   const t = await oku(env, "selin:toplu", null);
   const modeller = await oku(env, "selin:modeller", {});
@@ -932,7 +932,15 @@ async function kontrolMesaji(env, idYazi) {
   const m = r.result;
   const h = { "x-yazi": encodeURIComponent((m.caption || m.text || "").slice(0, 600)), "x-grup": String(m.media_group_id || "") };
   const resim = m.photo ? m.photo[m.photo.length - 1] : m.document && /^image\//.test(m.document.mime_type || "") ? m.document : null;
-  if (!resim) return new Response(null, { status: 204, headers: { ...h, "x-tur": m.video ? "video" : "diger" } });
+  if (!resim && m.video && (m.video.file_size || 0) <= VIDEO_SINIR) {
+    // Video: kontrol için dosyanın kendisi (Actions içinden birkaç kare çıkarılır).
+    const fv = await tg(env, "getFile", { file_id: m.video.file_id });
+    if (fv.ok) {
+      const dv = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${fv.result.file_path}`);
+      return new Response(dv.body, { headers: { ...h, "x-tur": "video", "content-type": "video/mp4" } });
+    }
+  }
+  if (!resim) return new Response(null, { status: 204, headers: { ...h, "x-tur": m.video ? "video-buyuk" : "diger" } });
   const f = await tg(env, "getFile", { file_id: resim.file_id });
   if (!f.ok) return new Response(null, { status: 204, headers: { ...h, "x-tur": "buyuk" } });
   const dosya = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`);
