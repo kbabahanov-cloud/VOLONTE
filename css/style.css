@@ -484,3 +484,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 400; }
   .model-galeri { grid-template-columns: 1fr; }
   .model-bilgi { position: static; }
 }
+
+/* Sitenin kendi video oynatıcısı (Telegram gönderisi yerine) */
+.model-video.model-video-site { grid-column: auto; }
+.model-video-site video { display: block; width: 100%; aspect-ratio: 9 / 16; object-fit: cover; background: #000; }

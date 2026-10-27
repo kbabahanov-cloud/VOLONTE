@@ -20,3 +20,13 @@ Her eleman **ayrı bir Worker**'dır: biri bozulursa ya da yeniden yüklenirse d
 | `harcama:<ay>` | herkes (ekleme) | aylık yapay zekâ harcaması (mikro-dolar) |
 
 Ortak okuma yardımcıları: `telegram-bot/ortak.js` (`kanalBilgisi`, `modelSecenekleri`, `kodsuzMu`, `tarihUzun`) ve `telegram-bot/harcama.js`.
+
+## Vegawin'de olmayan modeller (kullanıcı kararı, 27 Ekim) — BÜTÜN ELEMANLAR
+
+Telegram kanalında VOLONTE ve Black Rose modelleri birlikte. Sayım Sami şimdilik sadece VOLONTE'nin Vegawin'ini okur
+(Black Rose köprüsü sonra kurulacak). Vegawin'de kaydı olmayan (ya da kartı pasif olan) model **hata değildir**:
+- Kemal: turda sorulmaya devam eder (stok bilinmiyor diye gizlenmez).
+- Selin: sitede kalır, fiyat yoksa "Ask price" gösterilir, **gizlenmez**; "mağazada var mı?" sorusu sorulabilir.
+- Sadece Vegawin'de kaydı olup toplam adedi 0/eksi olan model gizlenir.
+- Sami'nin kod kuralı değişmez (^(\d{3,6}), 0 ile başlayan iç kartlar alınmaz).
+Örnek: 3279 (Vegawin'de pasif), 3595 (kartı yok, büyük ihtimalle Black Rose).
