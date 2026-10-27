@@ -402,6 +402,7 @@ Kanal alt yazıları: ${yazilar.slice(0, 3).join(" | ").slice(0, 1200) || "yok"}
 ${onceki ? `Önceki taslak: ${JSON.stringify(onceki)}` : ""}
 ${duzeltme ? `Sahibin düzeltme isteği (uygula): ${duzeltme}` : ""}
 Her poz için net mi (bulanık/odak dışı/çok karanlık değil mi) değerlendir; ürün görünmüyorsa da net=false.
+Aynı fotoğrafın tekrarı (aynı kare/aynı poz, yeniden yüklenmiş ya da biraz farklı kaydedilmiş) varsa ilkini bırak, sonrakileri net=false ve not="tekrar" yap.
 kategori: katalog tarifine ve fotoğraflara bakarak tek birini seç: ${KATEGORILER.map((k) => `${k} (${KATEGORI_ADI[k]})`).join(", ")}. Gece/özel gün elbisesi evening; iki ya da üç parça uyumlu set sets; tek parça üst-alt birleşik jumpsuits.`,
   });
   const r = await client.beta.messages.create({
@@ -696,13 +697,27 @@ export async function siteStokEsitle(env, simdi) {
   await notEkle(env, `Site güncellendi (Vegawin): ${degisen.slice(0, 10).join(", ")}${degisen.length > 10 ? " …" : ""}`);
 }
 
+async function sha256(metin) {
+  const ozet = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(metin));
+  return [...new Uint8Array(ozet)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function siteyeYukle(env, kod, kim, simdi) {
   const modeller = await oku(env, "selin:modeller", {});
   const t = modeller[kod] && modeller[kod].taslak;
   const bilgi = await kanalBilgisi(env);
   const netler = t.fotolar.filter((f) => f.net);
   const dosyalar = [];
-  for (const [i, f] of netler.entries()) dosyalar.push({ yol: `galeri/${kod}/${i + 1}.jpg`, b64: await dosyaB64(env, f.buyuk.file_id) });
+  // Aynı fotoğraf kanalda farklı paylaşımlarda yeniden yüklenmiş olabilir (dosya kimliği farklı,
+  // içerik aynı): içerik aynıysa bir kez konur.
+  const gorulen = new Set();
+  for (const f of netler) {
+    const b64 = await dosyaB64(env, f.buyuk.file_id);
+    const iz = await sha256(b64);
+    if (gorulen.has(iz)) continue;
+    gorulen.add(iz);
+    dosyalar.push({ yol: `galeri/${kod}/${dosyalar.length + 1}.jpg`, b64 });
+  }
   const { liste } = await siteVerisi(env);
   const st = (await stokBilgisi(env, [kod]))[kod];
   const urun = {
