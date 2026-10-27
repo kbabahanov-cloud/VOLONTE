@@ -122,6 +122,13 @@ export class StokDeposu {
     return sonuc;
   }
 
+  // Stokta (toplam > 0) ve satış fiyatı olan, gizlenmemiş modeller (Selin'in toplu yüklemesi için).
+  stoktakiler() {
+    const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
+    return this.hepsi("SELECT kod, SUM(adet) AS toplam, MAX(fiyat) AS fiyat FROM urun GROUP BY kod HAVING SUM(adet) > 0 AND MAX(fiyat) IS NOT NULL ORDER BY kod")
+      .filter((r) => !silinen.has(r.kod));
+  }
+
   bilgi(kod) {
     const satirlar = this.hepsi("SELECT magaza, ad, adet, fiyat, guncel FROM urun WHERE kod = ?", kod);
     const karar = this.tek("SELECT durum, kim, zaman, sonraki FROM karar WHERE kod = ?", kod);
@@ -152,6 +159,7 @@ export class StokDO {
     if (yol === "/soru-gonderildi") return cevap(d.soruGonderildi(g.kod, g.mesajlar) || { ok: true });
     if (yol === "/karar") return cevap(d.karar(g.kod, g.islem, g.kim, g.simdi));
     if (yol === "/gizliler") return cevap(d.gizliler());
+    if (yol === "/stoktakiler") return cevap(d.stoktakiler());
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());

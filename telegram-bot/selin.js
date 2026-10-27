@@ -124,6 +124,7 @@ export default {
       await nesne.fetch("https://selin/cron", { method: "POST" });
       await nesne.fetch("https://selin/hazirla", { method: "POST" }); // ayrı istekler: her birinin kendi istek sınırı
       await nesne.fetch("https://selin/kare", { method: "POST" });
+      await nesne.fetch("https://selin/tarama", { method: "POST" });
       return;
     }
     if (duraklatildi(Math.floor(Date.now() / 1000))) return;
@@ -154,6 +155,9 @@ export class SelinDO {
       case "/guncelleme": await guncelleme(await istek.json(), env); return new Response("ok");
       case "/cron": await selinCron(env, simdi); return new Response("ok");
       case "/kare": await kareSiraGuvenli(env, simdi); return new Response("ok");
+      case "/tarama":
+        try { await taramaAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `tarama: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
+        return new Response("ok");
       case "/video": return videoVer(env, url.searchParams.get("t"));
       case "/kare-geldi": return kareGeldi(env, await istek.json().catch(() => ({})), simdi);
       default: await hazirlaGuvenli(env, simdi); return new Response("ok");
@@ -744,6 +748,67 @@ async function sitedenKaldir(env, kod, kim, simdi) {
   modeller[kod] = { ...(modeller[kod] || {}), durum: "kaldirildi", zaman: simdi };
   await yazKV(env, "selin:modeller", modeller);
   return true;
+}
+
+// ---------- Envanter taraması: Vegawin'de stok + fiyat olan ve Telegram'da fotoğrafı bulunan modeller ----------
+// (Toplu yükleme için sayım, kullanıcı isteği 27 Ekim.) Bir kez çalışır; her 5 dakikada en fazla ~12 kanal
+// mesajı arşive iletilerek bakılır (bir modelde ilk fotoğraf bulununca o model biter). Sonuç KV'de "selin:rapor".
+const TARAMA_SURUM = "v1";
+const TARAMA_ILETME = 12;
+
+function taramaOzeti(d) {
+  const s = Object.entries(d.sonuc);
+  return {
+    surum: d.surum, basla: d.basla, bitis: d.bitis || null, bitti: d.bitti,
+    stokVeFiyat: d.stokFiyat, telegramda: d.telegramda.length, zatenSitede: d.telegramda.filter((k) => d.sitede.includes(k)).length,
+    taranan: s.length, kalan: d.sira.length,
+    fotolu: s.filter(([, x]) => x.foto > 0).map(([k]) => k),
+    sadeceVideo: s.filter(([, x]) => !x.foto && x.video > 0).map(([k]) => k),
+    medyaYok: s.filter(([, x]) => !x.foto && !x.video).map(([k]) => k),
+  };
+}
+
+export async function taramaAdimi(env, simdi) {
+  let d = await oku(env, "selin:tarama", null);
+  if (!d || d.surum !== TARAMA_SURUM) {
+    if (!env.STOK) return;
+    const r = await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/stoktakiler", { method: "POST", body: "{}" });
+    const stok = await r.json();
+    const bilgi = await kanalBilgisi(env);
+    const sitede = (await siteVerisi(env)).liste.map((u) => u.kod);
+    const telegramda = stok.map((x) => x.kod).filter((k) => modelSecenekleri(k, bilgi.kodlar, bilgi.kodsuz).length);
+    d = { surum: TARAMA_SURUM, basla: simdi, stokFiyat: stok.length, telegramda, sitede, sira: telegramda.filter((k) => !sitede.includes(k)), sonuc: {}, bitti: false };
+    await yazKV(env, "selin:tarama", d);
+    await yazKV(env, "selin:rapor", taramaOzeti(d));
+    return;
+  }
+  if (d.bitti) return;
+  const arsiv = await oku(env, "arsiv", null);
+  const bilgi = await kanalBilgisi(env);
+  if (!arsiv || !bilgi.kanal) return;
+  let iletilen = 0;
+  while (d.sira.length && iletilen < TARAMA_ILETME) {
+    const kod = d.sira[0];
+    let foto = 0;
+    let video = 0;
+    dis: for (const sec of modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, 2)) {
+      for (const id of sec.ids) {
+        iletilen++;
+        const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: bilgi.kanal.id, message_id: id, disable_notification: true });
+        if (!r.ok) continue;
+        if (r.result.photo) { foto++; break dis; }
+        if (r.result.video) video++;
+      }
+    }
+    d.sonuc[kod] = { foto, video };
+    d.sira.shift();
+  }
+  if (!d.sira.length) {
+    d.bitti = true;
+    d.bitis = simdi;
+  }
+  await yazKV(env, "selin:tarama", d);
+  if (d.bitti || Object.keys(d.sonuc).length % 60 < 6) await yazKV(env, "selin:rapor", taramaOzeti(d)); // ara rapor (az KV yazımı)
 }
 
 // ---------- 5) Videodan kare (sadece videosu olan modeller) ----------

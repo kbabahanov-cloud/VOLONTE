@@ -358,3 +358,21 @@ test("siteye yüklerken içeriği aynı fotoğraflar bir kez konur (kanalda yeni
   const liste = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
   assert.deepEqual(liste[0].fotolar, ["galeri/3100/1.jpg"]);
 });
+
+test("envanter taraması: Vegawin'de stok+fiyat olan ve Telegram'da bulunan modeller sayılır, fotoğrafı olanlar ayrılır; rapor KV'ye", async () => {
+  const { taramaAdimi } = await import("./selin.js");
+  const o = ortam();
+  const kodlar = JSON.parse(o.depo.get("kodlar"));
+  kodlar["3300"] = [{ ids: [301], tarih: o.simdi - 20 * GUN }]; // sadece video
+  o.depo.set("kodlar", JSON.stringify(kodlar));
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async () => Response.json([{ kod: "3194", toplam: 3, fiyat: 69 }, { kod: "3300", toplam: 1, fiyat: 40 }, { kod: "9999", toplam: 5, fiyat: 10 }]) }) };
+  await taramaAdimi(o.env, o.simdi); // başlangıç: liste
+  let r = JSON.parse(o.depo.get("selin:rapor"));
+  assert.deepEqual([r.stokVeFiyat, r.telegramda, r.kalan], [3, 2, 2]);
+  await taramaAdimi(o.env, o.simdi + 300);
+  r = JSON.parse(o.depo.get("selin:rapor"));
+  assert.equal(r.bitti, true);
+  assert.deepEqual(r.fotolu, ["3194"]);
+  assert.deepEqual(r.sadeceVideo, ["3300"]);
+  assert.equal(cagri(o.g, "forwardMessage").filter((f) => f.govde.message_id === 300).length, 1); // ilk fotoğrafta durur
+});
