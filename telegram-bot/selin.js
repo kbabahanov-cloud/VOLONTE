@@ -104,6 +104,13 @@ export default {
       else await guncelleme(u, env);
       return new Response("ok");
     }
+    // Sitenin kendi video oynatıcısı için: /v/<kanal mesaj no> (sadece sitedeki ürünlerin videoları).
+    if (istek.method === "GET" && /^\/v\/\d+$/.test(url.pathname)) {
+      const id = url.pathname.slice(3);
+      const basliklar = { "x-aralik": istek.headers.get("Range") || "" };
+      if (env.SELIN) return selinNesne(env).fetch(`https://selin/sitevideo?id=${id}`, { headers: basliklar });
+      return siteVideo(env, id, istek.headers.get("Range"));
+    }
     if (istek.method === "GET" && url.pathname === "/video") {
       if (env.SELIN) return selinNesne(env).fetch(`https://selin/video?t=${encodeURIComponent(url.searchParams.get("t") || "")}`);
       return videoVer(env, url.searchParams.get("t"));
@@ -159,6 +166,7 @@ export class SelinDO {
         try { await taramaAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `tarama: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/video": return videoVer(env, url.searchParams.get("t"));
+      case "/sitevideo": return siteVideo(env, url.searchParams.get("id"), istek.headers.get("x-aralik") || null);
       case "/kare-geldi": return kareGeldi(env, await istek.json().catch(() => ({})), simdi);
       default: await hazirlaGuvenli(env, simdi); return new Response("ok");
     }
@@ -748,6 +756,47 @@ async function sitedenKaldir(env, kod, kim, simdi) {
   modeller[kod] = { ...(modeller[kod] || {}), durum: "kaldirildi", zaman: simdi };
   await yazKV(env, "selin:modeller", modeller);
   return true;
+}
+
+// ---------- Site video oynatıcısı ----------
+// Ürün sayfasında video Telegram gönderisi (kanal adı, izlenme, tarih, alt yazı) yerine sitenin kendi
+// <video> oynatıcısında, yazısız gösterilir. Video siteye yüklenmez: Selin her istekte Telegram'dan
+// akıtır (ücretsiz). Sadece sitedeki ürünlerin videoları verilir; Telegram botları 20 MB'tan büyük
+// dosyayı indiremez (o video sitede gösterilmez).
+async function siteVideoIdleri(env, simdi) {
+  const kayit = await oku(env, "selin:siteVideolar", null);
+  if (kayit && simdi - kayit.zaman < 600) return kayit.ids;
+  const ids = (await siteVerisi(env)).liste.flatMap((u) => (u.videolar || []).map((v) => String(v).split("/").pop()));
+  await yazKV(env, "selin:siteVideolar", { zaman: simdi, ids });
+  return ids;
+}
+
+export async function siteVideo(env, id, aralik) {
+  const simdi = Math.floor(Date.now() / 1000);
+  if (!/^\d+$/.test(String(id || ""))) return new Response("yok", { status: 404 });
+  let v = await oku(env, `selin:vid:${id}`, null);
+  if (!v) {
+    if (!(await siteVideoIdleri(env, simdi)).includes(String(id))) return new Response("yok", { status: 404 });
+    const arsiv = await oku(env, "arsiv", null);
+    const kanal = await oku(env, "kanal", null);
+    const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(id), disable_notification: true });
+    const m = r.ok && (r.result.video || r.result.animation);
+    if (!m) return new Response("video değil", { status: 404 });
+    v = { file_id: m.file_id, boyut: m.file_size || 0, w: m.width || 0, h: m.height || 0 };
+    await yazKV(env, `selin:vid:${id}`, v);
+  }
+  if (v.boyut > VIDEO_SINIR) return new Response("büyük", { status: 413 });
+  // Telegram dosya bağlantısı yaklaşık 1 saat geçerli: 50 dakika saklanır.
+  if (!v.yol || simdi - v.yolZaman > 3000) {
+    const f = await tg(env, "getFile", { file_id: v.file_id });
+    if (!f.ok) return new Response("indirilemedi", { status: 502 });
+    v = { ...v, yol: f.result.file_path, yolZaman: simdi };
+    await yazKV(env, `selin:vid:${id}`, v);
+  }
+  const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${v.yol}`, aralik ? { headers: { Range: aralik } } : {});
+  const h = new Headers({ "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=3600", "access-control-allow-origin": "*" });
+  for (const k of ["content-length", "content-range"]) if (r.headers.get(k)) h.set(k, r.headers.get(k));
+  return new Response(r.body, { status: r.status, headers: h });
 }
 
 // ---------- Envanter taraması: Vegawin'de stok + fiyat olan ve Telegram'da fotoğrafı bulunan modeller ----------

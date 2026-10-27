@@ -16,13 +16,23 @@
       yaziTemizle(gonderi) + '" data-width="100%"></' + "script></div>";
   }
 
+  // Sitenin kendi oynatıcısı: video Selin üzerinden Telegram'dan akar; kanal adı, izlenme, tarih ve
+  // alt yazı görünmez. (Deneme: ?video=yeni; onaylanınca varsayılan olacak.)
+  const VIDEO_SUNUCU = "https://volonte-selin.volonte.workers.dev/v/";
+  const YENI_OYNATICI = new URLSearchParams(location.search).get("video") === "yeni";
+  function siteOynatici(gonderi) {
+    const id = String(gonderi).split("/").pop();
+    if (!/^\d+$/.test(id)) return "";
+    return '<div class="model-video model-video-site"><video controls playsinline preload="metadata" src="' + VIDEO_SUNUCU + id + '#t=0.1"></video></div>';
+  }
+
   function ciz(alan, u) {
     document.title = (u.baslik || u.kod) + " — " + u.kod + " — VOLONTE";
     const fotolar = (u.fotolar || []).map(function (f, i) {
       return '<a class="model-foto" href="' + yaziTemizle(f) + '" target="_blank" rel="noopener"><img src="' + yaziTemizle(f) +
         '" alt="' + yaziTemizle(u.baslik || u.kod) + " — " + (i + 1) + '" loading="' + (i < 2 ? "eager" : "lazy") + '"></a>';
     }).join("");
-    const videolar = (u.videolar || []).map(telegramGomulu).join("");
+    const videolar = (u.videolar || []).map(YENI_OYNATICI ? siteOynatici : telegramGomulu).join("");
     const sekmeler = DILLER.filter(function (d) { return u.aciklama && u.aciklama[d.id]; }).map(function (d, i) {
       return '<button type="button" class="chip' + (i === 0 ? " active" : "") + '" data-dil="' + d.id + '">' + d.ad + "</button>";
     }).join("");
@@ -51,6 +61,10 @@
       if (b) dilSec(b.getAttribute("data-dil"));
     });
     dilSec("en");
+    // Oynatılamayan (ör. çok büyük) video sessizce gizlenir.
+    alan.querySelectorAll(".model-video-site video").forEach(function (v) {
+      v.addEventListener("error", function () { v.parentElement.remove(); });
+    });
     // Telegram oynatıcı betikleri innerHTML ile çalışmaz; yeniden ekle.
     alan.querySelectorAll(".model-video script").forEach(function (eski) {
       const yeni = document.createElement("script");

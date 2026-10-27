@@ -376,3 +376,25 @@ test("envanter taraması: Vegawin'de stok+fiyat olan ve Telegram'da bulunan mode
   assert.deepEqual(r.sadeceVideo, ["3300"]);
   assert.equal(cagri(o.g, "forwardMessage").filter((f) => f.govde.message_id === 300).length, 1); // ilk fotoğrafta durur
 });
+
+test("site video oynatıcısı: sadece sitedeki ürünlerin videoları Telegram'dan akıtılır (yazısız), aralık isteği iletilir", async () => {
+  const o = ortam();
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3194", videolar: ["Volonteroseoffical/301"] }]));
+  const istekler = [];
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/file/bot")) { istekler.push(init.headers || {}); return new Response(new Uint8Array([1, 2, 3]), { status: 206, headers: { "content-range": "bytes 0-2/3", "content-length": "3" } }); }
+    return asil(url, init);
+  };
+  const r = await selin.fetch(new Request("https://selin.test/v/301", { headers: { Range: "bytes=0-" } }), o.env);
+  assert.equal(r.status, 206);
+  assert.equal(r.headers.get("content-type"), "video/mp4");
+  assert.equal(r.headers.get("content-range"), "bytes 0-2/3");
+  assert.equal(istekler[0].Range, "bytes=0-");
+  assert.equal((await selin.fetch(new Request("https://selin.test/v/999"), o.env)).status, 404); // sitede olmayan
+  // ikinci istek: Telegram'a yeniden iletme/getFile yok (saklandı)
+  o.g.length = 0;
+  await selin.fetch(new Request("https://selin.test/v/301"), o.env);
+  assert.equal(cagri(o.g, "forwardMessage").length + cagri(o.g, "getFile").length, 0);
+  globalThis.fetch = asil;
+});
