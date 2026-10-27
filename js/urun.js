@@ -16,10 +16,10 @@
       yaziTemizle(gonderi) + '" data-width="100%"></' + "script></div>";
   }
 
-  // Sitenin kendi oynatıcısı: video Selin üzerinden Telegram'dan akar; kanal adı, izlenme, tarih ve
-  // alt yazı görünmez. (Deneme: ?video=yeni; onaylanınca varsayılan olacak.)
+  // Sitenin kendi oynatıcısı (varsayılan, kullanıcı onayı 27 Ekim): video Selin üzerinden Telegram'dan akar;
+  // kanal adı, izlenme, tarih ve alt yazı görünmez. Eski Telegram gönderisi görünümü: ?video=telegram
   const VIDEO_SUNUCU = "https://volonte-selin.volonte.workers.dev/v/";
-  const YENI_OYNATICI = new URLSearchParams(location.search).get("video") === "yeni";
+  const YENI_OYNATICI = new URLSearchParams(location.search).get("video") !== "telegram";
   function siteOynatici(gonderi) {
     const id = String(gonderi).split("/").pop();
     if (!/^\d+$/.test(id)) return "";

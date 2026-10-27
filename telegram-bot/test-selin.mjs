@@ -398,3 +398,53 @@ test("site video oynatıcısı: sadece sitedeki ürünlerin videoları Telegram'
   assert.equal(cagri(o.g, "forwardMessage").length + cagri(o.g, "getFile").length, 0);
   globalThis.fetch = asil;
 });
+
+test("toplu yükleme: taramadaki fotoğraflı modeller sorulmadan hazırlanır, tek liste + tek düğme; /cikar; onayla siteye 2'şer yüklenir", async () => {
+  const { topluAdimi } = await import("./selin.js");
+  const o = ortam();
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false }, "3100": { toplam: 2, fiyat: 30, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 2, telegramda: ["3194", "3100"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 }, "3100": { foto: 1, video: 0 } } }));
+  await topluAdimi(o.env, o.simdi);
+  assert.deepEqual(JSON.parse(o.depo.get("selin:hazirla")), ["3100", "3194"]);
+  assert.equal(o.g.length, 0);
+  await hazirlaAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  assert.equal(cagri(o.g, "sendMessage").length, 0); // tek tek kart yok
+  await topluAdimi(o.env, o.simdi);
+  const liste = cagri(o.g, "sendMessage");
+  assert.equal(liste.length, 2); // iki kişiye tek mesaj
+  assert.match(liste[0].govde.text, /toplu yükleme listesi \(2 model[\s\S]*3194 · Black Wrap Dress · Elbise · 38-40-42-44 · 69 \$ · 1 foto[\s\S]*\/cikar/);
+  assert.equal(liste[0].govde.reply_markup.inline_keyboard[0][0].callback_data, "tu:evet");
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/cikar 3100" } }, o.env);
+  await bas(o.env, 222, "tu:evet");
+  await bas(o.env, 111, "tu:evet");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Merdan zaten onayladı/);
+  await topluAdimi(o.env, o.simdi + 300);
+  const site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual(site.map((u) => [u.kod, u.fiyat]), [["3194", 69]]);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Toplu yükleme bitti: 1 model siteye eklendi/);
+});
+
+test("'Dosya olarak' gönderilen fotoğraf (sıkıştırılmamış) kullanılır; yapay zekâya 1024, siteye 2048 piksele küçültülür", async () => {
+  const o = ortam();
+  const boyutlar = [];
+  o.env.IMAGES = { input: () => ({ transform(t) { boyutlar.push(t.width); return this; }, async output() { return { response: () => new Response(new Uint8Array([7, 7, 7])) }; } }) };
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/forwardMessage") && JSON.parse(init.body).message_id === 400) {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 9, caption: "CODE.3100\nSIZE 44/46/48", document: { file_id: "d400", file_unique_id: "ud400", mime_type: "image/jpeg", file_size: 6e6 } } }));
+    }
+    return asil(url, init);
+  };
+  o.depo.set("selin:modeller", JSON.stringify({ "3100": { durum: "hazirlaniyor", zaman: 1 } }));
+  o.depo.set("selin:hazirla", JSON.stringify(["3100"]));
+  await hazirlaAdimi(o.env, o.simdi);
+  const t = JSON.parse(o.depo.get("selin:modeller"))["3100"].taslak;
+  assert.equal(t.fotolar[0].buyuk.belge, true);
+  assert.deepEqual(boyutlar, [1024]);
+  await bas(o.env, 111, "sb:3100:b");
+  await bas(o.env, 111, "so:3100");
+  globalThis.fetch = asil;
+  assert.deepEqual(boyutlar, [1024, 2048]);
+  assert.deepEqual(JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0].fotolar, ["galeri/3100/1.jpg"]);
+});

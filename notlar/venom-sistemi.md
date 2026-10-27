@@ -159,7 +159,9 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - HD denemesi: FSRCNN/EDSR (ücretsiz) renk korur (ΔE≈0.8) ama netlik kazancı yok denecek kadar az (Telegram fotoğrafları 960×1280). Öneri: video-yalnız modellerde 1080p video karesi; yeni çekimleri Telegram'a "Dosya olarak" (sıkıştırmasız) gönderme alışkanlığı.
 - Envanter taraması (27 Ekim 20:45): Vegawin stok+fiyat 87; Telegram'da 62; sitede 2; fotoğraflı 24 (3183, 3186, 3322, 3335, 3360, 3403, 3407, 3411, 3429, 3439, 3475, 3481, 3506, 3520, 3558, 3565, 3567, 3577, 3578, 3583, 3592, 3593, 3618, 4211); son 2 paylaşımında sadece video 36.
 
-**Sıradaki komut: Kullanıcıya: B toplu yükleme (24 fotoğraflı model, tek liste onayı) + A video örneği linki (?video=yeni) + HD sonucu ve öneri → onaylar.**
+- ✅ Kullanıcı onayları (27 Ekim akşam): (1) 24 fotoğraflı modelin TOPLU yüklemesi başladı (selin:toplu; tek liste + "✅ Hepsini siteye yükle", /cikar; onaydan sonra 5 dk'da 2 model). (2) Yazısız video oynatıcı VARSAYILAN (eski görünüm ?video=telegram). (3) Yeni çekimler Telegram'a "Dosya olarak" (sıkıştırmasız) gönderilecek — Selin belge-fotoğrafları okur, Cloudflare Images ile yapay zekâya 1024, siteye 2048 px küçültür.
+
+**Sıradaki komut: Toplu liste gelince kullanıcı onayı. Sonra 36 sadece-videolu model (videodan kare, tek liste). Ardından İş 2 (site tasarımı) planı, Pelin/Arda (60 $ tek kasa).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
