@@ -1097,15 +1097,15 @@ async function uretimCalis(env, simdi) {
   const onbellek = new Map();
   const referansAl = async (kod, yalinB64 = false) => {
     if (!onbellek.has(kod)) {
-      const modeller = await oku(env, "selin:modeller", {});
-      const t = modeller[kod] && modeller[kod].taslak;
-      const netler = t ? t.fotolar.filter((f) => f.net && !(HARIC_MESAJ[kod] || []).includes(f.id)).slice(0, 3) : [];
+      // Kanal fotoğrafları KULLANILMAZ (kullanıcı kararı): sadece Selin'e özelden gönderilen askı/manken fotoğrafları.
+      const refler = (await oku(env, `selin:referans:${kod}`, [])).filter((x) => x.tur === "foto");
+      const sirali = [...refler.filter((x) => x.rol === "manken"), ...refler.filter((x) => x.rol === "aski")].slice(0, 3);
       const liste = [];
-      for (const f of netler) liste.push(f.buyuk.belge ? await belgeB64(env, f.buyuk.file_id, 1536) : await dosyaB64(env, f.buyuk.file_id));
+      for (const f of sirali) liste.push({ rol: f.rol, b64: f.belge ? await belgeB64(env, f.file_id, 1536) : await dosyaB64(env, f.file_id) });
       onbellek.set(kod, liste);
     }
     const l = onbellek.get(kod);
-    return yalinB64 ? l : l.map((b) => `data:image/jpeg;base64,${b}`);
+    return yalinB64 ? l.map((x) => x.b64) : l.map((x) => ({ rol: x.rol, url: `data:image/jpeg;base64,${x.b64}` }));
   };
   const bildir = async (u) => {
     const oz = aracOzeti(u);
@@ -1128,7 +1128,7 @@ async function uretimSayfasi(env, anahtar) {
   const bloklar = u.kodlar.map((kod) => {
     const t = modeller[kod] && modeller[kod].taslak;
     const netler = t ? t.fotolar.filter((f) => f.net) : [];
-    const orj = netler.slice(0, 3).map((f, i) => `<figure><img src="${kok}/f/${kod}/${i}" loading="lazy"><figcaption>ORİJİNAL</figcaption></figure>`).join("");
+    const orj = netler.length ? `<figure class="bos"><figcaption>ORİJİNAL: Selin'e gönderilen askı/manken fotoğrafları</figcaption></figure>` : "";
     const satirlar = Object.entries(ARACLAR).map(([a, x]) => {
       const isler = u.isler.filter((is) => is.kod === kod && is.arac === a);
       const kutu = isler.map((is) => {
@@ -1510,6 +1510,23 @@ export async function guncelleme(u, env) {
   const yaz = (text, ek = {}) => tg(env, "sendMessage", { chat_id: m.chat.id, text, disable_web_page_preview: true, ...ek });
   const metin = (m.text || "").trim();
   const [komut, ...arg] = metin.split(/\s+/);
+
+  // Üretim referansı (kullanıcı kararı 28 Ekim): askı/manken fotoğrafları Selin'e özelden gönderilir;
+  // üretim SADECE bunları kullanır (kanaldan alınmaz). Yazı: "3618 askı" ya da "3618 manken".
+  const medya = m.photo ? { file_id: m.photo[m.photo.length - 1].file_id, tur: "foto" }
+    : m.document && /^image\//.test(m.document.mime_type || "") ? { file_id: m.document.file_id, tur: "foto", belge: true }
+      : m.video ? { file_id: m.video.file_id, tur: "video", boyut: m.video.file_size || 0 } : null;
+  if (medya) {
+    const r = String(m.caption || "").trim().match(/^(\d{3,6})\s*(ask[ıi]|manken)?/i);
+    if (!r) return yaz("Fotoğrafın yazısına model kodunu yazın: \"3618 askı\" (askıdaki kıyafet) ya da \"3618 manken\" (mankenin üstünde).");
+    const kod = r[1];
+    const rol = /manken/i.test(r[2] || "") ? "manken" : "aski";
+    const liste = await oku(env, `selin:referans:${kod}`, []);
+    liste.push({ ...medya, rol, kim: kisiAdi(m.from), zaman: simdi });
+    await yazKV(env, `selin:referans:${kod}`, liste.slice(-12));
+    const say = (x) => liste.filter((y) => y.rol === x && y.tur === "foto").length;
+    return yaz(`✅ ${kod}: ${rol === "aski" ? "askı" : "manken"} ${medya.tur === "video" ? "videosu" : "fotoğrafı"} kaydedildi. Bu modelde: askı ${say("aski")}, manken ${say("manken")} fotoğraf.\nSadece üretimde kullanılır; kanala ya da siteye gitmez.`);
+  }
 
   const duzeltilen = await env.KAYIT.get(`selin:duzelt:${m.from.id}`);
   if (duzeltilen && metin && !metin.startsWith("/")) {

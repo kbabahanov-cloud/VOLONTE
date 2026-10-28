@@ -8,6 +8,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 
+// ONAY KİLİDİ: kullanıcı onayı olmadan hiçbir araca istek gitmez, para harcanmaz (anahtar girilse bile).
+// Kullanıcı araç listesini ve bütçeyi onaylayınca true yapılır.
+export const URETIM_ONAYLI = false;
 export const KASA_USD = 60;
 export const DENEME_SINIR_USD = 15;
 export const DENEME_KODLARI = ["3618", "3592"]; // düz renk ceket + çiçek desenli elbise (kolay + zor desen)
@@ -74,20 +77,26 @@ export function isPlani(kod, araclar = ARACLAR) {
   return isler;
 }
 
+// referanslar: [{ rol: "manken"|"aski", url }] — Selin'e özelden gönderilen fotoğraflar (kanaldan değil)
 function girdiHazirla(is, referanslar, onceki) {
   const x = ARACLAR[is.arac];
+  const aski = referanslar.find((r) => r.rol === "aski") || referanslar[0];
+  const manken = referanslar.find((r) => r.rol === "manken") || referanslar[0];
   if (is.arac === "fashn") {
-    // Nano'nun ürettiği yeni pozun üstüne orijinal kıyafet (FASHN kıyafeti çizmez, aktarır → desen daha iyi korunur)
-    return { model_image: onceki, garment_image: referanslar[0], category: "auto", garment_photo_type: "model", mode: "quality", output_format: "png" };
+    // Nano'nun ürettiği yeni pozun üstüne askıdaki asıl kıyafet (FASHN kıyafeti çizmez, aktarır → desen daha iyi korunur)
+    return { model_image: onceki, garment_image: aski.url, category: "auto", garment_photo_type: aski.rol === "aski" ? "flat-lay" : "model", mode: "quality", output_format: "png" };
   }
+  referanslar = referanslar.map((r) => r.url);
   if (x.tur === "foto") return { prompt: `New photo of the same woman wearing the same outfit. Pose: ${POZLAR[is.poz]}. ${KURAL}`, image_urls: referanslar.slice(0, 3), num_images: 1, output_format: "png", ...(is.arac === "nanopro" ? { resolution: "2K" } : {}) };
-  if (is.arac === "veo") return { prompt: VIDEO_KURAL, image_url: referanslar[0], duration: "8s", generate_audio: false, resolution: "1080p" };
-  return { prompt: VIDEO_KURAL, image_url: referanslar[0], duration: "5", negative_prompt: "blur, distort, morphing, color change, pattern change, text, logo, watermark" };
+  // Video: mankenli fotoğraftan (yoksa Nano'nun ürettiği ilk pozdan)
+  const kaynak = manken.rol === "manken" ? manken.url : onceki || manken.url;
+  if (is.arac === "veo") return { prompt: VIDEO_KURAL, image_url: kaynak, duration: "8s", generate_audio: false, resolution: "1080p" };
+  return { prompt: VIDEO_KURAL, image_url: kaynak, duration: "5", negative_prompt: "blur, distort, morphing, color change, pattern change, text, logo, watermark" };
 }
 
 // Bir çalışma: en fazla birkaç gönderim + bekleyenlerin durumu (ücretsiz pakette 50 istek sınırı).
 export async function uretimAdimi(env, simdi, { referansAl, bildir }) {
-  if (!env.FAL_KEY) return;
+  if (!(URETIM_ONAYLI || env.URETIM_TEST === "1") || !env.FAL_KEY) return;
   let u = await oku(env, "selin:uretim", null);
   if (!u) {
     u = { surum: "d1", kodlar: DENEME_KODLARI, isler: DENEME_KODLARI.flatMap((k) => isPlani(k)), basla: simdi, deneme: true };
@@ -108,6 +117,10 @@ export async function uretimAdimi(env, simdi, { referansAl, bildir }) {
     const x = ARACLAR[is.arac];
     if (h.toplam + x.fiyat > KASA_USD || (u.deneme && h.deneme + x.fiyat > DENEME_SINIR_USD)) { is.durum = "butce"; continue; }
     let onceki = null;
+    if (x.tur === "video") {
+      const ilk = u.isler.find((y) => y.kod === is.kod && y.arac === "nano" && y.poz === 0);
+      if (ilk && ilk.durum === "hazir") onceki = ilk.url;
+    }
     if (x.sonra) {
       const o = u.isler.find((y) => y.kod === is.kod && y.arac === x.sonra && y.poz === is.poz);
       if (!o || ["bekliyor", "gonderildi"].includes(o.durum)) continue; // önce Nano pozu bitsin
@@ -116,7 +129,7 @@ export async function uretimAdimi(env, simdi, { referansAl, bildir }) {
     }
     try {
       const refs = await referansAl(is.kod);
-      if (!refs.length) { is.durum = "hata"; is.hata = "referans fotoğraf yok"; continue; }
+      if (!refs.length) { is.not = "askı/manken fotoğrafı bekleniyor"; continue; } // fotoğraf gelene kadar bekler, harcama yok
       is.fal = await falGonder(env, x.uc, girdiHazirla(is, refs, onceki));
       is.durum = "gonderildi";
       is.zaman = simdi;

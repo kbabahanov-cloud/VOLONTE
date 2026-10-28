@@ -5,7 +5,7 @@ import { uretimAdimi, isPlani, aracOzeti, ARACLAR, DENEME_SINIR_USD } from "./ur
 
 function ortam() {
   const depo = new Map();
-  const env = { FAL_KEY: "k", KAYIT: { async get(k, t) { const v = depo.get(k); return v == null ? null : t === "json" ? JSON.parse(v) : v; }, async put(k, v) { depo.set(k, v); }, async delete(k) { depo.delete(k); } } };
+  const env = { FAL_KEY: "k", URETIM_TEST: "1", KAYIT: { async get(k, t) { const v = depo.get(k); return v == null ? null : t === "json" ? JSON.parse(v) : v; }, async put(k, v) { depo.set(k, v); }, async delete(k) { depo.delete(k); } } };
   const gonderim = [];
   globalThis.fetch = async (url, istek = {}) => {
     const u = String(url);
@@ -29,7 +29,7 @@ function ortam() {
 test("üretim: anahtar yoksa hiçbir şey yapılmaz; varsa deneme planı (2 model) araç araç gönderilir, FASHN Nano pozunun üstüne orijinal kıyafeti giydirir; bitince bildirim; bütçe sınırı aşılmaz", async () => {
   const o = ortam();
   const bildirim = [];
-  const yardim = { referansAl: async () => ["data:image/jpeg;base64,AAA", "data:image/jpeg;base64,BBB"], bildir: async (u) => bildirim.push(u) };
+  const yardim = { referansAl: async () => [{ rol: "aski", url: "data:image/jpeg;base64,AAA" }, { rol: "manken", url: "data:image/jpeg;base64,BBB" }], bildir: async (u) => bildirim.push(u) };
   await uretimAdimi({ ...o.env, FAL_KEY: undefined }, 1000, yardim);
   assert.equal(o.depo.size, 0);
   for (let i = 0; i < 80 && !bildirim.length; i++) await uretimAdimi(o.env, 1000 + i * 300, yardim);
@@ -46,4 +46,12 @@ test("üretim: anahtar yoksa hiçbir şey yapılmaz; varsa deneme planı (2 mode
   assert.ok(h.deneme <= DENEME_SINIR_USD);
   const oz = aracOzeti(u);
   assert.ok(oz.kling.uretilen >= 1 && oz.nano.uretilen >= 1);
+});
+
+test("üretim onay kilidi: kullanıcı onayı yokken anahtar girilse bile hiçbir araca istek gitmez", async () => {
+  const o = ortam();
+  delete o.env.URETIM_TEST;
+  await uretimAdimi(o.env, 1000, { referansAl: async () => [{ rol: "aski", url: "x" }], bildir: async () => {} });
+  assert.equal(o.gonderim.length, 0);
+  assert.equal(o.depo.size, 0);
 });

@@ -554,3 +554,16 @@ test("fotoğraf düzeltmesi: hatalı mesaj taslaktan çıkar ve bir daha alınma
   assert.match(html, /❓ 3322 size soruldu/);
   assert.ok(FOTO_SORUSU["3567"]);
 });
+
+test("üretim referansı: Selin'e özelden '3618 askı' yazılı fotoğraf kaydedilir; kodsuz fotoğraf için kod istenir; izinsiz kişi kaydedemez", async () => {
+  const o = ortam();
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, photo: [{ file_id: "k1", width: 320 }, { file_id: "b1", width: 1280 }], caption: "3618 askı" } }, o.env);
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, photo: [{ file_id: "b2", width: 1280 }], caption: "3618 manken" } }, o.env);
+  const r = JSON.parse(o.depo.get("selin:referans:3618"));
+  assert.deepEqual(r.map((x) => [x.file_id, x.rol]), [["b1", "aski"], ["b2", "manken"]]);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /askı 1, manken 1 fotoğraf[\s\S]*kanala ya da siteye gitmez/);
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, photo: [{ file_id: "b3" }] } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /model kodunu yazın/);
+  await guncelleme({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, photo: [{ file_id: "b4" }], caption: "3618 askı" } }, o.env);
+  assert.equal(JSON.parse(o.depo.get("selin:referans:3618")).length, 2);
+});
