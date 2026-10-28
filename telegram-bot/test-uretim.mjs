@@ -48,10 +48,13 @@ test("üretim: anahtar yoksa hiçbir şey yapılmaz; varsa deneme planı (2 mode
   assert.ok(oz.kling.uretilen >= 1 && oz.nano.uretilen >= 1);
 });
 
-test("üretim onay kilidi: kullanıcı onayı yokken anahtar girilse bile hiçbir araca istek gitmez", async () => {
+test("üretim: kullanıcı onayladı (28 Ekim); fal.ai anahtarı ya da askı/manken fotoğrafı yokken hiçbir araca istek gitmez", async () => {
+  const { URETIM_ONAYLI } = await import("./uretim.js");
+  assert.equal(URETIM_ONAYLI, true);
   const o = ortam();
   delete o.env.URETIM_TEST;
-  await uretimAdimi(o.env, 1000, { referansAl: async () => [{ rol: "aski", url: "x" }], bildir: async () => {} });
+  await uretimAdimi({ ...o.env, FAL_KEY: undefined }, 1000, { referansAl: async () => [{ rol: "aski", url: "x" }], bildir: async () => {} });
+  await uretimAdimi(o.env, 1000, { referansAl: async () => [], bildir: async () => {} });
   assert.equal(o.gonderim.length, 0);
-  assert.equal(o.depo.size, 0);
+  assert.ok(!o.depo.has("selin:uretimHarcama"));
 });

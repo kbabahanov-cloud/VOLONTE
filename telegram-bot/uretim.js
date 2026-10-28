@@ -3,15 +3,17 @@
 // Birden çok araç denenir (tek hesap: fal.ai — anahtar Cloudflare'de FAL_KEY), her üretim orijinalle yan yana
 // gösterilir; Claude renk / desen / kesim / yüz benzerliğini puanlar, tutmayan elenir.
 // KESİN KURAL: renk, desen, kesim birebir aynı. Hiçbir şey onaysız siteye çıkmaz (site kilidi + Telegram onayı).
-// Bütçe: deneme sınırı DENEME_SINIR_USD, toplam 60 $ kasa (Pelin/Arda/ChatGPT ile ortak) KASA_USD.
+// Bütçe: deneme sınırı DENEME_SINIR_USD. 60 $ kasa sınırı kullanıcı kararıyla kaldırıldı (28 Ekim); büyük harcama ve
+// yeni abonelik için önce kullanıcıya sorulur, her ay harcama raporu verilir (aylık kayıt: uretim-harcama:<ay>).
+// İleride bu bölüm Pelin'in (video/görsel botu) olacak; deneme Selin'de yapılıyor.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 
-// ONAY KİLİDİ: kullanıcı onayı olmadan hiçbir araca istek gitmez, para harcanmaz (anahtar girilse bile).
-// Kullanıcı araç listesini ve bütçeyi onaylayınca true yapılır.
-export const URETIM_ONAYLI = false;
-export const KASA_USD = 60;
+// ONAY KİLİDİ: kullanıcı 28 Ekim'de araç listesini (fal.ai, Nano Banana 2.1 ve Pro, FASHN, Kling, Veo 3.1 Fast,
+// Claude kontrolü) ve 3618 + 3592 denemesini onayladı. false yapılırsa hiçbir araca istek gitmez.
+export const URETIM_ONAYLI = true;
+export const ayAnahtari = (simdi) => `uretim-harcama:${new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 7)}`;
 export const DENEME_SINIR_USD = 15;
 export const DENEME_KODLARI = ["3618", "3592"]; // düz renk ceket + çiçek desenli elbise (kolay + zor desen)
 
@@ -40,7 +42,9 @@ const yaz = (env, k, v) => env.KAYIT.put(k, JSON.stringify(v));
 export async function uretimHarcanan(env) {
   return oku(env, "selin:uretimHarcama", { toplam: 0, deneme: 0 });
 }
-async function harcamaYaz(env, usd, deneme) {
+async function harcamaYaz(env, usd, deneme, simdi) {
+  const ay = Number((await env.KAYIT.get(ayAnahtari(simdi))) || 0); // aylık rapor için (paylaşılan KV)
+  await env.KAYIT.put(ayAnahtari(simdi), String(Math.round((ay + usd) * 1000) / 1000));
   const h = await uretimHarcanan(env);
   h.toplam = Math.round((h.toplam + usd) * 1000) / 1000;
   if (deneme) h.deneme = Math.round((h.deneme + usd) * 1000) / 1000;
@@ -115,7 +119,7 @@ export async function uretimAdimi(env, simdi, { referansAl, bildir }) {
     }
     if (is.durum !== "bekliyor" || gonderilen >= 2) continue;
     const x = ARACLAR[is.arac];
-    if (h.toplam + x.fiyat > KASA_USD || (u.deneme && h.deneme + x.fiyat > DENEME_SINIR_USD)) { is.durum = "butce"; continue; }
+    if (u.deneme && h.deneme + x.fiyat > DENEME_SINIR_USD) { is.durum = "butce"; continue; }
     let onceki = null;
     if (x.tur === "video") {
       const ilk = u.isler.find((y) => y.kod === is.kod && y.arac === "nano" && y.poz === 0);
@@ -134,7 +138,7 @@ export async function uretimAdimi(env, simdi, { referansAl, bildir }) {
       is.durum = "gonderildi";
       is.zaman = simdi;
       h.toplam += x.fiyat; if (u.deneme) h.deneme += x.fiyat;
-      await harcamaYaz(env, x.fiyat, u.deneme);
+      await harcamaYaz(env, x.fiyat, u.deneme, simdi);
     } catch (e) {
       is.durum = "hata";
       is.hata = String(e.message).slice(0, 200);

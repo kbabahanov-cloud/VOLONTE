@@ -183,7 +183,11 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - 28 Ekim: Üretim atölyesi kodu hazır ve yüklendi (telegram-bot/uretim.js). FAL_KEY girilince 3618 + 3592 ile deneme otomatik başlar: Nano Banana 2.1, Nano Banana Pro, FASHN (Nano pozu + orijinal kıyafet), Kling, Veo 3.1 Fast. Deneme sınırı 15 $, kasa 60 $. Claude orijinalle puanlar (8 altı elenir). Sayfa: önizleme linki + /uretim. Kullanıcı askı videolarını göndermeyi teklif etti (kıyafet referansı olarak kullanılacak).
 
-**Sıradaki komut: ÜRETİM DENEMESİ — kullanıcı 3322/3567 sorularını cevaplar; araç hesabı (öneri: tek fal.ai hesabı) + deneme bütçesi onayı. Sonra SAMİ-BOT BotFather adımları, 3 ücretsiz beceri.** (eski: Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Sonra: 24 modelin toplu listesini kullanıcı onaylar (Selin gece hazırlıyor). Sonra 3 ücretsiz beceri birlikte eklenecek (onaylı): Design, Website Design, Marketing (ücretli bağlantılar olmadan). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
+- 28 Ekim kullanıcı kararları: araçlar 1-7 onaylı (fal.ai, Nano Banana 2.1, Nano Banana Pro, FASHN, Kling, Veo 3.1 Fast, Claude kontrolü). Deneme 3618 + 3592; askı/manken fotoğraflarını Merdan veya Hemra Selin'e özelden gönderecek ("3618 askı" / "3618 manken"). Kanal fotoğrafı üretimde KULLANILMAZ. URETIM_ONAYLI=true (anahtar + fotoğraf gelince başlar), deneme sınırı 15 $.
+- 60 $ kasa KALDIRILDI. Büyük harcama / yeni abonelik → önce sor. Her ayın 1'i 09:45 aylık harcama raporu (venom.js aylikRapor). Claude 80 $ aylık sınırı aynen duruyor.
+- Üretim ileride Pelin'in işi: Pelin botu açılınca uretim.js bölümü Pelin'e taşınacak.
+
+**Sıradaki komut: FAL-1 — kullanıcı fal.ai'ye Google ile kaydolur, 20 $ yükler ("fal hesabı açıldı" der). Sonra FAL-2: API anahtarı → Cloudflare volonte-selin → Secret FAL_KEY. Paralel: Merdan/Hemra 3618 ve 3592 askı+manken fotoğraflarını Selin'e gönderir. Sonra SAMİ-BOT BotFather adımları, bağlantılar listesi.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

@@ -49,7 +49,7 @@ import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "
 import { StokDO, stokKodu } from "./stok.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
-import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor } from "./venom.js";
 
 export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -1281,6 +1281,7 @@ export async function sabahIsleri(env, simdi) {
     await grubaGonder(env, "kemal", r.metin, tgf);
   }
   if (await raporZamani(env, simdi, [9, 40], "venom:topluRapor")) await topluRapor(env, simdi, tgf);
+  await aylikRapor(env, simdi, tgf, AYLIK_SINIR_USD);
 }
 
 export async function kemalRaporu(env, simdi) {

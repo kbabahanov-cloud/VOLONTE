@@ -75,3 +75,30 @@ async function yapayZekaYorumu(env, simdi, metin) {
   await harcamaEkle(env, model, r.usage, simdi);
   return r.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim().slice(0, 600) || null;
 }
+
+// Her ayın 1'i 09:45 — aylık harcama raporu (kullanıcı kararı 28 Ekim: 60 $ kasa kaldırıldı, her ay rapor verilecek).
+// Claude (Kemal + Selin + Defne, aylık sınır harcama.js) ve üretim araçları (fal.ai, uretim.js) ayrı ayrı.
+export function aylikRaporMetni(simdi, { claude, uretim, claudeSinir }) {
+  const ay = new Date((simdi + SAAT_FARKI - 86400) * 1000).toISOString().slice(0, 7);
+  const [y, a] = ay.split("-");
+  const toplam = claude + uretim;
+  return [
+    `💰 VENOM — ${a}.${y} aylık harcama raporu`,
+    "",
+    `• Claude (Kemal, Selin, Sami raporları, kontroller): ${claude.toFixed(2)} $ (aylık sınır ${claudeSinir} $)`,
+    `• Üretim araçları (fal.ai: fotoğraf/video): ${uretim.toFixed(2)} $`,
+    `• Cloudflare, GitHub, Telegram: 0 $ (ücretsiz paket)`,
+    "",
+    `Toplam: ${toplam.toFixed(2)} $`,
+    "Not: fal.ai tutarı Selin'in tahminidir; kesin tutar fal.ai panelinde.",
+  ].join("\n");
+}
+
+export async function aylikRapor(env, simdi, tgf, claudeSinir) {
+  if (gunAnahtari(simdi).slice(8) !== "01") return;
+  if (!(await raporZamani(env, simdi, [9, 45], "venom:aylikRapor"))) return;
+  const gecenAy = new Date((simdi + SAAT_FARKI - 86400) * 1000).toISOString().slice(0, 7);
+  const claude = Number((await env.KAYIT.get(`harcama:${gecenAy}`)) || 0) / 1e6;
+  const uretim = Number((await env.KAYIT.get(`uretim-harcama:${gecenAy}`)) || 0);
+  await grubaGonder(env, "kemal", aylikRaporMetni(simdi, { claude, uretim, claudeSinir }), tgf);
+}

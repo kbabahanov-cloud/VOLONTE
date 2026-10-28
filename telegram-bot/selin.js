@@ -18,7 +18,7 @@ import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak } from "./venom.js";
-import { uretimAdimi, aracOzeti, uretimHarcanan, ARACLAR, KASA_USD, DENEME_SINIR_USD } from "./uretim.js";
+import { uretimAdimi, aracOzeti, uretimHarcanan, ARACLAR, DENEME_SINIR_USD } from "./uretim.js";
 
 const SAAT_FARKI = 3 * 3600;
 const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
@@ -1111,7 +1111,7 @@ async function uretimCalis(env, simdi) {
     const oz = aracOzeti(u);
     const satir = Object.values(oz).map((a) => `• ${a.ad}: ${a.uretilen} üretim${a.tur === "foto" ? `, uygun ${a.uygun} (desen ${a.desen ?? "-"}/10, renk ${a.renk ?? "-"}/10)` : ""}${a.hata ? `, hata ${a.hata}` : ""}`);
     const h = await uretimHarcanan(env);
-    const metin = `🎨 Selin — üretim denemesi bitti (${u.kodlar.join(", ")}).\n\n${satir.join("\n")}\n\nHarcama (yaklaşık): ${h.deneme.toFixed(2)} $ (deneme sınırı ${DENEME_SINIR_USD} $, kasa ${KASA_USD} $).\n\nOrijinalle yan yana karşılaştırma:\n${await onizlemeLinki(env)}/uretim\n\nSiteye hiçbir şey çıkmadı.`;
+    const metin = `🎨 Selin — üretim denemesi bitti (${u.kodlar.join(", ")}).\n\n${satir.join("\n")}\n\nHarcama (yaklaşık): ${h.deneme.toFixed(2)} $ (deneme sınırı ${DENEME_SINIR_USD} $).\n\nOrijinalle yan yana karşılaştırma:\n${await onizlemeLinki(env)}/uretim\n\nSiteye hiçbir şey çıkmadı.`;
     for (const k of kimlikler(env.ALLOWED_IDS)) await tg(env, "sendMessage", { chat_id: k, text: metin, disable_web_page_preview: true });
   };
   await uretimAdimi(env, simdi, { referansAl, bildir });

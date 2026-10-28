@@ -131,3 +131,19 @@ test("Sami bot anahtarı yokken de rapor hazırlanır (Telegram'a gitmez); payla
   assert.ok(!o.depo.has("sami:elleRapor"));
   assert.ok([...o.depo.keys()].some((k) => k.startsWith("venom:samiMetin:")));
 });
+
+test("aylık harcama raporu: ayın 1'inde geçen ayın Claude + üretim harcaması, bir kez", async () => {
+  const { aylikRapor } = await import("./venom.js");
+  const o = ortam();
+  const birinci = Date.UTC(2026, 10, 1, 9 - 3, 50) / 1000; // 1 Kasım 09:50 İstanbul
+  o.depo.set("harcama:2026-10", String(12.5 * 1e6));
+  o.depo.set("uretim-harcama:2026-10", "5.6");
+  const g = [];
+  const tgf = async (env, metod, govde) => g.push(govde);
+  await aylikRapor(o.env, birinci - 86400, tgf, 80); // 31 Ekim: rapor yok
+  assert.equal(g.length, 0);
+  await aylikRapor(o.env, birinci, tgf, 80);
+  await aylikRapor(o.env, birinci + 300, tgf, 80);
+  assert.equal(g.length, 2); // iki yöneticiye, bir kez
+  assert.match(g[0].text, /10\.2026 aylık harcama raporu[\s\S]*Claude[^\n]*12\.50 \$[\s\S]*fal\.ai[^\n]*5\.60 \$[\s\S]*Toplam: 18\.10 \$/);
+});
