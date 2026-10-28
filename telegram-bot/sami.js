@@ -52,9 +52,12 @@ export default {
     return new Response("Sayım Sami çalışıyor (sadece okur).");
   },
   async scheduled(olay, env) {
-    if (!env.BOT_TOKEN || !env.STOK) return;
+    if (!env.STOK) return;
     const simdi = Math.floor(Date.now() / 1000);
-    for (const [ad, f] of Object.entries({ webhookKur, sorular, sabahRaporu })) {
+    // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
+    // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu } : { sabahRaporu };
+    for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
       } catch (e) {
@@ -183,23 +186,49 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
   };
 }
 
+// Sami kanala eklenmeden önce (ya da paylaşım kaydı yoksa) dünkü paylaşımlar Kemal'in kanal dizininden
+// ("kodlar") çıkarılır; paylaşım anındaki stok, o andan sonraki ilk bitti/geldi olayından bulunur.
+export function kanaldanPaylasimlar(kodlar, tum, olaylar, basla, bitis) {
+  const sonuc = [];
+  for (const [kod, gruplar] of Object.entries(kodlar)) {
+    for (const g of gruplar) {
+      if (!(g.tarih >= basla && g.tarih < bitis)) continue;
+      const x = tum[kod];
+      let toplam = x ? x.toplam : null;
+      const sonraki = olaylar.filter((o) => o.kod === kod && o.zaman > g.tarih && ["bitti", "geldi"].includes(o.tur)).sort((a, b) => a.zaman - b.zaman)[0];
+      if (x && sonraki) toplam = sonraki.tur === "bitti" ? 1 : 0;
+      sonuc.push({ kod, zaman: g.tarih, toplam, mesaj: g.ids[0] });
+    }
+  }
+  return sonuc.sort((a, b) => a.zaman - b.zaman);
+}
+
 async function sabahRaporu(env, simdi) {
   const s = saat(simdi);
-  if (s < RAPOR_SAATI[0] + RAPOR_SAATI[1] / 60 || s >= 10) return;
+  const elle = await env.KAYIT.get("sami:elleRapor"); // elle istenen rapor: saat ve günlük sınır yok, Telegram'a gitmez
   const gun = gunAnahtari(simdi);
-  if ((await stokIste(env, "/ayar-oku", { k: `rapor:${gun}` })).v) return;
-  await stokIste(env, "/ayar-yaz", { k: `rapor:${gun}`, v: "1" });
+  if (!elle) {
+    if (s < RAPOR_SAATI[0] + RAPOR_SAATI[1] / 60 || s >= 10) return;
+    if ((await stokIste(env, "/ayar-oku", { k: `rapor:${gun}` })).v) return;
+    await stokIste(env, "/ayar-yaz", { k: `rapor:${gun}`, v: "1" });
+  } else await env.KAYIT.delete("sami:elleRapor");
   const dunBasi = simdi - (simdi + SAAT_FARKI) % 86400 - 86400; // dün 00:00 (İstanbul)
+  const tum = await stokIste(env, "/tum");
+  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+  let paylasimlar = await stokIste(env, "/paylasimlar", { basla: dunBasi, bitis: dunBasi + 86400 });
+  if (!paylasimlar.length) paylasimlar = kanaldanPaylasimlar(kodlar, tum, await stokIste(env, "/olaylar", { basla: dunBasi, bitis: simdi }), dunBasi, dunBasi + 86400);
   const rapor = samiRaporu({
     simdi,
     ozet: await stokIste(env, "/ozet"),
     olaylar: await stokIste(env, "/olaylar", { basla: dunBasi, bitis: dunBasi + 86400 }),
-    paylasimlar: await stokIste(env, "/paylasimlar", { basla: dunBasi, bitis: dunBasi + 86400 }),
-    tum: await stokIste(env, "/tum"),
+    paylasimlar,
+    tum,
     site: await siteUrunleri(env),
-    kodlar: (await env.KAYIT.get("kodlar", "json")) || {},
+    kodlar,
     sonpaylasim: (await env.KAYIT.get("sonpaylasim", "json")) || {},
   });
+  await env.KAYIT.put(`venom:samiMetin:${gun}`, rapor.metin, { expirationTtl: 7 * 86400 }); // tam metin (kontrol için)
+  if (elle) return;
   await raporuBirak(env, "sami", simdi, rapor);
-  await grubaGonder(env, "sami", rapor.metin, tg);
+  if (env.BOT_TOKEN) await grubaGonder(env, "sami", rapor.metin, tg);
 }

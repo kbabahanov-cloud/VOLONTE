@@ -112,3 +112,22 @@ test("toplu rapor: üç botun özeti + yakalanan sorunlar + yapılacaklar; gruba
   await topluRapor(o.env, ist(9, 40), async (env, metod, govde) => g.push({ metod, govde }));
   assert.deepEqual(g.map((x) => x.govde.chat_id), [-900]);
 });
+
+test("Sami bot anahtarı yokken de rapor hazırlanır (Telegram'a gitmez); paylaşım kaydı yoksa Kemal'in kanal dizininden dünkü paylaşımlar kontrol edilir", async () => {
+  const { kanaldanPaylasimlar } = await import("./sami.js");
+  const tum = { "3100": { toplam: 0, fiyat: 30 }, "3194": { toplam: 3, fiyat: 70 } };
+  const kodlar = { "3100": [{ ids: [700], tarih: ist(14, 0, -1) }], "3194": [{ ids: [701], tarih: ist(15, 0, -1) }, { ids: [10], tarih: ist(10, 0, -5) }], "3595": [{ ids: [702], tarih: ist(16, 0, -1) }] };
+  // 3194 dün 15:00'te paylaşıldı, 18:00'de bitti, bugün geri geldi → paylaşım anında stokta
+  const olaylar = [{ kod: "3194", tur: "bitti", zaman: ist(18, 0, -1) }, { kod: "3194", tur: "geldi", zaman: ist(8, 0) }];
+  const p = kanaldanPaylasimlar(kodlar, tum, olaylar, ist(0, 0, -1), ist(0));
+  assert.deepEqual(p.map((x) => [x.kod, x.toplam]), [["3100", 0], ["3194", 1], ["3595", null]]);
+  const o = ortam();
+  delete o.env.BOT_TOKEN;
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 3, fiyat: 69 }], ist(8, 0, -1));
+  o.depo.set("sami:elleRapor", "1");
+  o.g.length = 0;
+  await sami.scheduled({}, o.env);
+  assert.equal(o.g.length, 0); // Telegram yok
+  assert.ok(!o.depo.has("sami:elleRapor"));
+  assert.ok([...o.depo.keys()].some((k) => k.startsWith("venom:samiMetin:")));
+});
