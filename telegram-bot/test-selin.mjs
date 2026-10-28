@@ -567,3 +567,12 @@ test("üretim referansı: Selin'e özelden '3618 askı' yazılı fotoğraf kayde
   await guncelleme({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, photo: [{ file_id: "b4" }], caption: "3618 askı" } }, o.env);
   assert.equal(JSON.parse(o.depo.get("selin:referans:3618")).length, 2);
 });
+
+test("/kimim: izinsiz kişi de kendi kimliğini öğrenir, başka cevap almaz", async () => {
+  const o = ortam();
+  await guncelleme({ message: { chat: { id: 999, type: "private" }, from: { id: 999, first_name: "Yeni" }, text: "/kimim" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Telegram kimliğiniz: 999[\s\S]*izinli değilsiniz/);
+  assert.ok(o.depo.has("venom:kimlik:selin:999"));
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/kimim" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /izinlisiniz/);
+});

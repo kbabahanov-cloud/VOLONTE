@@ -1502,6 +1502,11 @@ export async function guncelleme(u, env) {
   if (u.my_chat_member) return grupUyeligi(u.my_chat_member, env, "selin", "🌸 Selin (site)", tg);
   const m = u.message;
   if (!m || m.chat.type !== "private" || !m.from) return;
+  // /kimim: herkes kendi Telegram kimliğini öğrenir (izin vermek için). Yabancıya başka hiçbir cevap yok.
+  if ((m.text || "").trim().toLowerCase().startsWith("/kimim")) {
+    await env.KAYIT.put(`venom:kimlik:selin:${m.from.id}`, JSON.stringify({ ad: kisiAdi(m.from), kullanici: m.from.username || null, zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 7 * 86400 });
+    return tg(env, "sendMessage", { chat_id: m.chat.id, text: `Telegram kimliğiniz: ${m.from.id}\n${izinli(m.from.id, env) ? "✅ Selin'de izinlisiniz." : "⛔ Henüz izinli değilsiniz; bu numarayı yöneticiye iletin."}` });
+  }
   if (!izinli(m.from.id, env)) {
     await env.KAYIT.put(`selin:bekleyen:${m.from.id}`, JSON.stringify({ ad: kisiAdi(m.from), kullanici: m.from.username || null }), { expirationTtl: 7 * 86400 });
     return; // Selin sadece yöneticiler ve ekiple konuşur
