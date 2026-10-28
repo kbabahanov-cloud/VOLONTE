@@ -1175,9 +1175,6 @@ const ISTEK_SAATI = 10;
 const GUN_SONU_SAATI = 20;
 // Önce: önizlemede fotoğrafı karışan 24 model + sitedeki 4 model (yeni yolla baştan), sonra stoktaki diğerleri.
 const ONCELIKLI = ["3183", "3186", "3322", "3335", "3360", "3403", "3407", "3411", "3429", "3439", "3475", "3481", "3506", "3520", "3558", "3565", "3567", "3577", "3578", "3583", "3592", "3593", "3618", "4211", "3563", "3279", "3595", "3448"];
-// Vegawin'de stokta görünmese de istenecek modeller (kullanıcı kararı 28 Ekim: fotoğrafları gönderilecek;
-// fiyat Vegawin'de yoksa sitede "Ask price").
-const HER_ZAMAN_ISTE = ["3279", "3595"];
 const OZEL_ACIK = ["istendi", "geldi", "onayda", "yukleniyor", "sitede", "gonderilemedi", "eklenmeyecek"];
 const BEDEN_KELIME = [[/k[üu][çc][üu]k/i, "k"], [/b[üu]y[üu]k/i, "b"], [/ik[iı]s[iı]/i, "i"]];
 
@@ -1188,7 +1185,7 @@ export async function istekAdaylari(env, modeller) {
   const stok = await stokIste2(env, "/stoktakiler");
   const kodlar = stok.map((r) => String(r.kod));
   const uygun = (k) => !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
-  const oncelik = ONCELIKLI.filter((k) => (kodlar.includes(k) || HER_ZAMAN_ISTE.includes(k)) && uygun(k));
+  const oncelik = ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k));
   const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
   return [...oncelik, ...diger];
 }
