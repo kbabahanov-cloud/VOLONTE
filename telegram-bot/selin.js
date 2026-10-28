@@ -18,6 +18,7 @@ import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak } from "./venom.js";
+import { uretimAdimi, aracOzeti, uretimHarcanan, ARACLAR, KASA_USD, DENEME_SINIR_USD } from "./uretim.js";
 
 const SAAT_FARKI = 3 * 3600;
 const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
@@ -155,6 +156,7 @@ export default {
       await cagir("/kare");
       await cagir("/tarama");
       await cagir("/toplu");
+      await cagir("/uretim");
       return;
     }
     if (duraklatildi(Math.floor(Date.now() / 1000))) return;
@@ -190,6 +192,9 @@ export class SelinDO {
       case "/kare": await kareSiraGuvenli(env, simdi); return new Response("ok");
       case "/toplu":
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
+        return new Response("ok");
+      case "/uretim":
+        try { await uretimCalis(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `uretim: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/tarama":
         try { await taramaAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `tarama: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
@@ -998,6 +1003,7 @@ export async function onizleme(env, yol, aralik) {
   const jeton = await env.KAYIT.get("selin:kontrolJeton");
   if (!gizliEsit(anahtar || "", await onizlemeAnahtari(env)) && !(jeton && gizliEsit(anahtar || "", jeton))) return new Response("yok", { status: 404 });
   if (tur === "json") return Response.json(await kontrolListesi(env));
+  if (tur === "uretim") return uretimSayfasi(env, anahtar);
   if (tur === "m") return kontrolMesaji(env, kod);
   if (tur === "f" || tur === "v") {
     const t = await oku(env, "selin:toplu", null);
@@ -1083,6 +1089,68 @@ document.querySelectorAll(".model-diller").forEach(function (g) {
 document.querySelectorAll(".model-video-site video").forEach(function (v) { v.addEventListener("error", function () { v.parentElement.remove(); }); });
 </script></body></html>`;
   return new Response(sayfa, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+}
+
+// ---------- Üretim atölyesi bağlantısı (uretim.js) ----------
+// Referans: modelin taslağındaki net fotoğraflar (hatalı mesajlar zaten çıkarıldı), en büyük boyutta.
+async function uretimCalis(env, simdi) {
+  const onbellek = new Map();
+  const referansAl = async (kod, yalinB64 = false) => {
+    if (!onbellek.has(kod)) {
+      const modeller = await oku(env, "selin:modeller", {});
+      const t = modeller[kod] && modeller[kod].taslak;
+      const netler = t ? t.fotolar.filter((f) => f.net && !(HARIC_MESAJ[kod] || []).includes(f.id)).slice(0, 3) : [];
+      const liste = [];
+      for (const f of netler) liste.push(f.buyuk.belge ? await belgeB64(env, f.buyuk.file_id, 1536) : await dosyaB64(env, f.buyuk.file_id));
+      onbellek.set(kod, liste);
+    }
+    const l = onbellek.get(kod);
+    return yalinB64 ? l : l.map((b) => `data:image/jpeg;base64,${b}`);
+  };
+  const bildir = async (u) => {
+    const oz = aracOzeti(u);
+    const satir = Object.values(oz).map((a) => `• ${a.ad}: ${a.uretilen} üretim${a.tur === "foto" ? `, uygun ${a.uygun} (desen ${a.desen ?? "-"}/10, renk ${a.renk ?? "-"}/10)` : ""}${a.hata ? `, hata ${a.hata}` : ""}`);
+    const h = await uretimHarcanan(env);
+    const metin = `🎨 Selin — üretim denemesi bitti (${u.kodlar.join(", ")}).\n\n${satir.join("\n")}\n\nHarcama (yaklaşık): ${h.deneme.toFixed(2)} $ (deneme sınırı ${DENEME_SINIR_USD} $, kasa ${KASA_USD} $).\n\nOrijinalle yan yana karşılaştırma:\n${await onizlemeLinki(env)}/uretim\n\nSiteye hiçbir şey çıkmadı.`;
+    for (const k of kimlikler(env.ALLOWED_IDS)) await tg(env, "sendMessage", { chat_id: k, text: metin, disable_web_page_preview: true });
+  };
+  await uretimAdimi(env, simdi, { referansAl, bildir });
+}
+
+async function uretimSayfasi(env, anahtar) {
+  const u = await oku(env, "selin:uretim", null);
+  const h = await uretimHarcanan(env);
+  const kok = `/onizleme/${anahtar}`;
+  if (!u) return new Response(`<p style="font:16px sans-serif;padding:20px">Üretim henüz başlamadı${env.FAL_KEY ? "" : " (fal.ai anahtarı girilmedi)"}.</p>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+  const modeller = await oku(env, "selin:modeller", {});
+  const oz = aracOzeti(u);
+  const tablo = Object.entries(oz).map(([, a]) => `<tr><td>${htmlKacir(a.ad)}</td><td>${a.tur}</td><td>${a.fiyat} $</td><td>${a.uretilen}</td><td>${a.tur === "foto" ? `${a.uygun}` : "siz bakın"}</td><td>${a.desen ?? "-"}</td><td>${a.renk ?? "-"}</td><td>${a.hata}</td></tr>`).join("");
+  const bloklar = u.kodlar.map((kod) => {
+    const t = modeller[kod] && modeller[kod].taslak;
+    const netler = t ? t.fotolar.filter((f) => f.net) : [];
+    const orj = netler.slice(0, 3).map((f, i) => `<figure><img src="${kok}/f/${kod}/${i}" loading="lazy"><figcaption>ORİJİNAL</figcaption></figure>`).join("");
+    const satirlar = Object.entries(ARACLAR).map(([a, x]) => {
+      const isler = u.isler.filter((is) => is.kod === kod && is.arac === a);
+      const kutu = isler.map((is) => {
+        const p = u.puan && u.puan[kod] && u.puan[kod][`${a}:${is.poz}`];
+        const etiket = p ? `<figcaption class="${p.uygun ? "iyi" : "kotu"}">${p.uygun ? "✅" : "❌"} renk ${p.renk} · desen ${p.desen} · kesim ${p.kesim} · yüz ${p.yuz}<br>${htmlKacir(p.not || "")}</figcaption>` : `<figcaption>${is.durum === "hazir" ? "" : htmlKacir(is.durum + (is.hata ? ": " + is.hata : ""))}</figcaption>`;
+        if (is.durum !== "hazir") return `<figure class="bos">${etiket}</figure>`;
+        return x.tur === "video" ? `<figure><video controls playsinline preload="metadata" src="${htmlKacir(is.url)}"></video>${etiket}</figure>` : `<figure><a href="${htmlKacir(is.url)}" target="_blank"><img src="${htmlKacir(is.url)}" loading="lazy"></a>${etiket}</figure>`;
+      }).join("");
+      return `<h3>${htmlKacir(x.ad)} — ${x.fiyat} $/${x.tur === "video" ? "video" : "görsel"}</h3><div class="sira"><div class="orj">${orj}</div>${kutu}</div>`;
+    }).join("");
+    return `<section><h2>${htmlKacir(kod)} ${t ? "— " + htmlKacir(t.baslik) : ""}</h2>${satirlar}</section>`;
+  }).join("");
+  const sayfa = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Üretim karşılaştırma — VOLONTE</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;margin:0;padding:16px;background:#fafafa;color:#222}h2{margin-top:36px;border-bottom:2px solid #222}h3{font-size:15px;margin:18px 0 6px}
+.sira{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.orj{display:flex;gap:8px;border-right:3px solid #c9a227;padding-right:8px}
+figure{margin:0;flex:0 0 220px}figure img,figure video{width:220px;height:300px;object-fit:cover;background:#ddd;border-radius:6px}figcaption{font-size:12px;padding:4px 2px}
+.iyi{color:#0a7a2f}.kotu{color:#b00020}.bos{height:300px;background:#eee;border-radius:6px;display:flex;align-items:center;justify-content:center;text-align:center}
+table{border-collapse:collapse;background:#fff}td,th{border:1px solid #ddd;padding:6px 8px;font-size:13px}.bant{background:#1d1d1f;color:#fff;padding:12px;border-radius:8px}</style></head><body>
+<div class="bant">🎨 <b>ÜRETİM DENEMESİ — siteye çıkmadı.</b> Her satırda solda ORİJİNAL, sağda o aracın ürettikleri. Claude puanı: 8'in altı ❌ (kullanılmaz). Harcama (yaklaşık): ${h.deneme.toFixed(2)} $ / deneme sınırı ${DENEME_SINIR_USD} $.</div>
+<h2>Araç karşılaştırması</h2><table><tr><th>Araç</th><th>Tür</th><th>Fiyat</th><th>Üretilen</th><th>Uygun (≥8)</th><th>Desen ort.</th><th>Renk ort.</th><th>Hata</th></tr>${tablo}</table>
+${bloklar}</body></html>`;
+  return new Response(sayfa, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
 // ---------- Toplu yükleme (kullanıcı kararı, 27 Ekim) ----------

@@ -181,6 +181,8 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   Kural: renk/desen/kesim birebir; her üretim orijinalle yan yana onaya. Araçlar karşılaştırılacak (OpenAI görsel, Google Veo/Nano Banana,
   Kling, Runway, FASHN). Sora API 24 Eylül 2026'da kapandı. 60 $ kasa; önce 1-2 model deneme.
 
+- 28 Ekim: Üretim atölyesi kodu hazır ve yüklendi (telegram-bot/uretim.js). FAL_KEY girilince 3618 + 3592 ile deneme otomatik başlar: Nano Banana 2.1, Nano Banana Pro, FASHN (Nano pozu + orijinal kıyafet), Kling, Veo 3.1 Fast. Deneme sınırı 15 $, kasa 60 $. Claude orijinalle puanlar (8 altı elenir). Sayfa: önizleme linki + /uretim. Kullanıcı askı videolarını göndermeyi teklif etti (kıyafet referansı olarak kullanılacak).
+
 **Sıradaki komut: ÜRETİM DENEMESİ — kullanıcı 3322/3567 sorularını cevaplar; araç hesabı (öneri: tek fal.ai hesabı) + deneme bütçesi onayı. Sonra SAMİ-BOT BotFather adımları, 3 ücretsiz beceri.** (eski: Sıradaki komut: SAMİ-BOT — BotFather adımları (yarın sabah tek tek). Sonra: 24 modelin toplu listesini kullanıcı onaylar (Selin gece hazırlıyor). Sonra 3 ücretsiz beceri birlikte eklenecek (onaylı): Design, Website Design, Marketing (ücretli bağlantılar olmadan). Sonra 36 sadece-videolu model, İş 2 (site tasarımı), Pelin/Arda (60 $ tek kasa).**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
