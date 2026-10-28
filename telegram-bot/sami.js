@@ -16,7 +16,7 @@
 
 import { kodBul } from "./ortak.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
-import { grubaGonder, grupUyeligi, raporuBirak } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -47,7 +47,9 @@ export default {
     const url = new URL(istek.url);
     if (istek.method === "POST" && url.pathname === "/telegram") {
       if (!gizliEsit(istek.headers.get("X-Telegram-Bot-Api-Secret-Token"), env.WEBHOOK_SECRET)) return new Response("yetkisiz", { status: 401 });
-      await guncelleme(await istek.json(), env);
+      const u = await istek.json();
+      if (await birikimSuzgeci(env, "sami", u, (id) => izinli(id, env), tg)) return new Response("ok");
+      await guncelleme(u, env);
       return new Response("ok");
     }
     return new Response("Sayım Sami çalışıyor (sadece okur).");
@@ -55,6 +57,7 @@ export default {
   async scheduled(olay, env) {
     if (!env.STOK) return;
     const simdi = Math.floor(Date.now() / 1000);
+    if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
     const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu } : { sabahRaporu, stokTablosu, harcamaTablosu };

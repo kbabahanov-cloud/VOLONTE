@@ -200,3 +200,30 @@ test("stok deposu: kod sorguları dizin kullanır (tam tarama yok)", async () =>
   assert.match(plan, /USING INDEX urun_kod/);
   assert.ok(d);
 });
+
+test("birikmiş mesaj koruması: eski mesaja cevap yok, müşteri mesajı listeye; veritabanı açılınca kesim; kuyruk boşalınca liste yöneticilere", async () => {
+  const { birikimSuzgeci, birikimAdimi } = await import("./venom.js");
+  const o = ortam();
+  o.depo.set("venom:birikim:kemal", JSON.stringify({}));
+  const g = [];
+  let bekleyen = 3;
+  const tgf = async (env, metod, govde) => { g.push({ metod, govde }); return metod === "getWebhookInfo" ? { ok: true, result: { pending_update_count: bekleyen } } : { ok: true }; };
+  const ekip = (id) => [111, 333].includes(id);
+  const musteri = { message: { message_id: 5, date: ist(14), chat: { id: 900, type: "private" }, from: { id: 900, first_name: "Aisha", username: "aisha" }, text: "Price of 3194?" } };
+  assert.equal(await birikimSuzgeci(o.env, "kemal", musteri, ekip, tgf), true);
+  assert.equal(await birikimSuzgeci(o.env, "kemal", { message: { ...musteri.message, from: { id: 111 } } }, ekip, tgf), true);
+  assert.equal(await birikimSuzgeci(o.env, "kemal", { channel_post: { message_id: 1, date: ist(14), chat: { id: -100 } } }, ekip, tgf), false); // kanal kaydı işlenir
+  assert.equal(await birikimSuzgeci(o.env, "kemal", { callback_query: { id: "c" } }, ekip, tgf), true);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:birikmis:kemal")).map((x) => x.metin), ["Price of 3194?"]);
+  await birikimAdimi(o.env, "kemal", ist(15), tgf); // veritabanı çalışıyor → kesim
+  assert.equal(JSON.parse(o.depo.get("venom:birikim:kemal")).kesim, ist(15));
+  assert.equal(await birikimSuzgeci(o.env, "kemal", { message: { ...musteri.message, date: ist(15, 1) } }, ekip, tgf), false); // yeni mesaj normal
+  await birikimAdimi(o.env, "kemal", ist(15, 5), tgf); // kuyruk dolu
+  assert.ok(o.depo.has("venom:birikim:kemal"));
+  bekleyen = 0;
+  await birikimAdimi(o.env, "kemal", ist(15, 10), tgf);
+  assert.ok(!o.depo.has("venom:birikim:kemal"));
+  const liste = g.filter((x) => x.metod === "sendMessage");
+  assert.equal(liste.length, 2);
+  assert.match(liste[0].govde.text, /yeniden çalışıyor[\s\S]*1 müşteri mesajı \(HİÇBİRİNE otomatik cevap gitmedi\)[\s\S]*Aisha \(@aisha\): Price of 3194\?/);
+});

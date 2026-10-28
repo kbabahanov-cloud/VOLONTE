@@ -102,3 +102,60 @@ export async function aylikRapor(env, simdi, tgf, claudeSinir) {
   const uretim = Number((await env.KAYIT.get(`uretim-harcama:${gecenAy}`)) || 0);
   await grubaGonder(env, "kemal", aylikRaporMetni(simdi, { claude, uretim, claudeSinir }), tgf);
 }
+
+// ---------- Birikmiş mesaj koruması (28 Ekim) ----------
+// Cloudflare sınırı yüzünden işlenemeyen mesajları Telegram sonradan toplu gönderir. Koruma açıkken
+// ("venom:birikim:<bot>"): eski mesajlara HİÇBİR otomatik cevap gitmez; ekipten gelenler atlanır, müşteri
+// mesajları "venom:birikmis:<bot>" listesine yazılır ve kuyruk boşalınca liste yöneticilere gönderilir
+// (cevaplar sahibin onayıyla). Kanal paylaşımları ve üyelik olayları normal işlenir (cevap değil, kayıt).
+// kesim: botların veritabanı yeniden çalıştığı an; ondan önceki her mesaj "birikmiş" sayılır.
+export async function birikimSuzgeci(env, bot, u, izinliMi, tgf) {
+  const bayrak = await env.KAYIT.get(`venom:birikim:${bot}`, "json");
+  if (!bayrak) return false;
+  if (u.callback_query) {
+    await tgf(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "Bu düğmeye bot dururken basılmış. Lütfen birkaç dakika sonra yeniden basın.", show_alert: true }).catch(() => {});
+    return true;
+  }
+  const m = u.message || u.edited_message;
+  if (!m) return false; // kanal paylaşımı, üyelik, tepki: normal işlenir
+  if (bayrak.kesim && m.date >= bayrak.kesim) return false; // yeni mesaj
+  if (m.from && izinliMi(m.from.id)) return true; // ekip: sessizce atlanır (gerekirse yeniden yazar)
+  const liste = (await env.KAYIT.get(`venom:birikmis:${bot}`, "json")) || [];
+  liste.push({
+    zaman: m.date, sohbet: m.chat.id, tur: m.chat.type, mesaj: m.message_id,
+    ad: m.from ? [m.from.first_name, m.from.last_name].filter(Boolean).join(" ") : (m.chat.title || ""),
+    kullanici: (m.from && m.from.username) || null,
+    metin: String(m.text || m.caption || "").slice(0, 300), medya: Boolean(m.photo || m.video || m.document || m.voice),
+  });
+  await env.KAYIT.put(`venom:birikmis:${bot}`, JSON.stringify(liste.slice(-200)), { expirationTtl: 14 * 86400 });
+  return true;
+}
+
+// 5 dakikalık görevde: veritabanı çalışınca "kesim" konur; Telegram kuyruğu boşalınca koruma kalkar ve
+// (Kemal için) biriken müşteri mesajları listesi yöneticilere gider.
+export async function birikimAdimi(env, bot, simdi, tgf) {
+  const bayrak = await env.KAYIT.get(`venom:birikim:${bot}`, "json");
+  if (!bayrak) return;
+  if (!bayrak.kesim) {
+    if (!env.STOK) return;
+    const r = await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "saglik" }) }).catch(() => null);
+    if (!r || !r.ok) return; // Cloudflare sınırı sürüyor
+    bayrak.kesim = simdi;
+    await env.KAYIT.put(`venom:birikim:${bot}`, JSON.stringify(bayrak));
+    return;
+  }
+  if (simdi - bayrak.kesim < 120) return;
+  const w = await tgf(env, "getWebhookInfo", {});
+  if (!w || !w.ok || (w.result.pending_update_count || 0) > 0) return;
+  await env.KAYIT.delete(`venom:birikim:${bot}`);
+  if (bot !== "kemal") return;
+  const liste = (await env.KAYIT.get(`venom:birikmis:${bot}`, "json")) || [];
+  const saatYaz = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)} ${d.slice(11, 16)}`; };
+  const satirlar = liste.map((x, i) => `${i + 1}) ${saatYaz(x.zaman)} ${x.ad}${x.kullanici ? ` (@${x.kullanici})` : ""}${x.tur !== "private" ? " [grup]" : ""}: ${x.metin || (x.medya ? "[fotoğraf/video]" : "[boş]")}`);
+  const metin = liste.length
+    ? `✅ Kemal, Selin ve Sami yeniden çalışıyor.\n\n📨 Bot dururken gelen ${liste.length} müşteri mesajı (HİÇBİRİNE otomatik cevap gitmedi):\n\n${satirlar.join("\n")}\n\nHangilerine ne cevap gidecekse söyleyin; onayınız olmadan kimseye yazılmaz.`
+    : "✅ Kemal, Selin ve Sami yeniden çalışıyor. Bot dururken müşteriden mesaj gelmemiş.";
+  for (const k of kimlikler(env.ALLOWED_IDS)) {
+    for (let i = 0; i < metin.length; i += 3900) await tgf(env, "sendMessage", { chat_id: k, text: metin.slice(i, i + 3900), disable_web_page_preview: true });
+  }
+}

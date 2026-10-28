@@ -49,7 +49,7 @@ import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "
 import { StokDO, stokKodu } from "./stok.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
-import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi } from "./venom.js";
 
 export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -89,6 +89,8 @@ export default {
         return new Response("yetkisiz", { status: 401 });
       }
       const update = await request.json();
+      // Birikmiş mesaj koruması: veritabanına gitmeden önce (eski mesaja cevap yok, müşteri mesajı listeye).
+      if (await birikimSuzgeci(env, "kemal", update, (id) => kisilerden(env).includes(String(id)), telegram)) return new Response("ok");
       // Kemal'in işleri kendi Durable Object'inde çalışır (sık yazılan kayıtlar orada; KV sınırı).
       if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
       else await guncellemeIsle(update, env);
@@ -102,6 +104,7 @@ export default {
   // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
+    try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     if (env.KATALOG) {
       const nesne = kemalNesne(env);
       await nesne.fetch("https://kemal/kemal/cron", { method: "POST" });

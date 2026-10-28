@@ -17,7 +17,7 @@ import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
-import { grubaGonder, grupUyeligi, raporZamani, raporuBirak } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
 import { uretimAdimi, aracOzeti, uretimHarcanan, ARACLAR, DENEME_SINIR_USD } from "./uretim.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -104,6 +104,7 @@ export default {
     if (istek.method === "POST" && url.pathname === "/telegram") {
       if (!gizliEsit(istek.headers.get("X-Telegram-Bot-Api-Secret-Token"), env.WEBHOOK_SECRET)) return new Response("yetkisiz", { status: 401 });
       const u = await istek.json();
+      if (await birikimSuzgeci(env, "selin", u, (id) => izinli(id, env), tg)) return new Response("ok");
       if (duraklatildi(Math.floor(Date.now() / 1000))) {
         // Mesaj gönderilmez, kayıt yazılmaz; düğmeye basana sadece kısa bir uyarı (sohbete düşmez).
         if (u.callback_query) await tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "Selin şu an durduruldu; yeniden başlatılınca devam edecek.", show_alert: true });
@@ -147,6 +148,7 @@ export default {
   },
   async scheduled(olay, env) {
     if (!env.BOT_TOKEN) return;
+    try { await birikimAdimi(env, "selin", Math.floor(Date.now() / 1000), tg); } catch { /* bir sonraki çalışmada */ }
     if (env.SELIN) {
       const nesne = selinNesne(env);
       const cagir = async (yol) => {
