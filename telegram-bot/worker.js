@@ -42,10 +42,14 @@ import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
 import { markaBas } from "./marka.js";
 import { musteriIsle, dilSec } from "./musteri.js";
-import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri } from "./ortak.js";
+import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } from "./ortak.js";
+
+export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
-import { StokDO, stokKodu, BEKLESIN_STOK_GUN } from "./stok.js";
+import { StokDO, stokKodu } from "./stok.js";
+import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor } from "./venom.js";
 
 export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -199,6 +203,7 @@ async function anaKanalMi(chat, env) {
 
 // Bot bir kanala yönetici eklenince: izinli kişi eklediyse orası "Kemal arşiv" olur.
 async function uyelikIsle(m, env) {
+  if (await grupUyeligi(m, env, "kemal", "🤖 Kemal (kanal ve paylaşımlar)", (e, metod, g) => telegram(e, metod, g))) return; // "Venom Ekip" grubu
   if (!m.chat || m.chat.type !== "channel" || (await anaKanalMi(m.chat, env))) return;
   const durum = m.new_chat_member && m.new_chat_member.status;
   const arsiv = await env.KAYIT.get("arsiv", "json");
@@ -230,20 +235,6 @@ export function fiyatBul(metin) {
 }
 
 // "CODE.3329", "Kod: 3394 B", "#3329", "Model 3329" → "3329"
-export function kodBul(metin) {
-  if (!metin) return null;
-  // Kodda en az bir rakam olmalı: "MODEL IS AVAILABLE" kod sayılmaz.
-  for (const m of metin.matchAll(/(?:code|kod|код|réf|ref|model|модель)\s*[.:#№\-]*\s*([A-Z0-9][A-Z0-9\-]{1,15})/gi)) {
-    if (/\d/.test(m[1])) return kodNormal(m[1]);
-  }
-  const m = metin.match(/#([0-9]{3,8})\b/);
-  return m ? kodNormal(m[1]) : null;
-}
-
-export function kodNormal(kod) {
-  return String(kod || "").trim().toUpperCase();
-}
-
 // kodlar = { "3329": [{ ids: [13696, 13697], tarih, album }], ... } (en yeni başta)
 // Aynı paylaşım (ortak parça ya da aynı albüm) zaten varsa parçalar birleştirilir:
 // eski bir albümün tek parçasının yazısı düzenlenince diğer parçalar kaybolmasın.
@@ -1249,11 +1240,6 @@ async function kuyrukIptal(cq, env) {
 // (sık yazıldığı için KV'nin günlük 1000 yazma sınırını harcamasın diye kendi deposunda).
 // ---------- Sayım Sami: Vegawin stok köprüsü (stok.js) ----------
 
-const stokNesne = (env) => env.STOK.get(env.STOK.idFromName("stok"), { locationHint: "enam" });
-async function stokIste(env, yol, govde = {}) {
-  const r = await stokNesne(env).fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(govde) });
-  return r.json();
-}
 async function stokGizliler(env) {
   if (!env.STOK) return [];
   try { return await stokIste(env, "/gizliler"); } catch { return []; }
@@ -1275,84 +1261,58 @@ async function kopruAl(request, env) {
   return Response.json({ ok: true, ...sonuc });
 }
 
-const STOK_SORU_PARTI = 6; // bir çalışmada en fazla soru (istek sınırı)
-const stokKlavye = (kod) => ({ inline_keyboard: [[
-  { text: "🔁 Repete olacak", callback_data: `sz:r:${kod}` },
-  { text: "🗑 Sil", callback_data: `sz:s:${kod}` },
-  { text: "⏳ Beklesin", callback_data: `sz:b:${kod}` },
-]] });
+// Stok soruları ve /stok: ortak kod (stokbot.js). "sami:aktif" varsa sorular Sami'nin botundan gider.
+const kemalTg = (env, metod, govde) => telegram(env, metod, govde);
+export const stokSorulariGonder = async (env, simdi) => {
+  if (await env.KAYIT.get("sami:aktif")) return; // stok bilgisinin ve sorularının sahibi Sami
+  return stokSorulariGonderOrtak(env, simdi, kemalTg);
+};
+const stokKarari = (cq, env) => stokKarariOrtak(cq, env, kemalTg);
+const stokGoster = (msg, env) => stokGosterOrtak(msg, env, kemalTg);
 
-export async function stokSorulariGonder(env, simdi) {
-  if (!env.STOK) return;
-  const sorular = await stokIste(env, "/sorular", { simdi, enFazla: STOK_SORU_PARTI });
-  if (!sorular.length) return;
-  const kanal = await env.KAYIT.get("kanal", "json");
-  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
-  for (const s of sorular) {
-    const metin = [
-      `📦 ${s.kod}${s.ad ? ` — ${s.ad}` : ""}`,
-      `Vegawin: stok bitti (adet ${s.adet}). Ne yapalım?`,
-      "🔁 Repete olacak → gizli bekler, stok gelince kendiliğinden geri döner",
-      "🗑 Sil → siteden ve Telegram turlarından kaldırılır (kanal paylaşımlarına ve Vegawin'e dokunulmaz)",
-      `⏳ Beklesin → ${BEKLESIN_STOK_GUN} gün sonra hâlâ stok yoksa tekrar sorarım`,
-    ].join("\n");
-    const sec = kanal && modelSecenekleri(s.kod, kodlar, {})[0];
-    const mesajlar = [];
-    for (const kisi of kisilerden(env)) {
-      let r = sec ? await telegram(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal.id, message_id: sec.ids[0], caption: metin, reply_markup: stokKlavye(s.kod) }) : { ok: false };
-      let tur = "c";
-      if (!r.ok) {
-        r = await telegram(env, "sendMessage", { chat_id: kisi, text: metin, reply_markup: stokKlavye(s.kod) });
-        tur = "t";
-      }
-      if (r.ok) mesajlar.push([kisi, r.result.message_id, tur, metin]);
-    }
-    await stokIste(env, "/soru-gonderildi", { kod: s.kod, mesajlar });
+// ---------- Venom Ekip sabah raporları (venom.js) ----------
+
+// 09:15 Kemal'in raporu, 09:40 toplu rapor (üç botun özeti + kontroller + yapay zekâ yorumu).
+export async function sabahIsleri(env, simdi) {
+  const tgf = (e, metod, g) => telegram(e, metod, g);
+  if (await raporZamani(env, simdi, [9, 15], "venom:kemalRaporu")) {
+    const r = await kemalRaporu(env, simdi);
+    await raporuBirak(env, "kemal", simdi, r);
+    await grubaGonder(env, "kemal", r.metin, tgf);
   }
+  if (await raporZamani(env, simdi, [9, 40], "venom:topluRapor")) await topluRapor(env, simdi, tgf);
+  await aylikRapor(env, simdi, tgf, AYLIK_SINIR_USD);
 }
 
-async function stokKarari(cq, env) {
-  const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  const [, islem, kod] = String(cq.data).split(":");
-  const kim = kisiAdi(cq.from);
-  if (!env.STOK) return cevapla("Stok köprüsü bağlı değil.");
-  const r = await stokIste(env, "/karar", { kod, islem, kim, simdi: Math.floor(Date.now() / 1000) });
-  if (!r.ok) return cevapla(r.kim ? `${r.kim} zaten karar verdi.` : "Bu soru artık geçerli değil.");
-  const ek = r.durum === "repete" ? `🔁 ${kim}: repete olacak — gizli bekliyor, stok gelince geri döner.`
-    : r.durum === "gizli" ? `🗑 ${kim}: sil — siteden ve Telegram turlarından kaldırıldı (kanal ve Vegawin'e dokunulmadı).`
-    : `⏳ ${kim}: beklesin — ${BEKLESIN_STOK_GUN} gün sonra tekrar sorulacak.`;
-  await cevapla("Tamam");
-  for (const [kisi, id, tur, metin] of r.mesajlar) {
-    const yeni = `${metin}\n\n${ek}`;
-    if (tur === "c") await telegram(env, "editMessageCaption", { chat_id: kisi, message_id: id, caption: yeni.slice(0, 1024), reply_markup: { inline_keyboard: [] } });
-    else await telegram(env, "editMessageText", { chat_id: kisi, message_id: id, text: yeni, reply_markup: { inline_keyboard: [] } });
-  }
-}
-
-async function stokGoster(msg, env) {
-  const yaz = (text) => telegram(env, "sendMessage", { chat_id: msg.chat.id, text, disable_web_page_preview: true });
-  if (!env.STOK) return yaz("Stok köprüsü henüz bağlı değil.");
-  const kod = stokKodu((msg.text || "").split(/\s+/)[1] || "");
-  if (!kod) {
-    const o = await stokIste(env, "/ozet");
-    if (!o.kopruler.length) return yaz("📦 Vegawin köprüsünden henüz veri gelmedi.");
-    const durum = { soru: "cevap bekleyen soru", repete: "repete bekleyen", gizli: "silinen (gizli)", beklesin: "beklesin" };
-    return yaz([
-      "📦 Vegawin stok köprüsü",
-      ...o.kopruler.map((k) => `• ${k.magaza}: ${k.adet} ürün · son veri ${tarihYaz(k.son)}`),
-      `Stokta: ${o.stokta} model · stoksuz (gizli): ${o.stoksuz}`,
-      ...o.kararlar.map((k) => `• ${durum[k.durum] || k.durum}: ${k.n}`),
-    ].join("\n"));
-  }
-  const b = await stokIste(env, "/bilgi", { kod });
-  if (!b.satirlar.length) return yaz(`${kod}: Vegawin'de bu kodla stok kaydı yok.`);
-  const karar = b.karar ? { soru: "stok bitti, cevap bekliyor", repete: `repete olacak (${b.karar.kim})`, gizli: `silindi/gizli (${b.karar.kim})`, beklesin: `beklesin (${b.karar.kim})` }[b.karar.durum] : null;
-  return yaz([
-    `📦 ${kod} — ${b.satirlar[0].ad || ""}`,
-    ...b.satirlar.map((x) => `• ${x.magaza}: ${x.adet} adet${x.fiyat != null ? ` · ${x.fiyat} $` : ""} (${tarihYaz(x.guncel)})`),
-    `Toplam: ${b.toplam} → ${b.toplam > 0 && !(b.karar && b.karar.durum === "gizli") ? "görünür" : "gizli (sitede ve Telegram'da görünmez)"}`,
-    karar ? `Durum: ${karar}` : null,
-  ].filter(Boolean).join("\n"));
+export async function kemalRaporu(env, simdi) {
+  const dun = gunAnahtari(simdi - 86400);
+  const kanalda = Number((await env.KAYIT.get(`gun:${dun}`)) || 0);
+  const kemalin = Number((await env.KAYIT.get(`sayac:${dun}`)) || 0);
+  const ozet = (await env.KAYIT.get("ozet", "json")) || { sonlar: [] };
+  const dunku = ozet.sonlar.filter((p) => gunAnahtari(p.tarih) === dun);
+  const tepkiler = await tepkileriOku(env, [...new Set(dunku.flatMap((p) => p.ids))]);
+  const puan = (p) => p.ids.reduce((t, id) => t + (tepkiler[id] || 0), 0);
+  const enIyi = [...dunku].filter((p) => puan(p) > 0).sort((a, b) => puan(b) - puan(a)).slice(0, 3);
+  const tur = await env.KAYIT.get("tur", "json");
+  const bugunTur = tur && (tur.gun || gunAnahtari(tur.basla)) === gunAnahtari(simdi) ? tur : null;
+  const istekler = ((await env.KAYIT.get("istekler", "json")) || []).filter((i) => i.durum === "bekliyor");
+  // Kontrol: sırada (bugün paylaşılacak) stoğu bitmiş model var mı? Stok bilgisi Sami'den.
+  const kuyruk = await kuyrukListesi(env);
+  const gizli = new Set(await stokGizliler(env));
+  const stoksuzSira = kuyruk.filter((o) => gizli.has(o.kod)).map((o) => o.kod);
+  const satir = [`🤖 Kemal — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`, ""];
+  satir.push(`Dün kanala ${kanalda} paylaşım yapıldı; ${kemalin} tanesi Kemal'in yeniden paylaşımı.`);
+  satir.push(enIyi.length ? `En çok tepki: ${enIyi.map((p) => `${kodBul(p.metin || "") || "kodsuz"} ❤️ ${puan(p)}`).join(" · ")}` : "Dün tepki verisi yok.");
+  satir.push(bugunTur ? `Bugünün turu: ${Object.keys(bugunTur.ogeler).length} model soruldu, ${bugunTur.onaylar.length} onay, ${Object.values(bugunTur.ogeler).filter((o) => !o.karar).length} cevap bekliyor.` : "Bugünün turu henüz başlamadı.");
+  satir.push(`Sırada: ${kuyruk.length} onaylı paylaşım. Müşteri istek defteri: ${istekler.length} bekleyen.`);
+  const sorunlar = stoksuzSira.length ? [`Paylaşım sırasında stoğu bitmiş model: ${stoksuzSira.join(", ")} (Sami'ye göre)`] : [];
+  satir.push("", "🔎 Kontrol:", stoksuzSira.length ? `• ⚠️ ${sorunlar[0]}` : "• ✅ Sıradaki paylaşımların hepsi stokta (ya da Vegawin dışı)");
+  return {
+    metin: satir.join("\n"),
+    ozet: `Dün ${kanalda} paylaşım (${kemalin} Kemal); bugünkü tur ${bugunTur ? `${bugunTur.onaylar.length} onay` : "başlamadı"}; sırada ${kuyruk.length}.`,
+    sorunlar,
+    yapilacak: bugunTur && Object.values(bugunTur.ogeler).some((o) => !o.karar) ? ["Kemal'in bugünkü turunda cevap bekleyen modeller var"] : [],
+  };
 }
 
 export class KatalogDO {
@@ -1391,7 +1351,10 @@ export class KatalogDO {
     if (yol === "/kemal/guncelleme") await guncellemeIsle(await istek.json(), env);
     else if (yol === "/kemal/cron") {
       await durumKontrol(env);
-      if (env.BOT_TOKEN) await rotasyon(env, simdi);
+      if (env.BOT_TOKEN) {
+        try { await sabahIsleri(env, simdi); } catch (e) { await this.env.KAYIT.put("kemal:raporHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+        await rotasyon(env, simdi);
+      }
     } else if (yol === "/kemal/adim") {
       await katalogGuvenli(env, simdi);
       await altyaziGuvenli(env, simdi);

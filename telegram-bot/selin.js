@@ -17,6 +17,8 @@ import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak } from "./venom.js";
+import { uretimAdimi, aracOzeti, uretimHarcanan, ARACLAR, DENEME_SINIR_USD } from "./uretim.js";
 
 const SAAT_FARKI = 3 * 3600;
 const ILK_HAFTA_GUNLUK = 50; // kullanıcı kararı (22 Ekim): ilk hafta günde 50 model
@@ -26,7 +28,7 @@ const PAYLASIM_EN_FAZLA = 4; // bir modelin en yeni kaç paylaşımından poz to
 const POZ_EN_FAZLA = 10;
 const ILETME_EN_FAZLA = 12; // bir hazırlıkta arşive iletilen mesaj (ücretsiz pakette çalışma başına 50 istek)
 const DUSUK_COZUNURLUK = 700; // piksel (genişlik ya da yükseklik); altı "düşük çözünürlük"
-const GUNCELLEMELER = ["message", "callback_query"];
+const GUNCELLEMELER = ["message", "callback_query", "my_chat_member"];
 // Sitedeki kategoriler (js/urunler.js ile aynı kimlikler) ve kartta gösterilen Türkçe adları.
 export const KATEGORI_ADI = {
   dresses: "Elbise", evening: "Abiye", sets: "Takım", jumpsuits: "Tulum",
@@ -45,7 +47,7 @@ const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice
 const kimlikler = (yazi) => String(yazi || "").split(",").map((x) => x.trim()).filter(Boolean);
 // Yöneticiler + ekip: hepsi listeleri görür ve düğmelere basar. Ayar işleri sadece yöneticide.
 const kisiler = (env) => [...new Set([...kimlikler(env.ALLOWED_IDS), ...kimlikler(env.EKIP_IDS)])];
-const izinli = (id, env) => kisiler(env).includes(String(id));
+const izinli = (id, env) => kisiler(env).includes(String(id)) || kimlikler(env.SAHIP_IDS).includes(String(id));
 const yoneticiMi = (id, env) => kimlikler(env.ALLOWED_IDS).includes(String(id));
 const kisiAdi = (f) => [f.first_name, f.last_name].filter(Boolean).join(" ") || f.username || "Biri";
 const oku = async (env, k, bos) => (await env.KAYIT.get(k, "json")) ?? bos;
@@ -85,6 +87,13 @@ function gizliEsit(a, b) {
 const DURAKLAT_BITIS = 0;
 export const duraklatildi = (simdi) => simdi < DURAKLAT_BITIS;
 
+// Site yükleme kilidi (kullanıcı kararı, 28 Ekim: önizlemede başka modellerin fotoğrafları görüldü).
+// true iken hiçbir model siteye yüklenmez (toplu düğmesi ve tek kart onayı dahil); taslaklar ve
+// liste kaybolmaz. Kullanıcı onayıyla false yapılır.
+export const SITE_KILIDI = true;
+const kilitli = (env) => SITE_KILIDI && env.KILIT_TEST_ACIK !== "1"; // testler kilidi açabilir
+const KILIT_MESAJI = "🔒 Siteye yükleme şu an kilitli (fotoğraflar kontrol ediliyor). Hiçbir şey siteye çıkmadı.";
+
 // Selin'in bütün işleri kendi Durable Object'inde ("selin") çalışır: "selin:*" kayıtları orada
 // (KV günlük yazma sınırı). Hata/durum kayıtları izlenebilsin diye KV'de kalır (depo.js).
 const selinNesne = (env) => env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
@@ -111,6 +120,20 @@ export default {
       if (env.SELIN) return selinNesne(env).fetch(`https://selin/sitevideo?id=${id}`, { headers: basliklar });
       return siteVideo(env, id, istek.headers.get("Range"));
     }
+    // Yeni akış videosu: /v2/<kod>/<n>
+    if (istek.method === "GET" && /^\/v2\/\d{3,6}\/\d+$/.test(url.pathname)) {
+      const [, , kod, n] = url.pathname.split("/");
+      const basliklar = { "x-aralik": istek.headers.get("Range") || "" };
+      if (env.SELIN) return selinNesne(env).fetch(`https://selin/v2?kod=${kod}&n=${n}`, { headers: basliklar });
+      return ozelVideo(env, kod, n, istek.headers.get("Range"));
+    }
+    // Toplu liste önizlemesi (gizli anahtarlı link; sadece bakmak için).
+    if (istek.method === "GET" && url.pathname.startsWith("/onizleme/")) {
+      const basliklar = { "x-aralik": istek.headers.get("Range") || "" };
+      const yol = url.pathname.slice("/onizleme/".length);
+      if (env.SELIN) return selinNesne(env).fetch(`https://selin/onizleme?yol=${encodeURIComponent(yol)}`, { headers: basliklar });
+      return onizleme(env, yol, istek.headers.get("Range"));
+    }
     if (istek.method === "GET" && url.pathname === "/video") {
       if (env.SELIN) return selinNesne(env).fetch(`https://selin/video?t=${encodeURIComponent(url.searchParams.get("t") || "")}`);
       return videoVer(env, url.searchParams.get("t"));
@@ -134,12 +157,10 @@ export default {
       // Durduruluyken bile kayıtlar bir kez kopyalanıp kontrol edilir (mesaj gönderilmez).
       if (duraklatildi(Math.floor(Date.now() / 1000))) return void (await nesne.fetch("https://selin/goc", { method: "POST" }));
       // Ayrı istekler: her birinin kendi istek sınırı; biri hata verirse diğerleri yine çalışır.
+      // Yeni akış (28 Ekim): kanal tabanlı işler (liste, hazırlık, kare, tarama, toplu) KAPALI.
       await cagir("/cron");
-      await cagir("/hazirla");
-      await cagir("/hazirla"); // iki model (toplu yüklemede hazırlık daha hızlı biter); sıra boşsa bir şey yapmaz
-      await cagir("/kare");
-      await cagir("/tarama");
-      await cagir("/toplu");
+      await cagir("/istek");
+      await cagir("/uretim");
       return;
     }
     if (duraklatildi(Math.floor(Date.now() / 1000))) return;
@@ -151,7 +172,8 @@ export default {
 
 // Her adım ayrı korunur: biri hata verirse diğerleri yine çalışır, hata KV'de "selin:hata".
 async function selinCron(env, simdi) {
-  const adimlar = { webhookKur, githubKontrol, fotografYokGocu, listeAdimi, ozetAdimi, siteStokEsitle };
+  // Yeni akış: kanal tabanlı adımlar (fotografYokGocu, listeAdimi, ozetAdimi, onizlemeDuyur, kontrolIstegi) kapalı.
+  const adimlar = { webhookKur, githubKontrol, siteStokEsitle, selinSabahRaporu, fotoDuzeltmeGocu };
   for (const [ad, f] of Object.entries(adimlar)) {
     try {
       await f(env, simdi);
@@ -176,9 +198,19 @@ export class SelinDO {
       case "/toplu":
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
+      case "/istek":
+        for (const [ad, f] of Object.entries({ istekAdimi, ozelHazirlaAdimi, gunSonuOzeti })) {
+          try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
+        }
+        return new Response("ok");
+      case "/v2": return ozelVideo(env, url.searchParams.get("kod"), url.searchParams.get("n"), istek.headers.get("x-aralik") || null);
+      case "/uretim":
+        try { await uretimCalis(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `uretim: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
+        return new Response("ok");
       case "/tarama":
         try { await taramaAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `tarama: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
+      case "/onizleme": return onizleme(env, url.searchParams.get("yol"), istek.headers.get("x-aralik") || null);
       case "/video": return videoVer(env, url.searchParams.get("t"));
       case "/sitevideo": return siteVideo(env, url.searchParams.get("id"), istek.headers.get("x-aralik") || null);
       case "/kare-geldi": return kareGeldi(env, await istek.json().catch(() => ({})), simdi);
@@ -392,6 +424,20 @@ async function belgeB64(env, fileId, genislik) {
   return b64Yap(new Uint8Array(await sonuc.response().arrayBuffer()));
 }
 
+// Fotoğraf kontrolü (28 Ekim, tek tek incelendi): kanalda bu koda yazılmış ama başka kıyafet/baskı
+// gösteren mesajlar. Bunlar hiçbir zaman taslağa girmez.
+export const HARIC_MESAJ = {
+  "3618": [13457], // sarı-siyah çizgili korse üst + etek videosu (3618 ceket-pantolon)
+  "3403": [10673], // eski görsel, baskı farklı
+  "3407": [10646], // eski görsel, yaprak baskısı farklı
+  "3429": [11083], // eski görsel, turuncu renk (model pembe)
+};
+// Kullanıcıya sorulan modeller: cevap gelene kadar taslak onaya/siteye gitmez.
+export const FOTO_SORUSU = {
+  "3322": "Bu kodla iki farklı kıyafet var: beyaz/siyah saçaklı ceket-pantolon (videolarında BLACK ROSE yazıyor) ve siyah dantel üst-etek (VOLONTE videosu). Hangisi 3322?",
+  "3567": "Aynı korseli ceket-pantolon 3 renkte paylaşılmış: siyah, kırmızı, beyaz. Sitede hepsi mi görünsün, tek renk mi?",
+};
+
 // Modelin en yeni paylaşımlarındaki bütün medya (arşiv kanalına iletilerek okunur; aynı fotoğraf tekrarsız).
 export async function medyaTopla(env, bilgi, kod) {
   const arsiv = await oku(env, "arsiv", null);
@@ -404,6 +450,7 @@ export async function medyaTopla(env, bilgi, kod) {
   let iletilen = 0;
   for (const sec of modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, PAYLASIM_EN_FAZLA)) {
     for (const id of sec.ids) {
+      if ((HARIC_MESAJ[kod] || []).includes(id)) continue;
       if (iletilen >= ILETME_EN_FAZLA || fotolar.length >= POZ_EN_FAZLA) break;
       iletilen++;
       const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: bilgi.kanal.id, message_id: id, disable_notification: true });
@@ -611,9 +658,9 @@ function kartMetni(kod, t, kanalAdi) {
     `Başlık: ${t.baslik}`,
     `Kategori: ${KATEGORI_ADI[t.kategori] || t.kategori} (yanlışsa ✏️ Düzelt → "kategori: takım" yazın)`,
     `Bedenler: ${beden}`,
-    `Fiyat: ${t.fiyat != null ? `${t.fiyat} $ (Vegawin)` : "Vegawin'de yok"}`,
-    `Pozlar: ${netler.length} net${atilan.length ? `; konmayacak ${atilan.length}: ${atilan.map((f) => `${kanalAdi ? `t.me/${kanalAdi}/${f.id}` : f.id} (${f.not})`).join(", ")}` : ""}`,
-    `Videolar: ${t.videolar.length ? `${t.videolar.length} (sitede Telegram oynatıcısıyla)` : "yok"}`,
+    `Fiyat: ${t.fiyat != null ? `${t.fiyat} $ (Vegawin)` : "Vegawin'de yok"}${t.kaynak === "ozel" ? ` · Stok: ${t.stok != null ? `${t.stok} adet` : "—"}` : ""}`,
+    `Pozlar: ${netler.length} net${atilan.length ? `; konmayacak ${atilan.length}: ${atilan.map((f) => `${t.kaynak === "ozel" ? `poz ${f.id}` : kanalAdi ? `t.me/${kanalAdi}/${f.id}` : f.id} (${f.not})`).join(", ")}` : ""}`,
+    `Videolar: ${t.videolar.length ? `${t.videolar.length}${t.kaynak === "ozel" ? " (sitenin kendi oynatıcısında, yazısız)" : " (sitede Telegram oynatıcısıyla)"}` : "yok"}`,
     "",
     `EN: ${t.aciklama.en}`,
     "",
@@ -752,6 +799,7 @@ async function sha256(metin) {
 }
 
 async function siteyeYukle(env, kod, kim, simdi) {
+  if (kilitli(env) && !ozelMi((await oku(env, "selin:modeller", {}))[kod])) throw new Error("siteye yükleme kilitli");
   const modeller = await oku(env, "selin:modeller", {});
   const t = modeller[kod] && modeller[kod].taslak;
   const bilgi = await kanalBilgisi(env);
@@ -772,7 +820,7 @@ async function siteyeYukle(env, kod, kim, simdi) {
   const urun = {
     kod, baslik: t.baslik, kategori: t.kategori, aciklama: { en: t.aciklama.en, fr: t.aciklama.fr, pt: t.aciklama.pt },
     bedenler: t.bedenler, fotolar: dosyalar.map((d) => d.yol),
-    videolar: t.videolar.map((v) => `${bilgi.kanal.kullanici}/${v.id}`),
+    videolar: t.kaynak === "ozel" ? t.videolar.filter((v) => !(v.boyut > VIDEO_SINIR)).map((v) => `selin/${kod}/${v.id}`) : t.videolar.map((v) => `${bilgi.kanal.kullanici}/${v.id}`),
     fiyat: st ? st.fiyat : t.fiyat ?? null, // Vegawin satış fiyatı ($)
     gizli: Boolean(st && st.gizli),        // stoğu bitince sitede görünmez (kayıt silinmez)
     eklenme: gunAnahtari(simdi),
@@ -836,11 +884,517 @@ export async function siteVideo(env, id, aralik) {
   return new Response(r.body, { status: r.status, headers: h });
 }
 
+// ---------- Toplu liste önizlemesi (kullanıcı isteği, 28 Ekim) ----------
+// Tek link: toplu listedeki modeller siteye nasıl girecekse öyle (sitenin kendi tasarımı, fotoğraflar,
+// video oynatıcı, fiyat, bedenler). Sadece bakmak içindir: siteye hiçbir şey yazmaz; onay yine
+// Telegram'daki "✅ Hepsini siteye yükle" düğmesiyle. Link gizli anahtarlıdır (yalnız ekibe gider).
+const htmlKacir = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const onizlemeAnahtari = async (env) => (await sha256(`${env.WEBHOOK_SECRET}:onizleme`)).slice(0, 24);
+export const onizlemeLinki = async (env) => `${env.SELF_URL}/onizleme/${await onizlemeAnahtari(env)}`;
+
+// "Onay bekleyen" sayıları ayrı ayrı: toplu listedekiler, tek tek gelen taslaklar, videodan kare bekleyenler.
+async function onayDokumu(env) {
+  const { modeller, kartlar, kareler } = await bekleyenler(env);
+  const t = await oku(env, "selin:toplu", null);
+  const toplu = t ? t.kodlar : [];
+  const hazir = toplu.filter((k) => modeller[k] && modeller[k].durum === "onayda");
+  const hazirlaniyor = toplu.filter((k) => modeller[k] && modeller[k].durum === "hazirlaniyor");
+  const soru = toplu.filter((k) => modeller[k] && modeller[k].durum === "foto-soru");
+  const olmayan = toplu.filter((k) => !hazir.includes(k) && !hazirlaniyor.includes(k) && !soru.includes(k));
+  return { modeller, t, toplu, hazir, hazirlaniyor, soru, olmayan, kartlar, kareler };
+}
+
+// Bir kez: kayıtlı taslaklardan hatalı mesajları çıkar; sorulan modelleri beklet (kayıt silinmez).
+export async function fotoDuzeltmeGocu(env) {
+  if ((await env.KAYIT.get("selin:fotoDuzeltme")) === "f1") return;
+  const modeller = await oku(env, "selin:modeller", {});
+  for (const [kod, idler] of Object.entries(HARIC_MESAJ)) {
+    const t = modeller[kod] && modeller[kod].taslak;
+    if (!t) continue;
+    t.fotolar = t.fotolar.filter((f) => !idler.includes(f.id));
+    t.videolar = t.videolar.filter((v) => !idler.includes(v.id));
+  }
+  for (const kod of Object.keys(FOTO_SORUSU)) {
+    if (modeller[kod] && modeller[kod].durum === "onayda") modeller[kod] = { ...modeller[kod], durum: "foto-soru" };
+  }
+  await yazKV(env, "selin:modeller", modeller);
+  await env.KAYIT.put("selin:fotoDuzeltme", "f1");
+}
+
+// Her toplu listenin önizleme linki yöneticilere bir kez kendiliğinden gider (sonra /onizleme ile).
+export async function onizlemeDuyur(env) {
+  const t = await oku(env, "selin:toplu", null);
+  if (!t || !["hazirlaniyor", "onayda"].includes(t.durum) || !env.SELF_URL) return;
+  if ((await env.KAYIT.get("selin:onizlemeDuyuru")) === String(t.basla)) return;
+  await env.KAYIT.put("selin:onizlemeDuyuru", String(t.basla));
+  const metin = await onizlemeMesaji(env);
+  for (const k of kimlikler(env.ALLOWED_IDS)) await tg(env, "sendMessage", { chat_id: k, text: metin, disable_web_page_preview: true });
+}
+
+export async function onizlemeMesaji(env) {
+  const d = await onayDokumu(env);
+  if (!d.toplu.length) return "Şu an toplu liste yok.";
+  const az = d.hazir.filter((k) => d.modeller[k].taslak.fotolar.filter((f) => f.net).length <= 2)
+    .map((k) => { const x = d.modeller[k].taslak; return `${k} (${x.fotolar.filter((f) => f.net).length} foto, ${x.videolar.length} video)`; });
+  return [
+    "🌸 Toplu listenin önizlemesi — siteye ÇIKMADI, sadece bakmak için:",
+    await onizlemeLinki(env),
+    "",
+    `Toplu liste: ${d.toplu.length} model — hazır ${d.hazir.length}${d.hazirlaniyor.length ? `, hazırlanıyor ${d.hazirlaniyor.length}` : ""}${d.olmayan.length ? `, hazırlanamayan ${d.olmayan.length}` : ""}.`,
+    `Bu listenin dışında onay bekleyen: ${d.kartlar.length} tek taslak${d.kartlar.length ? ` (${d.kartlar.join(", ")})` : ""} + ${d.kareler.length} videodan kare (fotoğrafı olmayan modeller için)${d.kareler.length ? `: ${d.kareler.join(", ")}` : ""}.`,
+    az.length ? `\n2 ya da daha az fotoğraflı: ${az.join(", ")}.` : "",
+    "",
+    "Siz düğmeye basmadan hiçbir model siteye çıkmaz. İstemediğiniz: /cikar 3183",
+  ].join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+// ---------- Fotoğraf karışıklığı kontrolü (28 Ekim) ----------
+// Toplu listedeki her modelin kanal paylaşım grupları (hangi mesajlar), taslağa giren fotoğraflar ve
+// her mesajın kendi yazısı GitHub Actions'a verilir; Actions hepsini "kareler" dalına kaydeder
+// (kontrol/<sürüm>/). Böylece her fotoğrafın hangi gönderiden geldiği tek tek incelenir.
+// Siteye hiçbir şey yazmaz; Telegram'a mesaj göndermez (sadece arşiv kanalına iletme).
+const KONTROL_SURUM = "k2"; // k1: fotoğraflar, k2: videolardan kareler
+async function kontrolListesi(env) {
+  const t = await oku(env, "selin:toplu", null);
+  const modeller = await oku(env, "selin:modeller", {});
+  const bilgi = await kanalBilgisi(env);
+  return (t ? t.kodlar : []).map((kod) => {
+    const x = modeller[kod] && modeller[kod].taslak;
+    return {
+      kod, durum: modeller[kod] && modeller[kod].durum,
+      gruplar: (bilgi.kodlar[kod] || []).map((g) => ({ ids: g.ids, tarih: g.tarih, album: g.album || null, y: g.y || null })),
+      secilen: modelSecenekleri(kod, bilgi.kodlar, bilgi.kodsuz, PAYLASIM_EN_FAZLA).map((g) => g.ids),
+      fotolar: x ? x.fotolar.map((f, i) => ({ sira: i, id: f.id, net: f.net, not: f.not, belge: Boolean(f.buyuk.belge) })) : [],
+      videolar: x ? x.videolar.map((v) => v.id) : [],
+    };
+  });
+}
+// Tek kanal mesajı: fotoğrafsa en büyük hâli; yazısı başlıkta. Sadece toplu listedeki modellerin mesajları.
+async function kontrolMesaji(env, idYazi) {
+  const id = Number(idYazi);
+  const liste = await kontrolListesi(env);
+  if (!liste.some((m) => m.gruplar.some((g) => g.ids.includes(id)))) return new Response("yok", { status: 404 });
+  const arsiv = await oku(env, "arsiv", null);
+  const kanal = await oku(env, "kanal", null);
+  const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true });
+  if (!r.ok) return new Response(null, { status: 204, headers: { "x-tur": "hata", "x-yazi": encodeURIComponent(r.description || "") } });
+  const m = r.result;
+  const h = { "x-yazi": encodeURIComponent((m.caption || m.text || "").slice(0, 600)), "x-grup": String(m.media_group_id || "") };
+  const resim = m.photo ? m.photo[m.photo.length - 1] : m.document && /^image\//.test(m.document.mime_type || "") ? m.document : null;
+  if (!resim && m.video && (m.video.file_size || 0) <= VIDEO_SINIR) {
+    // Video: kontrol için dosyanın kendisi (Actions içinden birkaç kare çıkarılır).
+    const fv = await tg(env, "getFile", { file_id: m.video.file_id });
+    if (fv.ok) {
+      const dv = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${fv.result.file_path}`);
+      return new Response(dv.body, { headers: { ...h, "x-tur": "video", "content-type": "video/mp4" } });
+    }
+  }
+  if (!resim) return new Response(null, { status: 204, headers: { ...h, "x-tur": m.video ? "video-buyuk" : "diger" } });
+  const f = await tg(env, "getFile", { file_id: resim.file_id });
+  if (!f.ok) return new Response(null, { status: 204, headers: { ...h, "x-tur": "buyuk" } });
+  const dosya = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`);
+  return new Response(dosya.body, { headers: { ...h, "x-tur": "foto", "x-benzersiz": resim.file_unique_id, "content-type": "image/jpeg" } });
+}
+// Bir kez: geçici jeton (6 saat) + Actions isteği.
+export async function kontrolIstegi(env) {
+  if (!env.GITHUB_TOKEN || !env.SELF_URL) return;
+  if ((await env.KAYIT.get("selin:kontrolSurum")) === KONTROL_SURUM) return;
+  await env.KAYIT.put("selin:kontrolSurum", KONTROL_SURUM);
+  const jeton = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await env.KAYIT.put("selin:kontrolJeton", jeton, { expirationTtl: 6 * 3600 });
+  const icerik = { surum: KONTROL_SURUM, kok: `${env.SELF_URL}/onizleme/${jeton}` };
+  await gh(env, `/contents/istekler/kontrol/${KONTROL_SURUM}.json`, { method: "PUT", body: JSON.stringify({ message: "Selin: fotoğraf kontrolü isteği", branch: KARE_DALI, content: btoa(JSON.stringify(icerik)) }) });
+}
+
+// /onizleme/<anahtar>            → sayfa
+// /onizleme/<anahtar>/f/<kod>/<n> → fotoğraf (sitede görünecek n. net poz)
+// /onizleme/<anahtar>/v/<kod>/<n> → video (Telegram'dan akış)
+export async function onizleme(env, yol, aralik) {
+  const [anahtar, tur, kod, sira] = String(yol || "").split("/").filter(Boolean);
+  const jeton = await env.KAYIT.get("selin:kontrolJeton");
+  if (!gizliEsit(anahtar || "", await onizlemeAnahtari(env)) && !(jeton && gizliEsit(anahtar || "", jeton))) return new Response("yok", { status: 404 });
+  if (tur === "json") return Response.json(await kontrolListesi(env));
+  if (tur === "uretim") return uretimSayfasi(env, anahtar);
+  if (tur === "m") return kontrolMesaji(env, kod);
+  if (tur === "f" || tur === "v") {
+    const t = await oku(env, "selin:toplu", null);
+    const modeller = await oku(env, "selin:modeller", {});
+    const x = t && t.kodlar.includes(kod) && modeller[kod] && modeller[kod].taslak;
+    const oge = x && (tur === "f" ? x.fotolar.filter((f) => f.net)[Number(sira)] : x.videolar[Number(sira)]);
+    if (!oge) return new Response("yok", { status: 404 });
+    const fileId = tur === "f" ? oge.buyuk.file_id : oge.file_id;
+    if (tur === "v" && oge.boyut > VIDEO_SINIR) return new Response("büyük", { status: 413 });
+    const f = await tg(env, "getFile", { file_id: fileId });
+    if (!f.ok) return new Response("indirilemedi", { status: 502 });
+    const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`, aralik ? { headers: { Range: aralik } } : {});
+    const uzanti = String(f.result.file_path).split(".").pop().toLowerCase();
+    const tip = tur === "v" ? "video/mp4" : { png: "image/png", webp: "image/webp" }[uzanti] || "image/jpeg";
+    const h = new Headers({ "content-type": tip, "cache-control": "private, max-age=3600", "accept-ranges": "bytes" });
+    for (const k of ["content-length", "content-range"]) if (r.headers.get(k)) h.set(k, r.headers.get(k));
+    return new Response(r.body, { status: r.status, headers: h });
+  }
+  const d = await onayDokumu(env);
+  const stok = await stokBilgisi(env, d.hazir);
+  const kok = `/onizleme/${anahtar}`;
+  const bloklar = d.hazir.map((k) => {
+    const x = d.modeller[k].taslak;
+    const fiyat = (stok[k] && stok[k].fiyat) ?? x.fiyat ?? null;
+    const netler = x.fotolar.filter((f) => f.net);
+    const fotolar = netler.map((f, i) => `<a class="model-foto" href="${kok}/f/${k}/${i}" target="_blank" rel="noopener"><img src="${kok}/f/${k}/${i}" alt="${htmlKacir(x.baslik)} — ${i + 1}" loading="lazy"></a>`).join("");
+    const videolar = x.videolar.map((v, i) => (v.boyut > VIDEO_SINIR ? "" : `<div class="model-video model-video-site"><video controls playsinline preload="metadata" src="${kok}/v/${k}/${i}#t=0.1"></video></div>`)).join("");
+    const buyukVideo = x.videolar.filter((v) => v.boyut > VIDEO_SINIR).length;
+    const diller = ["en", "fr", "pt"].filter((dl) => x.aciklama && x.aciklama[dl]);
+    return `<section class="onz-model" id="m${htmlKacir(k)}">
+  <div class="model-izgara">
+    <div class="model-galeri">${fotolar}${videolar}</div>
+    <div class="model-bilgi">
+      <p class="product-code">${htmlKacir(k)}</p>
+      <h1>${htmlKacir(x.baslik)}</h1>
+      ${x.bedenler ? `<p class="product-meta">Sizes: ${htmlKacir(x.bedenler)} · sold by series (mixed sizes)</p>` : ""}
+      ${fiyat != null ? `<p class="model-fiyat">Wholesale price: $${htmlKacir(fiyat)}</p>` : ""}
+      <div class="chips model-diller">${diller.map((dl, i) => `<button type="button" class="chip${i ? "" : " active"}" data-dil="${dl}">${{ en: "English", fr: "Français", pt: "Português" }[dl]}</button>`).join("")}</div>
+      ${diller.map((dl, i) => `<p class="model-aciklama" data-metin="${dl}"${i ? " hidden" : ""}>${htmlKacir(x.aciklama[dl])}</p>`).join("")}
+      <span class="btn">${fiyat != null ? "Order on WhatsApp" : "Ask on WhatsApp"}</span>
+    </div>
+  </div>
+  <div class="onz-alt">
+    <b>Kod: ${htmlKacir(k)}</b> · Fiyat: ${fiyat != null ? `${htmlKacir(fiyat)} $ (Vegawin)` : "Vegawin'de yok → sitede \"Ask price\""} · Bedenler: ${htmlKacir(x.bedenler || "SEÇİLMEDİ")} · Kategori: ${htmlKacir(KATEGORI_ADI[x.kategori] || x.kategori)}<br>
+    ${netler.length} fotoğraf${netler.length <= 2 ? " ⚠️ az" : ""}${x.fotolar.length > netler.length ? ` (bulanık/küçük ${x.fotolar.length - netler.length} tanesi konmayacak)` : ""} · ${x.videolar.length} video${buyukVideo ? ` (${buyukVideo} tanesi 20 MB'tan büyük, sitede görünmez)` : ""}
+    ${x.aciklama && x.aciklama.tr ? `<br><i>TR: ${htmlKacir(x.aciklama.tr)}</i>` : ""}
+  </div>
+</section>`;
+  }).join("\n");
+  const diger = [
+    d.hazirlaniyor.length ? `<p>⏳ Hâlâ hazırlanıyor (sayfayı sonra yenileyin): ${d.hazirlaniyor.join(", ")}</p>` : "",
+    d.soru.map((k) => `<p>❓ ${k} size soruldu, cevaba kadar listede yok: ${htmlKacir(FOTO_SORUSU[k])}</p>`).join(""),
+    d.olmayan.length ? `<p>❌ Hazırlanamadı (fotoğraf okunamadı): ${d.olmayan.join(", ")}</p>` : "",
+    `<p>Bu listenin dışında onay bekleyen: ${d.kartlar.length} tek taslak${d.kartlar.length ? ` (${d.kartlar.join(", ")})` : ""} ve ${d.kareler.length} videodan kare${d.kareler.length ? ` (${d.kareler.join(", ")})` : ""}. Bunlar Telegram'da ayrı kartlarla gelir.</p>`,
+  ].join("");
+  const sayfa = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow"><title>Önizleme — VOLONTE</title>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="${htmlKacir(env.SITE_URL)}/css/style.css">
+<style>
+.onz-bant{position:sticky;top:0;z-index:50;background:#1d1d1f;color:#fff;padding:12px 16px;font:14px/1.5 Inter,sans-serif}
+.onz-bant b{color:#ffd479}.onz-model{padding:40px 0;border-bottom:1px solid #e5e5e5}
+.onz-alt{margin-top:18px;padding:12px 14px;background:#fff8e6;border:1px solid #f0d68a;border-radius:8px;font:14px/1.6 Inter,sans-serif;color:#333}
+.onz-icindekiler{display:flex;flex-wrap:wrap;gap:8px;font:14px Inter,sans-serif}.onz-icindekiler a{padding:4px 10px;border:1px solid #ccc;border-radius:14px;text-decoration:none;color:#222}
+.onz-model{scroll-margin-top:110px}.onz-diger{padding:32px 0;font:15px/1.6 Inter,sans-serif}.model-bilgi .btn{cursor:default;opacity:.85}
+</style></head><body>
+<div class="onz-bant">🌸 <b>ÖNİZLEME — bu modeller henüz sitede DEĞİL.</b> Siteye nasıl girecekse öyle görünüyor. Onay: Telegram'da Selin'in listesindeki "✅ Hepsini siteye yükle". İstemediğiniz model: Selin'e <code>/cikar 3183</code>.<br>Hazır ${d.hazir.length} / ${d.toplu.length} model${d.hazirlaniyor.length ? ` · hazırlanıyor ${d.hazirlaniyor.length}` : ""}</div>
+<header class="site-header"><nav class="container nav"><span class="logo">VOLONTE</span></nav></header>
+<main class="section model-sayfa" style="padding-top:8px"><div class="container">
+${d.hazir.length ? `<p class="onz-icindekiler">${d.hazir.map((k) => `<a href="#m${htmlKacir(k)}">${htmlKacir(k)}</a>`).join(" ")}</p>` : ""}
+${bloklar || '<p class="empty">Henüz hazır model yok; Selin hazırlıyor. Sayfayı biraz sonra yenileyin.</p>'}
+<div class="onz-diger">${diger}</div>
+</div></main>
+<script>
+document.querySelectorAll(".model-diller").forEach(function (g) {
+  g.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-dil]"); if (!b) return;
+    var kutu = g.parentElement;
+    kutu.querySelectorAll("[data-dil]").forEach(function (x) { x.classList.toggle("active", x === b); });
+    kutu.querySelectorAll("[data-metin]").forEach(function (p) { p.hidden = p.getAttribute("data-metin") !== b.getAttribute("data-dil"); });
+  });
+});
+document.querySelectorAll(".model-video-site video").forEach(function (v) { v.addEventListener("error", function () { v.parentElement.remove(); }); });
+</script></body></html>`;
+  return new Response(sayfa, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
+}
+
+// ---------- Üretim atölyesi bağlantısı (uretim.js) ----------
+// Referans: modelin taslağındaki net fotoğraflar (hatalı mesajlar zaten çıkarıldı), en büyük boyutta.
+async function uretimCalis(env, simdi) {
+  const onbellek = new Map();
+  const referansAl = async (kod, yalinB64 = false) => {
+    if (!onbellek.has(kod)) {
+      // Kanal fotoğrafları KULLANILMAZ (kullanıcı kararı): sadece Selin'e özelden gönderilen askı/manken fotoğrafları.
+      const refler = (await oku(env, `selin:referans:${kod}`, [])).filter((x) => x.tur === "foto");
+      const sirali = [...refler.filter((x) => x.rol === "manken"), ...refler.filter((x) => x.rol === "aski")].slice(0, 3);
+      const liste = [];
+      for (const f of sirali) liste.push({ rol: f.rol, b64: f.belge ? await belgeB64(env, f.file_id, 1536) : await dosyaB64(env, f.file_id) });
+      onbellek.set(kod, liste);
+    }
+    const l = onbellek.get(kod);
+    return yalinB64 ? l.map((x) => x.b64) : l.map((x) => ({ rol: x.rol, url: `data:image/jpeg;base64,${x.b64}` }));
+  };
+  const bildir = async (u) => {
+    const oz = aracOzeti(u);
+    const satir = Object.values(oz).map((a) => `• ${a.ad}: ${a.uretilen} üretim${a.tur === "foto" ? `, uygun ${a.uygun} (desen ${a.desen ?? "-"}/10, renk ${a.renk ?? "-"}/10)` : ""}${a.hata ? `, hata ${a.hata}` : ""}`);
+    const h = await uretimHarcanan(env);
+    const metin = `🎨 Selin — üretim denemesi bitti (${u.kodlar.join(", ")}).\n\n${satir.join("\n")}\n\nHarcama (yaklaşık): ${h.deneme.toFixed(2)} $ (deneme sınırı ${DENEME_SINIR_USD} $).\n\nOrijinalle yan yana karşılaştırma:\n${await onizlemeLinki(env)}/uretim\n\nSiteye hiçbir şey çıkmadı.`;
+    for (const k of kimlikler(env.ALLOWED_IDS)) await tg(env, "sendMessage", { chat_id: k, text: metin, disable_web_page_preview: true });
+  };
+  await uretimAdimi(env, simdi, { referansAl, bildir });
+}
+
+async function uretimSayfasi(env, anahtar) {
+  const u = await oku(env, "selin:uretim", null);
+  const h = await uretimHarcanan(env);
+  const kok = `/onizleme/${anahtar}`;
+  if (!u) return new Response(`<p style="font:16px sans-serif;padding:20px">Üretim henüz başlamadı${env.FAL_KEY ? "" : " (fal.ai anahtarı girilmedi)"}.</p>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+  const modeller = await oku(env, "selin:modeller", {});
+  const oz = aracOzeti(u);
+  const tablo = Object.entries(oz).map(([, a]) => `<tr><td>${htmlKacir(a.ad)}</td><td>${a.tur}</td><td>${a.fiyat} $</td><td>${a.uretilen}</td><td>${a.tur === "foto" ? `${a.uygun}` : "siz bakın"}</td><td>${a.desen ?? "-"}</td><td>${a.renk ?? "-"}</td><td>${a.hata}</td></tr>`).join("");
+  const bloklar = u.kodlar.map((kod) => {
+    const t = modeller[kod] && modeller[kod].taslak;
+    const netler = t ? t.fotolar.filter((f) => f.net) : [];
+    const orj = netler.length ? `<figure class="bos"><figcaption>ORİJİNAL: Selin'e gönderilen askı/manken fotoğrafları</figcaption></figure>` : "";
+    const satirlar = Object.entries(ARACLAR).map(([a, x]) => {
+      const isler = u.isler.filter((is) => is.kod === kod && is.arac === a);
+      const kutu = isler.map((is) => {
+        const p = u.puan && u.puan[kod] && u.puan[kod][`${a}:${is.poz}`];
+        const etiket = p ? `<figcaption class="${p.uygun ? "iyi" : "kotu"}">${p.uygun ? "✅" : "❌"} renk ${p.renk} · desen ${p.desen} · kesim ${p.kesim} · yüz ${p.yuz}<br>${htmlKacir(p.not || "")}</figcaption>` : `<figcaption>${is.durum === "hazir" ? "" : htmlKacir(is.durum + (is.hata ? ": " + is.hata : ""))}</figcaption>`;
+        if (is.durum !== "hazir") return `<figure class="bos">${etiket}</figure>`;
+        return x.tur === "video" ? `<figure><video controls playsinline preload="metadata" src="${htmlKacir(is.url)}"></video>${etiket}</figure>` : `<figure><a href="${htmlKacir(is.url)}" target="_blank"><img src="${htmlKacir(is.url)}" loading="lazy"></a>${etiket}</figure>`;
+      }).join("");
+      return `<h3>${htmlKacir(x.ad)} — ${x.fiyat} $/${x.tur === "video" ? "video" : "görsel"}</h3><div class="sira"><div class="orj">${orj}</div>${kutu}</div>`;
+    }).join("");
+    return `<section><h2>${htmlKacir(kod)} ${t ? "— " + htmlKacir(t.baslik) : ""}</h2>${satirlar}</section>`;
+  }).join("");
+  const sayfa = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Üretim karşılaştırma — VOLONTE</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;margin:0;padding:16px;background:#fafafa;color:#222}h2{margin-top:36px;border-bottom:2px solid #222}h3{font-size:15px;margin:18px 0 6px}
+.sira{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.orj{display:flex;gap:8px;border-right:3px solid #c9a227;padding-right:8px}
+figure{margin:0;flex:0 0 220px}figure img,figure video{width:220px;height:300px;object-fit:cover;background:#ddd;border-radius:6px}figcaption{font-size:12px;padding:4px 2px}
+.iyi{color:#0a7a2f}.kotu{color:#b00020}.bos{height:300px;background:#eee;border-radius:6px;display:flex;align-items:center;justify-content:center;text-align:center}
+table{border-collapse:collapse;background:#fff}td,th{border:1px solid #ddd;padding:6px 8px;font-size:13px}.bant{background:#1d1d1f;color:#fff;padding:12px;border-radius:8px}</style></head><body>
+<div class="bant">🎨 <b>ÜRETİM DENEMESİ — siteye çıkmadı.</b> Her satırda solda ORİJİNAL, sağda o aracın ürettikleri. Claude puanı: 8'in altı ❌ (kullanılmaz). Harcama (yaklaşık): ${h.deneme.toFixed(2)} $ / deneme sınırı ${DENEME_SINIR_USD} $.</div>
+<h2>Araç karşılaştırması</h2><table><tr><th>Araç</th><th>Tür</th><th>Fiyat</th><th>Üretilen</th><th>Uygun (≥8)</th><th>Desen ort.</th><th>Renk ort.</th><th>Hata</th></tr>${tablo}</table>
+${bloklar}</body></html>`;
+  return new Response(sayfa, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+// ---------- YENİ AKIŞ (kullanıcı kararı, 28 Ekim) ----------
+// Kanal alt yazıları (kod, fiyat) KULLANILMAZ; doğru kod ve fiyat sadece Vegawin'de (Sami). Selin kanala bağlanmaz.
+//  1) Her gün 10:00'da Sami'nin stok listesinden GUNLUK_ISTEK model seçilir, sahibe (0091 hesabı) kod listesi gider.
+//  2) Sahip fotoğrafları ("Dosya olarak") ve videoyu gönderir; yazı: "3503 Küçük" / "3518 Büyük" / "3520 İkisi de".
+//  3) Selin başlık, açıklama (4 dil), kategori hazırlar; fiyat ve stok Vegawin'den. Taslak sahibe onaya gider.
+//  4) Onaylanınca siteye yüklenir. 20:00'de günün özeti; gönderilmeyenler "gönderilemedi" listesine (sonra fal.ai).
+export const GUNLUK_ISTEK = 15;
+const ISTEK_SAATI = 10;
+const GUN_SONU_SAATI = 20;
+// Önce: önizlemede fotoğrafı karışan 24 model + sitedeki 4 model (yeni yolla baştan), sonra stoktaki diğerleri.
+const ONCELIKLI = ["3183", "3186", "3322", "3335", "3360", "3403", "3407", "3411", "3429", "3439", "3475", "3481", "3506", "3520", "3558", "3565", "3567", "3577", "3578", "3583", "3592", "3593", "3618", "4211", "3563", "3279", "3595", "3448"];
+const OZEL_ACIK = ["istendi", "geldi", "onayda", "yukleniyor", "sitede", "gonderilemedi", "eklenmeyecek"];
+const BEDEN_KELIME = [[/k[üu][çc][üu]k/i, "k"], [/b[üu]y[üu]k/i, "b"], [/ik[iı]s[iı]/i, "i"]];
+
+const sahipler = async (env) => [...new Set([...kimlikler(env.SAHIP_IDS), ...kimlikler(await env.KAYIT.get("selin:sahip"))])];
+const ozelMi = (m) => Boolean(m && m.kaynak === "ozel");
+
+export async function istekAdaylari(env, modeller) {
+  const stok = await stokIste2(env, "/stoktakiler");
+  const kodlar = stok.map((r) => String(r.kod));
+  const uygun = (k) => !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
+  const oncelik = ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k));
+  const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
+  return [...oncelik, ...diger];
+}
+async function stokIste2(env, yol, govde = {}) {
+  if (!env.STOK) return [];
+  try {
+    const r = await env.STOK.get(env.STOK.idFromName("stok")).fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(govde) });
+    return await r.json();
+  } catch {
+    return [];
+  }
+}
+
+// 10:00 — günün istek listesi (bir kez)
+export async function istekAdimi(env, simdi) {
+  const s = saat(simdi);
+  if (s < ISTEK_SAATI || s >= GUN_SONU_SAATI) return;
+  const gun = gunAnahtari(simdi);
+  if (await env.KAYIT.get(`selin:istek:${gun}`)) return;
+  const kime = await sahipler(env);
+  if (!kime.length) return; // sahip (0091) tanımlanmadan istek gitmez
+  const modeller = await oku(env, "selin:modeller", {});
+  const secilen = (await istekAdaylari(env, modeller)).slice(0, GUNLUK_ISTEK);
+  await yazKV(env, `selin:istek:${gun}`, { kodlar: secilen, zaman: simdi }, 30 * 86400);
+  if (!secilen.length) return;
+  for (const k of secilen) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "istendi", istenme: simdi, medya: [], kart: [] };
+  await yazKV(env, "selin:modeller", modeller);
+  const metin = [
+    `🌸 Günaydın! Bugün ${secilen.length} model istiyorum (Vegawin'de stokta):`,
+    secilen.join(", "),
+    "",
+    "Her model için fotoğrafları 📎 → Dosya olarak gönderin (kalite düşmesin), videoyu da ekleyin.",
+    "Yazıya kod ve beden: \"3503 Küçük\" · \"3518 Büyük\" · \"3520 İkisi de\" (Küçük 38-44, Büyük 44-50).",
+    "Gönderemeyeceğiniz model: /yok 3503",
+  ].join("\n");
+  for (const k of kime) await tg(env, "sendMessage", { chat_id: k, text: metin });
+}
+
+// Gelen medya (sahip ya da izinli kişi): kod + beden yazısı; albümün yazısız parçaları albüm kimliğinden,
+// tek tek gönderilen yazısızlar aynı kişinin son 10 dakikadaki koduna eklenir.
+export async function ozelMedya(env, m, medya, simdi, yaz) {
+  const yazi = String(m.caption || "").trim();
+  const r = yazi.match(/^(\d{3,6})\b(.*)$/s);
+  let kod = r ? r[1] : null;
+  let grup = null;
+  if (r) for (const [d, g] of BEDEN_KELIME) if (d.test(r[2])) { grup = g; break; }
+  if (!kod && m.media_group_id) kod = await env.KAYIT.get(`selin:album:${m.media_group_id}`);
+  if (!kod) {
+    const son = await oku(env, `selin:sonKod:${m.from.id}`, null);
+    if (son && simdi - son.zaman < 600) kod = son.kod;
+  }
+  if (!kod && m.media_group_id) {
+    // albümün yazısı henüz gelmedi: beklet
+    const bek = await oku(env, `selin:albumBek:${m.media_group_id}`, []);
+    await yazKV(env, `selin:albumBek:${m.media_group_id}`, [...bek, medya], 3600);
+    return;
+  }
+  if (!kod) return yaz("Fotoğrafın yazısına model kodunu ve bedeni yazın: \"3503 Küçük\", \"3518 Büyük\" ya da \"3520 İkisi de\".");
+  const modeller = await oku(env, "selin:modeller", {});
+  const eski = modeller[kod] || {};
+  const yeniKayit = !ozelMi(eski) || ["istendi", "gonderilemedi", "sitede", "eklenmeyecek", "onayda"].includes(eski.durum);
+  const x = yeniKayit && eski.durum !== "geldi"
+    ? { ...eski, kaynak: "ozel", durum: "geldi", medya: [], kart: [], gonderen: m.from.id, hata: 0 }
+    : eski;
+  const bek = m.media_group_id ? await oku(env, `selin:albumBek:${m.media_group_id}`, []) : [];
+  for (const md of [...bek, medya]) if (!x.medya.some((y) => y.uid === md.uid)) x.medya.push(md);
+  if (grup) x.bedenGrubu = grup;
+  x.sonMedya = simdi;
+  x.durum = "geldi";
+  modeller[kod] = x;
+  await yazKV(env, "selin:modeller", modeller);
+  if (m.media_group_id) await env.KAYIT.put(`selin:album:${m.media_group_id}`, kod, { expirationTtl: 3600 });
+  if (bek.length) await env.KAYIT.delete(`selin:albumBek:${m.media_group_id}`);
+  await yazKV(env, `selin:sonKod:${m.from.id}`, { kod, zaman: simdi }, 3600);
+  if (!r) return; // yazısız parça: sessizce eklenir
+  const st = (await stokBilgisi(env, [kod]))[kod];
+  const notlar = [];
+  if (!x.bedenGrubu) notlar.push("Beden yazılmadı; taslakta 📏 düğmesiyle seçebilirsiniz.");
+  if (!st) notlar.push("Bu kod Vegawin'de yok; fiyat olmazsa sitede \"Ask price\" görünür.");
+  else if (!(st.toplam > 0)) notlar.push("Vegawin'de stoğu 0 görünüyor.");
+  if (medya.tur === "foto" && !medya.belge) notlar.push("Fotoğraf sıkıştırılmış geldi; en iyi kalite için 📎 → Dosya olarak gönderin.");
+  if (medya.tur === "video" && medya.boyut > VIDEO_SINIR) notlar.push("Video 20 MB'tan büyük: Telegram botları indiremiyor, sitede gösterilemez. Daha kısa/küçük video gönderin.");
+  const grupAd = x.bedenGrubu ? BEDEN_GRUPLARI[x.bedenGrubu] : null;
+  return yaz(`✅ ${kod} alındı${grupAd ? ` (${grupAd.ad}: ${grupAd.bedenler})` : ""}. Diğer fotoğraf/videoları da gönderin; 2 dakika yeni dosya gelmezse taslağı hazırlayıp size gönderirim.${notlar.length ? "\n• " + notlar.join("\n• ") : ""}`);
+}
+
+// Taslak: gelen dosyalardan (2 dk sessizlikten sonra), Vegawin fiyat/stokla. Çalışma başına bir model.
+export async function ozelHazirlaAdimi(env, simdi) {
+  if (!env.ANTHROPIC_API_KEY || (await sinirAsildiMi(env, simdi))) return;
+  const modeller = await oku(env, "selin:modeller", {});
+  const kod = Object.keys(modeller).find((k) => ozelMi(modeller[k]) && modeller[k].durum === "geldi" && simdi - (modeller[k].sonMedya || 0) >= 120);
+  if (kod) await ozelHazirla(env, kod, simdi, null);
+}
+
+export async function ozelHazirla(env, kod, simdi, duzeltme) {
+  const modeller = await oku(env, "selin:modeller", {});
+  const x = modeller[kod];
+  const fotoMedya = x.medya.filter((y) => y.tur === "foto").slice(0, POZ_EN_FAZLA);
+  const videolar = x.medya.filter((y) => y.tur === "video").map((v, i) => ({ id: i, file_id: v.file_id, boyut: v.boyut || 0, w: v.w || 0 }));
+  if (!fotoMedya.length) {
+    x.durum = "geldi"; // fotoğraf bekleniyor
+    x.sonMedya = simdi + 3600; // bir saat sonra tekrar bak
+    await yazKV(env, "selin:modeller", modeller);
+    for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: `📷 ${kod}: sadece video geldi. Fotoğrafları da 📎 → Dosya olarak gönderin.` });
+    return;
+  }
+  try {
+    const fotolar = [];
+    for (const f of fotoMedya) fotolar.push({ ...f, b64: f.belge ? await belgeB64(env, f.file_id, 1024) : await dosyaB64(env, f.file_id) });
+    const onceki = x.taslak && duzeltme ? { baslik: x.taslak.baslik, aciklama: x.taslak.aciklama } : null;
+    const ai = await aciklamaYaz(env, { kod, fotolar, tarif: null, yazilar: [], duzeltme, onceki });
+    const netlik = new Map((ai.pozlar || []).map((p) => [p.poz, p]));
+    const st = (await stokBilgisi(env, [kod]))[kod] || null;
+    const grup = x.bedenGrubu || (x.taslak && x.taslak.bedenGrubu) || null;
+    const guncel = await oku(env, "selin:modeller", {});
+    guncel[kod] = {
+      ...guncel[kod], durum: "onayda", zaman: simdi, kart: [],
+      taslak: {
+        kaynak: "ozel", baslik: ai.baslik, kategori: ai.kategori, aciklama: ai.aciklama,
+        bedenGrubu: grup, bedenOneri: grup, bedenler: grup ? BEDEN_GRUPLARI[grup].bedenler : null,
+        fotolar: fotoMedya.map((f, i) => {
+          const n = netlik.get(i + 1);
+          return { id: i + 1, buyuk: { file_id: f.file_id, belge: Boolean(f.belge), width: f.w || 0, height: f.h || 0 }, orta: null, net: !n || n.net, not: n && !n.net ? n.not || "bulanık" : "" };
+        }),
+        videolar, yazilar: [], fiyat: st ? st.fiyat ?? null : null, stok: st ? st.toplam : null,
+      },
+    };
+    await yazKV(env, "selin:modeller", guncel);
+    for (const k of await sahipler(env)) await kartGoster(env, kod, k);
+  } catch (e) {
+    const g = await oku(env, "selin:modeller", {});
+    g[kod].hata = (g[kod].hata || 0) + 1;
+    g[kod].sonMedya = simdi; // 2 dk sonra yeniden dener
+    if (g[kod].hata >= 3) g[kod].durum = "hazirlanamadi";
+    await yazKV(env, "selin:modeller", g);
+    await yazKV(env, "selin:hata", { zaman: simdi, hata: `ozel ${kod}: ${String(e && e.message).slice(0, 250)}` }, 7 * 86400);
+    if (g[kod].hata >= 3) for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: `⚠️ ${kod} hazırlanamadı (${String(e && e.message).slice(0, 120)}). Dosyaları yeniden gönderebilirsiniz.` });
+  }
+}
+
+// 20:00 — günün özeti; bugün istenip hiç dosyası gelmeyenler "gönderilemedi" listesine (sonra fal.ai).
+export async function gunSonuOzeti(env, simdi) {
+  if (saat(simdi) < GUN_SONU_SAATI) return;
+  const gun = gunAnahtari(simdi);
+  if (await env.KAYIT.get(`selin:gunSonu:${gun}`)) return;
+  const istek = await oku(env, `selin:istek:${gun}`, null);
+  const kime = await sahipler(env);
+  if (!kime.length) return;
+  await env.KAYIT.put(`selin:gunSonu:${gun}`, "1", { expirationTtl: 3 * 86400 });
+  const modeller = await oku(env, "selin:modeller", {});
+  const bugun = istek ? istek.kodlar : [];
+  const gelmeyen = bugun.filter((k) => modeller[k] && modeller[k].durum === "istendi");
+  const gelen = bugun.filter((k) => modeller[k] && ["geldi", "onayda", "yukleniyor", "sitede", "hazirlanamadi", "eklenmeyecek"].includes(modeller[k].durum));
+  for (const k of gelmeyen) modeller[k].durum = "gonderilemedi";
+  await yazKV(env, "selin:modeller", modeller);
+  const ozel = Object.entries(modeller).filter(([, m]) => ozelMi(m));
+  const say = (d, f = () => true) => ozel.filter(([k, m]) => m.durum === d && f(k, m)).map(([k]) => k);
+  const bugunSitede = say("sitede", (k, m) => gunAnahtari(m.zaman || 0) === gun);
+  const onayda = say("onayda");
+  const gonderilemedi = say("gonderilemedi");
+  const metin = [
+    `🌙 Selin — ${gun.split("-").reverse().join(".")} gün sonu`,
+    `İstenen: ${bugun.length} · gelen: ${gelen.length} · bugün siteye çıkan: ${bugunSitede.length}${bugunSitede.length ? ` (${bugunSitede.join(", ")})` : ""}`,
+    `Onayınızı bekleyen: ${onayda.length}${onayda.length ? ` (${onayda.join(", ")})` : ""}`,
+    `Gönderilemeyen (sonra fal.ai ile): ${gonderilemedi.length}${gonderilemedi.length ? ` — ${gonderilemedi.slice(0, 30).join(", ")}${gonderilemedi.length > 30 ? " …" : ""}` : ""}`,
+  ].join("\n");
+  for (const k of kime) await tg(env, "sendMessage", { chat_id: k, text: metin });
+}
+
+// Yeni akış videosu sitede: /v2/<kod>/<n> (sadece sitedeki yeni akış modelleri; Telegram'dan akıtılır, yazısız).
+export async function ozelVideo(env, kod, n, aralik) {
+  const modeller = await oku(env, "selin:modeller", {});
+  const m = modeller[kod];
+  const v = ozelMi(m) && m.durum === "sitede" && m.taslak && m.taslak.videolar[Number(n)];
+  if (!v || v.boyut > VIDEO_SINIR) return new Response("yok", { status: 404 });
+  const anahtar = `selin:v2yol:${kod}:${n}`;
+  let yol = await oku(env, anahtar, null);
+  const simdi = Math.floor(Date.now() / 1000);
+  if (!yol || simdi - yol.zaman > 3000) {
+    const f = await tg(env, "getFile", { file_id: v.file_id });
+    if (!f.ok) return new Response("indirilemedi", { status: 502 });
+    yol = { yol: f.result.file_path, zaman: simdi };
+    await yazKV(env, anahtar, yol);
+  }
+  const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${yol.yol}`, aralik ? { headers: { Range: aralik } } : {});
+  const h = new Headers({ "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=3600", "access-control-allow-origin": "*" });
+  for (const k of ["content-length", "content-range"]) if (r.headers.get(k)) h.set(k, r.headers.get(k));
+  return new Response(r.body, { status: r.status, headers: h });
+}
+
 // ---------- Toplu yükleme (kullanıcı kararı, 27 Ekim) ----------
 // Envanter taramasındaki fotoğraflı modeller tek tek sorulmadan hazırlanır, TEK LİSTE ile onaya gelir
 // ("✅ Hepsini siteye yükle"; istenmeyen: /cikar 3183). Onaydan sonra her çalışmada 2 model yüklenir.
 const TOPLU_SURUM = "v1";
 const TOPLU_PARTI = 2;
+
+// Yeni toplu parti (günlük karşılaştırmadaki eksikler). Aktif parti varken başlamaz.
+export async function topluBaslat(env, simdi, kodlar, kaynak) {
+  const t = await oku(env, "selin:toplu", null);
+  if (t && t.surum === TOPLU_SURUM && t.durum !== "bitti") return false;
+  if (!kodlar.length) return false;
+  const modeller = await oku(env, "selin:modeller", {});
+  for (const k of kodlar) modeller[k] = { ...(modeller[k] || {}), durum: "hazirlaniyor", zaman: simdi, kim: kaynak, toplu: true, kart: [] };
+  await yazKV(env, "selin:modeller", modeller);
+  const sira = await oku(env, "selin:hazirla", []);
+  await yazKV(env, "selin:hazirla", [...kodlar, ...sira.filter((k) => !kodlar.includes(k))]);
+  await yazKV(env, "selin:toplu", { surum: TOPLU_SURUM, durum: "hazirlaniyor", kodlar, haric: [], basarisiz: [], yuklenen: [], basla: simdi, kaynak });
+  return true;
+}
 
 export async function topluAdimi(env, simdi) {
   let t = await oku(env, "selin:toplu", null);
@@ -861,15 +1415,15 @@ export async function topluAdimi(env, simdi) {
   const modeller = await oku(env, "selin:modeller", {});
   if (t.durum === "hazirlaniyor") {
     // Hazırlık bitti mi? (onayda ya da fotoğrafsız/okunamadı → başarısız)
-    const bekleyen = t.kodlar.filter((k) => modeller[k] && ["hazirlaniyor", "kare-bekliyor"].includes(modeller[k].durum));
+    const bekleyen = t.kodlar.filter((k) => modeller[k] && modeller[k].durum === "hazirlaniyor"); // videodan kare bekleyenler listeyi bekletmez
     if (bekleyen.length) return;
     t.basarisiz = t.kodlar.filter((k) => !modeller[k] || modeller[k].durum !== "onayda");
     t.durum = "onayda";
     await yazKV(env, "selin:toplu", t);
     return topluListeGonder(env, t, modeller);
   }
-  if (t.durum === "yukleniyor") {
-    const kalan = t.kodlar.filter((k) => !t.haric.includes(k) && !t.basarisiz.includes(k) && !t.yuklenen.includes(k));
+  if (t.durum === "yukleniyor" && !kilitli(env)) {
+    const kalan = t.kodlar.filter((k) => !t.haric.includes(k) && !t.basarisiz.includes(k) && !t.yuklenen.includes(k) && modeller[k] && modeller[k].durum === "onayda"); // sorulan model yüklenmez
     for (const kod of kalan.slice(0, TOPLU_PARTI)) {
       try {
         await siteyeYukle(env, kod, t.onaylayan, simdi);
@@ -901,7 +1455,7 @@ async function topluListeGonder(env, t, modeller) {
     if ((parca + s).length > 3800) { parcalar.push(parca); parca = ""; }
     parca += `\n${s}`;
   }
-  parca += `${t.basarisiz.length ? `\n\nHazırlanamayan (fotoğraf okunamadı): ${t.basarisiz.join(", ")}` : ""}\n\nİstemediğiniz model varsa: /cikar 3183 3186\nSonra tek düğmeyle hepsi siteye çıkar.`;
+  parca += `${t.basarisiz.length ? `\n\nHazırlanamayan (fotoğraf okunamadı): ${t.basarisiz.join(", ")}` : ""}${env.SELF_URL ? `\n\n👀 Siteye nasıl gireceğini görmek için: ${await onizlemeLinki(env)}` : ""}\n\nİstemediğiniz model varsa: /cikar 3183 3186\nSonra tek düğmeyle hepsi siteye çıkar.`;
   parcalar.push(parca);
   for (const [i, metin] of parcalar.entries()) {
     const son = i === parcalar.length - 1;
@@ -912,6 +1466,7 @@ async function topluListeGonder(env, t, modeller) {
 async function topluOnay(env, cq, kim, simdi, cevapla) {
   const t = await oku(env, "selin:toplu", null);
   if (!t || t.durum !== "onayda") return cevapla(t && t.onaylayan ? `${t.onaylayan} zaten onayladı.` : "Onay bekleyen toplu liste yok.");
+  if (kilitli(env)) return cevapla(KILIT_MESAJI);
   t.durum = "yukleniyor";
   t.onaylayan = kim;
   t.onayZaman = simdi;
@@ -919,6 +1474,49 @@ async function topluOnay(env, cq, kim, simdi, cevapla) {
   const sayi = t.kodlar.length - t.haric.length - t.basarisiz.length;
   await cevapla("Yükleme başladı");
   return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ ${kim} onayladı: ${sayi} model 5 dakikada 2'şer siteye yükleniyor (yaklaşık ${Math.ceil(sayi / TOPLU_PARTI) * 5} dk).${t.haric.length ? ` Çıkarılan: ${t.haric.join(", ")}.` : ""}` });
+}
+
+// ---------- Sabah raporu (09:25) ve Kemal × Sami karşılaştırması ----------
+// Stok bilgisinin tek kaynağı Sami. Vegawin'de stok + fiyatı olan, Kemal'in kanalında paylaşılmış ama sitede
+// olmayan modeller "eksik" sayılır ve yeni toplu listeye hazırlanır (tek onayla siteye çıkar).
+const TOPLU_GUNLUK_EN_FAZLA = 30;
+const ISLEMDE = ["sitede", "yukleniyor", "onayda", "hazirlaniyor", "kare-bekliyor", "kanaldayok"];
+
+export async function eksikModeller(env) {
+  if (!env.STOK) return [];
+  const stok = await (await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/stoktakiler", { method: "POST", body: "{}" })).json();
+  const bilgi = await kanalBilgisi(env);
+  const sitede = new Set((await siteVerisi(env)).liste.map((u) => u.kod));
+  const modeller = await oku(env, "selin:modeller", {});
+  return stok.map((x) => x.kod).filter((k) => modelSecenekleri(k, bilgi.kodlar, bilgi.kodsuz).length && !sitede.has(k))
+    .filter((k) => !(modeller[k] && (ISLEMDE.includes(modeller[k].durum) || (modeller[k].durum === "eklenmeyecek" && !modeller[k].not))));
+}
+
+export async function selinSabahRaporu(env, simdi) {
+  if (!(await raporZamani(env, simdi, [9, 25], "selin:sabahRaporu"))) return;
+  const dun = gunAnahtari(simdi - 86400);
+  const site = (await siteVerisi(env)).liste;
+  const modeller = await oku(env, "selin:modeller", {});
+  const ozel = Object.entries(modeller).filter(([, m]) => ozelMi(m));
+  const say = (d) => ozel.filter(([, m]) => m.durum === d).map(([k]) => k);
+  const istek = await oku(env, `selin:istek:${dun}`, null);
+  const dunEklenen = site.filter((u) => u.eklenme === dun).map((u) => u.kod);
+  const satir = [
+    `🌸 Selin — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`,
+    "",
+    `Sitede: ${site.filter((u) => !u.gizli).length} model görünür, ${site.filter((u) => u.gizli).length} stoksuz (gizli).`,
+    `Dün: istenen ${istek ? istek.kodlar.length : 0}, siteye eklenen ${dunEklenen.length}${dunEklenen.length ? ` (${dunEklenen.join(", ")})` : ""}.`,
+    `Onay bekleyen: ${say("onayda").length} · gönderilemeyen (sonra fal.ai): ${say("gonderilemedi").length}.`,
+    `Bugün ${ISTEK_SAATI}:00'da ${GUNLUK_ISTEK} model istenecek (kod ve fiyat Vegawin'den).`,
+  ];
+  const sorunlar = say("hazirlanamadi").length ? [`Hazırlanamayan ${say("hazirlanamadi").length} model (dosyalar yeniden gönderilmeli)`] : [];
+  if (!(await sahipler(env)).length) sorunlar.push("Selin'in istek göndereceği 0091 hesabı tanımlı değil (/sahip)");
+  await raporuBirak(env, "selin", simdi, {
+    ozet: `Sitede ${site.filter((u) => !u.gizli).length} model; dün ${dunEklenen.length} eklendi; onay bekleyen ${say("onayda").length}; gönderilemeyen ${say("gonderilemedi").length}.`,
+    sorunlar,
+    yapilacak: say("onayda").length ? [`Selin'in ${say("onayda").length} taslağını onaylayın`] : [],
+  });
+  await grubaGonder(env, "selin", satir.join("\n"), tg);
 }
 
 // ---------- Envanter taraması: Vegawin'de stok + fiyat olan ve Telegram'da fotoğrafı bulunan modeller ----------
@@ -1120,8 +1718,14 @@ async function kareSecildi(env, cq, kod, n, kim, simdi, cevapla) {
 
 export async function guncelleme(u, env) {
   if (u.callback_query) return dugme(u.callback_query, env);
+  if (u.my_chat_member) return grupUyeligi(u.my_chat_member, env, "selin", "🌸 Selin (site)", tg);
   const m = u.message;
   if (!m || m.chat.type !== "private" || !m.from) return;
+  // /kimim: herkes kendi Telegram kimliğini öğrenir (izin vermek için). Yabancıya başka hiçbir cevap yok.
+  if ((m.text || "").trim().toLowerCase().startsWith("/kimim")) {
+    await env.KAYIT.put(`venom:kimlik:selin:${m.from.id}`, JSON.stringify({ ad: kisiAdi(m.from), kullanici: m.from.username || null, zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 7 * 86400 });
+    return tg(env, "sendMessage", { chat_id: m.chat.id, text: `Telegram kimliğiniz: ${m.from.id}\n${izinli(m.from.id, env) ? "✅ Selin'de izinlisiniz." : "⛔ Henüz izinli değilsiniz; bu numarayı yöneticiye iletin."}` });
+  }
   if (!izinli(m.from.id, env)) {
     await env.KAYIT.put(`selin:bekleyen:${m.from.id}`, JSON.stringify({ ad: kisiAdi(m.from), kullanici: m.from.username || null }), { expirationTtl: 7 * 86400 });
     return; // Selin sadece yöneticiler ve ekiple konuşur
@@ -1131,10 +1735,29 @@ export async function guncelleme(u, env) {
   const metin = (m.text || "").trim();
   const [komut, ...arg] = metin.split(/\s+/);
 
+  // Üretim referansı (kullanıcı kararı 28 Ekim): askı/manken fotoğrafları Selin'e özelden gönderilir;
+  // üretim SADECE bunları kullanır (kanaldan alınmaz). Yazı: "3618 askı" ya da "3618 manken".
+  const medya = m.photo ? { file_id: m.photo[m.photo.length - 1].file_id, tur: "foto" }
+    : m.document && /^image\//.test(m.document.mime_type || "") ? { file_id: m.document.file_id, tur: "foto", belge: true }
+      : m.video ? { file_id: m.video.file_id, tur: "video", boyut: m.video.file_size || 0 } : null;
+  if (medya) {
+    const r = String(m.caption || "").trim().match(/^(\d{3,6})\s*(ask[ıi]|manken)/i);
+    if (!r) return ozelMedya(env, m, { ...medya, uid: (m.document || m.video || (m.photo && m.photo[m.photo.length - 1]) || {}).file_unique_id || medya.file_id, w: (m.photo ? m.photo[m.photo.length - 1].width : m.video ? m.video.width : 0) || 0, h: (m.photo ? m.photo[m.photo.length - 1].height : m.video ? m.video.height : 0) || 0 }, simdi, yaz);
+    const kod = r[1];
+    const rol = /manken/i.test(r[2] || "") ? "manken" : "aski";
+    const liste = await oku(env, `selin:referans:${kod}`, []);
+    liste.push({ ...medya, rol, kim: kisiAdi(m.from), zaman: simdi });
+    await yazKV(env, `selin:referans:${kod}`, liste.slice(-12));
+    const say = (x) => liste.filter((y) => y.rol === x && y.tur === "foto").length;
+    return yaz(`✅ ${kod}: ${rol === "aski" ? "askı" : "manken"} ${medya.tur === "video" ? "videosu" : "fotoğrafı"} kaydedildi. Bu modelde: askı ${say("aski")}, manken ${say("manken")} fotoğraf.\nSadece üretimde kullanılır; kanala ya da siteye gitmez.`);
+  }
+
   const duzeltilen = await env.KAYIT.get(`selin:duzelt:${m.from.id}`);
   if (duzeltilen && metin && !metin.startsWith("/")) {
     await env.KAYIT.delete(`selin:duzelt:${m.from.id}`);
     await yaz(`✏️ ${duzeltilen} düzeltiliyor...`);
+    const mm = (await oku(env, "selin:modeller", {}))[duzeltilen];
+    if (ozelMi(mm)) return ozelHazirla(env, duzeltilen, simdi, metin.slice(0, 800)); // kart sahibe yeniden gider
     await taslakHazirla(env, duzeltilen, simdi, metin.slice(0, 800));
     await kartGoster(env, duzeltilen, m.chat.id); // düzeltilen taslak sadece düzelteni bekletmesin
     return;
@@ -1165,6 +1788,24 @@ export async function guncelleme(u, env) {
     if (!sira.includes(kod)) await yazKV(env, "selin:kareSira", [...sira, kod]);
     return yaz(`🎞 ${kod} sıraya alındı; videodan kareler birkaç dakika içinde onayınıza gelecek.`);
   }
+  if (komut === "/onizleme") return yaz(await onizlemeMesaji(env));
+  if (komut === "/yok") {
+    const modeller = await oku(env, "selin:modeller", {});
+    const kodlar = arg.filter((k) => /^\d{3,6}$/.test(k));
+    for (const k of kodlar) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "gonderilemedi", zaman: simdi };
+    await yazKV(env, "selin:modeller", modeller);
+    return yaz(kodlar.length ? `Tamam: ${kodlar.join(", ")} "gönderilemeyenler" listesine alındı (sonra fal.ai ile).` : "Örnek: /yok 3503 3518");
+  }
+  if (komut === "/gonderilemeyenler") {
+    const modeller = await oku(env, "selin:modeller", {});
+    const l = Object.keys(modeller).filter((k) => ozelMi(modeller[k]) && modeller[k].durum === "gonderilemedi");
+    return yaz(`Gönderilemeyen ${l.length} model${l.length ? `: ${l.join(", ")}` : ""}.`);
+  }
+  if (komut === "/sahip") {
+    if (!yoneticiMi(m.from.id, env)) return yaz("Bu ayar sadece Murat ve Merdan'da.");
+    await env.KAYIT.put("selin:sahip", String(m.from.id));
+    return yaz(`✅ Günlük model istekleri ve taslaklar artık bu hesaba (${m.from.id}) gelecek.`);
+  }
   if (komut === "/liste") {
     if (!yoneticiMi(m.from.id, env)) return yaz("Bu ayar sadece Murat ve Merdan'da.");
     const gun = gunAnahtari(simdi);
@@ -1175,11 +1816,12 @@ export async function guncelleme(u, env) {
   const say = (d) => Object.values(modeller).filter((x) => x.durum === d).length;
   return yaz([
     "🌸 Ben Selin, VOLONTE sitesini dolduruyorum.",
-    `Sitede: ${say("sitede")} · onay bekleyen: ${say("onayda")} · hazırlanacak: ${(await oku(env, "selin:hazirla", [])).length} · cevap bekleyen: ${say("soruldu")}`,
+    `Sitede: ${say("sitede")} · onay bekleyen: ${say("onayda")} (toplu listede ${Object.values(modeller).filter((x) => x.durum === "onayda" && x.toplu).length}, tek kart ${Object.values(modeller).filter((x) => x.durum === "onayda" && !x.toplu).length}) · hazırlanacak: ${(await oku(env, "selin:hazirla", [])).length} · cevap bekleyen: ${say("soruldu")}`,
     `Günlük hedef: ${await gunlukHedef(env, simdi)} model.`,
     "",
     "/site — sitedeki modeller ve kaldırma",
     "/beden 3194 38-40-42 — beden yaz",
+    "/onizleme — toplu listenin önizleme sayfası (siteye çıkmadan bakmak için)",
     "/liste — bugünün listesini yeniden başlat",
     `Site: ${env.SITE_URL}`,
   ].join("\n"));
@@ -1244,6 +1886,7 @@ async function dugme(cq, env) {
       return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${kod}: ne değişsin? Yazın (ör. "açıklamada saten kumaş geçsin", "başlık: Satin Wrap Dress", "2. pozu çıkar").` });
     }
     if (islem === "so" && !m.taslak.bedenler) return cevapla("Önce beden seçin: 📏 Küçük / Büyük / İkisi de");
+    if (islem === "so" && kilitli(env) && !ozelMi(m)) return cevapla(KILIT_MESAJI); // yeni akış: sahip onayıyla yüklenir
     m.durum = islem === "so" ? "yukleniyor" : "eklenmeyecek";
     m.kim = kim;
     await yazKV(env, "selin:modeller", modeller); // önce kilitle

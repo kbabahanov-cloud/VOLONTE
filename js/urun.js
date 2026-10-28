@@ -20,10 +20,13 @@
   // kanal adı, izlenme, tarih ve alt yazı görünmez. Eski Telegram gönderisi görünümü: ?video=telegram
   const VIDEO_SUNUCU = "https://volonte-selin.volonte.workers.dev/v/";
   const YENI_OYNATICI = new URLSearchParams(location.search).get("video") !== "telegram";
+  // Yeni akış (28 Ekim): sahibin Selin'e gönderdiği video "selin/<kod>/<n>" → .../v2/<kod>/<n>
   function siteOynatici(gonderi) {
+    const yeni = String(gonderi).match(/^selin\/(\d{3,6})\/(\d+)$/);
     const id = String(gonderi).split("/").pop();
-    if (!/^\d+$/.test(id)) return "";
-    return '<div class="model-video model-video-site"><video controls playsinline preload="metadata" src="' + VIDEO_SUNUCU + id + '#t=0.1"></video></div>';
+    const kaynak = yeni ? VIDEO_SUNUCU.replace(/\/v\/$/, "/v2/") + yeni[1] + "/" + yeni[2] : /^\d+$/.test(id) ? VIDEO_SUNUCU + id : "";
+    if (!kaynak) return "";
+    return '<div class="model-video model-video-site"><video controls playsinline preload="metadata" src="' + kaynak + '#t=0.1"></video></div>';
   }
 
   function ciz(alan, u) {
@@ -32,7 +35,7 @@
       return '<a class="model-foto" href="' + yaziTemizle(f) + '" target="_blank" rel="noopener"><img src="' + yaziTemizle(f) +
         '" alt="' + yaziTemizle(u.baslik || u.kod) + " — " + (i + 1) + '" loading="' + (i < 2 ? "eager" : "lazy") + '"></a>';
     }).join("");
-    const videolar = (u.videolar || []).map(YENI_OYNATICI ? siteOynatici : telegramGomulu).join("");
+    const videolar = (u.videolar || []).map(function (v) { return YENI_OYNATICI || /^selin\//.test(v) ? siteOynatici(v) : telegramGomulu(v); }).join("");
     const sekmeler = DILLER.filter(function (d) { return u.aciklama && u.aciklama[d.id]; }).map(function (d, i) {
       return '<button type="button" class="chip' + (i === 0 ? " active" : "") + '" data-dil="' + d.id + '">' + d.ad + "</button>";
     }).join("");

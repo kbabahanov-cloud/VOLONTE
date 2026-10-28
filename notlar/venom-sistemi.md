@@ -161,7 +161,38 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 
 - ✅ Kullanıcı onayları (27 Ekim akşam): (1) 24 fotoğraflı modelin TOPLU yüklemesi başladı (selin:toplu; tek liste + "✅ Hepsini siteye yükle", /cikar; onaydan sonra 5 dk'da 2 model). (2) Yazısız video oynatıcı VARSAYILAN (eski görünüm ?video=telegram). (3) Yeni çekimler Telegram'a "Dosya olarak" (sıkıştırmasız) gönderilecek — Selin belge-fotoğrafları okur, Cloudflare Images ile yapay zekâya 1024, siteye 2048 px küçültür.
 
-**Sıradaki komut: Toplu liste gelince kullanıcı onayı. Sonra 36 sadece-videolu model (videodan kare, tek liste). Ardından İş 2 (site tasarımı) planı, Pelin/Arda (60 $ tek kasa).**
+### Venom Ekip + Sayım Sami botu (27 Ekim 2026 gecesi hazırlandı, kullanıcı onaylı)
+- Stoğun TEK kaynağı Sami (StokDO). Kemal ve Selin stoğu her zaman Sami'den alır. Vegawin'de sadece okuma.
+- Yeni worker: volonte-sami (yüklendi, BOT_TOKEN bekliyor). Token girilince "stok bitti" soruları Kemal'den Sami'ye geçer (`sami:aktif`).
+- Üç bot da kanala eklenecek; Sami kanal paylaşımlarını o anki stokla kaydeder (`paylasim` tablosu).
+- Sabah raporları: 09:05 Sami (stok, dünkü biten/gelen/fiyat, kontroller) · 09:15 Kemal (kanal) · 09:25 Selin (site) · 09:40 toplu rapor + kısa yapay zekâ yorumu.
+- Kontroller: stokta olmayan model paylaşıldı mı (Kemal mi elle mi), sitede yanlış fiyat, sitede görünen ama stoğu biten model. Vegawin'de olmayan (Black Rose) hata sayılmaz.
+- Grup kurulana kadar raporlar Murat ve Merdan'a özel mesajla gider.
+- Yarın sabah BotFather adımları (tek tek): 1) /newbot "Sayım Sami" 2) token → Cloudflare volonte-sami Secret BOT_TOKEN 3) herkes Sami'ye /start 4) Sami'yi kanala yönetici ekle 5) "Venom Ekip" grubu, Kemal+Selin+Sami+ekip (botları yönetici eklesin).
+
+### Fotoğraf karışıklığı kontrolü + yeni üretim sistemi (28 Ekim gecesi)
+- Siteye yükleme KİLİTLİ (selin.js SITE_KILIDI). Kullanıcı açmadan hiçbir şey çıkmaz.
+- 24 modelin bütün fotoğrafları ve videoları tek tek incelendi (kareler dalı kontrol/k1, k2).
+  Sebep: Selin kanalda yazısında kodu geçen her paylaşımı alıyor; kanalda yanlış koda yazılmış video (3618'de çizgili korse-etek),
+  aynı kodla iki farklı kıyafet (3322: BLACK ROSE saçaklı ceket vs VOLONTE dantel takım), aynı modelin farklı renkleri (3567) ve eski
+  farklı baskılı görseller. Çıkarıldı: HARIC_MESAJ. Soruldu: 3322, 3567 (FOTO_SORUSU).
+- Sitedeki 4 model: karışıklık yok; kullanıcı kararı: yeni sistemle silinip baştan yüklenecek (henüz silinmedi).
+- Yeni görev (kullanıcı kararı): Selin, gerçek fotoğraf/videodan kıyafeti öğrenip aynı manken + aynı kıyafetle HD 3-4 fotoğraf + video ÜRETECEK.
+  Kural: renk/desen/kesim birebir; her üretim orijinalle yan yana onaya. Araçlar karşılaştırılacak (OpenAI görsel, Google Veo/Nano Banana,
+  Kling, Runway, FASHN). Sora API 24 Eylül 2026'da kapandı. 60 $ kasa; önce 1-2 model deneme.
+
+- 28 Ekim: Üretim atölyesi kodu hazır ve yüklendi (telegram-bot/uretim.js). FAL_KEY girilince 3618 + 3592 ile deneme otomatik başlar: Nano Banana 2.1, Nano Banana Pro, FASHN (Nano pozu + orijinal kıyafet), Kling, Veo 3.1 Fast. Deneme sınırı 15 $, kasa 60 $. Claude orijinalle puanlar (8 altı elenir). Sayfa: önizleme linki + /uretim. Kullanıcı askı videolarını göndermeyi teklif etti (kıyafet referansı olarak kullanılacak).
+
+- 28 Ekim kullanıcı kararları: araçlar 1-7 onaylı (fal.ai, Nano Banana 2.1, Nano Banana Pro, FASHN, Kling, Veo 3.1 Fast, Claude kontrolü). Deneme 3618 + 3592; askı/manken fotoğraflarını Merdan veya Hemra Selin'e özelden gönderecek ("3618 askı" / "3618 manken"). Kanal fotoğrafı üretimde KULLANILMAZ. URETIM_ONAYLI=true (anahtar + fotoğraf gelince başlar), deneme sınırı 15 $.
+- 60 $ kasa KALDIRILDI. Büyük harcama / yeni abonelik → önce sor. Her ayın 1'i 09:45 aylık harcama raporu (venom.js aylikRapor). Claude 80 $ aylık sınırı aynen duruyor.
+- Üretim ileride Pelin'in işi: Pelin botu açılınca uretim.js bölümü Pelin'e taşınacak.
+
+- 28 Ekim kullanıcı kararı: BUGÜN SAMİ BİTİYOR (fal.ai/üretim bekliyor). Sami Google Sheets'e yazar (google.js; hizmet hesabı anahtarı GOOGLE_SA, ücretsiz).
+  Stok tablosu (kod, adet, satış fiyatı, sitede, Telegram'da) ekip sadece görür; harcama tablosu ayrı, sadece kullanıcı. Alış/maliyet/kâr/B20 hiçbir tabloya yazılmaz.
+  Tek kaynak: Sami'nin deposu (StokDO); tablo aynı veriden 5 dk'da bir yazılan birebir ayna; botlar depodan okur (Google'ı okumak yavaş/sınırlı).
+  Tablolar kullanıcının Drive'ında; bağlama: Sami'ye /tablo stok <link>, /tablo harcama <link>.
+
+**Sıradaki komut: SAMİ-1 BotFather /newbot → token Cloudflare volonte-sami BOT_TOKEN. Sonra herkes /start, Sami kanala yönetici. Sonra GOOGLE-1..5 (proje, Sheets API, hizmet hesabı JSON → GOOGLE_SA, iki tablo, paylaşım, /tablo). Sonra FAL-1.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 

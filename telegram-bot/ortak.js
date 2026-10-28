@@ -45,3 +45,19 @@ export async function kanalBilgisi(env) {
     sonpaylasim: await oku("sonpaylasim", {}),
   };
 }
+
+// Kanal yazısından model kodu (Kemal ve Sami aynı kuralı kullanır).
+export function kodBul(metin) {
+  if (!metin) return null;
+  // Kodda en az bir rakam olmalı: "MODEL IS AVAILABLE" kod sayılmaz.
+  for (const m of metin.matchAll(/(?:code|kod|код|réf|ref|model|модель)\s*[.:#№\-]*\s*([A-Z0-9][A-Z0-9\-]{1,15})/gi)) {
+    if (/\d/.test(m[1])) return kodNormal(m[1]);
+  }
+  const m = metin.match(/#([0-9]{3,8})\b/);
+  return m ? kodNormal(m[1]) : null;
+}
+
+export function kodNormal(kod) {
+  return String(kod || "").trim().toUpperCase();
+}
+

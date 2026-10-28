@@ -12,7 +12,7 @@ function ortam() {
   const istekler = [];
   const github = { dosyalar: new Map(), commitler: [], istekler: [] };
   const env = {
-    BOT_TOKEN: "selin-token", WEBHOOK_SECRET: "s", ALLOWED_IDS: "111,222", ANTHROPIC_API_KEY: "k",
+    BOT_TOKEN: "selin-token", WEBHOOK_SECRET: "s", KILIT_TEST_ACIK: "1", ALLOWED_IDS: "111,222", ANTHROPIC_API_KEY: "k",
     GITHUB_TOKEN: "gh", GITHUB_REPO: "kbabahanov-cloud/VOLONTE", SITE_URL: "https://kbabahanov-cloud.github.io/VOLONTE",
     KAYIT: {
       async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; },
@@ -447,4 +447,175 @@ test("'Dosya olarak' gönderilen fotoğraf (sıkıştırılmamış) kullanılır
   globalThis.fetch = asil;
   assert.deepEqual(boyutlar, [1024, 2048]);
   assert.deepEqual(JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0].fotolar, ["galeri/3100/1.jpg"]);
+});
+
+test("önizleme: gizli anahtarlı tek link; toplu listedeki modeller sitedeki gibi (foto, video, fiyat, beden); siteye hiçbir şey yazılmaz; 'onay bekleyen' ayrımı", async () => {
+  const { topluAdimi, onizleme, onizlemeLinki, onizlemeDuyur } = await import("./selin.js");
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false }, "3100": { toplam: 2, fiyat: 30, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 2, telegramda: ["3194", "3100"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 }, "3100": { foto: 1, video: 0 } } }));
+  await topluAdimi(o.env, o.simdi);
+  await onizlemeDuyur(o.env); // hazırlanırken bile link bir kez yöneticilere gider
+  await onizlemeDuyur(o.env);
+  const duyuru = cagri(o.g, "sendMessage");
+  assert.deepEqual(duyuru.map((x) => x.govde.chat_id), ["111", "222"]);
+  assert.match(duyuru[0].govde.text, /siteye ÇIKMADI[\s\S]*https:\/\/selin\.test\/onizleme\/[0-9a-f]{24}[\s\S]*hazır 0, hazırlanıyor 2/);
+  await hazirlaAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  const link = await onizlemeLinki(o.env);
+  const yol = link.split("/onizleme/")[1];
+  assert.equal((await onizleme(o.env, "yanlis-anahtar")).status, 404);
+  const html = await (await onizleme(o.env, yol)).text();
+  assert.match(html, /ÖNİZLEME — bu modeller henüz sitede DEĞİL[\s\S]*Hazır 2 \/ 2 model/);
+  assert.match(html, /<p class="product-code">3194<\/p>[\s\S]*Sizes: 38-40-42-44[\s\S]*Wholesale price: \$69[\s\S]*Kod: 3194<\/b> · Fiyat: 69 \$ \(Vegawin\) · Bedenler: 38-40-42-44/);
+  assert.match(html, new RegExp(`<img src="/onizleme/${yol}/f/3194/0"`));
+  assert.match(html, new RegExp(`<video[^>]+src="/onizleme/${yol}/v/3194/0#t=0.1"`));
+  const foto = await onizleme(o.env, `${yol}/f/3194/0`);
+  assert.equal(foto.headers.get("content-type"), "image/jpeg");
+  assert.equal((await onizleme(o.env, `${yol}/f/9999/0`)).status, 404); // listede olmayan model verilmez
+  assert.equal(o.github.dosyalar.size, 0); // siteye hiçbir şey yazılmadı
+  o.g.length = 0;
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/onizleme" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Toplu liste: 2 model — hazır 2\.\nBu listenin dışında onay bekleyen: 0 tek taslak \+ 0 videodan kare/);
+});
+
+test("site kilidi: kilit açıkken (kullanıcı kararı 28 Ekim) toplu düğme de tek kart onayı da siteye hiçbir şey yüklemez", async () => {
+  const { topluAdimi } = await import("./selin.js");
+  const o = ortam();
+  delete o.env.KILIT_TEST_ACIK;
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 1, telegramda: ["3194"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 } } }));
+  await topluAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  await topluAdimi(o.env, o.simdi);
+  await bas(o.env, 111, "tu:evet");
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /kilitli/);
+  assert.equal(JSON.parse(o.depo.get("selin:toplu")).durum, "onayda");
+  await topluAdimi(o.env, o.simdi + 300);
+  assert.equal(o.github.dosyalar.size, 0);
+});
+
+test("fotoğraf kontrolü: bir kez geçici jetonla Actions isteği; liste ve tek mesaj sadece toplu modellerin gruplarından", async () => {
+  const { topluAdimi, onizleme, kontrolIstegi } = await import("./selin.js");
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  stokBagla(o, { "3194": { toplam: 5, fiyat: 69, gizli: false } });
+  o.depo.set("selin:tarama", JSON.stringify({ surum: "v1", bitti: true, stokFiyat: 1, telegramda: ["3194"], sitede: [], sira: [], sonuc: { "3194": { foto: 1, video: 1 } } }));
+  await topluAdimi(o.env, o.simdi);
+  await hazirlaAdimi(o.env, o.simdi);
+  await kontrolIstegi(o.env);
+  await kontrolIstegi(o.env);
+  const istek = o.github.commitler.filter(([m, y]) => m === "PUT" && y.startsWith("/contents/istekler/kontrol/"));
+  assert.equal(istek.length, 1);
+  assert.equal(istek[0][2].branch, "kareler");
+  const jeton = o.depo.get("selin:kontrolJeton");
+  const liste = await (await onizleme(o.env, `${jeton}/json`)).json();
+  assert.deepEqual(liste[0].gruplar.map((g) => g.ids), [[300, 301], [200]]);
+  assert.ok(liste[0].fotolar.length >= 1);
+  const m = await onizleme(o.env, `${jeton}/m/300`);
+  assert.equal(m.headers.get("x-tur"), "foto");
+  assert.match(decodeURIComponent(m.headers.get("x-yazi")), /CODE\.3194/);
+  assert.equal((await onizleme(o.env, `${jeton}/m/999`)).status, 404);
+  assert.equal((await onizleme(o.env, "baskajeton/json")).status, 404);
+});
+
+test("fotoğraf düzeltmesi: hatalı mesaj taslaktan çıkar ve bir daha alınmaz; sorulan model önizlemede soru olarak görünür, yüklenmez", async () => {
+  const { fotoDuzeltmeGocu, HARIC_MESAJ, FOTO_SORUSU, onizleme, onizlemeLinki } = await import("./selin.js");
+  const o = ortam();
+  o.env.SELF_URL = "https://selin.test";
+  const taslak = (ids, vids) => ({ baslik: "X", kategori: "dresses", bedenler: "38-40", aciklama: { en: "x" }, fotolar: ids.map((id) => ({ id, net: true, buyuk: { file_id: "f" + id } })), videolar: vids.map((id) => ({ id, file_id: "v" + id, boyut: 1 })) });
+  o.depo.set("selin:toplu", JSON.stringify({ surum: "v1", kodlar: ["3618", "3322"], durum: "onayda", haric: [], basarisiz: [], yuklenen: [] }));
+  o.depo.set("selin:modeller", JSON.stringify({ "3618": { durum: "onayda", toplu: true, taslak: taslak([13076, 13077], [13457]) }, "3322": { durum: "onayda", toplu: true, taslak: taslak([12782], [13598]) } }));
+  assert.deepEqual(HARIC_MESAJ["3618"], [13457]);
+  await fotoDuzeltmeGocu(o.env);
+  const m = JSON.parse(o.depo.get("selin:modeller"));
+  assert.deepEqual(m["3618"].taslak.videolar, []);
+  assert.equal(m["3322"].durum, "foto-soru");
+  const html = await (await onizleme(o.env, (await onizlemeLinki(o.env)).split("/onizleme/")[1])).text();
+  assert.match(html, /Hazır 1 \/ 2 model/);
+  assert.match(html, /❓ 3322 size soruldu/);
+  assert.ok(FOTO_SORUSU["3567"]);
+});
+
+test("üretim referansı: Selin'e özelden '3618 askı' yazılı fotoğraf kaydedilir; kodsuz fotoğraf için kod istenir; izinsiz kişi kaydedemez", async () => {
+  const o = ortam();
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, photo: [{ file_id: "k1", width: 320 }, { file_id: "b1", width: 1280 }], caption: "3618 askı" } }, o.env);
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, photo: [{ file_id: "b2", width: 1280 }], caption: "3618 manken" } }, o.env);
+  const r = JSON.parse(o.depo.get("selin:referans:3618"));
+  assert.deepEqual(r.map((x) => [x.file_id, x.rol]), [["b1", "aski"], ["b2", "manken"]]);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /askı 1, manken 1 fotoğraf[\s\S]*kanala ya da siteye gitmez/);
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, photo: [{ file_id: "b3" }] } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /model kodunu/);
+  await guncelleme({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, photo: [{ file_id: "b4" }], caption: "3618 askı" } }, o.env);
+  assert.equal(JSON.parse(o.depo.get("selin:referans:3618")).length, 2);
+});
+
+test("/kimim: izinsiz kişi de kendi kimliğini öğrenir, başka cevap almaz", async () => {
+  const o = ortam();
+  await guncelleme({ message: { chat: { id: 999, type: "private" }, from: { id: 999, first_name: "Yeni" }, text: "/kimim" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Telegram kimliğiniz: 999[\s\S]*izinli değilsiniz/);
+  assert.ok(o.depo.has("venom:kimlik:selin:999"));
+  await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/kimim" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /izinlisiniz/);
+});
+
+test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (öncelik karışık 24); 'Dosya olarak' albüm + video gelir; taslak Vegawin fiyatıyla sahibe; onayla siteye (kilit yeni akışı engellemez); 20:00 özet, gelmeyenler gönderilemedi", async () => {
+  const { istekAdimi, ozelHazirlaAdimi, gunSonuOzeti, ozelVideo, GUNLUK_ISTEK } = await import("./selin.js");
+  const o = ortam();
+  delete o.env.KILIT_TEST_ACIK; // site kilidi açık değil: yeni akış yine de onayla yüklenir
+  o.env.SAHIP_IDS = "777";
+  const stok = { "3618": { toplam: 4, fiyat: 55 }, "3100": { toplam: 2, fiyat: 30 } };
+  for (let i = 0; i < 20; i++) stok[String(5000 + i)] = { toplam: 1, fiyat: 10 };
+  stokBagla(o, stok);
+  const stokFetch = o.env.STOK.get().fetch;
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
+    ? Response.json(Object.entries(o.stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat })))
+    : stokFetch(url, init) }) };
+  const gun = ist(10, 5);
+  const gercekSaat = Date.now;
+  Date.now = () => gun * 1000; // dosyalar bu saatle kaydedilir
+  await istekAdimi(o.env, ist(9, 55)); // saat gelmedi
+  assert.equal(cagri(o.g, "sendMessage").length, 0);
+  await istekAdimi(o.env, gun);
+  await istekAdimi(o.env, gun + 300); // günde bir kez
+  const istek = cagri(o.g, "sendMessage");
+  assert.equal(istek.length, 1);
+  assert.equal(istek[0].govde.chat_id, "777");
+  const kodlar = istek[0].govde.text.split("\n")[1].split(", ");
+  assert.equal(kodlar.length, GUNLUK_ISTEK);
+  assert.equal(kodlar[0], "3618"); // öncelikli (karışık 24)
+  assert.match(istek[0].govde.text, /Dosya olarak[\s\S]*3503 Küçük[\s\S]*\/yok 3503/);
+  // albüm: yazısız parça önce gelir, sonra yazılı (Dosya olarak) + video
+  const gonder = (ek) => guncelleme({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Murat" }, ...ek } }, o.env);
+  await gonder({ media_group_id: "g1", document: { file_id: "d2", file_unique_id: "u2", mime_type: "image/jpeg" } });
+  await gonder({ media_group_id: "g1", document: { file_id: "d1", file_unique_id: "u1", mime_type: "image/jpeg" }, caption: "3618 Büyük" });
+  await gonder({ video: { file_id: "v1", file_unique_id: "uv1", file_size: 5e6, width: 1080 } });
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /✅ 3618 alındı \(Büyük: 44-46-48-50\)/);
+  let m = JSON.parse(o.depo.get("selin:modeller"))["3618"];
+  assert.deepEqual(m.medya.map((x) => x.file_id).sort(), ["d1", "d2", "v1"]);
+  const su = gun;
+  await ozelHazirlaAdimi(o.env, su + 60); // 2 dk sessizlik yok
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3618"].durum, "geldi");
+  o.g.length = 0;
+  await ozelHazirlaAdimi(o.env, su + 400);
+  m = JSON.parse(o.depo.get("selin:modeller"))["3618"];
+  assert.equal(m.durum, "onayda");
+  assert.equal(m.taslak.fiyat, 55);
+  assert.equal(m.taslak.bedenler, "44-46-48-50");
+  const kart = cagri(o.g, "sendMessage").at(-1);
+  assert.equal(kart.govde.chat_id, "777");
+  assert.match(kart.govde.text, /Fiyat: 55 \$ \(Vegawin\) · Stok: 4 adet[\s\S]*Videolar: 1 \(sitenin kendi oynatıcısında/);
+  await bas(o.env, 111, "so:3618"); // yönetici onaylar (sahip de basabilir)
+  const site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual([site[0].kod, site[0].fiyat, site[0].videolar, site[0].fotolar.length], ["3618", 55, ["selin/3618/0"], 1]);
+  assert.equal((await ozelVideo(o.env, "3618", "0", null)).status, 200);
+  assert.equal((await ozelVideo(o.env, "3100", "0", null)).status, 404);
+  await gonder({ text: "/yok 5019" });
+  o.g.length = 0;
+  await gunSonuOzeti(o.env, ist(20, 5));
+  const ozet = cagri(o.g, "sendMessage")[0].govde.text;
+  assert.match(ozet, /İstenen: 15 · gelen: 1 · bugün siteye çıkan: 1 \(3618\)/);
+  assert.match(ozet, /Gönderilemeyen \(sonra fal\.ai ile\): 14/);
+  Date.now = gercekSaat;
 });

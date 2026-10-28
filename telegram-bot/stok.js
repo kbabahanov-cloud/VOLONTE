@@ -23,6 +23,11 @@ const TABLOLAR = [
   `CREATE TABLE IF NOT EXISTS karar (kod TEXT PRIMARY KEY, durum TEXT NOT NULL, kim TEXT, zaman INTEGER,
      sonraki INTEGER, mesajlar TEXT)`,
   `CREATE TABLE IF NOT EXISTS kopru (magaza TEXT PRIMARY KEY, son INTEGER, adet INTEGER)`,
+  // Sami'nin günlük raporu için: stok bitti / geldi / fiyat değişti olayları.
+  `CREATE TABLE IF NOT EXISTS olay (kod TEXT NOT NULL, tur TEXT NOT NULL, onceki REAL, sonraki REAL, zaman INTEGER NOT NULL)`,
+  // Kanal paylaşımları (Sami kanalı izler): paylaşıldığı anda stok ve fiyat — kontrol için.
+  `CREATE TABLE IF NOT EXISTS paylasim (mesaj INTEGER PRIMARY KEY, kod TEXT, zaman INTEGER, toplam REAL, fiyat REAL)`,
+  `CREATE TABLE IF NOT EXISTS ayar (k TEXT PRIMARY KEY, v TEXT)`,
 ];
 
 // Saf mantık: SQL ile çalışan depo (Durable Object içinde ya da testte node:sqlite ile).
@@ -48,6 +53,7 @@ export class StokDeposu {
       const kod = stokKodu(u.kod);
       if (!kod) continue;
       const once = this.toplam(kod);
+      const onceFiyat = (this.tek("SELECT MAX(fiyat) AS f FROM urun WHERE kod = ?", kod) || {}).f ?? null;
       if (u.yok) this.sql.exec("DELETE FROM urun WHERE magaza = ? AND kod = ?", magaza, kod);
       else {
         this.sql.exec(
@@ -58,6 +64,13 @@ export class StokDeposu {
       }
       yazilan += 1;
       const sonra = this.toplam(kod);
+      if (!ilkMi) {
+        const olay = (tur, a, b) => this.sql.exec("INSERT INTO olay (kod, tur, onceki, sonraki, zaman) VALUES (?, ?, ?, ?, ?)", kod, tur, a, b, simdi);
+        if (once != null && once > 0 && (sonra == null || sonra <= 0)) olay("bitti", once, sonra);
+        else if ((once == null || once <= 0) && sonra != null && sonra > 0) olay("geldi", once, sonra);
+        const yeniFiyat = (this.tek("SELECT MAX(fiyat) AS f FROM urun WHERE kod = ?", kod) || {}).f ?? null;
+        if (onceFiyat != null && yeniFiyat != null && onceFiyat !== yeniFiyat) olay("fiyat", onceFiyat, yeniFiyat);
+      }
       const karar = this.tek("SELECT durum FROM karar WHERE kod = ?", kod);
       if (sonra != null && sonra > 0) {
         // Stok geldi: repete/beklesin/soru kapanır, model yeniden görünür. "Sil" (gizli) kalır.
@@ -129,6 +142,31 @@ export class StokDeposu {
       .filter((r) => !silinen.has(r.kod));
   }
 
+  olaylar(basla, bitis) {
+    return this.hepsi("SELECT kod, tur, onceki, sonraki, zaman FROM olay WHERE zaman >= ? AND zaman < ? ORDER BY zaman", basla, bitis);
+  }
+
+  // Sami kanalda bir paylaşım görünce: o andaki stok ve fiyatla kaydeder (Vegawin'de olmayan: null).
+  paylasimKaydet(mesaj, kod, zaman) {
+    const k = stokKodu(kod);
+    const fiyat = (this.tek("SELECT MAX(fiyat) AS f, COUNT(*) AS n FROM urun WHERE kod = ?", k) || {});
+    this.sql.exec("INSERT OR IGNORE INTO paylasim (mesaj, kod, zaman, toplam, fiyat) VALUES (?, ?, ?, ?, ?)",
+      mesaj, k, zaman, this.toplam(k), fiyat.n ? fiyat.f : null);
+  }
+  paylasimlar(basla, bitis) {
+    return this.hepsi("SELECT mesaj, kod, zaman, toplam, fiyat FROM paylasim WHERE zaman >= ? AND zaman < ? ORDER BY zaman", basla, bitis);
+  }
+
+  // Bütün bilinen modeller (Sami'nin kontrolleri için): kod → { toplam, fiyat, gizli }.
+  tum() {
+    const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
+    return Object.fromEntries(this.hepsi("SELECT kod, SUM(adet) AS t, MAX(fiyat) AS f FROM urun GROUP BY kod")
+      .map((r) => [r.kod, { toplam: r.t, fiyat: r.f, gizli: r.t <= 0 || silinen.has(r.kod) }]));
+  }
+
+  ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
+  ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
+
   bilgi(kod) {
     const satirlar = this.hepsi("SELECT magaza, ad, adet, fiyat, guncel FROM urun WHERE kod = ?", kod);
     const karar = this.tek("SELECT durum, kim, zaman, sonraki FROM karar WHERE kod = ?", kod);
@@ -160,6 +198,12 @@ export class StokDO {
     if (yol === "/karar") return cevap(d.karar(g.kod, g.islem, g.kim, g.simdi));
     if (yol === "/gizliler") return cevap(d.gizliler());
     if (yol === "/stoktakiler") return cevap(d.stoktakiler());
+    if (yol === "/olaylar") return cevap(d.olaylar(g.basla, g.bitis));
+    if (yol === "/paylasim-kaydet") return cevap(d.paylasimKaydet(g.mesaj, g.kod, g.zaman) || { ok: true });
+    if (yol === "/paylasimlar") return cevap(d.paylasimlar(g.basla, g.bitis));
+    if (yol === "/tum") return cevap(d.tum());
+    if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
+    if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
