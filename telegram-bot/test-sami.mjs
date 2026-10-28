@@ -147,3 +147,45 @@ test("aylık harcama raporu: ayın 1'inde geçen ayın Claude + üretim harcamas
   assert.equal(g.length, 2); // iki yöneticiye, bir kez
   assert.match(g[0].text, /10\.2026 aylık harcama raporu[\s\S]*Claude[^\n]*12\.50 \$[\s\S]*fal\.ai[^\n]*5\.60 \$[\s\S]*Toplam: 18\.10 \$/);
 });
+
+test("stok tablosu satırları: sadece kod, adet, satış fiyatı, sitede, Telegram'da; stoktakiler önce; alış/maliyet yok", async () => {
+  const { stokTablosuSatirlari } = await import("./sami.js");
+  const satir = stokTablosuSatirlari(
+    { "3100": { toplam: 0, fiyat: 30, gizli: true }, "3194": { toplam: 3, fiyat: 70 }, "3010": { toplam: 5, fiyat: null } },
+    [{ kod: "3194", fiyat: 70 }, { kod: "3100", gizli: true }],
+    { "3194": [{}], "3100": [{}] },
+  );
+  assert.deepEqual(satir, [["3010", 5, "", "Yok", "Yok"], ["3194", 3, 70, "Var", "Var"], ["3100", 0, 30, "Yok", "Var"]]);
+});
+
+test("Google tablosu: anahtar ve tablo bağlıyken Sami stoğu yazar; değişiklik yoksa tekrar yazmaz; /tablo sadece yöneticide", async () => {
+  const { stokTablosu, guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  const { generateKeyPairSync } = await import("node:crypto");
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  o.env.GOOGLE_SA = JSON.stringify({ client_email: "sami@volonte.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }) });
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 3, fiyat: 69 }], ist(8));
+  const google = [];
+  const eski = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => {
+    const u = String(url);
+    if (u.startsWith("https://oauth2.googleapis.com/")) return Response.json({ access_token: "t", expires_in: 3600 });
+    if (u.startsWith("https://sheets.googleapis.com/")) {
+      google.push({ u, govde: istek.body ? JSON.parse(istek.body) : null });
+      if (u.includes("?fields=sheets.properties")) return Response.json({ sheets: [{ properties: { sheetId: 0, title: "Sayfa1", gridProperties: {} } }] });
+      return Response.json({});
+    }
+    return eski(url, istek);
+  };
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333 }, text: "/tablo stok https://docs.google.com/spreadsheets/d/AAAAAAAAAAAAAAAAAAAAAAAAAAAA/edit" } }, o.env);
+  assert.ok(!o.depo.has("sami:tablo:stok")); // ekip bağlayamaz
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/tablo stok https://docs.google.com/spreadsheets/d/AAAAAAAAAAAAAAAAAAAAAAAAAAAA/edit" } }, o.env);
+  assert.equal(o.depo.get("sami:tablo:stok"), "AAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  await stokTablosu(o.env, ist(10));
+  const yazim = google.find((x) => x.u.includes("valueInputOption=RAW"));
+  assert.deepEqual(yazim.govde.values.slice(1), [["Model kodu", "Adet", "Satış fiyatı ($)", "Sitede", "Telegram'da"], ["3194", 3, 69, "Var", "Var"]]);
+  const sayi = google.length;
+  await stokTablosu(o.env, ist(10, 5));
+  assert.equal(google.length, sayi); // değişiklik yok → yazılmaz
+  globalThis.fetch = eski;
+});

@@ -17,6 +17,7 @@
 import { kodBul } from "./ortak.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak } from "./venom.js";
+import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -56,7 +57,7 @@ export default {
     const simdi = Math.floor(Date.now() / 1000);
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu } : { sabahRaporu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -100,11 +101,13 @@ export async function guncelleme(u, env) {
   if (!m || !m.from || m.chat.type !== "private" || !izinli(m.from.id, env)) return;
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   if (komut === "/stok") return stokGoster(m, env, tg);
+  if (komut === "/tablo") return tabloKomutu(m, env);
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: [
     "📦 Ben Sayım Sami. Vegawin stoklarını okurum (hiçbir şeyi değiştirmem).",
     "/stok — köprünün durumu",
     "/stok 3194 — o modelin adedi, fiyatı ve durumu",
     "Stok bitince 🔁 Repete / 🗑 Sil / ⏳ Beklesin sorusunu ben sorarım. Her sabah 09:05'te Venom Ekip grubuna rapor veririm.",
+    "Stok tablosunu (Google Sheets) 5 dakikada bir güncellerim. /tablo — tablo durumu (yönetici).",
   ].join("\n") });
 }
 
@@ -231,4 +234,95 @@ async function sabahRaporu(env, simdi) {
   if (elle) return;
   await raporuBirak(env, "sami", simdi, rapor);
   if (env.BOT_TOKEN) await grubaGonder(env, "sami", rapor.metin, tg);
+}
+
+// ---------- Google Sheets (kullanıcı kararı, 28 Ekim) ----------
+// Stok tablosu: Sami'nin deposunun (StokDO) birebir aynası; 5 dakikada bir, değişiklik varsa (en geç saatte bir) yazılır.
+// Botlar stoğu yine Sami'nin deposundan okur (hızlı, sınırsız); tablo aynı veriden yazıldığı için bire bir aynıdır.
+// Sadece: model kodu, adet, satış fiyatı, sitede, Telegram'da. Alış fiyatı / maliyet / kâr / koddaki ek (B20) YOK —
+// köprü bunları zaten okumaz. Harcama tablosu ayrıdır (yalnız kullanıcı görür; paylaşımı kullanıcı Google'da yapar).
+const ayGoster = (ay) => ay.split("-").reverse().join(".");
+const zamanYaz = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)} ${d.slice(11, 16)}`; };
+
+export function stokTablosuSatirlari(tum, site, kodlar) {
+  const sitede = new Set(site.filter((u) => !u.gizli).map((u) => String(u.kod)));
+  return Object.entries(tum)
+    .sort(([ka, a], [kb, b]) => (b.toplam > 0) - (a.toplam > 0) || ka.localeCompare(kb, "tr", { numeric: true }))
+    .map(([kod, x]) => [kod, Math.max(0, Number(x.toplam) || 0), x.fiyat != null ? Number(x.fiyat) : "", sitede.has(kod) ? "Var" : "Yok", kodlar[kod] ? "Var" : "Yok"]);
+}
+
+async function tabloKimlik(env, tur) {
+  return tabloKimligi(env[tur === "stok" ? "STOK_TABLO_ID" : "HARCAMA_TABLO_ID"]) || (await env.KAYIT.get(`sami:tablo:${tur}`));
+}
+
+async function sha(metin) {
+  const o = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(metin));
+  return [...new Uint8Array(o)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function stokTablosu(env, simdi) {
+  if (!hizmetHesabi(env)) return;
+  const id = await tabloKimlik(env, "stok");
+  if (!id) return;
+  const satirlar = stokTablosuSatirlari(await stokIste(env, "/tum"), await siteUrunleri(env), (await env.KAYIT.get("kodlar", "json")) || {});
+  const iz = await sha(JSON.stringify(satirlar));
+  const onceki = JSON.parse((await stokIste(env, "/ayar-oku", { k: "tablo:stok" })).v || "{}");
+  if (onceki.id === id && onceki.iz === iz && simdi - onceki.zaman < 3600) return;
+  if (onceki.id !== id) await sayfaHazirla(env, id, "Stok", 2);
+  const stokta = satirlar.filter((r) => r[1] > 0).length;
+  await sayfayaYaz(env, id, "Stok", [
+    [`VOLONTE stok — son güncelleme ${zamanYaz(simdi)} · Sayım Sami (Vegawin'den, sadece okuma) · stokta ${stokta} model`, "", "", "", ""],
+    ["Model kodu", "Adet", "Satış fiyatı ($)", "Sitede", "Telegram'da"],
+    ...satirlar,
+  ]);
+  await stokIste(env, "/ayar-yaz", { k: "tablo:stok", v: JSON.stringify({ id, iz, zaman: simdi }) });
+}
+
+// Harcama tablosu: ay ay Claude + üretim (fal.ai). Aylık değerler Sami'nin deposunda da saklanır (KV kaydı 70 günde silinir).
+export async function harcamaTablosu(env, simdi) {
+  if (!hizmetHesabi(env)) return;
+  const id = await tabloKimlik(env, "harcama");
+  if (!id) return;
+  const ay = new Date((simdi + SAAT_FARKI) * 1000).toISOString().slice(0, 7);
+  const kayit = JSON.parse((await stokIste(env, "/ayar-oku", { k: "tablo:harcama" })).v || "{}");
+  if (kayit.id === id && simdi - (kayit.zaman || 0) < 3600) return; // saatte bir
+  const aylar = kayit.aylar || {};
+  aylar[ay] = {
+    claude: Number((await env.KAYIT.get(`harcama:${ay}`)) || 0) / 1e6,
+    uretim: Number((await env.KAYIT.get(`uretim-harcama:${ay}`)) || 0),
+  };
+  if (kayit.id !== id) await sayfaHazirla(env, id, "Harcama", 2);
+  const satirlar = Object.keys(aylar).sort().reverse().map((a) => {
+    const x = aylar[a];
+    return [ayGoster(a), Math.round(x.claude * 100) / 100, Math.round(x.uretim * 100) / 100, Math.round((x.claude + x.uretim) * 100) / 100];
+  });
+  await sayfayaYaz(env, id, "Harcama", [
+    [`VOLONTE harcama — son güncelleme ${zamanYaz(simdi)} · sadece sahibi görür`, "", "", ""],
+    ["Ay", "Claude ($)", "Üretim fal.ai ($)", "Toplam ($)"],
+    ...satirlar,
+  ]);
+  await stokIste(env, "/ayar-yaz", { k: "tablo:harcama", v: JSON.stringify({ id, zaman: simdi, aylar }) });
+}
+
+// /tablo — hizmet hesabının e-postası ve tabloların durumu; /tablo stok <link>, /tablo harcama <link> (sadece yönetici)
+async function tabloKomutu(m, env) {
+  const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text, disable_web_page_preview: true });
+  if (!yoneticiMi(m.from.id, env)) return yaz("Bu ayar sadece Murat ve Merdan'da.");
+  const [, tur, link] = (m.text || "").trim().split(/\s+/);
+  const sa = hizmetHesabi(env);
+  if (tur === "stok" || tur === "harcama") {
+    const id = tabloKimligi(link);
+    if (!id) return yaz(`Örnek: /tablo ${tur} https://docs.google.com/spreadsheets/d/...`);
+    await env.KAYIT.put(`sami:tablo:${tur}`, id);
+    return yaz(`✅ ${tur === "stok" ? "Stok" : "Harcama"} tablosu kaydedildi. 5 dakika içinde yazmaya başlarım.${sa ? "" : "\n⚠️ Google anahtarı (GOOGLE_SA) henüz girilmedi."}`);
+  }
+  const durum = async (t) => ((await tabloKimlik(env, t)) ? "bağlı ✅" : "yok");
+  return yaz([
+    "📊 Google tabloları",
+    sa ? `Hizmet hesabı: ${sa.client_email}\n(Tabloyu bu e-postayla "Düzenleyen" olarak paylaşın.)` : "⚠️ Google anahtarı (GOOGLE_SA) henüz girilmedi.",
+    `Stok tablosu: ${await durum("stok")}`,
+    `Harcama tablosu: ${await durum("harcama")}`,
+    "",
+    "Bağlamak için: /tablo stok <link> · /tablo harcama <link>",
+  ].join("\n"));
 }

@@ -187,7 +187,12 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
 - 60 $ kasa KALDIRILDI. Büyük harcama / yeni abonelik → önce sor. Her ayın 1'i 09:45 aylık harcama raporu (venom.js aylikRapor). Claude 80 $ aylık sınırı aynen duruyor.
 - Üretim ileride Pelin'in işi: Pelin botu açılınca uretim.js bölümü Pelin'e taşınacak.
 
-**Sıradaki komut: FAL-1 — kullanıcı fal.ai'ye Google ile kaydolur, 20 $ yükler ("fal hesabı açıldı" der). Sonra FAL-2: API anahtarı → Cloudflare volonte-selin → Secret FAL_KEY. Paralel: Merdan/Hemra 3618 ve 3592 askı+manken fotoğraflarını Selin'e gönderir. Sonra SAMİ-BOT BotFather adımları, bağlantılar listesi.**
+- 28 Ekim kullanıcı kararı: BUGÜN SAMİ BİTİYOR (fal.ai/üretim bekliyor). Sami Google Sheets'e yazar (google.js; hizmet hesabı anahtarı GOOGLE_SA, ücretsiz).
+  Stok tablosu (kod, adet, satış fiyatı, sitede, Telegram'da) ekip sadece görür; harcama tablosu ayrı, sadece kullanıcı. Alış/maliyet/kâr/B20 hiçbir tabloya yazılmaz.
+  Tek kaynak: Sami'nin deposu (StokDO); tablo aynı veriden 5 dk'da bir yazılan birebir ayna; botlar depodan okur (Google'ı okumak yavaş/sınırlı).
+  Tablolar kullanıcının Drive'ında; bağlama: Sami'ye /tablo stok <link>, /tablo harcama <link>.
+
+**Sıradaki komut: SAMİ-1 BotFather /newbot → token Cloudflare volonte-sami BOT_TOKEN. Sonra herkes /start, Sami kanala yönetici. Sonra GOOGLE-1..5 (proje, Sheets API, hizmet hesabı JSON → GOOGLE_SA, iki tablo, paylaşım, /tablo). Sonra FAL-1.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
