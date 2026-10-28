@@ -585,6 +585,7 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   const kodlar = istek[0].govde.text.split("\n")[1].split(", ");
   assert.equal(kodlar.length, GUNLUK_ISTEK);
   assert.equal(kodlar[0], "3618"); // öncelikli (karışık 24)
+  assert.ok(kodlar.includes("3279") && kodlar.includes("3595")); // stokta görünmese de istenir
   assert.match(istek[0].govde.text, /Dosya olarak[\s\S]*3503 Küçük[\s\S]*\/yok 3503/);
   // albüm: yazısız parça önce gelir, sonra yazılı (Dosya olarak) + video
   const gonder = (ek) => guncelleme({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Murat" }, ...ek } }, o.env);
