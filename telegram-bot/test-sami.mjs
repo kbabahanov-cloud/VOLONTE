@@ -189,3 +189,14 @@ test("Google tablosu: anahtar ve tablo bağlıyken Sami stoğu yazar; değişikl
   assert.equal(google.length, sayi); // değişiklik yok → yazılmaz
   globalThis.fetch = eski;
 });
+
+test("stok deposu: kod sorguları dizin kullanır (tam tarama yok)", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const { StokDeposu } = await import("./stok.js");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) { if (!p.length && !/^\s*SELECT|^\s*EXPLAIN/i.test(q)) { db.exec(q); return { toArray: () => [] }; } const st = db.prepare(q); return { toArray: () => (/^\s*(SELECT|EXPLAIN)/i.test(q) ? st.all(...p) : (st.run(...p), [])) }; } };
+  const d = new StokDeposu(sql);
+  const plan = sql.exec("EXPLAIN QUERY PLAN SELECT SUM(adet) AS t, MAX(fiyat) AS f, COUNT(*) AS n FROM urun WHERE kod = ?", "3194").toArray().map((r) => r.detail).join(" ");
+  assert.match(plan, /USING INDEX urun_kod/);
+  assert.ok(d);
+});
