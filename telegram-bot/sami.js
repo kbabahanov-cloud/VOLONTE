@@ -68,7 +68,9 @@ export default {
       try {
         await f(env, simdi);
       } catch (e) {
-        await env.KAYIT.put("sami:hata", JSON.stringify({ zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }), { expirationTtl: 7 * 86400 });
+        const hata = `${ad}: ${String(e && e.message).slice(0, 300)}`;
+        const eski = await env.KAYIT.get("sami:hata", "json");
+        if (!eski || eski.hata !== hata || simdi - eski.zaman > 3600) await env.KAYIT.put("sami:hata", JSON.stringify({ zaman: simdi, hata }), { expirationTtl: 7 * 86400 });
       }
     }
   },
@@ -281,14 +283,43 @@ async function sha(metin) {
   return [...new Uint8Array(o)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function stokTablosu(env, simdi) {
+// Tablo yazma güvenli sarmalı (29 Ekim): son yazma ve son hata Sami'nin deposunda (/tablo gösterir); Google hata
+// verirse 30 dakika beklenir (her 5 dakikada boşuna denenmez, hata kaydı KV yazma sınırını tüketmez).
+async function tabloDurum(env, tur) { return JSON.parse((await stokIste(env, "/ayar-oku", { k: `tablo:durum:${tur}` })).v || "{}"); }
+function tabloGuvenli(tur, yaz) {
+  return async (env, simdi) => {
+    if (!hizmetHesabi(env) || !(await tabloKimlik(env, tur))) return;
+    const d = await tabloDurum(env, tur);
+    if (d.bekle && simdi < d.bekle) return;
+    try {
+      const yazdi = await yaz(env, simdi);
+      if (yazdi || d.sonHata) await stokIste(env, "/ayar-yaz", { k: `tablo:durum:${tur}`, v: JSON.stringify({ ...d, ...(yazdi ? { sonYazma: simdi } : {}), sonHata: null, bekle: null }) });
+    } catch (e) {
+      await stokIste(env, "/ayar-yaz", { k: `tablo:durum:${tur}`, v: JSON.stringify({ ...d, sonHata: String(e && e.message).slice(0, 300), hataZaman: simdi, bekle: simdi + 1800 }) });
+    }
+  };
+}
+export const stokTablosu = tabloGuvenli("stok", stokTablosuYaz);
+export const harcamaTablosu = tabloGuvenli("harcama", harcamaTablosuYaz);
+
+// Google hata mesajını sade Türkçeye çevirir
+export function googleHataAciklama(m) {
+  const t = String(m || "");
+  if (/has not been used in project|is disabled/i.test(t)) return `Google Sheets API bu Google projesinde kapalı → console.cloud.google.com'da aynı projede "Google Sheets API" → Etkinleştir.${(t.match(/project (\d+)/) || [])[1] ? ` (proje no: ${t.match(/project (\d+)/)[1]})` : ""}`;
+  if (/403|PERMISSION_DENIED|does not have permission/i.test(t)) return "Tabloya erişim yok → tabloyu hizmet hesabının e-postasıyla \"Düzenleyen\" olarak paylaşın.";
+  if (/404|not found/i.test(t)) return "Tablo bulunamadı → linki kontrol edin (/tablo stok <link>).";
+  if (/GOOGLE_SA|invalid_grant|private key/i.test(t)) return "Google anahtarı (GOOGLE_SA) hatalı → JSON dosyasının tamamı yapıştırılmalı.";
+  return t.slice(0, 200);
+}
+
+async function stokTablosuYaz(env, simdi) {
   if (!hizmetHesabi(env)) return;
   const id = await tabloKimlik(env, "stok");
   if (!id) return;
   const satirlar = stokTablosuSatirlari(await stokIste(env, "/tum"), await siteUrunleri(env), (await env.KAYIT.get("kodlar", "json")) || {});
   const iz = await sha(JSON.stringify(satirlar));
   const onceki = JSON.parse((await stokIste(env, "/ayar-oku", { k: "tablo:stok" })).v || "{}");
-  if (onceki.id === id && onceki.iz === iz && simdi - onceki.zaman < 3600) return;
+  if (onceki.id === id && onceki.iz === iz && simdi - onceki.zaman < 3600) return false;
   if (onceki.id !== id) await sayfaHazirla(env, id, "Stok", 2);
   const stokta = satirlar.filter((r) => r[1] > 0).length;
   await sayfayaYaz(env, id, "Stok", [
@@ -297,16 +328,15 @@ export async function stokTablosu(env, simdi) {
     ...satirlar,
   ]);
   await stokIste(env, "/ayar-yaz", { k: "tablo:stok", v: JSON.stringify({ id, iz, zaman: simdi }) });
+  return true;
 }
 
 // Harcama tablosu: ay ay Claude + üretim (fal.ai). Aylık değerler Sami'nin deposunda da saklanır (KV kaydı 70 günde silinir).
-export async function harcamaTablosu(env, simdi) {
-  if (!hizmetHesabi(env)) return;
+async function harcamaTablosuYaz(env, simdi) {
   const id = await tabloKimlik(env, "harcama");
-  if (!id) return;
   const ay = new Date((simdi + SAAT_FARKI) * 1000).toISOString().slice(0, 7);
   const kayit = JSON.parse((await stokIste(env, "/ayar-oku", { k: "tablo:harcama" })).v || "{}");
-  if (kayit.id === id && simdi - (kayit.zaman || 0) < 3600) return; // saatte bir
+  if (kayit.id === id && simdi - (kayit.zaman || 0) < 3600) return false; // saatte bir
   const aylar = kayit.aylar || {};
   aylar[ay] = {
     claude: Number((await env.KAYIT.get(`harcama:${ay}`)) || 0) / 1e6,
@@ -323,6 +353,7 @@ export async function harcamaTablosu(env, simdi) {
     ...satirlar,
   ]);
   await stokIste(env, "/ayar-yaz", { k: "tablo:harcama", v: JSON.stringify({ id, zaman: simdi, aylar }) });
+  return true;
 }
 
 // /tablo — hizmet hesabının e-postası ve tabloların durumu; /tablo stok <link>, /tablo harcama <link> (sadece yönetici)
@@ -337,7 +368,11 @@ async function tabloKomutu(m, env) {
     await env.KAYIT.put(`sami:tablo:${tur}`, id);
     return yaz(`✅ ${tur === "stok" ? "Stok" : "Harcama"} tablosu kaydedildi. 5 dakika içinde yazmaya başlarım.${sa ? "" : "\n⚠️ Google anahtarı (GOOGLE_SA) henüz girilmedi."}`);
   }
-  const durum = async (t) => ((await tabloKimlik(env, t)) ? "bağlı ✅" : "yok");
+  const durum = async (t) => {
+    if (!(await tabloKimlik(env, t))) return "yok";
+    const d = await tabloDurum(env, t);
+    return `bağlı ✅\n   son yazma: ${d.sonYazma ? zamanYaz(d.sonYazma) : "henüz yok"}\n   son hata: ${d.sonHata ? `${zamanYaz(d.hataZaman)} — ${googleHataAciklama(d.sonHata)}` : "yok"}`;
+  };
   return yaz([
     "📊 Google tabloları",
     sa ? `Hizmet hesabı: ${sa.client_email}\n(Tabloyu bu e-postayla "Düzenleyen" olarak paylaşın.)` : "⚠️ Google anahtarı (GOOGLE_SA) henüz girilmedi.",

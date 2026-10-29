@@ -429,3 +429,48 @@ test("fabrika denemesi: 🧪 her mesajda, Murat başlatır; kanal paylaşımı v
   const renk = await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "fabrika:renkler" }) })).json();
   assert.equal(renk.v, null);
 });
+
+test("Google tablosu hata verirse: 30 dk beklenir, son hata /tablo'da sade Türkçe; düzelince son yazma görünür", async () => {
+  const { stokTablosu, googleHataAciklama, guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  const { generateKeyPairSync } = await import("node:crypto");
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  o.env.GOOGLE_SA = JSON.stringify({ client_email: "sami@x.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }) });
+  o.depo.set("sami:tablo:stok", "AAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 3, fiyat: 69 }], ist(8));
+  let kapali = true;
+  let istek = 0;
+  const eski = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith("https://oauth2.googleapis.com/")) return Response.json({ access_token: "t", expires_in: 3600 });
+    if (u.startsWith("https://sheets.googleapis.com/")) {
+      istek++;
+      if (kapali) return Response.json({ error: { code: 403, message: "Google Sheets API has not been used in project 493224151064 before or it is disabled." } }, { status: 403 });
+      if (u.includes("?fields=sheets.properties")) return Response.json({ sheets: [{ properties: { sheetId: 0, title: "Sayfa1", gridProperties: {} } }] });
+      return Response.json({});
+    }
+    return eski(url, init);
+  };
+  await stokTablosu(o.env, ist(10));
+  const ilk = istek;
+  await stokTablosu(o.env, ist(10, 5)); // 30 dk dolmadı → denenmez
+  assert.equal(istek, ilk);
+  assert.match(googleHataAciklama("Google Sheets API has not been used in project 493224151064 before or it is disabled"), /kapalı[\s\S]*Etkinleştir[\s\S]*493224151064/);
+  o.g.length = 0;
+  globalThis.fetch = (async (url, init) => (String(url).includes("api.telegram.org") ? (o.g.push({ metod: String(url).split("/").pop(), govde: JSON.parse(init.body) }), Response.json({ ok: true, result: { message_id: 1 } })) : (await (async () => globalThis.__f(url, init))())));
+  globalThis.__f = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith("https://oauth2.googleapis.com/")) return Response.json({ access_token: "t", expires_in: 3600 });
+    if (u.startsWith("https://sheets.googleapis.com/")) { istek++; if (u.includes("?fields=sheets.properties")) return Response.json({ sheets: [{ properties: { sheetId: 0, title: "Sayfa1", gridProperties: {} } }] }); return Response.json({}); }
+    return eski(url, init);
+  };
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/tablo" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /Stok tablosu: bağlı ✅\n   son yazma: henüz yok\n   son hata: .*Google Sheets API bu Google projesinde kapalı/);
+  kapali = false;
+  await stokTablosu(o.env, ist(10, 40)); // 30 dk geçti → yazar
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/tablo" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /son yazma: 28\.10\.2026 10:40\n   son hata: yok/);
+  globalThis.fetch = eski;
+});
