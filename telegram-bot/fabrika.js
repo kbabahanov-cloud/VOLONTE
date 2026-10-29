@@ -203,6 +203,22 @@ async function kuyrukAdimi(env, simdi, tg) {
   return false;
 }
 
+// Bir kerelik (kullanıcı kararı 29 Ekim): KV "fabrika:yenidenGonder" = bugünün tarihi → eski düzende giden ve henüz fabrikaya
+// gitmemiş liste iptal edilir, Hemra'ya not düşülür, aynı günün satışları yeni düzende yeniden gönderilir. Sonuç KV'ye yazılır.
+async function yenidenGonder(env, gun, simdi, tg) {
+  if ((await env.KAYIT.get("fabrika:yenidenGonder")) !== gun) return false;
+  await env.KAYIT.delete("fabrika:yenidenGonder");
+  const d = await ayarOku(env, `fabrika:${gun}`, null);
+  const sonuc = (x) => env.KAYIT.put("fabrika:yenidenSonuc", JSON.stringify({ gun, zaman: simdi, ...x }), { expirationTtl: 7 * 86400 });
+  if (d && d.asama === "gonderildi") { await sonuc({ ok: false, neden: "liste zaten onaylanıp fabrikaya gitmiş" }); return true; }
+  const satislar = await satislarAl(env, gun);
+  if (!satislar.length) { await sonuc({ ok: false, neden: "bugün satış yok" }); return true; }
+  await tg(env, "sendMessage", { chat_id: sorumlu(env), text: `ℹ️ ${gunGoster(gun)} eksik listesi (eski düzen) iptal edildi — yenisi fotoğraflı ve düğmeli olarak hemen geliyor.` });
+  await listeyiGonder(env, gun, satislar, simdi, tg, null, { onceki: d && d.ekler ? { ekler: d.ekler } : {} });
+  await sonuc({ ok: true, model: satislar.length, adet: satislar.reduce((t, x) => t + (Number(x.satilan) || 0), 0) });
+  return true;
+}
+
 // Satış girişi izlenir: ilk satış gelince başlar, liste 10 dakika değişmezse (giriş bitti) Hemra'ya gider — saat şartı yok.
 // Liste gittikten sonra yeni model satılırsa (yine 10 dk sabit kalınca) sadece yeni modeller "ek" olarak sorulur.
 // Hatırlatmalar her listenin gidişine göre: Hemra'ya 1 saat, Murat'a 2 saat sonra.
@@ -210,6 +226,7 @@ export async function fabrikaAdimi(env, simdi, tg) {
   if (await kuyrukAdimi(env, simdi, tg)) return; // önce yarım kalan gönderimler
   if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return; // satış okuması henüz doğrulanmadı
   const gun = gunAnahtari(simdi);
+  if (await yenidenGonder(env, gun, simdi, tg)) return;
   const d = await ayarOku(env, `fabrika:${gun}`, null);
   const satislar = await satislarAl(env, gun);
   const iz = JSON.stringify(satislar.map((x) => [x.kod, x.satilan]));

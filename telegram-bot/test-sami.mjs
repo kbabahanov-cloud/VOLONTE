@@ -635,3 +635,25 @@ test("/eksik: sadece Murat ve Hemra; satışla liste hemen Hemra'ya; aynı gün 
   assert.ok(!g.some((x) => /bugün satılan/.test(x.govde.text || "")));
   Date.now = gercek;
 });
+
+test("bir kerelik: eski düzendeki liste iptal, aynı günün satışları yeni düzende yeniden (işaret bir kez çalışır)", async () => {
+  const { fabrikaAdimi } = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  o.depo.set("sami:satisAcik", "1");
+  const gun = "2026-10-28";
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun, kalemler: [{ kod: "3183", adet: 2 }, { kod: "3194", adet: 1 }] }) });
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${gun}`, v: JSON.stringify({ asama: "soruldu", zaman: ist(14) }) }) });
+  o.depo.set("fabrika:yenidenGonder", gun);
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 9 } }; };
+  await fabrikaAdimi(o.env, ist(19, 30), tg);
+  assert.match(g[0].govde.text, /eski düzen\) iptal edildi/);
+  assert.match(g[1].govde.text, /2 model, toplam 3 adet/);
+  assert.equal(g.length, 4); // not + özet + 2 model
+  assert.deepEqual(JSON.parse(o.depo.get("fabrika:yenidenSonuc")).model, 2);
+  assert.ok(!o.depo.has("fabrika:yenidenGonder"));
+  g.length = 0;
+  await fabrikaAdimi(o.env, ist(19, 45), tg);
+  assert.equal(g.length, 0); // ikinci kez gitmez
+});

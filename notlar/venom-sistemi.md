@@ -318,6 +318,8 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   → o gün 10:00'dan sonra Murat + Hemra'ya "bugün hazır olmalıydı, geldi mi?" [📦 Geldi]; repete süresi için de. Sipariş kaydı tek çağrı (StokDO /fs-yaz:
   fs:<id>, fs:acik, fs:takip zamanlı işler dizini, fs:hafta:<pazartesi>). Pazartesi 09:30 Murat'a haftalık özet (istenen, geldi, bekleniyor, gecikiyor).
 
+- 29 Ekim 19:30: bugünün eski düzende giden listesi iptal edildi (Hemra'ya not), 13 model / 77 adet yeni düzende yeniden gönderildi (bir kerelik KV fabrika:yenidenGonder; sonuç fabrika:yenidenSonuc). Günde tek liste kuralı aynen.
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
