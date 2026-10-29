@@ -198,6 +198,11 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   Selin başlık/açıklama/kategori, fiyat+stok Vegawin'den; taslak sahibe; onayla siteye (site kilidi yeni akışı engellemez). 20:00 özet;
   gelmeyenler "gonderilemedi" (sonra fal.ai). Öncelik: karışık 24 + sitedeki 4. Video sitede /v2/<kod>/<n> (PR #25).
 
+- 29 Ekim FABRİKA EKSİK LİSTESİ (onaylı): köprü günlük satış (belge tipi 21, depo envanter, sadece SELECT) → /kopru/satis → StokDO satis.
+  Sami 20:05 Hemra'ya (6448681578) satılanlar + renk hafızası; Hemra yazar → Onayla/Düzelt → Nuri/Sinem/Fuat'a SADECE kod/renk/adet, Murat'a (2005113508) kopya.
+  21:00 hatırlatma, 22:00 Murat'a "Hemra onaylamadı". Fabrika kişileri /start → Murat onayı (fa:e). sami:satisAcik=1 satış denemesi doğrulanınca açılacak.
+  Köprü artık 08:55–20:55 (ayar bitisSaati 21), kalp atışı; bu akşam kurulacak (satis-deneme.bat fotoğrafı bekleniyor).
+
 **Sıradaki komut: 0091 hesabından Selin'e /kimim → izinliyse /sahip; değilse kimlik SAHIP_IDS'e eklenir. Sonra Sami kanala yönetici + Google B1-B9. fal.ai bekliyor.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
