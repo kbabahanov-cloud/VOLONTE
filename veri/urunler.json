@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3322",
+  "baslik": "Lace Peplum Skirt Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece lace suit pairing a fitted peplum top with a high-waisted midi pencil skirt. The high neck and fabric-covered buttons run down the front, while sheer floral lace sleeves and a scalloped lace hem add a refined finish. Wear it to ceremonies, evening events or polished daytime occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces en dentelle, composé d'un haut péplum ajusté et d'une jupe crayon midi taille haute. Le col montant et les boutons recouverts de tissu descendent sur le devant, tandis que les manches en dentelle florale transparente et l'ourlet festonné apportent une touche raffinée. Idéal pour les cérémonies, les soirées ou les occasions de journée élégantes. Confectionné à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças em renda, com top peplum ajustado e saia lápis midi de cintura alta. A gola alta e os botões forrados no mesmo tecido percorrem a frente, enquanto as mangas em renda floral transparente e a barra recortada dão um acabamento sofisticado. Ideal para cerimónias, eventos à noite ou ocasiões elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3322/1.jpg",
+   "galeri/3322/2.jpg",
+   "galeri/3322/3.jpg"
+  ],
+  "videolar": [
+   "selin/3322/0"
+  ],
+  "fiyat": 45,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3186",
   "baslik": "Double-Breasted Blazer Skirt Set",
   "kategori": "sets",
