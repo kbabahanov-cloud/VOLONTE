@@ -13,6 +13,7 @@
 #   sami.ps1 baslat    ilk gönderimi yapar, 5 dakikalık görevi kurar
 #   sami.ps1 calistir  (görev çalıştırır) 09:00-19:00 arası değişen ürünleri gönderir
 #   sami.ps1 durdur    5 dakikalık görevi kaldırır
+#   sami.ps1 durum     görevin durumu + günlüğün son satırları (sorun olursa ekran fotoğrafı Claude'a)
 
 param([string]$Mod = "calistir")
 
@@ -181,6 +182,12 @@ function Esitle([switch]$Zorla) {
   }
   foreach ($kod in @($son.Keys)) { if (-not $simdiki.ContainsKey($kod)) { [void]$degisen.Add(@{ kod = $kod; yok = $true }) } }
   if ($degisen.Count -gt 0) { Gonder (Duz $g.Anahtar) $degisen.ToArray() }
+  else {
+    # Kalp atışı (29 Ekim): değişiklik yoksa boş liste gider; Sami köprünün çalıştığını görür.
+    Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru" -TimeoutSec 60 `
+      -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $(Duz $g.Anahtar)" } `
+      -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes('{"urunler":[]}')) | Out-Null
+  }
   $yeni = @{}
   foreach ($kod in $simdiki.Keys) { $yeni[$kod] = Imza $simdiki[$kod] }
   $yeni | ConvertTo-Json -Compress | Set-Content -Path $SonDosya -Encoding UTF8
@@ -272,16 +279,38 @@ switch ($Mod) {
       Bekle; exit 1
     }
     $eylem = New-ScheduledTaskAction -Execute "wscript.exe" -Argument ('"' + (Join-Path $Klasor "sami.vbs") + '"')
-    $tetik = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+    # Tetikler (29 Ekim): (1) bilgisayar açılıp oturum açılınca, (2) her gün 08:55'ten itibaren — ikisi de 5 dakikada bir.
+    # Eski tek seferlik tetik bazı Windows sürümlerinde bir gün sonra duruyordu.
+    $tekrar = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Hours 11)).Repetition
+    $girisTetik = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $girisTetik.Repetition = $tekrar
+    $gunTetik = New-ScheduledTaskTrigger -Daily -At "08:55"
+    $gunTetik.Repetition = $tekrar
+    $tetik = @($girisTetik, $gunTetik)
     $ayarlar = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName $GorevAdi -Action $eylem -Trigger $tetik -Settings $ayarlar -Description "Sayım Sami: Vegawin stok köprüsü (sadece okuma), 5 dakikada bir" -Force | Out-Null
-    Write-Host "✓ Görev kuruldu: $($Ayar.baslangicSaati):00-$($Ayar.bitisSaati):00 arası 5 dakikada bir çalışır." -ForegroundColor Green
+    Write-Host "✓ Görev kuruldu: $($Ayar.baslangicSaati):00-$($Ayar.bitisSaati):00 arası 5 dakikada bir çalışır; bilgisayar açılınca kendiliğinden başlar." -ForegroundColor Green
     Write-Host "Durdurmak için: durdur.bat"
     Bekle
   }
   "durdur" {
     try { Unregister-ScheduledTask -TaskName $GorevAdi -Confirm:$false; Write-Host "✓ Sami durduruldu." -ForegroundColor Green }
     catch { Write-Host "Görev zaten yok." }
+    Bekle
+  }
+  "durum" {
+    Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
+    try {
+      $gorev = Get-ScheduledTask -TaskName $GorevAdi -ErrorAction Stop
+      $bilgi = Get-ScheduledTaskInfo -TaskName $GorevAdi
+      Write-Host "Görev: $($gorev.State)  ·  son çalışma: $($bilgi.LastRunTime)  ·  sonuç: $($bilgi.LastTaskResult)  ·  sıradaki: $($bilgi.NextRunTime)"
+    } catch { Write-Host "✗ Görev YOK (baslat.bat çalıştırılmalı)." -ForegroundColor Red }
+    Write-Host "Şifre kaydı: $(if (Test-Path $GizliDosya) { 'var ✓' } else { 'YOK ✗ (kurulum.bat gerekli)' })"
+    Write-Host ""
+    Write-Host "Günlüğün son satırları:"
+    if (Test-Path $Gunluk) { Get-Content $Gunluk -Encoding UTF8 -Tail 15 | ForEach-Object { Write-Host "  $_" } } else { Write-Host "  (günlük yok)" }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
     Bekle
   }
   "calistir" {

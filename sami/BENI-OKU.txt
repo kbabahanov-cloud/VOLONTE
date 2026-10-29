@@ -17,5 +17,13 @@ KURULUM (Vegawin'in kurulu olduğu bilgisayarda, tek seferlik):
    09:00-19:00 arası 5 dakikada bir, sadece değişen ürünler gider.
    Bilgisayar kapalıysa bekler, açılınca kaldığı yerden devam eder.
 
+DURUM (sorun olursa): durum.bat — görevin durumunu ve günlüğün son satırlarını gösterir; ekran fotoğrafını Claude'a gönderin.
+
+GÜNCELLEME (29 Ekim, eski köprünün yerine):
+1) durdur.bat'a çift tıklayın (eski görev kalkar).
+2) Yeni zip'i aynı yere açın, eski dosyaların üzerine yazın ("Değiştir" deyin). Şifre tekrar sorulmaz.
+3) baslat.bat'a çift tıklayın. Bundan sonra bilgisayar her açılışta ve her gün 08:55'ten itibaren kendiliğinden çalışır.
+   Değişiklik olmasa da 5 dakikada bir "çalışıyorum" sinyali gider (Sami raporunda son veri saati güncel görünür).
+
 DURDURMAK: durdur.bat
 GÜNLÜK (sorun olursa): Windows'ta  %LOCALAPPDATA%\Sami  klasörü
