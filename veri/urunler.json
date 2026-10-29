@@ -1,5 +1,26 @@
 [
  {
+  "kod": "3439",
+  "baslik": "One-Shoulder Pleated Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A one-shoulder maxi dress in a fine all-over pleat, cut with a relaxed silhouette that falls straight to the floor. A single wide cape-like sleeve flows from the shoulder, and a soft geometric print in coral and pale blue adds quiet movement. Wear it to weddings, celebrations or elegant gatherings. Made in Istanbul with careful workmanship.",
+   "fr": "Une robe longue asymétrique à une épaule, entièrement plissée, à la silhouette ample qui tombe jusqu'au sol. Une large manche façon cape s'étend depuis l'épaule, tandis qu'un imprimé géométrique corail et bleu pâle apporte du mouvement en douceur. Idéale pour les mariages, les fêtes ou les réceptions élégantes. Confectionnée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido longo de um ombro só, todo plissado, com silhueta solta que cai até ao chão. Uma manga ampla, em estilo capa, desce do ombro, e um estampado geométrico em coral e azul-claro dá movimento suave à peça. Ideal para casamentos, celebrações ou encontros elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3439/1.jpg",
+   "galeri/3439/2.jpg",
+   "galeri/3439/3.jpg",
+   "galeri/3439/4.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 40,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3475",
   "baslik": "Lace Peplum Evening Set",
   "kategori": "sets",
