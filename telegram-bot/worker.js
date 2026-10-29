@@ -100,6 +100,8 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
+    // Pelin'in kör testi: modelin gerçek mankenli kanal videosu (tek seferlik anahtar Pelin'den, ortak kayıtta).
+    if (request.method === "GET" && /^\/kanal-video\/[a-f0-9]{32}$/.test(url.pathname)) return kanalVideo(env, url.pathname.split("/")[2], request.headers.get("Range"));
 
     return new Response("VOLONTE asistanı çalışıyor.");
   },
@@ -1254,6 +1256,35 @@ async function kuyrukIptal(cq, env) {
   await env.KAYIT.delete(`kuyruk:${kod}`);
   await telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "İptal edildi" });
   return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `❌ ${ad} sıradan çıkarıldı (${kisiAdi(cq.from)}). Kanala paylaşılmayacak; kanalda hiçbir şey silinmedi.` });
+}
+
+// Pelin (volonte-pelin) için: modelin kanaldaki en yeni VİDEOSU (yazısız, sadece dosya). Anahtar "pelinvideo:<t>" Pelin'in
+// yazdığı ortak kayıt; bulunan dosya kimliği aynı kayda yazılır (arşive her seferinde iletilmesin). Telegram sınırı 20 MB.
+export async function kanalVideo(env, t, aralik = null) {
+  const k = await env.KAYIT.get(`pelinvideo:${t}`, "json");
+  if (!k) return new Response("yok", { status: 404 });
+  if (!k.file_id) {
+    const kanal = await env.KAYIT.get("kanal", "json");
+    const arsiv = await env.KAYIT.get("arsiv", "json");
+    if (!kanal || !arsiv) return new Response("yok", { status: 404 });
+    let deneme = 0;
+    for (const sec of modelSecenekleri(k.kod, (await env.KAYIT.get("kodlar", "json")) || {}, {})) {
+      for (const id of sec.ids) {
+        if (deneme++ >= 12 || k.file_id) break;
+        const r = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true });
+        if (r.ok && r.result.video) k.file_id = r.result.video.file_id;
+      }
+      if (k.file_id) break;
+    }
+    if (!k.file_id) return new Response("video yok", { status: 404 });
+    await env.KAYIT.put(`pelinvideo:${t}`, JSON.stringify(k), { expirationTtl: 14 * 86400 });
+  }
+  const f = await telegram(env, "getFile", { file_id: k.file_id });
+  if (!f.ok) return new Response(`dosya alınamadı: ${f.description || ""}`, { status: 404 });
+  const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`, aralik ? { headers: { Range: aralik } } : {});
+  const baslik = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=3600" };
+  for (const h of ["content-length", "content-range"]) if (r.headers.get(h)) baslik[h] = r.headers.get(h);
+  return new Response(r.body, { status: r.status, headers: baslik });
 }
 
 // ---------- YENİ KANAL DÜZENİ (duzen.js, kullanıcı kararı 29 Ekim) ----------

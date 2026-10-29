@@ -291,6 +291,17 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   Uygulama notu: satis tablosunda magaza sütunu var (ayrım mümkün); fabrika.js liste/hatırlatma/onay kayıtları mağaza başına (fabrika:<gun>:<magaza>);
   Merdan'ın Sami botuna /start yazmış olduğu kontrol edilecek.
 
+- 29 Ekim PELİN KURULDU (volonte-pelin yüklendi, 132 test; telegram-bot/pelin.js, test-pelin.mjs, scripts/yukle-pelin.sh). @VolontePelinBot.
+  Beyin Sonnet 5.5 (/beyin opus — sadece Murat), komutsuz sohbet (araç: sadece maliyet önizlemesi gönderir). Bütçe ayrı 150 $/ay (fal → uretim-harcama:<ay>,
+  Claude → pelin-claude:<ay>), 120 $'da Murat'a uyarı; her üretimden önce maliyet kartı ✅/❌ (sadece Murat); "fal hazır" (Murat) yazılmadan üretim yok.
+  Deneme: (a) 3 yüz (beyaz/siyahi/dolgun) × 2 aday, Nano Banana Pro, yazıyla (gerçek kişi referansı yok) → Murat seçer (Claude yüzden kişi tanıyamaz —
+  ünlü benzerliği kontrolü kullanıcının gözü). (b) askı fotoğrafı ("3592 askı", "3577 askı" yazılı, Pelin'e) + seçilen yüz → Nano Banana Pro edit başlangıç karesi
+  (3592 siyahi, 3577 beyaz manken) → Murat onayı. (c) aynı kare, 6 sn, 9:16: Veo 3.1 Lite (720p) / Kling 3.0 Pro / Seedance 2.0 (720p) → fal kare çıkarma (3 kare)
+  → Claude Sonnet renk/desen/kesim puanı → kör test (harfler karışık; gerçek kanal videosu Kemal'in /kanal-video/<anahtar> adresinden, kanalda yoksa düşer)
+  Murat + Hemra'ya; araç adı ve maliyet oylamadan sonra açılır. Tahmin: yüz 0,90 $, kare 0,30 $, video+puan ~5,70 $ (toplam ~7 $).
+  Kod/VOLONTE yazısı paketlemede (ham karede yazı yok, video aracı bozar); AI notu basılmaz. R2 arşivi henüz yok (R2 için Cloudflare'de ödeme yöntemi gerekir → sorulacak).
+  Kullanıcının gireceği secret'lar (volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY. Selin kontrolü: üretim kapatıldıktan sonra da siteye ekleme çalışıyor (3403, 17:24).
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
