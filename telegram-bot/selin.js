@@ -201,7 +201,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -1435,6 +1435,17 @@ export async function videoKurtarAdimi(env, simdi) {
     await yazKV(env, "selin:modeller", g);
     await tg(env, "sendMessage", { chat_id: sohbet, text: `🎬 ${kod}: video taslağa eklendi (${bulunan.map((v) => v.ad || "video").join(", ")}). Güncel taslak:` });
     await kartGoster(env, kod, sohbet);
+  }
+}
+
+// Fabrika "Bitti" + Murat/Hemra "Sil" (ikinci onaylı, Sami'den "venom:siteSil"): model siteden kaldırılır.
+export async function siteSilAdimi(env, simdi) {
+  const l = (await env.KAYIT.get("venom:siteSil", "json")) || [];
+  if (!l.length) return;
+  await env.KAYIT.put("venom:siteSil", "[]");
+  for (const x of l) {
+    const ok = await sitedenKaldir(env, x.kod, `${x.kim} (fabrika bitti)`, simdi);
+    if (ok) for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: `🗑️ ${x.kod} siteden kaldırıldı (fabrika bitti, karar: ${x.kim}).` });
   }
 }
 

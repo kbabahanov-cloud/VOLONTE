@@ -195,6 +195,12 @@ export class StokDeposu {
       .map((r) => ({ kod: r.kod, satilan: r.satilan, kalan: this.toplam(r.kod) }));
   }
 
+  // Fabrika "Bitti" → "Sil" kararı: model gizlenir (site/Telegram turlarında görünmez). Vegawin'e dokunmaz.
+  gizle(kod, kim, simdi) {
+    this.sql.exec("INSERT INTO karar (kod, durum, kim, zaman) VALUES (?, 'gizli', ?, ?) ON CONFLICT (kod) DO UPDATE SET durum = 'gizli', kim = excluded.kim, zaman = excluded.zaman", stokKodu(kod), kim, simdi);
+    return { ok: true };
+  }
+
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
 
@@ -233,6 +239,7 @@ export class StokDO {
     if (yol === "/paylasim-kaydet") return cevap(d.paylasimKaydet(g.mesaj, g.kod, g.zaman) || { ok: true });
     if (yol === "/paylasimlar") return cevap(d.paylasimlar(g.basla, g.bitis));
     if (yol === "/tum") return cevap(d.tum());
+    if (yol === "/gizle") return cevap(d.gizle(g.kod, g.kim, g.simdi));
     if (yol === "/satis-yaz") return cevap(d.satisYaz(g.magaza, g.gun, g.kalemler || []));
     if (yol === "/satislar") return cevap(d.satislar(g.gun));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });

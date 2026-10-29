@@ -50,6 +50,7 @@ import { StokDO, stokKodu } from "./stok.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi } from "./venom.js";
+import { murat as muratId, sorumlu as hemraId, denemeKaydi, denemeOzeti, DENEME } from "./fabrika.js";
 
 export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -558,6 +559,7 @@ async function dugmeIsle(cq, env) {
   if (/^(t1|t7|tx|ty|tv|tg|tb):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
+  if (veri.startsWith("kr:")) return repetePaylasKarari(cq, env);
   if (veri.startsWith("sz:")) return stokKarari(cq, env);
   if (/^(ay|an):/.test(veri)) return altyaziKarar(cq, env);
   if (veri === "mk:acik" || veri === "mk:kapali") {
@@ -1265,6 +1267,75 @@ async function kopruAl(request, env) {
   return Response.json({ ok: true, ...sonuc });
 }
 
+// ---------- Fabrika: repete paylaşımı ve "Sil" kararı (Sami'den, 29 Ekim) ----------
+// Sami "venom:repetePaylas" sırasına repete gelen modeli koyar → Kemal önizlemeyi Murat'a ve Hemra'ya gönderir
+// ("Paylaşılsın mı? Onayla / Bekle"); onaylanınca en yeni kanal paylaşımı yeniden paylaşılır (alt yazı "🔁 Repete geldi"
+// etiketiyle Kemal'in normal alt yazı onayına düşer). DENEMEDE kanalda ASLA paylaşılmaz.
+// "venom:kanalSil": fabrika bitti + Murat/Hemra "Sil" (ikinci onaylı) → kanaldaki paylaşımlar silinir.
+export async function fabrikaIsleri(env, simdi) {
+  const sira = (await env.KAYIT.get("venom:repetePaylas", "json")) || [];
+  if (sira.length) {
+    await env.KAYIT.put("venom:repetePaylas", "[]");
+    for (const r of sira) {
+      const st = (await stokIste(env, "/toplu", { kodlar: [r.kod] }).catch(() => ({})))[r.kod] || null;
+      const ids = r.deneme ? [] : modelSecenekleri(r.kod, (await env.KAYIT.get("kodlar", "json")) || {}, {}, 1).flatMap((g) => g.ids);
+      const metin = [
+        `${r.deneme ? DENEME : ""}🔁 Repete geldi – ${r.kod}`,
+        `Renkler: ${(r.renkler || []).map((x) => `${x.renk} ${x.adet}`).join(", ") || "—"}`,
+        `Fiyat: ${st && st.fiyat != null ? `${st.fiyat} $ (Vegawin)` : "Vegawin'de yok"}`,
+        `Stok: ${st ? `${Math.max(0, st.toplam)} adet` : "—"}${st && !(st.toplam > 0) ? " ⚠️ Vegawin'e henüz girilmemiş olabilir" : ""}`,
+        `Bildiren: ${r.bildiren}`,
+        r.deneme ? "\n(DENEME: onaylansa da kanalda paylaşılmaz)" : ids.length ? "" : "\n⚠️ Kanalda bu modelin paylaşımı bulunamadı; onaylansa da paylaşılamaz.",
+        "",
+        "Paylaşılsın mı?",
+      ].filter((x) => x !== "").join("\n");
+      const mesajlar = [];
+      for (const k of [...new Set([muratId(env), hemraId(env)])]) {
+        const g = await telegram(env, "sendMessage", { chat_id: k, text: metin, reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `kr:o:${r.id}` }, { text: "⏳ Bekle", callback_data: `kr:b:${r.id}` }]] } });
+        if (g && g.ok) mesajlar.push([k, g.result.message_id]);
+      }
+      await env.KAYIT.put(`venom:rp:${r.id}`, JSON.stringify({ ...r, ids, metin, mesajlar, durum: "bekliyor" }), { expirationTtl: 30 * 86400 });
+      if (r.deneme) await denemeKaydi(env, r.liste, "Kemal paylaşım önizlemesini Murat'a ve Hemra'ya gönderdi");
+    }
+  }
+  const silinecek = (await env.KAYIT.get("venom:kanalSil", "json")) || [];
+  if (silinecek.length) {
+    await env.KAYIT.put("venom:kanalSil", "[]");
+    for (const s of silinecek) await hicGelmeyecek(env, s.kod, `${s.kim} (fabrika bitti)`, simdi);
+  }
+}
+
+async function repetePaylasKarari(cq, env) {
+  const [, islem, id] = String(cq.data || "").split(":");
+  const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  const r = await env.KAYIT.get(`venom:rp:${id}`, "json");
+  if (!r || r.durum === "paylasildi" || r.durum === "denemeBitti") return cevapla(r ? `${r.karar || "Karar"} verildi.` : "Bu önizleme artık geçerli değil.");
+  const kim = kisiAdi(cq.from);
+  const simdi = Math.floor(Date.now() / 1000);
+  const hepsi = async (ek, klavye = { inline_keyboard: [] }) => { for (const [k, m] of r.mesajlar) await telegram(env, "editMessageText", { chat_id: k, message_id: m, text: `${r.metin}\n\n${ek}`, reply_markup: klavye }); };
+  if (islem === "b") {
+    r.karar = `${kim}: bekle`;
+    await env.KAYIT.put(`venom:rp:${id}`, JSON.stringify(r), { expirationTtl: 30 * 86400 });
+    await cevapla("Bekletildi");
+    if (r.deneme) await denemeKaydi(env, r.liste, `Kemal paylaşım onayı: "Bekle" (${kim})`);
+    return hepsi(`⏳ ${kim}: bekle dedi.`, { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `kr:o:${id}` }]] });
+  }
+  if (r.deneme) {
+    Object.assign(r, { durum: "denemeBitti", karar: `${kim}: onayla` });
+    await env.KAYIT.put(`venom:rp:${id}`, JSON.stringify(r), { expirationTtl: 30 * 86400 });
+    await cevapla("Deneme: paylaşılmadı");
+    await hepsi(`🧪 ${kim} onayladı — DENEME olduğu için kanalda paylaşılmadı.`);
+    await denemeKaydi(env, r.liste, `Kemal paylaşım onayı: "Onayla" (${kim}) — kanalda paylaşılmadı`);
+    return denemeOzeti(env, r.liste, (e, metod, govde) => telegram(e, metod, govde));
+  }
+  if (!r.ids.length) return cevapla("Kanalda paylaşım bulunamadı.");
+  Object.assign(r, { durum: "paylasildi", karar: `${kim}: onayla` });
+  await env.KAYIT.put(`venom:rp:${id}`, JSON.stringify(r), { expirationTtl: 30 * 86400 });
+  await cevapla("Paylaşılıyor");
+  const p = await kanaldaPaylas(env, r.kod, r.ids, simdi);
+  return hepsi(p.ok ? `✅ ${kim} onayladı — kanalda paylaşıldı${p.link ? `: ${p.link}` : ""}. Alt yazı "🔁 Repete geldi" etiketiyle onayınıza gelecek.` : `⚠️ Paylaşılamadı: ${p.hata}`);
+}
+
 // Günlük satış (belge tipi 21, köprü sadece okur): { gun: "2026-10-29", kalemler: [{ kod, adet }] }. Fiyat yok.
 async function kopruSatis(request, env) {
   const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
@@ -1368,6 +1439,7 @@ export class KatalogDO {
       await durumKontrol(env);
       if (env.BOT_TOKEN) {
         try { await sabahIsleri(env, simdi); } catch (e) { await this.env.KAYIT.put("kemal:raporHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+        try { await fabrikaIsleri(env, simdi); } catch (e) { await this.env.KAYIT.put("kemal:fabrikaHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
         await rotasyon(env, simdi);
       }
     } else if (yol === "/kemal/adim") {

@@ -18,7 +18,7 @@ import { kodBul } from "./ortak.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
-import { fabrikaAdimi, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji } from "./fabrika.js";
+import { fabrikaAdimi, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -62,7 +62,8 @@ export default {
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
     const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const siparis = (e, t) => siparisTakip(e, t, tg);
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -96,6 +97,10 @@ async function sorular(env, simdi) {
 export async function guncelleme(u, env) {
   if (u.callback_query) {
     const cq = u.callback_query;
+    const simdiD = Math.floor(Date.now() / 1000);
+    // Fabrika düğmeleri: fabrika kişileri de basabilir (sadece bunlar)
+    if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
+    if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
     if (/^f[ba]:/.test(String(cq.data || ""))) return fabrikaDugmesi(env, cq, tg, Math.floor(Date.now() / 1000));
@@ -107,9 +112,11 @@ export async function guncelleme(u, env) {
   if (!m || !m.from || m.chat.type !== "private") return;
   if (!izinli(m.from.id, env)) return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
   if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000))) return; // Hemra'nın eksik listesi
+  if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return; // "3394 repete geldi …"
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   if (komut === "/stok") return stokGoster(m, env, tg);
   if (komut === "/tablo") return tabloKomutu(m, env);
+  if (komut === "/fabrikadeneme") return fabrikaDenemesi(env, m, tg, Math.floor(Date.now() / 1000));
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: [
     "📦 Ben Sayım Sami. Vegawin stoklarını okurum (hiçbir şeyi değiştirmem).",
     "/stok — köprünün durumu",

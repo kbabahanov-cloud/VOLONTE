@@ -295,8 +295,8 @@ test("fabrika: 20:05 Hemra'ya satılanlar (renk hafızasıyla); onayla fabrikaya
   assert.equal(kart.govde.reply_markup.inline_keyboard[0][0].callback_data, `fb:o:${gun}`);
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `fb:o:${gun}`, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
-  const nuri = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === 555);
-  assert.equal(nuri.govde.text, `🏭 VOLONTE eksik listesi — 28.10.2026\n\n3183 — siyah 10, bej 6`); // fiyat/satış yok
+  const nuri = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === 555); // 3183'ün fotoğrafı yok → sadece yazı
+  assert.equal(nuri.govde.text, "VOLONTE – Model 3183. İstenen: siyah 10 seri, bej 6 seri"); // fiyat/satış/stok yok
   assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111").govde.text, /onaylayan: Hemra[\s\S]*3183 — siyah 10, bej 6/);
   // ertesi gün renk hafızası
   g.length = 0;
@@ -309,4 +309,123 @@ test("fabrika: 20:05 Hemra'ya satılanlar (renk hafızasıyla); onayla fabrikaya
   assert.equal(g.at(-1).govde.chat_id, "111");
   assert.match(g.at(-1).govde.text, /Hemra onaylamadı/);
   Date.now = Date.now.gercek;
+});
+
+test("fabrika siparişi: model başına mesaj (kanal fotoğrafı + ⚠️ düğmesi), ilk basan geçerli, repete süresi, repete geldi → Kemal'e; bitti → Sil ikinci onayla kuyruklara; fiyat/stok fabrikaya asla gitmez", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }, { id: 556, ad: "Sinem" }]));
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 4, fiyat: 70 }], ist(8));
+  const gun = "2026-10-28";
+  // Hemra onay kartı hazır (doğrudan kayıt)
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${gun}`, v: JSON.stringify({ asama: "onayda", liste: [{ kod: "3194", renkler: [{ renk: "siyah", adet: 10 }] }] }) }) });
+  o.g.length = 0;
+  const bas = (kim, data, mesaj = 1) => g2({ callback_query: { id: "c", from: { id: kim, first_name: { 555: "Nuri", 556: "Sinem", 333: "Hemra", 111: "Murat" }[kim] || "X" }, data, message: { chat: { id: kim }, message_id: mesaj } } }, o.env);
+  await bas(333, `fb:o:${gun}`);
+  const kopya = cagri(o.g, "copyMessage");
+  assert.equal(kopya.length, 2); // iki fabrika kişisi, kanal fotoğrafı
+  assert.equal(kopya[0].govde.caption, "VOLONTE – Model 3194. İstenen: siyah 10 seri");
+  assert.ok(!/\$|fiyat|stok|satılan/i.test(kopya[0].govde.caption));
+  const kl = kopya[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text);
+  assert.deepEqual(kl, ["✅ Gelecek", "🔁 Repete olacak", "❌ Bitti, gelmeyecek", "⚠️ Fotoğraf yanlış model"]);
+  const id = kopya[0].govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  // ⚠️ fotoğraf yanlış → Murat + Hemra
+  o.g.length = 0;
+  await bas(555, `fc:y:${id}`);
+  assert.deepEqual(cagri(o.g, "sendMessage").map((x) => x.govde.chat_id).sort(), ["111", "333"]);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /3194 fotoğrafı yanlış dendi \(Nuri\)/);
+  // yetkisiz kişi basamaz
+  o.g.length = 0;
+  await bas(999, `fc:g:${id}`);
+  assert.match(cagri(o.g, "answerCallbackQuery")[0].govde.text, /Yetkiniz yok/);
+  // Sinem repete der → süre sorulur; Nuri sonra basarsa geçersiz
+  o.g.length = 0;
+  await bas(556, `fc:r:${id}`, 51);
+  await bas(555, `fc:g:${id}`);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Sinem zaten cevapladı/);
+  await bas(555, `fc:s:${id}:5`);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /size ait değil/);
+  o.g.length = 0;
+  await bas(556, `fc:s:${id}:5`);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111").govde.text, /Sinem · 3194 → Repete, 5 gün/);
+  assert.ok(cagri(o.g, "editMessageCaption").every((x) => /Sinem cevapladı: Repete olacak — 5 gün/.test(x.govde.caption)));
+  // süre dolunca bir kez "hazır mı?"
+  o.g.length = 0;
+  await f.siparisTakip(o.env, Math.floor(Date.now() / 1000) + 6 * 86400, (e, m, g) => { o.g.push({ metod: m, govde: g }); return { ok: true, result: { message_id: 9 } }; });
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => /repetesi hazır mı/.test(x.govde.text)).length, 2);
+  // Nuri yazıyla bildirir → onay sorusu → Evet → Murat/Hemra'ya + Kemal sırası
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 555, type: "private" }, from: { id: 555, first_name: "Nuri" }, text: "3194 repete geldi siyah 8" } }, o.env);
+  const soru = cagri(o.g, "sendMessage")[0];
+  assert.match(soru.govde.text, /3194 repete geldi – siyah 8, doğru mu\?/);
+  o.g.length = 0;
+  await bas(555, soru.govde.reply_markup.inline_keyboard[0][0].callback_data, 77);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /📦 3194 repete geldi – siyah 8 \(Nuri bildirdi\)/);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:repetePaylas")).map((x) => [x.kod, x.deneme]), [["3194", false]]);
+  // Bitti → karar → Sil (ikinci onay) → kuyruklar + gizle
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: "fabrika:2026-10-29", v: JSON.stringify({ asama: "onayda", liste: [{ kod: "3100", renkler: [{ renk: "bej", adet: 2 }] }] }) }) });
+  o.g.length = 0;
+  await bas(333, "fb:o:2026-10-29");
+  const id2 = cagri(o.g, "copyMessage")[0].govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  o.g.length = 0;
+  await bas(555, `fc:b:${id2}`);
+  const karar = cagri(o.g, "sendMessage").filter((x) => /fabrika bitti dedi\. Ne yapalım\?/.test(x.govde.text));
+  assert.equal(karar.length, 2);
+  o.g.length = 0;
+  await bas(111, `fk:s:${id2}`, 5);
+  assert.match(cagri(o.g, "editMessageText")[0].govde.text, /kanalda 1 paylaşım silinecek[\s\S]*Emin misiniz/);
+  assert.ok(!o.depo.has("venom:kanalSil")); // henüz silinmedi
+  await bas(111, `fk:S:${id2}`, 5);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:kanalSil")).map((x) => x.kod), ["3100"]);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:siteSil")).map((x) => x.kod), ["3100"]);
+  const tum = await (await o.env.STOK.get().fetch("https://stok/tum", { method: "POST", body: "{}" })).json();
+  assert.equal(tum["3100"] ? tum["3100"].gizli : true, true);
+  await bas(333, `fk:r:${id2}`);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /artık geçerli değil|zaten karar/);
+});
+
+test("fabrika denemesi: 🧪 her mesajda, Murat başlatır; kanal paylaşımı ve silme YOK; deneme gerçek listeye karışmaz; Kemal onayıyla özet", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }]));
+  const bas = (kim, data, mesaj = 1) => g2({ callback_query: { id: "c", from: { id: kim, first_name: { 555: "Nuri", 333: "Hemra", 111: "Murat" }[kim] }, data, message: { chat: { id: kim }, message_id: mesaj } } }, o.env);
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333 }, text: "/fabrikadeneme" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /sadece Murat/);
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "/fabrikadeneme" } }, o.env);
+  const kart = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333");
+  assert.match(kart.govde.text, /^🧪 DENEME – üretim yapmayın[\s\S]*9999 DENEME — siyah 2, bej 1/);
+  const did = kart.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  o.g.length = 0;
+  await bas(333, `fb:o:${did}`);
+  const msj = [...cagri(o.g, "sendMessage"), ...cagri(o.g, "copyMessage"), ...cagri(o.g, "sendPhoto")].find((x) => x.govde.chat_id === 555);
+  const yazi = msj.govde.caption || msj.govde.text;
+  assert.match(yazi, /^🧪 DENEME – üretim yapmayın\nVOLONTE – Model 9999 DENEME\. İstenen: siyah 2 seri, bej 1 seri$/);
+  assert.ok(msj.govde.reply_markup.inline_keyboard.flat().some((d) => d.text === "⚠️ Fotoğraf yanlış model"));
+  const id = msj.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  assert.ok(id.startsWith("D"));
+  await bas(555, `fc:r:${id}`);
+  await bas(555, `fc:s:${id}:3`);
+  await bas(555, `fc:k:${id}`);
+  // Kemal: önizleme → onay → kanalda PAYLAŞILMAZ → Murat'a özet
+  o.g.length = 0;
+  await fabrikaIsleri({ ...o.env, BOT_TOKEN: "k" }, Math.floor(Date.now() / 1000));
+  const onizleme = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111");
+  assert.match(onizleme.govde.text, /^🧪 DENEME[\s\S]*Repete geldi – 9999[\s\S]*kanalda paylaşılmaz/);
+  const { default: kemal } = await import("./worker.js");
+  assert.ok(kemal);
+  o.g.length = 0;
+  const w = await import("./worker.js");
+  await w.guncellemeIsle({ callback_query: { id: "c", from: { id: 111, first_name: "Murat" }, data: onizleme.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 111 }, message_id: 3 } } }, { ...o.env, BOT_TOKEN: "k", ALLOWED_IDS: "111,222" });
+  assert.equal(cagri(o.g, "copyMessages").length, 0); // kanalda paylaşım yok
+  const ozet = cagri(o.g, "sendMessage").find((x) => /Fabrika denemesi bitti/.test(x.govde.text));
+  assert.ok(ozet);
+  assert.match(ozet.govde.text, /Hemra onayladı[\s\S]*Repete süresi seçildi: 2-3 gün[\s\S]*Kanalda hiçbir şey paylaşılmadı, hiçbir şey silinmedi/);
+  // deneme gerçek renk hafızasına karışmadı
+  const renk = await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "fabrika:renkler" }) })).json();
+  assert.equal(renk.v, null);
 });
