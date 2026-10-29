@@ -15,6 +15,7 @@ const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice
 const gunGoster = (g) => g.split("-").reverse().join(".");
 const LISTE_SAATI = 20 + 5 / 60;   // 20:05 (köprünün 20:00 gönderiminden sonra)
 const HATIRLATMA_SAATI = 21;
+const BEKLEME_SONU = 21; // satış girilmediyse 21:00'e kadar beklenir
 const MURAT_HABER_SAATI = 22;
 
 export const sorumlu = (env) => String(env.FABRIKA_SORUMLU || "6448681578");
@@ -68,42 +69,67 @@ export function listeCoz(metin) {
 
 export const listeYaz = (liste) => liste.map((x) => `${x.kod} — ${x.renkler.map((r) => `${r.renk} ${r.adet}`).join(", ")}`).join("\n");
 
-// 20:05 — Hemra'ya günün satış listesi
+// Günün satış listesi Hemra'ya (otomatik ya da /eksik). Aynı gün bir kez.
+async function listeyiGonder(env, gun, satislar, simdi, tg, kim = null) {
+  const renkler = await ayarOku(env, "fabrika:renkler", {});
+  const gruplar = Object.fromEntries(satislar.map((x) => [x.kod, grupOf(x)]));
+  const satirlar = [grupluYaz(satislar, gruplar, (x) => `${x.kod} · satılan ${x.satilan} · stokta ${x.kalan == null ? "—" : Math.max(0, x.kalan)}${x.ikiKart ? " ⚠️ iki kartı var" : ""}`)];
+  const hazir = satislar.filter((x) => renkler[x.kod] && renkler[x.kod].length).map((x) => `${x.kod}: ${renkler[x.kod].join(", ")}?`);
+  const metin = [
+    `🏭 ${gunGoster(gun)} — bugün satılan modeller (${satislar.length})${kim ? ` · ${kim} istedi` : ""}:`,
+    ...satirlar,
+    "",
+    "Fabrikaya ne isteyelim? Renkleriyle yazın, örnek: 3183 siyah 10 bej 6",
+    ...(hazir.length ? ["", "Daha önce yazdığınız renkler:", ...hazir] : []),
+  ].join("\n");
+  await tg(env, "sendMessage", { chat_id: sorumlu(env), text: metin.slice(0, 4000) });
+  await ayarYaz(env, `fabrika:${gun}`, { asama: "soruldu", zaman: simdi });
+}
+
+// 20:05'ten itibaren: satış varsa ve son 10 dakikadır değişmiyorsa (akşam toplu giriş bitti) liste Hemra'ya gider.
+// O gün satış girilmemişse 21:00'e kadar beklenir; 21:00'den sonra otomatik gitmez (/eksik ile gönderilebilir).
 export async function fabrikaAdimi(env, simdi, tg) {
   const s = saat(simdi);
   const gun = gunAnahtari(simdi);
   const d = await ayarOku(env, `fabrika:${gun}`, null);
-  if (!d) {
+  if (!d || d.asama === "bekliyor") {
     if (s < LISTE_SAATI || s >= 23) return;
     if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return; // satış okuması henüz doğrulanmadı
+    if (s >= BEKLEME_SONU) { if (!d || d.asama === "bekliyor") await ayarYaz(env, `fabrika:${gun}`, { asama: "satisYok" }); return; }
     const satislar = await stokIste(env, "/satislar", { gun });
-    if (!satislar.length) { await ayarYaz(env, `fabrika:${gun}`, { asama: "satisYok" }); return; }
-    const renkler = await ayarOku(env, "fabrika:renkler", {});
-    const gruplar = Object.fromEntries(satislar.map((x) => [x.kod, grupOf(x)]));
-    const satirlar = [grupluYaz(satislar, gruplar, (x) => `${x.kod} · satılan ${x.satilan} · stokta ${x.kalan == null ? "—" : Math.max(0, x.kalan)}${x.ikiKart ? " ⚠️ iki kartı var" : ""}`)];
-    const hazir = satislar.filter((x) => renkler[x.kod] && renkler[x.kod].length).map((x) => `${x.kod}: ${renkler[x.kod].join(", ")}?`);
-    const metin = [
-      `🏭 ${gunGoster(gun)} — bugün satılan modeller (${satislar.length}):`,
-      ...satirlar,
-      "",
-      "Fabrikaya ne isteyelim? Renkleriyle yazın, örnek: 3183 siyah 10 bej 6",
-      ...(hazir.length ? ["", "Daha önce yazdığınız renkler:", ...hazir] : []),
-    ].join("\n");
-    await tg(env, "sendMessage", { chat_id: sorumlu(env), text: metin.slice(0, 4000) });
-    await ayarYaz(env, `fabrika:${gun}`, { asama: "soruldu", zaman: simdi });
-    return;
+    if (!satislar.length) { if (!d) await ayarYaz(env, `fabrika:${gun}`, { asama: "bekliyor" }); return; }
+    const iz = JSON.stringify(satislar.map((x) => [x.kod, x.satilan]));
+    if (!d || d.iz !== iz) { await ayarYaz(env, `fabrika:${gun}`, { asama: "bekliyor", iz, izZaman: simdi }); return; } // giriş sürüyor olabilir
+    if (simdi - d.izZaman < 600) return;
+    return listeyiGonder(env, gun, satislar, simdi, tg);
   }
   if (["soruldu", "duzelt", "onayda"].includes(d.asama)) {
-    if (s >= HATIRLATMA_SAATI && !d.hatirlatildi) {
+    const hatirlatma = Math.max(HATIRLATMA_SAATI, saat(d.zaman || simdi) + 55 / 60);
+    const muratHaber = Math.max(MURAT_HABER_SAATI, saat(d.zaman || simdi) + 2);
+    if (s >= hatirlatma && !d.hatirlatildi) {
       d.hatirlatildi = true;
       await ayarYaz(env, `fabrika:${gun}`, d);
       await tg(env, "sendMessage", { chat_id: sorumlu(env), text: d.asama === "onayda" ? "⏰ Fabrika listesi onayınızı bekliyor (✅ Onayla / ✏️ Düzelt)." : "⏰ Hatırlatma: fabrikaya ne isteyelim? Renkleriyle yazın, örnek: 3183 siyah 10 bej 6" });
-    } else if (s >= MURAT_HABER_SAATI && !d.muratHaber) {
+    } else if (s >= muratHaber && !d.muratHaber) {
       d.muratHaber = true;
       await ayarYaz(env, `fabrika:${gun}`, d);
       await tg(env, "sendMessage", { chat_id: murat(env), text: `ℹ️ ${gunGoster(gun)} fabrika eksik listesi: Hemra onaylamadı (liste fabrikaya gitmedi).` });
     }
   }
+}
+
+// /eksik (sadece Murat ve Hemra): o günün satışlarıyla liste hemen Hemra'ya. Aynı gün iki kez gitmez.
+export async function eksikKomutu(env, m, tg, simdi) {
+  const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text });
+  if (![murat(env), sorumlu(env)].includes(String(m.from.id))) return yaz("Bu komut sadece Murat ve Hemra'da.");
+  if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return yaz("Eksik listesi henüz kapalı.");
+  const gun = gunAnahtari(simdi);
+  const d = await ayarOku(env, `fabrika:${gun}`, null);
+  if (d && !["bekliyor", "satisYok"].includes(d.asama)) return yaz(`Bugünün listesi ${d.zaman ? `saat ${new Date((d.zaman + SAAT_FARKI) * 1000).toISOString().slice(11, 16)}'de ` : ""}zaten gönderildi (aynı gün iki kez gitmez).`);
+  const satislar = await stokIste(env, "/satislar", { gun });
+  if (!satislar.length) return yaz("Bugün için Vegawin'de satış görünmüyor. Satışlar girildiyse köprü 5 dakika içinde gönderir; sonra tekrar /eksik yazın.");
+  await listeyiGonder(env, gun, satislar, simdi, tg, [m.from.first_name, m.from.last_name].filter(Boolean).join(" ") || null);
+  if (String(m.from.id) !== sorumlu(env)) return yaz(`✅ Liste Hemra'ya gönderildi (${satislar.length} model).`);
 }
 
 // Hemra'nın yazısı (liste bekleniyorsa). true dönerse mesaj işlendi.
