@@ -1,5 +1,25 @@
 [
  {
+  "kod": "3403",
+  "baslik": "Floral Belted Shirt Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A midi shirt dress with a fitted bodice and a full, flared skirt. A classic shirt collar, voluminous puff sleeves gathered at the cuff and a self-tie waist belt shape the silhouette, while a gold floral print on black adds a refined richness. Polished enough for celebrations, easy for elegant daytime wear. Made in Istanbul with careful workmanship.",
+   "fr": "Une robe chemise midi au buste ajusté et à la jupe ample et évasée. Le col chemise classique, les manches bouffantes resserrées au poignet et la ceinture à nouer dessinent la silhouette, tandis que l'imprimé floral doré sur fond noir apporte une touche raffinée. Idéale pour les cérémonies comme pour une journée élégante. Confectionnée à Istanbul avec soin.",
+   "pt": "Um vestido chemise midi com corpete ajustado e saia ampla e evasê. A gola de camisa clássica, as mangas bufantes franzidas no punho e o cinto de amarrar definem a silhueta, enquanto o estampado floral dourado sobre fundo preto traz um toque sofisticado. Perfeito para celebrações e para um dia elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3403/1.jpg",
+   "galeri/3403/2.jpg",
+   "galeri/3403/3.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 44,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3558",
   "baslik": "Polka Dot Lace Slit Set",
   "kategori": "sets",
