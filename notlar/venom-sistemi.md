@@ -335,6 +335,8 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   Fabrikaya/Celal'e: "3254 · Küçük (38-44) · siyah 10 · bej 6" (İkisi de → iki ayrı mesaj/sipariş). Beyin aracı beden alanıyla. Bugünkü listeye bir kerelik
   (fabrika:bedenEkle) 12 modele beden düğmeli mesaj gitti; 3607 Hemra'nın "isteme" kararıyla atlandı; 3628'in yazılanı korundu (bedeni bekliyor).
 
+- 29 Ekim 20:05: Hemra'ya her model TEK mesaj (fotoğraf + bilgi + beden düğmeleri + Bu sefer isteme + durum); bugünkü 13 model kanal fotoğrafıyla yeniden gitti (fabrika:tekMesaj), seçimler korundu; bugün fabrikaya giden sipariş yoktu. Fabrikaya/Celal'e fotoğraf ZORUNLU: site → kanal (4 aday mesaj, yazısı değiştirilerek); bulunamazsa mesaj gitmez, Murat'a "📷 <kod> fotoğraf bulunamadı" (deneme hariç).
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)

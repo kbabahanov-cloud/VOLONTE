@@ -362,6 +362,53 @@ async function bedenEkle(env, gun, tg) {
   return true;
 }
 
+// Bir kerelik (29 Ekim): "fabrika:tekMesaj" = bugün → Hemra'ya her model TEK mesaj (fotoğraf + bilgi + beden düğmeleri + durum) yeniden;
+// seçimler korunur. Bugün fabrikaya fotoğrafsız gitmiş siparişler varsa fotoğrafları arkasından gönderilir. Sonuç: "fabrika:tekMesajSonuc".
+async function tekMesaj(env, gun, simdi, tg) {
+  if ((await env.KAYIT.get("fabrika:tekMesaj")) !== gun) return false;
+  await env.KAYIT.delete("fabrika:tekMesaj");
+  const sonuc = { gun, hemra: {}, fabrikaFoto: [] };
+  const ana = await ayarOku(env, `fabrika:${gun}`, null);
+  const site = await siteListesi(env);
+  const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
+  const eskiRenkler = await ayarOku(env, "fabrika:renkler", {});
+  let not = false;
+  for (const anahtar of ana ? [gun, ...(ana.ekler || [])] : []) {
+    const d = anahtar === gun ? ana : await ayarOku(env, `fabrika:${anahtar}`, null);
+    if (!d || !d.modeller || !["soruldu", "duzelt", "onayda"].includes(d.asama)) continue;
+    d.secim = d.secim || {};
+    d.mesajlar = d.mesajlar || {};
+    if (!not) { not = true; await tg(env, "sendMessage", { chat_id: sorumlu(env), text: "🔄 Liste düzeltildi: her model artık tek mesajda (fotoğraf + düğmeler). Seçtikleriniz kayıtlı; aşağıdaki mesajlardan devam edin." }); }
+    for (const x of d.modeller) {
+      const sc = secimNorm(d.secim[x.kod]);
+      const yazi = modelYazisi(x, sonIstek[x.kod], eskiRenkler[x.kod]);
+      const { r, tur, kaynak } = await hemraModelGonder(env, tg, x.kod, site, sc ? `${yazi}\n\n${secimYazi(sc)}` : yazi, modelKlavye(anahtar, x.kod, Boolean(sonIstek[x.kod]), sc && sc.beden ? sc.beden : null));
+      if (r && r.ok) d.mesajlar[x.kod] = [r.result.message_id, tur, tur === "metin" ? `${yazi}\n📷 fotoğraf yok` : yazi, kaynak];
+      sonuc.hemra[x.kod] = kaynak || "fotoğraf yok";
+    }
+    const guncel = (await ayarOku(env, `fabrika:${anahtar}`, null)) || d;
+    guncel.mesajlar = { ...(guncel.mesajlar || {}), ...d.mesajlar };
+    await ayarYaz(env, `fabrika:${anahtar}`, guncel);
+  }
+  // Bugün fabrikaya fotoğrafsız gitmiş siparişler: fotoğrafı arkasından.
+  for (const ozet of Object.entries(await ayarOku(env, `fs:hafta:${pazartesi(simdi)}`, {})).filter(([, x]) => gunAnahtari(x.gonderim) === gun).slice(0, 10)) {
+    const rec = await siparisOku(env, ozet[0]);
+    if (!rec || rec.deneme) continue;
+    const metinler = rec.mesajlar.filter(([, , t]) => t === "metin");
+    if (!metinler.length) continue;
+    const foto = await fotoBul(env, rec.kod, site);
+    for (const [chat] of metinler) {
+      let r = null;
+      if (foto && foto.tur === "site") r = await tg(env, "sendPhoto", { chat_id: chat, photo: foto.url, caption: siparisMetni(rec) });
+      else if (foto) for (const id of foto.adaylar) { r = await tg(env, "copyMessage", { chat_id: chat, from_chat_id: foto.kanal, message_id: id, caption: siparisMetni(rec) }); if (r && r.ok) break; }
+      sonuc.fabrikaFoto.push(`${rec.kod}→${chat}: ${r && r.ok ? "gönderildi" : "fotoğraf bulunamadı"}`);
+    }
+    if (!foto) await tg(env, "sendMessage", { chat_id: murat(env), text: `📷 ${rec.kod} fotoğraf bulunamadı (fabrikaya gitmiş siparişin fotoğrafı gönderilemedi).` });
+  }
+  await env.KAYIT.put("fabrika:tekMesajSonuc", JSON.stringify(sonuc), { expirationTtl: 7 * 86400 });
+  return true;
+}
+
 async function yenidenGonder(env, gun, simdi, tg) {
   if ((await env.KAYIT.get("fabrika:yenidenGonder")) !== gun) return false;
   await env.KAYIT.delete("fabrika:yenidenGonder");
@@ -386,6 +433,7 @@ export async function fabrikaAdimi(env, simdi, tg) {
   if (await yenidenGonder(env, gun, simdi, tg)) return;
   if (await fotoTamamla(env, gun, tg)) return;
   if (await bedenEkle(env, gun, tg)) return;
+  if (await tekMesaj(env, gun, simdi, tg)) return;
   const d = await ayarOku(env, `fabrika:${gun}`, null);
   const satislar = await satislarAl(env, gun);
   const iz = JSON.stringify(satislar.map((x) => [x.kod, x.satilan]));
@@ -746,10 +794,10 @@ async function fotoBul(env, kod, site = null) {
   const url = sitedenFoto(env, site || (await siteListesi(env)), kod);
   if (url) return { tur: "site", url };
   const kanal = await env.KAYIT.get("kanal", "json");
-  const gruplar = ((await env.KAYIT.get("kodlar", "json")) || {})[kod] || [];
-  const en = [...gruplar].sort((a, b) => b.tarih - a.tarih)[0];
-  const id = en && en.ids.find((x) => x > 0);
-  return kanal && id ? { tur: "kanal", kanal: kanal.id, id } : null;
+  const gruplar = [...(((await env.KAYIT.get("kodlar", "json")) || {})[kod] || [])].sort((a, b) => b.tarih - a.tarih);
+  // Aday kanal mesajları (en yeni paylaşımdan başlayarak; yazılı parça önce) — biri kopyalanamazsa sıradaki denenir.
+  const adaylar = gruplar.flatMap((g) => [g.y, ...g.ids]).filter((x, i, l) => x > 0 && l.indexOf(x) === i).slice(0, 4);
+  return kanal && adaylar.length ? { tur: "kanal", kanal: kanal.id, id: adaylar[0], adaylar } : null;
 }
 
 // Celal'e giden mesajda "VOLONTE" yazmaz (kullanıcı kararı)
@@ -770,13 +818,25 @@ async function fabrikayaGonder(env, rec, tg, site = null) {
   rec.kanalFoto = Boolean(foto && foto.tur === "kanal");
   const metin = siparisMetni(rec);
   let giden = 0;
+  // Gerçek siparişte fotoğraf ZORUNLU (kullanıcı kararı 29 Ekim): fotoğraf bulunamazsa mesaj gitmez, Murat'a haber verilir.
+  let calisan = foto && foto.tur === "kanal" ? null : undefined; // kanalda kopyalanabilen mesaj (ilk kişide bulunur)
   for (const k of kisiler) {
     let r = null;
     let tur = "foto";
     if (foto && foto.tur === "site") r = await tg(env, "sendPhoto", { chat_id: k.id, photo: foto.url, caption: metin, reply_markup: klavye(rec) });
-    else if (foto) r = await tg(env, "copyMessage", { chat_id: k.id, from_chat_id: foto.kanal, message_id: foto.id, caption: metin, reply_markup: klavye(rec) }); // kanal yazısı (fiyat vb.) GİTMEZ: yazı değiştirilir
-    if (!r || !r.ok) { tur = "metin"; r = await tg(env, "sendMessage", { chat_id: k.id, text: metin, reply_markup: klavye(rec) }); }
+    if (foto && (foto.tur === "kanal" || !(r && r.ok))) { // kanal yazısı (fiyat vb.) GİTMEZ: yazı değiştirilir
+      for (const id of calisan ? [calisan] : (foto.adaylar || [foto.id]).filter(Boolean)) {
+        if (!foto.kanal) break;
+        r = await tg(env, "copyMessage", { chat_id: k.id, from_chat_id: foto.kanal, message_id: id, caption: metin, reply_markup: klavye(rec) });
+        if (r && r.ok) { calisan = id; break; }
+      }
+    }
+    if ((!r || !r.ok) && rec.deneme) { tur = "metin"; r = await tg(env, "sendMessage", { chat_id: k.id, text: metin, reply_markup: klavye(rec) }); }
     if (r && r.ok) { giden++; rec.mesajlar.push([k.id, r.result.message_id, tur]); }
+  }
+  if (!rec.deneme && !giden && kisiler.length) {
+    rec.fotoYok = true;
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `📷 ${rec.kod} fotoğraf bulunamadı — fabrikaya gönderilmedi (${siparisMetni(rec)}). Sitede ya da kanalda fotoğrafı olunca tekrar gönderilebilir.` });
   }
   await siparisYaz(env, rec);
   return { giden, kisi: kisiler.length };
