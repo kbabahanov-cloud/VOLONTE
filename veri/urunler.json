@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3360",
+  "baslik": "Lace Peplum Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted lace top with a flowing, full-length chiffon-look skirt. The top features a scoop neckline, jewelled front buttons, sheer lace sleeves and a scalloped peplum hem. Ideal for ceremonies, church services and refined daytime events. Made in Istanbul with careful attention to finish.",
+   "fr": "Un ensemble deux pièces associant un haut en dentelle ajusté à une jupe longue et fluide d'aspect mousseline. Le haut se distingue par son encolure arrondie, ses boutons bijoux, ses manches en dentelle ajourée et son bas festonné en basque. Parfait pour les cérémonies, les cultes et les événements de journée élégants. Confectionné à Istanbul avec un soin particulier des finitions.",
+   "pt": "Um conjunto de duas peças que une uma blusa de renda ajustada a uma saia longa e fluida com aspeto de chiffon. A blusa tem decote redondo, botões com pedraria, mangas de renda transparente e barra recortada em peplum. Ideal para cerimónias, cultos e eventos diurnos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3360/1.jpg",
+   "galeri/3360/2.jpg",
+   "galeri/3360/3.jpg",
+   "galeri/3360/4.jpg"
+  ],
+  "videolar": [
+   "selin/3360/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3335",
   "baslik": "Satin Collar Lace Dress",
   "kategori": "dresses",
