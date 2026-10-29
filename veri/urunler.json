@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3186",
+  "baslik": "Double-Breasted Blazer Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece set pairing a tailored double-breasted blazer with a pleated midi skirt and a lace-trimmed camisole. The blazer features peak lapels, gold-tone buttons and buttoned cuffs, while the skirt falls in fine pleats from a clean waistband. Wear it as a full look for the office or special daytime events, or style the pieces separately. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble trois pièces associant un blazer croisé ajusté, une jupe midi plissée et un caraco bordé de dentelle. Le blazer se distingue par ses revers pointus, ses boutons dorés et ses poignets boutonnés, tandis que la jupe tombe en plis fins depuis une ceinture nette. À porter en total look au bureau ou lors d'événements en journée, ou pièce par pièce. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de três peças que combina um blazer trespassado de corte ajustado, uma saia midi plissada e uma camisola com acabamento em renda. O blazer tem lapelas em bico, botões dourados e punhos abotoados, enquanto a saia cai em pregas finas a partir de um cós limpo. Use o look completo no escritório ou em eventos diurnos, ou combine as peças separadamente. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3186/1.jpg",
+   "galeri/3186/2.jpg",
+   "galeri/3186/3.jpg",
+   "galeri/3186/4.jpg",
+   "galeri/3186/5.jpg",
+   "galeri/3186/6.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3183",
   "baslik": "Shawl Collar Check Suit",
   "kategori": "sets",
