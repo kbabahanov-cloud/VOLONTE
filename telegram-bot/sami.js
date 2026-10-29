@@ -290,12 +290,18 @@ function tabloGuvenli(tur, yaz) {
   return async (env, simdi) => {
     if (!hizmetHesabi(env) || !(await tabloKimlik(env, tur))) return;
     const d = await tabloDurum(env, tur);
-    if (d.bekle && simdi < d.bekle) return;
+    const hemen = await env.KAYIT.get("sami:tabloYeniden"); // elle "hemen dene" (beklemeyi atlar)
+    if (hemen) await env.KAYIT.delete("sami:tabloYeniden");
+    if (!hemen && d.bekle && simdi < d.bekle) return;
+    // Durum değişince ortak kayda da yazılır (dışarıdan kontrol için; sadece değişince → KV sınırı)
+    const dis = async (x) => { const k = `sami:tabloDurum:${tur}`; const e = await env.KAYIT.get(k); const v = JSON.stringify(x); if (e !== v) await env.KAYIT.put(k, v); };
     try {
       const yazdi = await yaz(env, simdi);
       if (yazdi || d.sonHata) await stokIste(env, "/ayar-yaz", { k: `tablo:durum:${tur}`, v: JSON.stringify({ ...d, ...(yazdi ? { sonYazma: simdi } : {}), sonHata: null, bekle: null }) });
+      if (yazdi || d.sonHata) await dis({ durum: "tamam", ilkYazma: d.sonYazma ? undefined : simdi });
     } catch (e) {
       await stokIste(env, "/ayar-yaz", { k: `tablo:durum:${tur}`, v: JSON.stringify({ ...d, sonHata: String(e && e.message).slice(0, 300), hataZaman: simdi, bekle: simdi + 1800 }) });
+      await dis({ durum: "hata", hata: String(e && e.message).slice(0, 300) });
     }
   };
 }
