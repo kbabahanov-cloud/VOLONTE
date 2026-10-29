@@ -279,7 +279,13 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   edilemedi" (kanala gitmez). Önceki "Black Rose modellerine dokunma" kuralının yerine bu geçerli.
   SIRADAKİ İŞ: Black Rose köprüsü (KOPRU_BLACKROSE).
 
-**Sıradaki komut: Komut 4d (Volonte CRM'e WhatsApp ekleme, test numarası).**
+- 29 Ekim: BLACK ROSE KÖPRÜSÜ hazırlığı (kullanıcı: "bugün başka bir şey yapma"; hiçbir şey yüklenmedi). Kodlar iki mağazada asla çakışmaz (ek kural yok).
+  Black Rose Vegawin AYRI bilgisayarda → köprü oraya ayrı kurulur. Paket: sami/Sami-kopru-BLACKROSE.zip (sami/blackrose/paket.sh ile üretilir;
+  ayar: magaza BLACKROSE, kullanıcı sami_okuma, firma/dönem F????/D???? → doldurulmadan kurulum çalışmaz). sami.ps1: merkez depo no ayar.json "depo"
+  (varsayılan 1, VOLONTE değişmedi); şifre sorusu ve uygulama adı ayardan. Vegawin programcısı için sami/blackrose/okuma-kullanicisi.sql (db_datareader + DENY yazma).
+  Venom tarafı hazır: /kopru X-Magaza BLACKROSE + secret KOPRU_BLACKROSE (kullanıcı girer). Açık soru: Black Rose satışları 20:05 fabrika eksik listesine girsin mi?
+
+**Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
 

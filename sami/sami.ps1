@@ -37,6 +37,8 @@ $GorevAdi = "Sami-$($Ayar.magaza)"
 $T_STOK = "$($Ayar.firma)TBLSTOKLAR"
 $T_BIRIM = "$($Ayar.firma)TBLBIRIMLEREX"
 $T_DEPO = "$($Ayar.firma)$($Ayar.donem)TBLDEPOENVANTER"
+# Merkez depo numarası (VOLONTE: 1; Black Rose'da farklı olabilir → ayar.json "depo"). Sadece tam sayı.
+$DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 
@@ -74,7 +76,7 @@ function Baglanti([string]$sifre) {
   $b["Password"] = $sifre
   $b["Connect Timeout"] = 10
   $b["ApplicationIntent"] = "ReadOnly"   # KİLİT 2
-  $b["Application Name"] = "Sami (VOLONTE, salt okuma)"
+  $b["Application Name"] = "Sami ($($Ayar.magaza), salt okuma)"
   return New-Object System.Data.SqlClient.SqlConnection $b.ConnectionString
 }
 
@@ -118,7 +120,7 @@ function StokSorgusu([string]$sifre) {
   $db = BagSutunu $d $T_DEPO
   $sql = "SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD, " +
     "(SELECT TOP 1 B.SATISFIYATI1 FROM $T_BIRIM B WHERE B.$bb = S.IND) AS FIYAT, " +
-    "(SELECT SUM(E.ENVANTER) FROM $T_DEPO E WHERE E.$db = S.IND AND E.DEPO = 1 AND (E.BELGETIPI IS NULL OR E.BELGETIPI <> 67)) AS ADET " +
+    "(SELECT SUM(E.ENVANTER) FROM $T_DEPO E WHERE E.$db = S.IND AND E.DEPO = $DEPO AND (E.BELGETIPI IS NULL OR E.BELGETIPI <> 67)) AS ADET " +
     "FROM $T_STOK S WHERE S.STATUS = 1 AND S.IND >= 100"
   return @{ sql = $sql; birimBag = $bb; depoBag = $db; stok = $s; birim = $b; depo = $d }
 }
@@ -135,7 +137,7 @@ function SatisSorgusu([string]$sifre) {
   if (-not $tarih) { throw "$T_DEPO tablosunda tarih sütunu bulunamadı. Sütunlar: $($d -join ', ')" }
   $db = BagSutunu $d $T_DEPO
   $sql = "SELECT S.STOKKODU AS KOD, SUM(E.ENVANTER) AS MIKTAR FROM $T_DEPO E INNER JOIN $T_STOK S ON E.$db = S.IND " +
-    "WHERE E.BELGETIPI = 21 AND E.DEPO = 1 AND E.$tarih >= @bas AND E.$tarih < @bit GROUP BY S.STOKKODU"
+    "WHERE E.BELGETIPI = 21 AND E.DEPO = $DEPO AND E.$tarih >= @bas AND E.$tarih < @bit GROUP BY S.STOKKODU"
   return @{ sql = $sql; tarih = $tarih; sutunlar = $d }
 }
 function Satislar([string]$sifre, [datetime]$gun) {
@@ -251,7 +253,7 @@ switch ($Mod) {
     Get-ChildItem -Path $Klasor | Unblock-File -ErrorAction SilentlyContinue   # internetten inen dosyaların uyarısını kaldır
     Write-Host "=== Sayım Sami kurulumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
     Write-Host "Vegawin'e SADECE OKUMA için bağlanacak. Şifre bu bilgisayarda şifreli saklanır, hiçbir yere gönderilmez."
-    $sifre = Read-Host "volonte_okuma kullanıcısının şifresini yazın" -AsSecureString
+    $sifre = Read-Host "$($Ayar.kullanici) kullanıcısının şifresini yazın" -AsSecureString
     try {
       $t = Sorgu (Duz $sifre) "SELECT COUNT(*) AS N FROM INFORMATION_SCHEMA.TABLES"
       Write-Host "✓ Vegawin'e bağlanıldı ($($t.Rows[0].N) tablo görünüyor)." -ForegroundColor Green
@@ -357,7 +359,7 @@ switch ($Mod) {
       Write-Host "Sütunlar: $($q.sutunlar -join ', ')"
       Write-Host ""
       Write-Host "Son 7 gün belge tipleri (adet satır · toplam miktar):"
-      $dag = Sorgu $sifre "SELECT TOP 15 E.BELGETIPI AS TIP, COUNT(*) AS SATIR, SUM(E.ENVANTER) AS TOPLAM FROM $T_DEPO E WHERE E.DEPO = 1 AND E.$($q.tarih) >= @bas GROUP BY E.BELGETIPI ORDER BY COUNT(*) DESC" @{ bas = (Get-Date).Date.AddDays(-7) }
+      $dag = Sorgu $sifre "SELECT TOP 15 E.BELGETIPI AS TIP, COUNT(*) AS SATIR, SUM(E.ENVANTER) AS TOPLAM FROM $T_DEPO E WHERE E.DEPO = $DEPO AND E.$($q.tarih) >= @bas GROUP BY E.BELGETIPI ORDER BY COUNT(*) DESC" @{ bas = (Get-Date).Date.AddDays(-7) }
       foreach ($r in $dag.Rows) { Write-Host ("  tip {0} · {1} satır · toplam {2}" -f $r.TIP, $r.SATIR, $r.TOPLAM) }
       foreach ($gunEk in @(0, -1)) {
         $gun = (Get-Date).Date.AddDays($gunEk)
