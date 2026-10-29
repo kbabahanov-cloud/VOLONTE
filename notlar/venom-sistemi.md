@@ -322,6 +322,13 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 
 - 29 Ekim 19:40: "📷 fotoğraf yok" sebebi: sitede sadece 15 model var, bugünün 13 modelinin hiçbiri sitede değil (kod eşleşmesi doğru). Düzeltme: sitede yoksa kanaldaki en yeni paylaşım (copyMessage, yazısı değiştirilerek). 13 modelin hepsi kanal fotoğrafıyla Hemra'ya yeniden gitti; Hemra'nın 3628 seçimi korundu (fabrika:fotoTamamla bir kerelik).
 
+- 29 Ekim SAMİ'NİN BEYNİ (yüklendi, 137 test; telegram-bot/sami-beyin.js): Claude Haiku 5.5 (SAMI_MODEL ile değişir), komutsuz sohbet; sadece Murat, Merdan,
+  Hemra, Aziz (fabrika/Celal sadece düğme). Araçlar: stok_bilgisi (fiyatsız), satislar, stoksuz_modeller, eksik_listesi_durumu, siparis_durumu, eksik_listesine_isle
+  (sadece Hemra + Murat; renk/adet, isteme, önceki gibi, hepsini önceki gibi → hepsi bitince Hemra'ya onay kartı). Silme/sipariş/fabrikaya gönderme aracı YOK.
+  Düz liste ("3183 siyah 10 bej 6") eski yoldan; ekli/serbest yazı (siyahtan, isteme, önceki gibi) beyne (duzListeMi). Bütçe ayrı 10 $/ay (StokDO beyin:harcama:<ay>),
+  8 $'da Murat'a uyarı, dolunca beyin durur. Geçmiş StokDO beyin:sohbet:<id> (6 saat, son 8). ⏳ ANTHROPIC_API_KEY volonte-sami'ye girilecek; girilince
+  KV sami:beyinDeneme'deki 3 soru otomatik denenir, cevaplar Murat'a + sami:beyinDenemeSonuc.
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)

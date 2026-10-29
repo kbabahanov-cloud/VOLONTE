@@ -18,6 +18,7 @@ import { kodBul } from "./ortak.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
+import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -63,7 +64,8 @@ export default {
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
     const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
     const siparis = (e, t) => siparisTakip(e, t, tg);
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -120,12 +122,15 @@ export async function guncelleme(u, env) {
   if (komut === "/tablo") return tabloKomutu(m, env);
   if (komut === "/eksik") return eksikKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/fabrikadeneme") return fabrikaDenemesi(env, m, tg, Math.floor(Date.now() / 1000));
+  // Komut değilse beyin (Haiku): normal cümleyle soru / eksik listesine serbest yazı.
+  if (m.text && !m.text.trim().startsWith("/")) return beyinCevapla(env, m, tg, Math.floor(Date.now() / 1000));
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: [
     "📦 Ben Sayım Sami. Vegawin stoklarını okurum (hiçbir şeyi değiştirmem).",
     "/stok — köprünün durumu",
     "/stok 3194 — o modelin adedi, fiyatı ve durumu",
     "Stok bitince 🔁 Repete / 🗑 Sil / ⏳ Beklesin sorusunu ben sorarım. Her sabah 09:05'te Venom Ekip grubuna rapor veririm.",
     "Stok tablosunu (Google Sheets) 5 dakikada bir güncellerim. /tablo — tablo durumu (yönetici).",
+    "Bana normal cümleyle de yazabilirsiniz: \"3596'dan kaç tane kaldı?\", \"bugün en çok ne sattı?\", \"Hemra listeyi onayladı mı?\"",
   ].join("\n") });
 }
 

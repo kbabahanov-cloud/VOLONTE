@@ -678,3 +678,79 @@ test("fotoğraf tamamlama: sitede yoksa kanal fotoğrafı (yazısı değiştiril
   assert.deepEqual(sonuc.sonuc, { 3194: "kanal", 3999: "yok" });
   assert.deepEqual(sonuc.secimler, ["3194"]); // seçim korundu
 });
+
+// ---------- Sami'nin beyni (Haiku) ----------
+function beyinOrtami(cevaplar) {
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", ANTHROPIC_API_KEY: "k" });
+  o.claude = [];
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => {
+    if (String(url).startsWith("https://api.anthropic.com")) {
+      o.claude.push(JSON.parse(istek.body));
+      const c = cevaplar.shift();
+      return Response.json({ id: "m", type: "message", role: "assistant", model: "claude-haiku-5-5", usage: { input_tokens: 1000, output_tokens: 200 }, ...c });
+    }
+    return onceki(url, istek);
+  };
+  return o;
+}
+const metinCevap = (text) => ({ stop_reason: "end_turn", content: [{ type: "text", text }] });
+const aracCevap = (name, input) => ({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name, input }] });
+
+test("Sami beyni: normal soru → Haiku araçla stok okur; araç sonucunda fiyat yok; fabrika kişisi beyni kullanamaz", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = beyinOrtami([aracCevap("stok_bilgisi", { kod: "3596" }), metinCevap("3596'dan 12 adet kaldı.")]);
+  await o.yaz("VOLONTE", [{ kod: "3596", adet: 12, fiyat: 77 }], ist(8));
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "3596'dan kaç tane kaldı?" } }, o.env);
+  assert.equal(o.claude[0].model, "claude-haiku-5-5");
+  const sonuc = o.claude[1].messages.at(-1).content[0].content;
+  assert.match(sonuc, /"toplam":12/);
+  assert.ok(!/77|fiyat/.test(sonuc)); // fiyat beyne hiç gitmez
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "3596'dan 12 adet kaldı.");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }]));
+  const n = o.claude.length;
+  await g2({ message: { chat: { id: 555, type: "private" }, from: { id: 555, first_name: "Nuri" }, text: "bugün ne sattık?" } }, o.env);
+  assert.equal(o.claude.length, n);
+});
+
+test("Sami beyni: Hemra serbest yazı ('siyahtan 5', 'bu sefer isteme') listeye işlenir, hepsi bitince onay kartı; düz liste eski yoldan", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = beyinOrtami([
+    aracCevap("eksik_listesine_isle", { kararlar: [{ kod: "3254", renkler: [{ renk: "siyah", adet: 5 }, { renk: "bej", adet: 3 }], isteme: false, onceki_gibi: false }], hepsini_onceki_gibi: false }),
+    metinCevap("3254: siyah 5, bej 3 işlendi. Kalan: 3297."),
+    aracCevap("eksik_listesine_isle", { kararlar: [{ kod: "3297", renkler: [], isteme: true, onceki_gibi: false }], hepsini_onceki_gibi: false }),
+    metinCevap("3297 bu sefer istenmeyecek. Liste tamam, onay kartı gönderildi."),
+  ]);
+  const gun = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  const kayit = { asama: "soruldu", zaman: Math.floor(Date.now() / 1000), modeller: [{ kod: "3254", satilan: 4, kalan: 2, grup: "fabrika" }, { kod: "3297", satilan: 1, kalan: 0, grup: "fabrika" }], secim: {}, mesajlar: {}, gonderilmedi: [] };
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${gun}`, v: JSON.stringify(kayit) }) });
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "3254 siyahtan 5, bejden 3" } }, o.env);
+  assert.equal(o.claude.length, 2); // düz liste değil → beyin
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "3297'yi bu sefer isteme" } }, o.env);
+  const kart = cagri(o.g, "sendMessage").find((x) => /Gidecek liste/.test(x.govde.text));
+  assert.match(kart.govde.text, /3254 — siyah 5, bej 3[\s\S]*⏭ Bu sefer istenmeyen: 3297/);
+  // düz liste: beyin çağrılmaz
+  const n = o.claude.length;
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "3254 siyah 6" } }, o.env);
+  assert.equal(o.claude.length, n);
+});
+
+test("Sami beyni: aylık 10 $ sınır — 8 $'da Murat'a uyarı, dolunca beyin durur (komutlar çalışır); Aziz araçla listeye işleyemez", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = beyinOrtami([metinCevap("Merhaba"), aracCevap("eksik_listesine_isle", { kararlar: [], hepsini_onceki_gibi: true }), metinCevap("Bunu Hemra yapabilir.")]);
+  o.env.EKIP_IDS = "333,444";
+  const ayK = `beyin:harcama:${new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7)}`;
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "7.9999" }) });
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "selam" } }, o.env);
+  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "111" && /%80/.test(x.govde.text)));
+  await g2({ message: { chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Aziz" }, text: "hepsini önceki gibi iste" } }, o.env);
+  assert.match(o.claude.at(-1).messages.at(-1).content[0].content, /sadece Hemra ve Murat/);
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "10" }) });
+  const n = o.claude.length;
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "bugün ne sattı?" } }, o.env);
+  assert.equal(o.claude.length, n);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /bütçesi \(10 \$\) doldu/);
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "/stok" } }, o.env);
+  assert.ok(cagri(o.g, "sendMessage").length > 0);
+});

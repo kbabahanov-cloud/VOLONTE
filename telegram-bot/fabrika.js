@@ -324,11 +324,69 @@ export async function eksikKomutu(env, m, tg, simdi) {
   if (String(m.from.id) !== sorumlu(env)) return yaz(`✅ Liste Hemra'ya gönderildi (${satislar.length} model).`);
 }
 
+// Kalıba uyan düz liste mi ("3183 siyah 10 bej 6, 3186 kırmızı 5")? Ekli renk (siyahtan), "isteme", "önceki gibi" vb. değil.
+export const duzListeMi = (metin) => !/[a-zçğıöşü](dan|den|tan|ten)\b/i.test(metin) && !/(isteme|önceki|onceki|hepsi|gibi|sefer|değil|degil|yerine|iptal|\byok\b|\bama\b|\bve\b)/i.test(metin);
+
+// ---------- Sami'nin beyni için (sami-beyin.js): sadece okuma + Hemra'nın listesine işleme ----------
+export async function acikListe(env, simdi) {
+  const gun = gunAnahtari(simdi);
+  const ana = await ayarOku(env, `fabrika:${gun}`, null);
+  if (!ana) return { gun, anahtar: null, d: null, ana: null };
+  let anahtar = null;
+  let d = null;
+  for (const k of [gun, ...(ana.ekler || [])]) {
+    const x = k === gun ? ana : await ayarOku(env, `fabrika:${k}`, null);
+    if (x && ["soruldu", "duzelt", "onayda"].includes(x.asama) && (!d || x.zaman >= d.zaman)) { anahtar = k; d = x; }
+  }
+  return { gun, anahtar, d, ana };
+}
+export async function listeDurumu(env, simdi) {
+  const { gun, anahtar, d, ana } = await acikListe(env, simdi);
+  if (!ana) return { gun, durum: "bugün liste yok (satış girilmedi ya da henüz 10 dk sabit kalmadı)" };
+  const x = d || ana;
+  const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
+  return {
+    gun, liste: anahtar || gun,
+    durum: { soruldu: "Hemra'ya gitti, renkler bekleniyor", duzelt: "Hemra düzeltiyor", onayda: "onay kartı Hemra'da", gonderildi: `onaylandı (${x.onaylayan || "Hemra"}), fabrikaya gönderildi`, bekliyor: "satış girişi sürüyor (10 dk sabit bekleniyor)" }[x.asama] || x.asama,
+    modeller: (x.modeller || []).map((m) => ({ kod: m.kod, satilan: m.satilan, stok: m.kalan, karar: x.secim && x.secim[m.kod] ? (x.secim[m.kod].isteme ? "istenmeyecek" : renkYazi(x.secim[m.kod].renkler)) : "bekliyor", onceki: sonIstek[m.kod] ? renkYazi(sonIstek[m.kod]) : null })),
+    ekler: ana.ekler || [],
+  };
+}
+// kararlar: [{ kod, renkler: [{renk, adet}], isteme, onceki_gibi }]; hepsiOnceki: karar bekleyen ve önceki kaydı olanların hepsi.
+export async function listeyeIsle(env, tg, simdi, kararlar, hepsiOnceki = false) {
+  const { anahtar, d } = await acikListe(env, simdi);
+  if (!d) return { hata: "Açık eksik listesi yok." };
+  d.secim = d.secim || {};
+  d.modeller = d.modeller || [];
+  const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
+  const uygula = {};
+  const sorun = [];
+  for (const k of kararlar || []) {
+    const kod = String(k.kod || "").trim();
+    if (!d.modeller.some((x) => x.kod === kod)) { sorun.push(`${kod}: bu listede yok`); continue; }
+    if (k.isteme) uygula[kod] = { isteme: true };
+    else if (k.onceki_gibi) { if (sonIstek[kod]) uygula[kod] = { renkler: sonIstek[kod] }; else sorun.push(`${kod}: önceki istek kaydı yok`); }
+    else {
+      const renkler = (k.renkler || []).map((r) => ({ renk: String(r.renk || "").toLocaleLowerCase("tr").trim(), adet: Math.round(Number(r.adet)) })).filter((r) => r.renk && r.adet > 0 && r.adet < 1000);
+      if (renkler.length) uygula[kod] = { renkler }; else sorun.push(`${kod}: renk/adet anlaşılamadı`);
+    }
+  }
+  if (hepsiOnceki) for (const x of d.modeller) {
+    if (d.secim[x.kod] || uygula[x.kod]) continue;
+    if (sonIstek[x.kod]) uygula[x.kod] = { renkler: sonIstek[x.kod] }; else sorun.push(`${x.kod}: önceki istek kaydı yok`);
+  }
+  if (Object.keys(uygula).length) await secimUygula(env, tg, anahtar, d, uygula, "beyin");
+  const kalan = d.modeller.filter((x) => !d.secim[x.kod]).map((x) => x.kod);
+  return { islenen: Object.entries(uygula).map(([k, x]) => `${k}: ${x.isteme ? "istenmeyecek" : renkYazi(x.renkler)}`), sorun, kalan, onayKartiGitti: !kalan.length };
+}
+
 // Hemra'nın yazısı (liste bekleniyorsa). true dönerse mesaj işlendi.
 export async function fabrikaCevabi(env, m, tg, simdi) {
   if (String(m.from.id) !== sorumlu(env)) return false;
   const metin = String(m.text || "").trim();
   if (!/^\d{4,6}\b/.test(metin)) return false;
+  // "3254 siyahtan 5", "bu sefer isteme", "önceki gibi" gibi serbest yazı beyne gider (Sami'nin beyni varsa).
+  if (env.ANTHROPIC_API_KEY && !duzListeMi(metin)) return false;
   const gun = gunAnahtari(simdi);
   const ana = await ayarOku(env, `fabrika:${gun}`, null);
   if (!ana) return false;
