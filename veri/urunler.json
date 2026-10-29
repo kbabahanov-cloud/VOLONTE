@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3475",
+  "baslik": "Lace Peplum Evening Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece black lace evening set pairing a high-neck peplum top with a slim, full-length skirt. The bodice carries beaded fringe at the neckline and shoulders, while the bell sleeves and asymmetric peplum are finished with embroidered floral scallops. Made for weddings, formal dinners and evening events. Produced in Istanbul with careful attention to finishing.",
+   "fr": "Ensemble de soirée deux pièces en dentelle noire, associant un haut péplum à col montant et une jupe longue près du corps. Le buste est orné de franges perlées à l'encolure et aux épaules, tandis que les manches évasées et le péplum asymétrique se terminent par des festons fleuris brodés. Idéal pour les mariages, dîners habillés et soirées. Confectionné à Istanbul avec un soin particulier.",
+   "pt": "Conjunto de festa em renda preta, com blusa peplum de gola alta e saia longa de corte justo. O corpete tem franjas bordadas com contas no decote e nos ombros, e as mangas sino e o peplum assimétrico terminam em recortes florais bordados. Pensado para casamentos, jantares formais e eventos noturnos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3475/1.jpg",
+   "galeri/3475/2.jpg",
+   "galeri/3475/3.jpg",
+   "galeri/3475/4.jpg",
+   "galeri/3475/5.jpg"
+  ],
+  "videolar": [
+   "selin/3475/0"
+  ],
+  "fiyat": 90,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3429",
   "baslik": "Floral Butterfly Sleeve Gown",
   "kategori": "evening",
