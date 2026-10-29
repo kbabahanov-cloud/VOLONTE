@@ -1315,6 +1315,8 @@ async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null 
     bedenler: u.bedenler || "",
     medya: medya || siteMedyasi(u),
     video: (u.videolar || []).length,
+    // Black Rose (VOLONTE Vegawin'de kartı yok): stok kontrol edilemez; sadece önizlemede not (kanala gitmez).
+    blackRose: Boolean(env.STOK) && Object.keys(baglam.stok).length > 0 && !baglam.stok[u.kod],
     tgSon: baglam.tarih.son[u.kod] || null,
   };
 }
@@ -1369,6 +1371,7 @@ export function kontrolMetni(p, simdi) {
     `Kumaş: ${p.kumas || "bilinmiyor → satır konmadı (biliyorsanız ✏️ Düzelt)"}`,
     `Telegram'da son paylaşım: ${p.tgSon ? `${tarihUzun(p.tgSon)} (${Math.floor((simdi - p.tgSon) / 86400)} gün önce)` : "hiç"}`,
     ...(p.video ? [`🎞 ${p.video} video var — videoda başka renk varsa ✏️ Düzelt`] : []),
+    ...(p.blackRose ? ["⚠️ Black Rose – stok kontrol edilemedi"] : []),
   ].join("\n");
 }
 
@@ -1410,7 +1413,7 @@ export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
     // Deneme: elle verilen kodlar (stoğu olmayan çıkar) ya da { otomatik: n } → kuralla seçilen n model (diğer gruplar ve "haric" dışında).
     const elle = gruplar.flatMap((g) => g.kodlar || []).map(String);
     const disari = [...elle, ...gruplar.flatMap((g) => g.haric || []).map(String)];
-    gruplar = gruplar.map((g) => ({ baslik: g.baslik, kodlar: g.otomatik ? sec(g.otomatik, disari) : (g.kodlar || []).map(String).filter((k) => !env.STOK || (stok[k] && stok[k].toplam > 0 && !stok[k].gizli)) }));
+    gruplar = gruplar.map((g) => ({ baslik: g.baslik, kodlar: g.otomatik ? sec(g.otomatik, disari) : (g.kodlar || []).map(String).filter((k) => !env.STOK || !stok[k] || (stok[k].toplam > 0 && !stok[k].gizli)) }));
   }
   const tur = { no: ((onceki && onceki.no) || 0) + 1, yeni: true, durum: "hazirlaniyor", basla: simdi, gun: gunAnahtari(simdi), onaylar: [], ogeler: {},
     gruplar: gruplar.map((g) => ({ baslik: g.baslik, kodlar: g.kodlar.filter((k) => site.some((u) => String(u.kod) === k)) })), karsilastirma: Boolean(gruplar[0] && gruplar[0].baslik) };

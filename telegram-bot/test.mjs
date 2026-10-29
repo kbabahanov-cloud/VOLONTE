@@ -1347,7 +1347,7 @@ test("yeni düzen alt yazısı: sıra, kalın CODE, fiyat yok, sadece EN/FR; ren
     "🔁 BACK IN STOCK / DE RETOUR",
     "<b>✅ CODE: 3596</b>",
     "🎨 Colors / Couleurs: orange-brown, pink-blue, multicolor",
-    "📏 Size: 44-46-48-50",
+    "📏 Size: 44-\u200B46-\u200B48-\u200B50",
     "📦 Series: 4 pcs / Série : 4 pièces",
     "🧵 Fabric / Tissu: chiffon",
     "🇬🇧 Elegant ruffled kimono set.",
@@ -1357,10 +1357,11 @@ test("yeni düzen alt yazısı: sıra, kalın CODE, fiyat yok, sadece EN/FR; ren
   const y = duzen.altYazi({ ...p, durum: "yeni", renkEmin: false, kumas: null, bedenler: "38-40-42-44-46-48-50" });
   assert.ok(!/Colors|Fabric|\$|🇹🇷|🇵🇹|price|prix/i.test(y));
   assert.match(y, /^🆕 NEW \/ NOUVEAU\n/);
-  assert.match(y, /📏 Size: 38-40-42-44 \/ 44-46-48-50\n📦 Series: 4 pcs/);
+  assert.match(y, /📏 Size: 38-\u200B40-\u200B42-\u200B44 \/ 44-\u200B46-\u200B48-\u200B50\n📦 Series: 4 pcs/);
+  assert.ok(!/\d{2}-\d/.test(y)); // telefon numarası sanılmasın
   const d = duzen.dugmeler().inline_keyboard.flat();
   assert.deepEqual(d.map((x) => x.url), ["https://wa.me/905362390091", "https://wa.me/905363448488", "https://kbabahanov-cloud.github.io/VOLONTE/"]);
-  assert.deepEqual(d.map((x) => x.text), ["📞 Order / Commande", "📞 Info", "🌐 All models / Tous les modèles"]);
+  assert.deepEqual(d.map((x) => x.text), ["🛒 Order", "📞 Info", "🌐 All models / Tous les modèles"]);
 });
 
 test("durum etiketi: stoğa döndü > yeni > son seriler > çok satan > mevcut; seçim: stokta + sitede + 14 gün, en eski önce", () => {
@@ -1440,7 +1441,7 @@ test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modelle
   assert.ok(o.claude[0].messages[0].content.some((c) => c.type === "image" && c.source.url === "https://kbabahanov-cloud.github.io/VOLONTE/galeri/3403/1.jpg"));
   for (const kisi of ["111", "333"]) assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => String(m.govde.chat_id) === kisi).length, 2);
   const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "111" && m.govde.media[0].caption.includes("3403"));
-  assert.equal(album.govde.media[0].caption, "✅ AVAILABLE / DISPONIBLE\n<b>✅ CODE: 3403</b>\n🎨 Colors / Couleurs: black-gold floral\n📏 Size: 38-40-42-44\n📦 Series: 4 pcs / Série : 4 pièces\n🇬🇧 Model 3403 line.\n🇫🇷 Ligne 3403.\nVOLONTE – Premium Women's Fashion");
+  assert.equal(album.govde.media[0].caption, "✅ AVAILABLE / DISPONIBLE\n<b>✅ CODE: 3403</b>\n🎨 Colors / Couleurs: black-gold floral\n📏 Size: 38-\u200B40-\u200B42-\u200B44\n📦 Series: 4 pcs / Série : 4 pièces\n🇬🇧 Model 3403 line.\n🇫🇷 Ligne 3403.\nVOLONTE – Premium Women's Fashion");
   assert.equal(album.govde.media[0].parse_mode, "HTML");
   assert.ok(!/\$|Wholesale|price|prix|fiyat/i.test(JSON.stringify(o.gonderilen))); // fiyat hiçbir yerde
   const not = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "111" && /👆/.test(m.govde.text));
@@ -1465,7 +1466,7 @@ test("✅ Paylaş sıraya alır, renk emin değilse önce ✏️ Düzelt; düzel
   await guncellemeIsle({ message: { message_id: 9, date: 1, chat: ozel(333), from: { id: 333, first_name: "Hemra" }, text: "renk: champagne, black\nkumaş: satin" } }, o.env);
   const yeni = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.media[0].caption.includes("3520"));
   assert.equal(yeni.length, 2); // ikisine yeni önizleme
-  assert.match(yeni[0].govde.media[0].caption, /🎨 Colors \/ Couleurs: champagne, black\n📏 Size: 44-46-48-50\n📦 Series: 4 pcs \/ Série : 4 pièces\n🧵 Fabric \/ Tissu: satin/);
+  assert.match(yeni[0].govde.media[0].caption, /🎨 Colors \/ Couleurs: champagne, black\n📏 Size: 44-\u200B46-\u200B48-\u200B50\n📦 Series: 4 pcs \/ Série : 4 pièces\n🧵 Fabric \/ Tissu: satin/);
   assert.ok(cagrilar(o.gonderilen, "editMessageText").some((m) => /Hemra düzeltti/.test(m.govde.text)));
   // Düzeltmeden sonra paylaş
   const yeniDugme = kontrolDugme(o.gonderilen, "111", "3520", "y1");
@@ -1569,4 +1570,15 @@ test("repete paylaşımı: önizlemede fiyat yok; onayla 🔁 BACK IN STOCK yeni
   await bas(o.env, 111, "kr:o:r1");
   const kanal = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === -100);
   assert.match(kanal.govde.media[0].caption, /^🔁 BACK IN STOCK \/ DE RETOUR\n<b>✅ CODE: 3403<\/b>\n🎨 Colors \/ Couleurs: black, beige\n/);
+});
+
+test("Black Rose (VOLONTE Vegawin'de kartı yok): stok şartı yok, sitede olması yeter; önizlemede not, kanal yazısında yok", async () => {
+  const simdi = ist(9);
+  const site = [{ kod: "BR1", fotolar: ["x"] }, { kod: "V1", fotolar: ["x"] }];
+  assert.deepEqual(duzen.gununModelleri({ site, stok: { V1: { toplam: 0 } }, tg: {}, simdi }).map((u) => u.kod), ["BR1"]);
+  assert.deepEqual(duzen.gununModelleri({ site, stok: {}, tg: {}, simdi }), []); // stok okunamadıysa kimse "Black Rose" sayılmaz
+  const { kontrolMetni } = await import("./worker.js");
+  const p = { kod: "BR1", durum: "yeni", renkler: ["black"], renkEmin: true, bedenler: "38-40-42-44", en: "a", fr: "b", blackRose: true };
+  assert.match(kontrolMetni(p, simdi), /⚠️ Black Rose – stok kontrol edilemedi/);
+  assert.ok(!/Black Rose/i.test(duzen.altYazi(p)));
 });

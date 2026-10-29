@@ -46,6 +46,10 @@ export function seriBilgisi(bedenler) {
   return { beden: sayilar.join("-"), adet: sayilar.length };
 }
 
+// "38-40-42-44" Telegram'da telefon numarası sanılıp mavi link oluyor: her "-" sonrasına görünmez boşluk (U+200B)
+// konur, rakam dizisi bölünür; görünüş aynı kalır.
+export const linksiz = (beden) => String(beden).replace(/-(?=\d)/g, "-\u200B");
+
 const html = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 // Alt yazı (Telegram HTML). Renk emin değilse (onaylanmamışsa) renk satırı konmaz; kumaş bilinmiyorsa satır yok.
@@ -53,7 +57,7 @@ export function altYazi(p) {
   const seri = seriBilgisi(p.bedenler);
   const satirlar = [DURUMLAR[p.durum] || DURUMLAR.hazir, `<b>✅ CODE: ${html(p.kod)}</b>`];
   if (p.renkler && p.renkler.length && p.renkEmin) satirlar.push(`🎨 Colors / Couleurs: ${html(p.renkler.join(", "))}`);
-  if (seri) satirlar.push(`📏 Size: ${seri.beden}`, `📦 Series: ${seri.adet} pcs / Série : ${seri.adet} pièces`);
+  if (seri) satirlar.push(`📏 Size: ${linksiz(seri.beden)}`, `📦 Series: ${seri.adet} pcs / Série : ${seri.adet} pièces`);
   if (p.kumas) satirlar.push(`🧵 Fabric / Tissu: ${html(p.kumas)}`);
   if (p.en) satirlar.push(`🇬🇧 ${html(p.en)}`);
   if (p.fr) satirlar.push(`🇫🇷 ${html(p.fr)}`);
@@ -64,7 +68,8 @@ export function altYazi(p) {
 // Tıklanabilir düğmeler (kanal paylaşımının altında).
 export function dugmeler() {
   return { inline_keyboard: [
-    [{ text: "📞 Order / Commande", url: SIPARIS_WA }, { text: "📞 Info", url: BILGI_WA }],
+    // "Order / Commande" yan yana iki düğmede telefonda kesiliyordu → kısa ad (kullanıcı kararı 29 Ekim).
+    [{ text: "🛒 Order", url: SIPARIS_WA }, { text: "📞 Info", url: BILGI_WA }],
     [{ text: "🌐 All models / Tous les modèles", url: SITE }],
   ] };
 }
@@ -93,10 +98,12 @@ export function durumSec({ kod, ilkPaylasim, toplam, bedenler, geldiZaman, satis
 // Günün modelleri: stokta + sitede + en az 14 gündür paylaşılmamış; en uzun süredir paylaşılmayan önce.
 // site: urunler.json; stok: { kod: { toplam, gizli } }; tg: { kod: son paylaşım }; haric: kodlar (sırada/atlanan).
 export function gununModelleri({ site, stok, tg, haric = [], simdi, adet = 10 }) {
+  const blackRoseSay = Object.keys(stok).length > 0; // stok okunamadıysa (boş) hiçbir model "Black Rose" sayılmaz
   const disari = new Set(haric.map(String));
   return site
     .filter((u) => !u.gizli && (u.fotolar || []).length)
-    .filter((u) => stok[u.kod] && stok[u.kod].toplam > 0 && !stok[u.kod].gizli)
+    // Vegawin'de (VOLONTE) kartı olmayan model = Black Rose: köprüsü yok, stok şartı aranmaz (sitede olması yeter).
+    .filter((u) => (stok[u.kod] ? stok[u.kod].toplam > 0 && !stok[u.kod].gizli : blackRoseSay))
     .filter((u) => !(tg[u.kod] > simdi - PAYLASIM_ARASI_GUN * 86400))
     .filter((u) => !disari.has(String(u.kod)))
     .sort((a, b) => (tg[a.kod] || 0) - (tg[b.kod] || 0) || String(a.kod).localeCompare(String(b.kod), "tr", { numeric: true }))
@@ -191,7 +198,8 @@ Site description: ${(u.aciklama && u.aciklama.en) || "none"}
 2) renk_emin: true only if you are certain about every colour (lighting, filters or very similar shades make you unsure → false). Do not guess.
 3) renk_notu: in Turkish, one short sentence: what you are unsure about (empty if certain).${videoSayisi ? ` Note: this model also has ${videoSayisi} video(s) you cannot see; mention in Turkish that the video may show other colours.` : ""}
 4) en: ONE short English line (max 60 characters) describing the model, elegant and modern, ending with a full stop. No price, size, code, fabric, emoji or phone.
-5) fr: the same line in natural French (max 70 characters).`,
+5) fr: the same line in natural French (max 70 characters).
+Never mention any brand or collection name (e.g. text printed on the photos) in en/fr.`,
         },
       ],
     }],

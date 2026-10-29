@@ -272,6 +272,13 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   Eski alt yazı önerisi (TR/EN/FR/PT + fiyat) KAPALI (ALTYAZI_ACIK). /paylas yeni düzende. Repete paylaşımı yeni düzende 🔁, önizlemede fiyat yok.
   Deneme (29 Ekim 18:00): (a) 3558, 3520, 3429, 3475, 3481 · (b) kuralla 5 (3403 hariç: bilgi kartında "BLACK ROSE COLLECTION" yazıyor → kullanıcıya soruldu).
 
+- 29 Ekim akşam kullanıcı kararları (yüklendi, 125 test): biçim B (albüm + "👆 CODE" mesajı). Düğme "🛒 Order" (yan yana kesiliyordu) + "📞 Info".
+  Size satırı telefon linki olmasın: her "-" sonrasına görünmez U+200B. BLACK ROSE HARİÇ TUTULMAZ: VOLONTE ve Black Rose her yerde (Telegram, site,
+  WhatsApp, Instagram) tek mağaza gibi; müşteriye ayrım görünmez (yapay zekâ yazısında marka/koleksiyon adı yazılmaz). Stok/satış Vegawin'de ayrı.
+  Black Rose köprüsü yokken: VOLONTE Vegawin'de kartı olmayan site modeli = Black Rose → stok şartı yok, önizlemede "⚠️ Black Rose – stok kontrol
+  edilemedi" (kanala gitmez). Önceki "Black Rose modellerine dokunma" kuralının yerine bu geçerli.
+  SIRADAKİ İŞ: Black Rose köprüsü (KOPRU_BLACKROSE).
+
 **Sıradaki komut: Komut 4d (Volonte CRM'e WhatsApp ekleme, test numarası).**
 
 ## Kapsam kararı (24 Eylül 2026)
