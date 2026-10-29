@@ -32,6 +32,8 @@ const TABLOLAR = [
   // 5 milyon okunan satır sınırı; dizinsiz her kod sorgusu ~500 satır okuyordu). Kayıtlara dokunmaz.
   // Günlük satış (fabrika eksik listesi için): köprü belge tipi 21 satış faturalarından model başına toplamı gönderir.
   `CREATE TABLE IF NOT EXISTS satis (magaza TEXT NOT NULL, gun TEXT NOT NULL, kod TEXT NOT NULL, adet REAL, PRIMARY KEY (magaza, gun, kod))`,
+  // Telegram'da son paylaşım tarihi (29 Ekim): Kemal paylaşınca yazar; stok tablosunda sütun olarak görünür.
+  `CREATE TABLE IF NOT EXISTS tg (kod TEXT PRIMARY KEY, son INTEGER)`,
   `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
   `CREATE INDEX IF NOT EXISTS olay_zaman ON olay (zaman)`,
   `CREATE INDEX IF NOT EXISTS paylasim_zaman ON paylasim (zaman)`,
@@ -211,6 +213,25 @@ export class StokDeposu {
     return { ok: true };
   }
 
+  // Telegram son paylaşım: { kod: unix } — sadece daha yeni tarih yazılır.
+  tgYaz(kayitlar) {
+    for (const [ham, t] of Object.entries(kayitlar || {}).slice(0, 3000)) {
+      const kod = stokKodu(ham);
+      if (!kod || !(Number(t) > 0)) continue;
+      this.sql.exec("INSERT INTO tg (kod, son) VALUES (?, ?) ON CONFLICT (kod) DO UPDATE SET son = MAX(tg.son, excluded.son)", kod, Math.floor(Number(t)));
+    }
+    return { ok: true };
+  }
+  tgHepsi() { return Object.fromEntries(this.hepsi("SELECT kod, son FROM tg").map((r) => [r.kod, r.son])); }
+  // Dönem satışı (çok satan etiketi için): kod → adet, gün aralığı dahil.
+  satisDonem(basla, bitis) {
+    return Object.fromEntries(this.hepsi("SELECT kod, SUM(adet) AS a FROM satis WHERE gun >= ? AND gun <= ? GROUP BY kod", basla, bitis).map((r) => [r.kod, r.a]));
+  }
+  // Stoğun 0'dan geri geldiği son zaman (🔁 etiketi için).
+  geldiler(basla) {
+    return Object.fromEntries(this.hepsi("SELECT kod, MAX(zaman) AS z FROM olay WHERE tur = 'geldi' AND zaman >= ? GROUP BY kod", basla).map((r) => [r.kod, r.z]));
+  }
+
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
 
@@ -253,6 +274,10 @@ export class StokDO {
     if (yol === "/satis-yaz") return cevap(d.satisYaz(g.magaza, g.gun, g.kalemler || []));
     if (yol === "/satislar") return cevap(d.satislar(g.gun));
     if (yol === "/tedarikci") return cevap(Object.fromEntries((g.kodlar || []).slice(0, 200).map((k) => [k, d.tedarikci(k)])));
+    if (yol === "/tg-yaz") return cevap(d.tgYaz(g.kayitlar));
+    if (yol === "/tg-hepsi") return cevap(d.tgHepsi());
+    if (yol === "/satis-donem") return cevap(d.satisDonem(g.basla, g.bitis));
+    if (yol === "/geldiler") return cevap(d.geldiler(g.basla || 0));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));

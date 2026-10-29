@@ -109,9 +109,9 @@ export async function gocBirKez(state, kv, kurallar, isim) {
 // kanal, arsiv, kodlar, kodsuz, tarifler, hicgelmeyecek, atlananlar, sonpaylasim, harcama:*, kare:*,
 // ve hata/durum kayıtları (katalogHata, altyaziHata, tarifhata, katalogHazir, durum:webhook).
 export const KEMAL_YEREL = {
-  anahtarlar: ["tur", "sonraki", "kopya", "ozet", "istekler", "marka", "altyaziSira", "altyaziNo"],
+  anahtarlar: ["tur", "sonraki", "kopya", "ozet", "istekler", "marka", "altyaziSira", "altyaziNo", "bicim"],
   onekler: ["kuyruk:", "sayac:", "gun:", "gunsonu:", "rapor:", "hatirlatma:", "onay:", "oneri:", "iletim:", "silinecek:",
-    "altyazi:", "katalog:", "ai:", "sohbet:", "m:", "mf:", "mtoplam:", "mftoplam:", "mhaber:", "msohbet:", "bekleyen:"],
+    "altyazi:", "katalog:", "ai:", "sohbet:", "m:", "mf:", "mtoplam:", "mftoplam:", "mhaber:", "msohbet:", "bekleyen:", "duzelt:"],
 };
 
 // Selin'in kayıtları; hata/durum kayıtları izlenebilsin diye KV'de kalır.

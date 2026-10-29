@@ -263,16 +263,18 @@ async function sabahRaporu(env, simdi) {
 // ---------- Google Sheets (kullanıcı kararı, 28 Ekim) ----------
 // Stok tablosu: Sami'nin deposunun (StokDO) birebir aynası; 5 dakikada bir, değişiklik varsa (en geç saatte bir) yazılır.
 // Botlar stoğu yine Sami'nin deposundan okur (hızlı, sınırsız); tablo aynı veriden yazıldığı için bire bir aynıdır.
-// Sadece: model kodu, adet, satış fiyatı, sitede, Telegram'da. Alış fiyatı / maliyet / kâr / koddaki ek (B20) YOK —
+// Sadece: model kodu, adet, satış fiyatı, sitede, Telegram'da, Telegram'da son paylaşım tarihi. Alış fiyatı / maliyet / kâr / koddaki ek (B20) YOK —
 // köprü bunları zaten okumaz. Harcama tablosu ayrıdır (yalnız kullanıcı görür; paylaşımı kullanıcı Google'da yapar).
 const ayGoster = (ay) => ay.split("-").reverse().join(".");
 const zamanYaz = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)} ${d.slice(11, 16)}`; };
 
-export function stokTablosuSatirlari(tum, site, kodlar) {
+const gunYaz = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`; };
+// tg: Telegram son paylaşım tarihleri (Sami'nin deposu, Kemal yazar) — Kemal günlük modelleri buna göre seçer.
+export function stokTablosuSatirlari(tum, site, kodlar, tg = {}) {
   const sitede = new Set(site.filter((u) => !u.gizli).map((u) => String(u.kod)));
   return Object.entries(tum)
     .sort(([ka, a], [kb, b]) => (b.toplam > 0) - (a.toplam > 0) || ka.localeCompare(kb, "tr", { numeric: true }))
-    .map(([kod, x]) => [kod, Math.max(0, Number(x.toplam) || 0), x.fiyat != null ? Number(x.fiyat) : "", sitede.has(kod) ? "Var" : "Yok", kodlar[kod] ? "Var" : "Yok"]);
+    .map(([kod, x]) => [kod, Math.max(0, Number(x.toplam) || 0), x.fiyat != null ? Number(x.fiyat) : "", sitede.has(kod) ? "Var" : "Yok", kodlar[kod] || tg[kod] ? "Var" : "Yok", tg[kod] ? gunYaz(tg[kod]) : ""]);
 }
 
 async function tabloKimlik(env, tur) {
@@ -323,15 +325,15 @@ async function stokTablosuYaz(env, simdi) {
   if (!hizmetHesabi(env)) return;
   const id = await tabloKimlik(env, "stok");
   if (!id) return;
-  const satirlar = stokTablosuSatirlari(await stokIste(env, "/tum"), await siteUrunleri(env), (await env.KAYIT.get("kodlar", "json")) || {});
+  const satirlar = stokTablosuSatirlari(await stokIste(env, "/tum"), await siteUrunleri(env), (await env.KAYIT.get("kodlar", "json")) || {}, await stokIste(env, "/tg-hepsi").catch(() => ({})));
   const iz = await sha(JSON.stringify(satirlar));
   const onceki = JSON.parse((await stokIste(env, "/ayar-oku", { k: "tablo:stok" })).v || "{}");
   if (onceki.id === id && onceki.iz === iz && simdi - onceki.zaman < 3600) return false;
   if (onceki.id !== id) await sayfaHazirla(env, id, "Stok", 2);
   const stokta = satirlar.filter((r) => r[1] > 0).length;
   await sayfayaYaz(env, id, "Stok", [
-    [`VOLONTE stok — son güncelleme ${zamanYaz(simdi)} · Sayım Sami (Vegawin'den, sadece okuma) · stokta ${stokta} model`, "", "", "", ""],
-    ["Model kodu", "Adet", "Satış fiyatı ($)", "Sitede", "Telegram'da"],
+    [`VOLONTE stok — son güncelleme ${zamanYaz(simdi)} · Sayım Sami (Vegawin'den, sadece okuma) · stokta ${stokta} model`, "", "", "", "", ""],
+    ["Model kodu", "Adet", "Satış fiyatı ($)", "Sitede", "Telegram'da", "Telegram'da son paylaşım"],
     ...satirlar,
   ]);
   await stokIste(env, "/ayar-yaz", { k: "tablo:stok", v: JSON.stringify({ id, iz, zaman: simdi }) });

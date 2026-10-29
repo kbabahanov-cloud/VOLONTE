@@ -258,6 +258,20 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 - 20 Ekim: Volonte portföyü Güvenlik Merkezi'nde **"Doğrulamayı başlat" düğmesi yok** (kullanıcı ekran fotoğrafıyla bildirdi).
 - [ ] Komut 4d: Volonte CRM (884729331246890) → WhatsApp ürünü / kullanım durumu ekle → portföy "Volonte" seç → Meta test numarası. Asıl numara EKLENMEZ, kart girilmez. Sonra Güvenlik Merkezi'ne dönülür.
 
+- 29 Ekim KEMAL YENİ KANAL DÜZENİ (kullanıcı kararı; yüklendi, 124 test): telegram-bot/duzen.js.
+  Alt yazı sırası: durum etiketi (🆕 NEW / 🔁 BACK IN STOCK / 🔥 BEST SELLER / ⚡ LAST SERIES; hiçbiri değilse ✅ AVAILABLE / DISPONIBLE),
+  <b>✅ CODE</b>, 🎨 renkler (sadece onaylıysa), 📏 beden, 📦 seri (Küçük/Büyük 4'lü), 🧵 kumaş (sadece biliniyorsa), 🇬🇧 + 🇫🇷 tek satır, imza.
+  FİYAT ASLA YOK; TR/PT yok. Düğmeler: Order wa.me/905362390091, Info wa.me/905363448488, All models (site). Biçim: A tek medya+düğme / B albüm + "👆 CODE" mesajı
+  (KV/DO "bicim", varsayılan B; denemede kullanıcı seçer). Medya siteden (galeri + Selin /v2 videoları); eski kanal yazısı kullanılmaz.
+  Etiket önceliği: stoğa döndü (14 gün) > yeni (ilk paylaşım yok/21 gün) > son seriler (stok ≤ 2 seri) > çok satan (14 günde ≥12 adet, ilk 10) > mevcut.
+  Renkler + EN/FR: Claude (Opus 5.5) site fotoğraflarından bir kez (KV yazi:<kod>); emin değilse renk satırı yok ve ✅ Paylaş kilitli → ✏️ Düzelt.
+  Seçim: Sami'nin stoğu (stokta) + sitede + ≥14 gün paylaşılmamış, en eski önce, günde 10. Telegram son paylaşım: StokDO "tg" tablosu (kanal kayıtlarından
+  dolduruldu; her kanal paylaşımında yazılır) → Google stok tablosunda "Telegram'da son paylaşım" sütunu.
+  Önizleme Murat + Hemra: ✅ Paylaş (sıraya) / ✏️ Düzelt ("renk: …", "kumaş: …", "durum: …", "en: …", "fr: …") / ❌ Geç (7 gün). Onaylananlar 08–20, 50–60 dk;
+  akşam onaylanan ertesi güne kalır, paylaşırken stok yeniden kontrol edilir. Eski düzen tur kodu ESKI_TUR=1 ile (sadece test).
+  Eski alt yazı önerisi (TR/EN/FR/PT + fiyat) KAPALI (ALTYAZI_ACIK). /paylas yeni düzende. Repete paylaşımı yeni düzende 🔁, önizlemede fiyat yok.
+  Deneme (29 Ekim 18:00): (a) 3558, 3520, 3429, 3475, 3481 · (b) kuralla 5 (3403 hariç: bilgi kartında "BLACK ROSE COLLECTION" yazıyor → kullanıcıya soruldu).
+
 **Sıradaki komut: Komut 4d (Volonte CRM'e WhatsApp ekleme, test numarası).**
 
 ## Kapsam kararı (24 Eylül 2026)

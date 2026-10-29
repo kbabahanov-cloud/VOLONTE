@@ -148,14 +148,15 @@ test("aylık harcama raporu: ayın 1'inde geçen ayın Claude + üretim harcamas
   assert.match(g[0].text, /10\.2026 aylık harcama raporu[\s\S]*Claude[^\n]*12\.50 \$[\s\S]*fal\.ai[^\n]*5\.60 \$[\s\S]*Toplam: 18\.10 \$/);
 });
 
-test("stok tablosu satırları: sadece kod, adet, satış fiyatı, sitede, Telegram'da; stoktakiler önce; alış/maliyet yok", async () => {
+test("stok tablosu satırları: sadece kod, adet, satış fiyatı, sitede, Telegram'da, son paylaşım tarihi; stoktakiler önce; alış/maliyet yok", async () => {
   const { stokTablosuSatirlari } = await import("./sami.js");
   const satir = stokTablosuSatirlari(
     { "3100": { toplam: 0, fiyat: 30, gizli: true }, "3194": { toplam: 3, fiyat: 70 }, "3010": { toplam: 5, fiyat: null } },
     [{ kod: "3194", fiyat: 70 }, { kod: "3100", gizli: true }],
     { "3194": [{}], "3100": [{}] },
+    { "3194": Date.UTC(2026, 9, 20, 9) / 1000 },
   );
-  assert.deepEqual(satir, [["3010", 5, "", "Yok", "Yok"], ["3194", 3, 70, "Var", "Var"], ["3100", 0, 30, "Yok", "Var"]]);
+  assert.deepEqual(satir, [["3010", 5, "", "Yok", "Yok", ""], ["3194", 3, 70, "Var", "Var", "20.10.2026"], ["3100", 0, 30, "Yok", "Var", ""]]);
 });
 
 test("Google tablosu: anahtar ve tablo bağlıyken Sami stoğu yazar; değişiklik yoksa tekrar yazmaz; /tablo sadece yöneticide", async () => {
@@ -183,7 +184,7 @@ test("Google tablosu: anahtar ve tablo bağlıyken Sami stoğu yazar; değişikl
   assert.equal(o.depo.get("sami:tablo:stok"), "AAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   await stokTablosu(o.env, ist(10));
   const yazim = google.find((x) => x.u.includes("valueInputOption=RAW"));
-  assert.deepEqual(yazim.govde.values.slice(1), [["Model kodu", "Adet", "Satış fiyatı ($)", "Sitede", "Telegram'da"], ["3194", 3, 69, "Var", "Var"]]);
+  assert.deepEqual(yazim.govde.values.slice(1), [["Model kodu", "Adet", "Satış fiyatı ($)", "Sitede", "Telegram'da", "Telegram'da son paylaşım"], ["3194", 3, 69, "Var", "Var", ""]]);
   const sayi = google.length;
   await stokTablosu(o.env, ist(10, 5));
   assert.equal(google.length, sayi); // değişiklik yok → yazılmaz
