@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3183",
+  "baslik": "Shawl Collar Check Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a tailored blazer with straight-leg trousers in a soft gray check. The blazer features a black shawl collar, a double-button front and black contrast pocket flaps. Ideal for the office, business meetings and formal occasions, styled with heels or flats. Made in Istanbul with careful attention to fit and finish.",
+   "fr": "Un ensemble deux pièces composé d'un blazer ajusté et d'un pantalon droit, dans un carreau gris doux. Le blazer se distingue par son col châle noir, sa fermeture à deux boutons et ses rabats de poches noirs contrastés. Idéal pour le bureau, les rendez-vous professionnels et les occasions formelles, avec talons ou ballerines. Fabriqué à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de duas peças com blazer ajustado e calça de perna reta, num xadrez cinza suave. O blazer destaca-se pela gola xale preta, fecho de dois botões e lapelas de bolso pretas em contraste. Ideal para o escritório, reuniões de negócios e ocasiões formais, com salto ou rasteira. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3183/1.jpg",
+   "galeri/3183/2.jpg",
+   "galeri/3183/3.jpg",
+   "galeri/3183/4.jpg"
+  ],
+  "videolar": [
+   "selin/3183/0"
+  ],
+  "fiyat": 40,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3563",
   "baslik": "Floral Hem Abaya Set",
   "kategori": "dresses",
