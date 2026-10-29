@@ -329,6 +329,12 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   8 $'da Murat'a uyarı, dolunca beyin durur. Geçmiş StokDO beyin:sohbet:<id> (6 saat, son 8). ⏳ ANTHROPIC_API_KEY volonte-sami'ye girilecek; girilince
   KV sami:beyinDeneme'deki 3 soru otomatik denenir, cevaplar Murat'a + sami:beyinDenemeSonuc.
 
+- 29 Ekim 19:51 BEDEN SEÇİMİ (yüklendi, 139 test): Hemra'nın her model mesajında [Küçük 38-44] [Büyük 44-50] [İkisi de] (fe:k|b|i). Yazıyla "3254 küçük siyah 10 bej 6",
+  "3254 büyük siyah 5" (listeCozBeden); bedensiz yazılan renk bedeni bekler. İkisi de → küçük ve büyük ayrı sorulur. Beden seçilmeden model karta geçmez ("beden seçilmedi").
+  Seçim: { beden k|b|i, gruplar {k,b}, bekleyen } | { isteme }. Renk hafızası bedenle (sonIstek {beden, gruplar}; "Son istenen: Küçük · siyah 10, bej 6").
+  Fabrikaya/Celal'e: "3254 · Küçük (38-44) · siyah 10 · bej 6" (İkisi de → iki ayrı mesaj/sipariş). Beyin aracı beden alanıyla. Bugünkü listeye bir kerelik
+  (fabrika:bedenEkle) 12 modele beden düğmeli mesaj gitti; 3607 Hemra'nın "isteme" kararıyla atlandı; 3628'in yazılanı korundu (bedeni bekliyor).
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
