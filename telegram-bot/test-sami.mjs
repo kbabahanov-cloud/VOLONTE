@@ -242,3 +242,71 @@ test("köprü raporu: son değişiklik ve son çalışma ayrı; eski köprüde (
   assert.match(r.metin, /16 saattir sinyal yok/);
   assert.equal(r.sorunlar.length, 1);
 });
+
+test("fabrika: liste çözümleme (kod 4-6 hane, adet 1-3 hane, birden çok renk)", async () => {
+  const { listeCoz, listeYaz } = await import("./fabrika.js");
+  const l = listeCoz("3183 siyah 10 bej 6, 3186 kırmızı 5\n3520 açık mavi 12 Lacivert 3");
+  assert.deepEqual(l, [
+    { kod: "3183", renkler: [{ renk: "siyah", adet: 10 }, { renk: "bej", adet: 6 }] },
+    { kod: "3186", renkler: [{ renk: "kırmızı", adet: 5 }] },
+    { kod: "3520", renkler: [{ renk: "açık mavi", adet: 12 }, { renk: "lacivert", adet: 3 }] },
+  ]);
+  assert.equal(listeYaz(l.slice(0, 1)), "3183 — siyah 10, bej 6");
+  assert.deepEqual(listeCoz("merhaba"), []);
+});
+
+test("fabrika: 20:05 Hemra'ya satılanlar (renk hafızasıyla); onayla fabrikaya SADECE kod/renk/adet, Murat'a kopya; fabrika kişisi Murat onayıyla eklenir; 21:00 hatırlatma, 22:00 Murat'a haber", async () => {
+  const { fabrikaAdimi } = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  await o.yaz("VOLONTE", [{ kod: "3183", adet: 4, fiyat: 40 }, { kod: "3186", adet: 0, fiyat: 30 }], ist(8));
+  const gun = "2026-10-28";
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun, kalemler: [{ kod: "3183", adet: 8 }, { kod: "3186", adet: 2 }] }) });
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 9 } }; };
+  await fabrikaAdimi(o.env, ist(20, 10), tg);
+  assert.equal(g.length, 0); // satış okuması henüz açılmadı
+  o.depo.set("sami:satisAcik", "1");
+  await fabrikaAdimi(o.env, ist(19, 50), tg); // saat gelmedi
+  assert.equal(g.length, 0);
+  // fabrika kişisi /start → Murat'a sorulur, Murat ekler
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 555, type: "private" }, from: { id: 555, first_name: "Nuri" }, text: "/start" } }, o.env);
+  const soru = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111");
+  assert.match(soru.govde.text, /Nuri Sami'ye \/start yazdı/);
+  await g2({ callback_query: { id: "c", from: { id: 333 }, data: "fa:e:555", message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
+  assert.ok(!o.depo.has("sami:fabrikaKisiler")); // Hemra ekleyemez
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: "fa:e:555", message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.deepEqual(JSON.parse(o.depo.get("sami:fabrikaKisiler")).map((k) => k.ad), ["Nuri"]);
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 555, type: "private" }, from: { id: 555 }, text: "/stok" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /sadece VOLONTE fabrika eksik listesini/);
+  // 20:05 liste Hemra'ya
+  await fabrikaAdimi(o.env, ist(20, 5), tg);
+  assert.equal(g[0].govde.chat_id, "333");
+  assert.match(g[0].govde.text, /3183 · satılan 8 · stokta 4\n3186 · satılan 2 · stokta 0[\s\S]*Renkleriyle yazın/);
+  // Hemra yazar → onay kartı
+  o.g.length = 0;
+  Date.now = ((gercek) => { const f = () => ist(20, 20) * 1000; f.gercek = gercek; return f; })(Date.now);
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "3183 siyah 10 bej 6" } }, o.env);
+  const kart = cagri(o.g, "sendMessage")[0];
+  assert.match(kart.govde.text, /3183 — siyah 10, bej 6[\s\S]*Fabrikaya gönderilsin mi\?/);
+  assert.equal(kart.govde.reply_markup.inline_keyboard[0][0].callback_data, `fb:o:${gun}`);
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `fb:o:${gun}`, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
+  const nuri = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === 555);
+  assert.equal(nuri.govde.text, `🏭 VOLONTE eksik listesi — 28.10.2026\n\n3183 — siyah 10, bej 6`); // fiyat/satış yok
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111").govde.text, /onaylayan: Hemra[\s\S]*3183 — siyah 10, bej 6/);
+  // ertesi gün renk hafızası
+  g.length = 0;
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun: "2026-10-29", kalemler: [{ kod: "3183", adet: 1 }] }) });
+  await fabrikaAdimi(o.env, ist(20, 5, 1), tg);
+  assert.match(g[0].govde.text, /Daha önce yazdığınız renkler:\n3183: siyah, bej\?/);
+  await fabrikaAdimi(o.env, ist(21, 0, 1), tg);
+  assert.match(g.at(-1).govde.text, /Hatırlatma/);
+  await fabrikaAdimi(o.env, ist(22, 0, 1), tg);
+  assert.equal(g.at(-1).govde.chat_id, "111");
+  assert.match(g.at(-1).govde.text, /Hemra onaylamadı/);
+  Date.now = Date.now.gercek;
+});

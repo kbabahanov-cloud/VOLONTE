@@ -30,6 +30,8 @@ const TABLOLAR = [
   `CREATE TABLE IF NOT EXISTS ayar (k TEXT PRIMARY KEY, v TEXT)`,
   // Arama dizinleri (28 Ekim): kod ile sorgular tablonun tamamını taramasın (Cloudflare ücretsiz pakette günlük
   // 5 milyon okunan satır sınırı; dizinsiz her kod sorgusu ~500 satır okuyordu). Kayıtlara dokunmaz.
+  // Günlük satış (fabrika eksik listesi için): köprü belge tipi 21 satış faturalarından model başına toplamı gönderir.
+  `CREATE TABLE IF NOT EXISTS satis (magaza TEXT NOT NULL, gun TEXT NOT NULL, kod TEXT NOT NULL, adet REAL, PRIMARY KEY (magaza, gun, kod))`,
   `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
   `CREATE INDEX IF NOT EXISTS olay_zaman ON olay (zaman)`,
   `CREATE INDEX IF NOT EXISTS paylasim_zaman ON paylasim (zaman)`,
@@ -176,6 +178,23 @@ export class StokDeposu {
       .map((r) => [r.kod, { toplam: r.t, fiyat: r.f, gizli: r.t <= 0 || silinen.has(r.kod) }]));
   }
 
+  // Köprü o günün satış toplamını her seferinde baştan gönderir (gün içinde artar): günün kayıtları yenilenir.
+  satisYaz(magaza, gun, kalemler) {
+    this.sql.exec("DELETE FROM satis WHERE magaza = ? AND gun = ?", magaza, gun);
+    for (const k of kalemler.slice(0, 2000)) {
+      const kod = stokKodu(k.kod);
+      const adet = Number(k.adet) || 0;
+      if (!kod || adet <= 0) continue;
+      this.sql.exec("INSERT INTO satis (magaza, gun, kod, adet) VALUES (?, ?, ?, ?) ON CONFLICT (magaza, gun, kod) DO UPDATE SET adet = satis.adet + excluded.adet", magaza, gun, kod, adet);
+    }
+    return { ok: true };
+  }
+  // Günün satılan modelleri: kod, satılan adet (mağazalar toplamı), stokta kalan.
+  satislar(gun) {
+    return this.hepsi("SELECT kod, SUM(adet) AS satilan FROM satis WHERE gun = ? GROUP BY kod ORDER BY kod", gun)
+      .map((r) => ({ kod: r.kod, satilan: r.satilan, kalan: this.toplam(r.kod) }));
+  }
+
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
 
@@ -214,6 +233,8 @@ export class StokDO {
     if (yol === "/paylasim-kaydet") return cevap(d.paylasimKaydet(g.mesaj, g.kod, g.zaman) || { ok: true });
     if (yol === "/paylasimlar") return cevap(d.paylasimlar(g.basla, g.bitis));
     if (yol === "/tum") return cevap(d.tum());
+    if (yol === "/satis-yaz") return cevap(d.satisYaz(g.magaza, g.gun, g.kalemler || []));
+    if (yol === "/satislar") return cevap(d.satislar(g.gun));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));

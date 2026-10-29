@@ -97,6 +97,7 @@ export default {
       return new Response("ok");
     }
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
+    if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
 
     return new Response("VOLONTE asistanı çalışıyor.");
   },
@@ -1262,6 +1263,17 @@ async function kopruAl(request, env) {
   const sonuc = await stokIste(env, "/yaz", { magaza, urunler, simdi });
   if (sonuc.yeniSoru && env.BOT_TOKEN) await stokSorulariGonder(env, simdi);
   return Response.json({ ok: true, ...sonuc });
+}
+
+// Günlük satış (belge tipi 21, köprü sadece okur): { gun: "2026-10-29", kalemler: [{ kod, adet }] }. Fiyat yok.
+async function kopruSatis(request, env) {
+  const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
+  const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !env.STOK || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
+  const govde = await request.json().catch(() => null);
+  if (!govde || !/^\d{4}-\d{2}-\d{2}$/.test(String(govde.gun || "")) || !Array.isArray(govde.kalemler) || govde.kalemler.length > 2000) return new Response("geçersiz", { status: 400 });
+  const kalemler = govde.kalemler.filter((k) => !/^0/.test(stokKodu(k.kod))).map((k) => ({ kod: stokKodu(k.kod), adet: Math.abs(Number(k.adet) || 0) }));
+  return Response.json(await stokIste(env, "/satis-yaz", { magaza, gun: govde.gun, kalemler }));
 }
 
 // Stok soruları ve /stok: ortak kod (stokbot.js). "sami:aktif" varsa sorular Sami'nin botundan gider.

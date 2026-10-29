@@ -18,6 +18,7 @@ import { kodBul } from "./ortak.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
+import { fabrikaAdimi, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -60,7 +61,8 @@ export default {
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -96,12 +98,15 @@ export async function guncelleme(u, env) {
     const cq = u.callback_query;
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
+    if (/^f[ba]:/.test(String(cq.data || ""))) return fabrikaDugmesi(env, cq, tg, Math.floor(Date.now() / 1000));
     return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Geçersiz düğme." });
   }
   if (u.my_chat_member) return uyelik(u.my_chat_member, env);
   if (u.channel_post) return kanalPaylasimi(u.channel_post, env);
   const m = u.message;
-  if (!m || !m.from || m.chat.type !== "private" || !izinli(m.from.id, env)) return;
+  if (!m || !m.from || m.chat.type !== "private") return;
+  if (!izinli(m.from.id, env)) return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
+  if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000))) return; // Hemra'nın eksik listesi
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   if (komut === "/stok") return stokGoster(m, env, tg);
   if (komut === "/tablo") return tabloKomutu(m, env);

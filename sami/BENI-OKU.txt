@@ -25,5 +25,8 @@ GÜNCELLEME (29 Ekim, eski köprünün yerine):
 3) baslat.bat'a çift tıklayın. Bundan sonra bilgisayar her açılışta ve her gün 08:55'ten itibaren kendiliğinden çalışır.
    Değişiklik olmasa da 5 dakikada bir "çalışıyorum" sinyali gider (Sami raporunda son veri saati güncel görünür).
 
+SATIŞ DENEMESİ (29 Ekim): satis-deneme.bat — bugünün ve dünün satışlarını (belge tipi 21, sadece okuma) ekrana yazar,
+hiçbir şey göndermez. Ekran fotoğrafını Claude'a gönderin. Köprü 20:55'e kadar çalışır; günün satış toplamını da gönderir.
+
 DURDURMAK: durdur.bat
 GÜNLÜK (sorun olursa): Windows'ta  %LOCALAPPDATA%\Sami  klasörü

@@ -13,6 +13,7 @@
 #   sami.ps1 baslat    ilk gönderimi yapar, 5 dakikalık görevi kurar
 #   sami.ps1 calistir  (görev çalıştırır) 09:00-19:00 arası değişen ürünleri gönderir
 #   sami.ps1 durdur    5 dakikalık görevi kaldırır
+#   sami.ps1 satis-deneme  bugünün satışlarını (belge tipi 21) okur ve ekrana yazar; hiçbir şey göndermez
 #   sami.ps1 durum     görevin durumu + günlüğün son satırları (sorun olursa ekran fotoğrafı Claude'a)
 
 param([string]$Mod = "calistir")
@@ -122,6 +123,42 @@ function StokSorgusu([string]$sifre) {
   return @{ sql = $sql; birimBag = $bb; depoBag = $db; stok = $s; birim = $b; depo = $d }
 }
 
+# ---- Günlük satış (fabrika eksik listesi, 29 Ekim) ----
+# Belge tipi 21 = satış faturası. Stok hareketlerinden (depo envanter) o günün satış miktarı model başına toplanır.
+# Sadece kod ve adet okunur; fiyat, maliyet, müşteri okunmaz. Yine sadece SELECT (aynı kilitler).
+$TARIH_ADAYLARI = @("TARIH", "ISLEMTARIHI", "BELGETARIHI", "FISTARIHI", "EVRAKTARIHI", "KAYITTARIHI")
+function SatisSorgusu([string]$sifre) {
+  $d = Sutunlar $sifre $T_DEPO
+  foreach ($sutun in @("ENVANTER", "DEPO", "BELGETIPI")) { if ($d -notcontains $sutun) { throw "$T_DEPO tablosunda $sutun sütunu yok." } }
+  $tarih = $null
+  foreach ($a in $TARIH_ADAYLARI) { if ($d -contains $a) { $tarih = $a; break } }
+  if (-not $tarih) { throw "$T_DEPO tablosunda tarih sütunu bulunamadı. Sütunlar: $($d -join ', ')" }
+  $db = BagSutunu $d $T_DEPO
+  $sql = "SELECT S.STOKKODU AS KOD, SUM(E.ENVANTER) AS MIKTAR FROM $T_DEPO E INNER JOIN $T_STOK S ON E.$db = S.IND " +
+    "WHERE E.BELGETIPI = 21 AND E.DEPO = 1 AND E.$tarih >= @bas AND E.$tarih < @bit GROUP BY S.STOKKODU"
+  return @{ sql = $sql; tarih = $tarih; sutunlar = $d }
+}
+function Satislar([string]$sifre, [datetime]$gun) {
+  $q = SatisSorgusu $sifre
+  $tablo = Sorgu $sifre $q.sql @{ bas = $gun.Date; bit = $gun.Date.AddDays(1) }
+  $sonuc = @{}
+  foreach ($r in $tablo.Rows) {
+    $kod = ModelKodu ([string]$r.KOD)
+    if (-not $kod) { continue }
+    $m = Num $r.MIKTAR; if ($null -eq $m) { continue }
+    $m = [Math]::Abs($m)
+    if ($sonuc.ContainsKey($kod)) { $sonuc[$kod] += $m } else { $sonuc[$kod] = $m }
+  }
+  return $sonuc
+}
+function SatisGonder([string]$anahtar, [hashtable]$satis, [datetime]$gun) {
+  $kalemler = @($satis.Keys | ForEach-Object { @{ kod = $_; adet = $satis[$_] } })
+  $govde = @{ gun = $gun.ToString("yyyy-MM-dd"); kalemler = [object[]]$kalemler } | ConvertTo-Json -Depth 4 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/satis" -TimeoutSec 60 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
+}
+
 # Vegawin kodundaki ek (ör. "3194B20" → "3194") iç bilgidir, dışarı gitmez.
 function ModelKodu([string]$kod) {
   $k = "$kod".Trim().ToUpperInvariant()
@@ -191,7 +228,11 @@ function Esitle([switch]$Zorla) {
   $yeni = @{}
   foreach ($kod in $simdiki.Keys) { $yeni[$kod] = Imza $simdiki[$kod] }
   $yeni | ConvertTo-Json -Compress | Set-Content -Path $SonDosya -Encoding UTF8
-  return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi"
+  # Günün satış toplamı (stok gönderiminden bağımsız; hata olursa stok etkilenmez)
+  $satisNot = ""
+  try { $sat = Satislar (Duz $g.Sifre) (Get-Date); SatisGonder (Duz $g.Anahtar) $sat (Get-Date); $satisNot = ", bugün satılan $($sat.Count) model" }
+  catch { $satisNot = ", satış okunamadı: $($_.Exception.Message)" }
+  return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi$satisNot"
 }
 
 function Bekle { Write-Host ""; Read-Host "Kapatmak için Enter'a basın" | Out-Null }
@@ -281,7 +322,7 @@ switch ($Mod) {
     $eylem = New-ScheduledTaskAction -Execute "wscript.exe" -Argument ('"' + (Join-Path $Klasor "sami.vbs") + '"')
     # Tetikler (29 Ekim): (1) bilgisayar açılıp oturum açılınca, (2) her gün 08:55'ten itibaren — ikisi de 5 dakikada bir.
     # Eski tek seferlik tetik bazı Windows sürümlerinde bir gün sonra duruyordu.
-    $tekrar = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Hours 11)).Repetition
+    $tekrar = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Hours 12)).Repetition
     $girisTetik = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
     $girisTetik.Repetition = $tekrar
     $gunTetik = New-ScheduledTaskTrigger -Daily -At "08:55"
@@ -296,6 +337,31 @@ switch ($Mod) {
   "durdur" {
     try { Unregister-ScheduledTask -TaskName $GorevAdi -Confirm:$false; Write-Host "✓ Sami durduruldu." -ForegroundColor Green }
     catch { Write-Host "Görev zaten yok." }
+    Bekle
+  }
+  "satis-deneme" {
+    Write-Host "=== Sayım Sami satış denemesi ($($Ayar.magaza)) — Venom'a hiçbir şey gönderilmez ===" -ForegroundColor Cyan
+    try {
+      $g = Gizliler; $sifre = Duz $g.Sifre
+      $q = SatisSorgusu $sifre
+      Write-Host "Hareket tablosu: $T_DEPO  ·  tarih sütunu: $($q.tarih)"
+      Write-Host "Sütunlar: $($q.sutunlar -join ', ')"
+      Write-Host ""
+      Write-Host "Son 7 gün belge tipleri (adet satır · toplam miktar):"
+      $dag = Sorgu $sifre "SELECT TOP 15 E.BELGETIPI AS TIP, COUNT(*) AS SATIR, SUM(E.ENVANTER) AS TOPLAM FROM $T_DEPO E WHERE E.DEPO = 1 AND E.$($q.tarih) >= @bas GROUP BY E.BELGETIPI ORDER BY COUNT(*) DESC" @{ bas = (Get-Date).Date.AddDays(-7) }
+      foreach ($r in $dag.Rows) { Write-Host ("  tip {0} · {1} satır · toplam {2}" -f $r.TIP, $r.SATIR, $r.TOPLAM) }
+      foreach ($gunEk in @(0, -1)) {
+        $gun = (Get-Date).Date.AddDays($gunEk)
+        $sat = Satislar $sifre $gun
+        Write-Host ""
+        Write-Host "$($gun.ToString('dd.MM.yyyy')) satış (belge tipi 21): $($sat.Count) model, toplam $([Math]::Round(($sat.Values | Measure-Object -Sum).Sum, 0)) adet"
+        $sat.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 10 | ForEach-Object { Write-Host ("  {0} · {1} adet" -f $_.Key, $_.Value) }
+      }
+      Write-Host ""
+      Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi)." -ForegroundColor Green
+    } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
     Bekle
   }
   "durum" {

@@ -21,6 +21,8 @@ cat > "$META" <<JSON
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
              {"type":"plain_text","name":"ALLOWED_IDS","text":"2005113508,6113852976"},
              {"type":"plain_text","name":"EKIP_IDS","text":"6448681578,8369444291"},
+             {"type":"plain_text","name":"FABRIKA_SORUMLU","text":"6448681578"},
+             {"type":"plain_text","name":"MURAT_ID","text":"2005113508"},
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-sami.volonte.workers.dev"},
              {"type":"plain_text","name":"GITHUB_REPO","text":"kbabahanov-cloud/VOLONTE"}$GIZLI]}
 JSON
