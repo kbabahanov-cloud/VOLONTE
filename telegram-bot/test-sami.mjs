@@ -291,7 +291,7 @@ test("fabrika: 20:05 Hemra'ya satılanlar (renk hafızasıyla); onayla fabrikaya
   Date.now = ((gercek) => { const f = () => ist(20, 20) * 1000; f.gercek = gercek; return f; })(Date.now);
   await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "3183 siyah 10 bej 6" } }, o.env);
   const kart = cagri(o.g, "sendMessage")[0];
-  assert.match(kart.govde.text, /3183 — siyah 10, bej 6[\s\S]*Fabrikaya gönderilsin mi\?/);
+  assert.match(kart.govde.text, /🏭 Fabrika \(Nuri\/Sinem\/Fuat\):\n3183 — siyah 10, bej 6[\s\S]*Gönderilsin mi\?/);
   assert.equal(kart.govde.reply_markup.inline_keyboard[0][0].callback_data, `fb:o:${gun}`);
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `fb:o:${gun}`, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
@@ -473,4 +473,63 @@ test("Google tablosu hata verirse: 30 dk beklenir, son hata /tablo'da sade Türk
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/tablo" } }, o.env);
   assert.match(cagri(o.g, "sendMessage")[0].govde.text, /son yazma: 28\.10\.2026 10:40\n   son hata: yok/);
   globalThis.fetch = eski;
+});
+
+test("Celal: 20:05 listesinde ayrı başlık (iki kart notu); onayda CELAL modeli SADECE Celal'e ('VOLONTE' yazmadan), diğeri sadece fabrikaya; Celal başkasının modeline basamaz; /start → Celal olarak ekle; deneme 9998 sadece Celal'e", async () => {
+  const { fabrikaAdimi } = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  o.depo.set("sami:satisAcik", "1");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }]));
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 4, fiyat: 70 }, { kod: "5079", adet: 1, fiyat: 50, celal: true, ikiKart: true }], ist(8));
+  const gun = "2026-10-28";
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun, kalemler: [{ kod: "3194", adet: 2 }, { kod: "5079", adet: 3 }] }) });
+  // Celal /start → Murat "Celal olarak ekle"
+  await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Celal" }, text: "/start" } }, o.env);
+  const soru = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111");
+  assert.deepEqual(soru.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🏭 Fabrikaya ekle", "👤 Celal olarak ekle", "❌ Ekleme"]);
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: "fa:c:777", message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.equal(JSON.parse(o.depo.get("sami:fabrikaKisiler")).find((k) => k.id === 777).grup, "celal");
+  const g = [];
+  await fabrikaAdimi(o.env, ist(20, 5), async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 9 } }; });
+  assert.match(g[0].govde.text, /🏭 Fabrika \(Nuri\/Sinem\/Fuat\):\n3194 · satılan 2 · stokta 4\n\n👤 Celal:\n5079 · satılan 3 · stokta 1 ⚠️ iki kartı var/);
+  const gercek = Date.now;
+  Date.now = () => ist(20, 20) * 1000;
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "3194 siyah 4, 5079 bej 5" } }, o.env);
+  const kart = cagri(o.g, "sendMessage").at(-1);
+  assert.match(kart.govde.text, /🏭 Fabrika[\s\S]*3194 — siyah 4[\s\S]*👤 Celal:\n5079 — bej 5/);
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `fb:o:${gun}`, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
+  const giden = [...cagri(o.g, "sendMessage"), ...cagri(o.g, "copyMessage"), ...cagri(o.g, "sendPhoto")].filter((x) => [555, 777].includes(x.govde.chat_id));
+  const nuri = giden.filter((x) => x.govde.chat_id === 555).map((x) => x.govde.caption || x.govde.text);
+  const celal = giden.filter((x) => x.govde.chat_id === 777).map((x) => x.govde.caption || x.govde.text);
+  assert.deepEqual(nuri, ["VOLONTE – Model 3194. İstenen: siyah 4 seri"]);
+  assert.deepEqual(celal, ["Model 5079. İstenen: bej 5 seri"]); // VOLONTE yok, fiyat/stok yok
+  // Celal fabrika modeline basamaz
+  const fabrikaMsj = giden.find((x) => x.govde.chat_id === 555);
+  const fid = fabrikaMsj.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 777, first_name: "Celal" }, data: `fc:g:${fid}`, message: { chat: { id: 777 }, message_id: 3 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery")[0].govde.text, /size ait değil/);
+  // Celal kendi modeline cevap → bildirim 👤
+  const cid = giden.find((x) => x.govde.chat_id === 777).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 777, first_name: "Celal" }, data: `fc:g:${cid}`, message: { chat: { id: 777 }, message_id: 3 } } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /👤 Celal · 5079 → Gelecek/);
+  // yazıyla başkasının modeli
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Celal" }, text: "3194 geldi" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /3194 sizin listenizde değil/);
+  // deneme: 9998 sadece Celal'e
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "/fabrikadeneme" } }, o.env);
+  const dk = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333");
+  assert.match(dk.govde.text, /9999 DENEME[\s\S]*👤 Celal:\n9998 CELAL DENEME/);
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 333 }, data: dk.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 333 }, message_id: 4 } } }, o.env);
+  const dg = [...cagri(o.g, "sendMessage"), ...cagri(o.g, "copyMessage"), ...cagri(o.g, "sendPhoto")].filter((x) => [555, 777].includes(x.govde.chat_id));
+  assert.deepEqual(dg.filter((x) => x.govde.chat_id === 777).map((x) => x.govde.caption || x.govde.text), ["🧪 DENEME – üretim yapmayın\nModel 9998 CELAL DENEME. İstenen: siyah 1 seri"]);
+  assert.ok(dg.filter((x) => x.govde.chat_id === 555).every((x) => /9999 DENEME/.test(x.govde.caption || x.govde.text)));
+  Date.now = gercek;
 });

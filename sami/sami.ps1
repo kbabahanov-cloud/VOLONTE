@@ -169,6 +169,8 @@ function ModelKodu([string]$kod) {
 function Num($v) { if ($v -is [DBNull] -or $null -eq $v) { return $null } return [double]$v }
 
 # Aynı model koduna düşen kartlar birleşir: adet toplanır, fiyat en yüksek, ad ilk kart.
+# Tedarikçi (29 Ekim): kodunda "CELAL" geçen kart Celal'in malıdır; dışarıya SADECE celal=true işareti gider
+# (ek yazının kendisi gitmez). Aynı kodun hem normal hem CELAL kartı varsa model Celal'e sayılır, ikiKart=true.
 function Urunler([string]$sifre) {
   $q = StokSorgusu $sifre
   $tablo = Sorgu $sifre $q.sql
@@ -179,12 +181,19 @@ function Urunler([string]$sifre) {
     if (-not $kod) { $uymayan++; continue }
     $adet = Num $r.ADET; if ($null -eq $adet) { $adet = 0 }
     $fiyat = Num $r.FIYAT
+    $celalKart = ([string]$r.KOD) -match '(?i)CELAL'
     if ($sonuc.ContainsKey($kod)) {
       $u = $sonuc[$kod]; $u.adet += $adet
       if ($null -ne $fiyat -and ($null -eq $u.fiyat -or $fiyat -gt $u.fiyat)) { $u.fiyat = $fiyat }
     } else {
-      $sonuc[$kod] = @{ kod = $kod; ad = ([string]$r.AD).Trim(); adet = $adet; fiyat = $fiyat }
+      $u = @{ kod = $kod; ad = ([string]$r.AD).Trim(); adet = $adet; fiyat = $fiyat; nC = 0; nN = 0 }
+      $sonuc[$kod] = $u
     }
+    if ($celalKart) { $u.nC++ } else { $u.nN++ }
+  }
+  foreach ($u in $sonuc.Values) {
+    $u.celal = ($u.nC -gt 0); $u.ikiKart = ($u.nC -gt 0 -and $u.nN -gt 0)
+    $u.Remove("nC"); $u.Remove("nN")
   }
   return @{ urunler = $sonuc; uymayan = $uymayan; satir = $tablo.Rows.Count }
 }
@@ -199,7 +208,7 @@ function Gonder([string]$anahtar, [object[]]$liste) {
   }
 }
 
-function Imza($u) { return "$($u.adet)|$($u.fiyat)|$($u.ad)" }
+function Imza($u) { return "$($u.adet)|$($u.fiyat)|$($u.ad)|$($u.celal)|$($u.ikiKart)" }
 
 # Sadece değişenleri gönderir. Gönderim başarılı olunca son durum kaydedilir; bilgisayar kapalıyken
 # kaçan değişiklikler açılınca bu karşılaştırmayla gider (kaldığı yerden devam).

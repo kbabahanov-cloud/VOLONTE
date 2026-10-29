@@ -47,6 +47,10 @@ export class StokDeposu {
     for (const sutun of ["degisim", "kalp"]) {
       try { this.sql.exec(`ALTER TABLE kopru ADD COLUMN ${sutun} INTEGER`); } catch { /* zaten var */ }
     }
+    // Tedarikçi (29 Ekim): Vegawin kodunda "CELAL" geçen kartlar Celal'in malı (köprü sadece işaret gönderir, ek yazıyı değil).
+    for (const [sutun, tur] of [["tedarikci", "TEXT"], ["ikikart", "INTEGER"]]) {
+      try { this.sql.exec(`ALTER TABLE urun ADD COLUMN ${sutun} ${tur}`); } catch { /* zaten var */ }
+    }
   }
   hepsi(sorgu, ...p) { return this.sql.exec(sorgu, ...p).toArray(); }
   tek(sorgu, ...p) { return this.hepsi(sorgu, ...p)[0] || null; }
@@ -69,9 +73,11 @@ export class StokDeposu {
       if (u.yok) this.sql.exec("DELETE FROM urun WHERE magaza = ? AND kod = ?", magaza, kod);
       else {
         this.sql.exec(
-          `INSERT INTO urun (magaza, kod, ad, adet, fiyat, guncel) VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT (magaza, kod) DO UPDATE SET ad = excluded.ad, adet = excluded.adet, fiyat = excluded.fiyat, guncel = excluded.guncel`,
+          `INSERT INTO urun (magaza, kod, ad, adet, fiyat, guncel, tedarikci, ikikart) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (magaza, kod) DO UPDATE SET ad = excluded.ad, adet = excluded.adet, fiyat = excluded.fiyat, guncel = excluded.guncel,
+             tedarikci = excluded.tedarikci, ikikart = excluded.ikikart`,
           magaza, kod, String(u.ad || "").slice(0, 120), Number(u.adet) || 0, u.fiyat == null ? null : Number(u.fiyat), simdi,
+          u.celal ? "CELAL" : null, u.ikiKart ? 1 : 0,
         );
       }
       yazilan += 1;
@@ -192,7 +198,11 @@ export class StokDeposu {
   // Günün satılan modelleri: kod, satılan adet (mağazalar toplamı), stokta kalan.
   satislar(gun) {
     return this.hepsi("SELECT kod, SUM(adet) AS satilan FROM satis WHERE gun = ? GROUP BY kod ORDER BY kod", gun)
-      .map((r) => ({ kod: r.kod, satilan: r.satilan, kalan: this.toplam(r.kod) }));
+      .map((r) => ({ kod: r.kod, satilan: r.satilan, kalan: this.toplam(r.kod), ...this.tedarikci(r.kod) }));
+  }
+  tedarikci(kod) {
+    const r = this.tek("SELECT MAX(tedarikci) AS t, MAX(ikikart) AS i FROM urun WHERE kod = ?", stokKodu(kod)) || {};
+    return { tedarikci: r.t || null, ikiKart: Boolean(r.i) };
   }
 
   // Fabrika "Bitti" → "Sil" kararı: model gizlenir (site/Telegram turlarında görünmez). Vegawin'e dokunmaz.
@@ -242,6 +252,7 @@ export class StokDO {
     if (yol === "/gizle") return cevap(d.gizle(g.kod, g.kim, g.simdi));
     if (yol === "/satis-yaz") return cevap(d.satisYaz(g.magaza, g.gun, g.kalemler || []));
     if (yol === "/satislar") return cevap(d.satislar(g.gun));
+    if (yol === "/tedarikci") return cevap(Object.fromEntries((g.kodlar || []).slice(0, 200).map((k) => [k, d.tedarikci(k)])));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
