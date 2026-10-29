@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3411",
+  "baslik": "Bow Detail Midi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A fit-and-flare midi dress with a square neckline, fitted bodice and full, flowing skirt in a softly textured white fabric. A sculpted statement bow sits at the shoulder, while puff shoulders open into sheer lace sleeves, with a matching bow tie at the back. Made for celebrations, ceremonies and special daytime events. Produced in Istanbul with careful craftsmanship.",
+   "fr": "Une robe midi ajustée et évasée, à encolure carrée, buste structuré et jupe ample dans un tissu blanc légèrement texturé. Un grand nœud sculpté orne l'épaule, les manches bouffantes se prolongent en dentelle transparente, et un nœud assorti se noue au dos. Idéale pour les cérémonies, fêtes et événements de journée. Confectionnée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido midi ajustado e evasê, com decote quadrado, corpete estruturado e saia ampla num tecido branco de textura suave. Um laço escultural marca o ombro, as mangas bufantes continuam em renda transparente e há um laço a condizer nas costas. Pensado para cerimónias, celebrações e eventos especiais de dia. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3411/1.jpg",
+   "galeri/3411/2.jpg",
+   "galeri/3411/3.jpg",
+   "galeri/3411/4.jpg",
+   "galeri/3411/5.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 55,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3407",
   "baslik": "Leaf Print Wrap Maxi Dress",
   "kategori": "dresses",
