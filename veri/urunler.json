@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3558",
+  "baslik": "Polka Dot Lace Slit Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a tailored single-button blazer with a long polka dot skirt. The blazer features peak lapels, flap pockets and contrast buttons on the cuffs, while the skirt opens at the front with a slit edged in delicate lace. Wear it to the office, daytime events or elegant dinners. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant une veste ajustée à un bouton et une jupe longue à pois. La veste se distingue par ses revers pointus, ses poches à rabat et ses boutons contrastés aux poignets, tandis que la jupe s'ouvre devant sur une fente bordée de dentelle délicate. À porter au bureau, en journée ou pour un dîner élégant. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um blazer ajustado de um botão com uma saia longa de bolinhas. O blazer tem lapelas em bico, bolsos com pala e botões contrastantes nos punhos, enquanto a saia abre à frente numa racha debruada com renda delicada. Ideal para o escritório, eventos de dia ou jantares elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3558/1.jpg",
+   "galeri/3558/2.jpg",
+   "galeri/3558/3.jpg",
+   "galeri/3558/4.jpg",
+   "galeri/3558/5.jpg",
+   "galeri/3558/6.jpg",
+   "galeri/3558/7.jpg",
+   "galeri/3558/8.jpg",
+   "galeri/3558/9.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3520",
   "baslik": "Satin Kimono Trouser Set",
   "kategori": "sets",
