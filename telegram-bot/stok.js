@@ -28,6 +28,11 @@ const TABLOLAR = [
   // Kanal paylaşımları (Sami kanalı izler): paylaşıldığı anda stok ve fiyat — kontrol için.
   `CREATE TABLE IF NOT EXISTS paylasim (mesaj INTEGER PRIMARY KEY, kod TEXT, zaman INTEGER, toplam REAL, fiyat REAL)`,
   `CREATE TABLE IF NOT EXISTS ayar (k TEXT PRIMARY KEY, v TEXT)`,
+  // Arama dizinleri (28 Ekim): kod ile sorgular tablonun tamamını taramasın (Cloudflare ücretsiz pakette günlük
+  // 5 milyon okunan satır sınırı; dizinsiz her kod sorgusu ~500 satır okuyordu). Kayıtlara dokunmaz.
+  `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
+  `CREATE INDEX IF NOT EXISTS olay_zaman ON olay (zaman)`,
+  `CREATE INDEX IF NOT EXISTS paylasim_zaman ON paylasim (zaman)`,
 ];
 
 // Saf mantık: SQL ile çalışan depo (Durable Object içinde ya da testte node:sqlite ile).

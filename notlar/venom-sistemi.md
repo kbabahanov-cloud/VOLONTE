@@ -192,7 +192,13 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   Tek kaynak: Sami'nin deposu (StokDO); tablo aynı veriden 5 dk'da bir yazılan birebir ayna; botlar depodan okur (Google'ı okumak yavaş/sınırlı).
   Tablolar kullanıcının Drive'ında; bağlama: Sami'ye /tablo stok <link>, /tablo harcama <link>.
 
-**Sıradaki komut: SAMİ-1 BotFather /newbot → token Cloudflare volonte-sami BOT_TOKEN. Sonra herkes /start, Sami kanala yönetici. Sonra GOOGLE-1..5 (proje, Sheets API, hizmet hesabı JSON → GOOGLE_SA, iki tablo, paylaşım, /tablo). Sonra FAL-1.**
+- 28 Ekim: Sami botu açıldı (token girildi, webhook 12:15, stok soruları Sami'de).
+- 28 Ekim YENİ AKIŞ (kullanıcı kararı): kanal alt yazıları (kod/fiyat) kullanılmaz, Selin kanala bağlanmaz. Her gün 10:00 Sami'nin
+  stoğundan 15 model sahibe (0091 hesabı, SAHIP_IDS ya da /sahip) istenir; sahip "Dosya olarak" fotoğraf + video, yazı "3503 Küçük/Büyük/İkisi de".
+  Selin başlık/açıklama/kategori, fiyat+stok Vegawin'den; taslak sahibe; onayla siteye (site kilidi yeni akışı engellemez). 20:00 özet;
+  gelmeyenler "gonderilemedi" (sonra fal.ai). Öncelik: karışık 24 + sitedeki 4. Video sitede /v2/<kod>/<n> (PR #25).
+
+**Sıradaki komut: 0091 hesabından Selin'e /kimim → izinliyse /sahip; değilse kimlik SAHIP_IDS'e eklenir. Sonra Sami kanala yönetici + Google B1-B9. fal.ai bekliyor.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)
 
