@@ -645,3 +645,38 @@ test("yazısız dosyalar + ayrı kod mesajı: '3183 Küçük' gelince son yazıs
   const iletilen = cagri(o.g, "forwardMessage");
   assert.ok(iletilen.length >= 1 && iletilen[0].govde.from_chat_id === 111);
 });
+
+test("'dosya olarak' video (IMG_4581.MP4) video sayılır; 3183'ün bağlanmayan videosu sohbetten bulunup taslağa eklenir, kart videoyla yeniden gider", async () => {
+  const { videoKurtarAdimi, belgeVideoMu } = await import("./selin.js");
+  assert.ok(belgeVideoMu({ mime_type: "video/mp4", file_name: "IMG_4581.MP4" }) && belgeVideoMu({ file_name: "a.MOV" }) && !belgeVideoMu({ mime_type: "image/jpeg" }));
+  const o = ortam();
+  const gonder = (ek) => guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, ...ek } }, o.env);
+  await gonder({ message_id: 1, document: { file_id: "d1", file_unique_id: "u1", mime_type: "image/jpeg" } });
+  await gonder({ message_id: 2, document: { file_id: "vd", file_unique_id: "uvd", mime_type: "video/mp4", file_name: "IMG_4581.MP4", file_size: 3.2e6 } });
+  await gonder({ message_id: 3, text: "3190 Küçük" });
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /✅ 3190 alındı \(1 fotoğraf, 1 video, Küçük\)/);
+  // 3183: taslak var, video yok; kart mesajı 120. Sohbette 118 = belge video, 117 = "3183 Küçük", 116 = başka model
+  o.depo.set("selin:modeller", JSON.stringify({ "3183": { kaynak: "ozel", durum: "onayda", gonderen: 111, kart: [["111", 120]], medya: [{ uid: "f1", tur: "foto" }], taslak: { kaynak: "ozel", baslik: "X", kategori: "sets", aciklama: { en: "x", tr: "x" }, bedenler: "38-40-42-44", bedenGrubu: "k", fotolar: [{ id: 1, net: true, buyuk: { file_id: "f1", belge: true } }], videolar: [], fiyat: 40 } } }));
+  const eski = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => {
+    if (String(url).endsWith("/forwardMessage")) {
+      const id = JSON.parse(istek.body).message_id;
+      const kim = { type: "user", sender_user: { id: 111 } };
+      const m = id === 118 ? { document: { file_id: "IMG", file_unique_id: "uimg", mime_type: "video/mp4", file_name: "IMG_4581.MP4", file_size: 3.2e6 } }
+        : id === 117 ? { text: "3183 Küçük" } : id === 116 ? { text: "3184 Büyük" } : { text: "Selin" };
+      return Response.json({ ok: true, result: { message_id: 1, forward_origin: id === 119 ? { type: "user", sender_user: { id: 999 } } : kim, ...m } });
+    }
+    return eski(url, istek);
+  };
+  o.g.length = 0;
+  await videoKurtarAdimi(o.env, 1000);
+  globalThis.fetch = eski;
+  const m = JSON.parse(o.depo.get("selin:modeller"))["3183"];
+  assert.deepEqual(m.taslak.videolar.map((v) => [v.file_id, v.belge]), [["IMG", true]]);
+  assert.equal(m.durum, "onayda");
+  assert.ok(cagri(o.g, "sendDocument").some((x) => x.govde.document === "IMG")); // kartta video
+  assert.match(cagri(o.g, "sendMessage").find((x) => /video taslağa eklendi/.test(x.govde.text)).govde.text, /IMG_4581\.MP4/);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Videolar: 1/);
+  await videoKurtarAdimi(o.env, 2000); // bir kez
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3183"].taslak.videolar.length, 1);
+});

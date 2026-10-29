@@ -201,7 +201,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, ozelHazirlaAdimi, gunSonuOzeti })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -641,6 +641,7 @@ async function kartGoster(env, kod, kisi) {
     if (liste.length > 1) await tg(env, "sendMediaGroup", { chat_id: kisi, media: liste.slice(0, 10).map((f) => ({ type: tur, media: f.buyuk.file_id })) });
     else if (liste.length === 1) await tg(env, tur === "photo" ? "sendPhoto" : "sendDocument", { chat_id: kisi, [tur]: liste[0].buyuk.file_id });
   }
+  if (t.kaynak === "ozel") for (const v of t.videolar) await tg(env, v.belge ? "sendDocument" : "sendVideo", { chat_id: kisi, [v.belge ? "document" : "video"]: v.file_id });
   const r = await tg(env, "sendMessage", { chat_id: kisi, text: kartMetni(kod, t, kanal && kanal.kullanici), disable_web_page_preview: true, reply_markup: kartKlavye(kod, t) });
   if (!r.ok) return false;
   const guncel = await oku(env, "selin:modeller", {});
@@ -1231,6 +1232,8 @@ export async function istekAdimi(env, simdi) {
 // kod gelince tek mesaj: "✅ 3183 alındı (4 fotoğraf, 1 video)". Yazısı kodlu albümün diğer parçaları albüm
 // kimliğiyle aynı koda eklenir.
 const BEKLEYEN_TTL = 12 * 3600;
+// "Dosya olarak" gönderilen video (ör. IMG_4581.MP4): Telegram'da video değil belge olarak gelir.
+export const belgeVideoMu = (d) => Boolean(d && (/^video\//.test(d.mime_type || "") || /\.(mp4|mov|m4v)$/i.test(d.file_name || "")));
 const bekleyenAnahtar = (uid) => `selin:bekleyenDosya:${uid}`;
 const kodBedenOku = (yazi) => {
   const r = String(yazi || "").trim().match(/^(\d{3,6})\b(.*)$/s);
@@ -1256,7 +1259,9 @@ async function dosyalariBagla(env, uid, kod, grup, dosyalar, simdi, { album = nu
   const bekleyen = await oku(env, bekleyenAnahtar(uid), []);
   const modeller = await oku(env, "selin:modeller", {});
   const eski = modeller[kod] || {};
-  const x = ozelMi(eski) && eski.durum === "geldi" ? eski : { ...eski, kaynak: "ozel", durum: "geldi", medya: [], kart: [], gonderen: uid, hata: 0, bildirildi: false };
+  // Aynı koda sonradan gelen dosya (ör. unutulan video) mevcut dosyalara eklenir; taslak yeniden hazırlanır.
+  const devam = ozelMi(eski) && ["geldi", "onayda", "hazirlanamadi"].includes(eski.durum);
+  const x = devam ? { ...eski, kart: eski.durum === "onayda" ? [] : eski.kart || [], hata: 0 } : { ...eski, kaynak: "ozel", durum: "geldi", medya: [], kart: [], gonderen: uid, hata: 0, bildirildi: false };
   for (const md of [...bekleyen, ...dosyalar]) if (!x.medya.some((y) => y.uid === md.uid)) x.medya.push({ file_id: md.file_id, tur: md.tur, belge: md.belge || false, boyut: md.boyut || 0, w: md.w || 0, h: md.h || 0, uid: md.uid });
   if (grup) x.bedenGrubu = grup;
   x.sonMedya = bildirimSonra ? simdi : simdi - 120; // kod mesajıyla gelenler hemen hazırlanır
@@ -1310,7 +1315,8 @@ async function sohbettenGeriBul(env, m) {
     if (kodBedenOku(f.caption) || kodBedenOku(f.text)) break; // önceki modelin sınırı
     const md = f.photo ? { file_id: f.photo[f.photo.length - 1].file_id, uid: f.photo[f.photo.length - 1].file_unique_id, tur: "foto", w: f.photo[f.photo.length - 1].width, h: f.photo[f.photo.length - 1].height }
       : f.document && /^image\//.test(f.document.mime_type || "") ? { file_id: f.document.file_id, uid: f.document.file_unique_id, tur: "foto", belge: true }
-        : f.video ? { file_id: f.video.file_id, uid: f.video.file_unique_id, tur: "video", boyut: f.video.file_size || 0, w: f.video.width || 0, h: f.video.height || 0 } : null;
+        : f.video ? { file_id: f.video.file_id, uid: f.video.file_unique_id, tur: "video", boyut: f.video.file_size || 0, w: f.video.width || 0, h: f.video.height || 0 }
+          : belgeVideoMu(f.document) ? { file_id: f.document.file_id, uid: f.document.file_unique_id, tur: "video", boyut: f.document.file_size || 0, belge: true } : null;
     if (md) bulunan.unshift(md);
     else if (f.text) break; // başka bir yazı: sınır
   }
@@ -1337,7 +1343,7 @@ export async function ozelHazirla(env, kod, simdi, duzeltme) {
   const modeller = await oku(env, "selin:modeller", {});
   const x = modeller[kod];
   const fotoMedya = x.medya.filter((y) => y.tur === "foto").slice(0, POZ_EN_FAZLA);
-  const videolar = x.medya.filter((y) => y.tur === "video").map((v, i) => ({ id: i, file_id: v.file_id, boyut: v.boyut || 0, w: v.w || 0 }));
+  const videolar = x.medya.filter((y) => y.tur === "video").map((v, i) => ({ id: i, file_id: v.file_id, boyut: v.boyut || 0, w: v.w || 0, belge: Boolean(v.belge) }));
   if (!fotoMedya.length) {
     x.durum = "geldi"; // fotoğraf bekleniyor
     x.sonMedya = simdi + 3600; // bir saat sonra tekrar bak
@@ -1376,6 +1382,50 @@ export async function ozelHazirla(env, kod, simdi, duzeltme) {
     await yazKV(env, "selin:modeller", g);
     await yazKV(env, "selin:hata", { zaman: simdi, hata: `ozel ${kod}: ${String(e && e.message).slice(0, 250)}` }, 7 * 86400);
     if (g[kod].hata >= 3) for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: `⚠️ ${kod} hazırlanamadı (${String(e && e.message).slice(0, 120)}). Dosyaları yeniden gönderebilirsiniz.` });
+  }
+}
+
+// Bir kez (29 Ekim): "dosya olarak" gönderildiği için bağlanmayan videoları sohbetten bulur, taslağa ekler ve
+// kartı sahibe yeniden gönderir. Sohbetteki son kart mesajından geriye en fazla 40 mesaja bakılır (arşive iletilerek).
+const VIDEO_KURTAR = ["3183"];
+export async function videoKurtarAdimi(env, simdi) {
+  for (const kod of VIDEO_KURTAR) {
+    if (await env.KAYIT.get(`selin:videoKurtar:${kod}`)) continue;
+    await env.KAYIT.put(`selin:videoKurtar:${kod}`, "1");
+    const modeller = await oku(env, "selin:modeller", {});
+    const x = modeller[kod];
+    if (!ozelMi(x) || !x.taslak) continue;
+    const sohbet = String(x.gonderen || (await sahipler(env))[0] || "");
+    const sonKart = Math.max(0, ...(x.kart || []).filter(([k]) => String(k) === sohbet).map(([, id]) => id));
+    const arsiv = await oku(env, "arsiv", null);
+    const bulunan = [];
+    if (sonKart && arsiv) {
+      for (let id = sonKart - 1; id > 0 && id >= sonKart - 40; id--) {
+        const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: Number(sohbet), message_id: id, disable_notification: true });
+        if (!r.ok) continue;
+        const f = r.result;
+        const kendisi = f.forward_origin && f.forward_origin.type === "user" && f.forward_origin.sender_user && String(f.forward_origin.sender_user.id) === sohbet;
+        if (!kendisi) continue;
+        const k = kodBedenOku(f.text) || kodBedenOku(f.caption);
+        if (k && k.kod !== kod) break; // önceki modelin sınırı
+        const v = f.video ? { file_id: f.video.file_id, uid: f.video.file_unique_id, boyut: f.video.file_size || 0, w: f.video.width || 0 }
+          : belgeVideoMu(f.document) ? { file_id: f.document.file_id, uid: f.document.file_unique_id, boyut: f.document.file_size || 0, belge: true, ad: f.document.file_name } : null;
+        if (v && !x.medya.some((y) => y.uid === v.uid)) bulunan.unshift(v);
+      }
+    }
+    if (!bulunan.length) {
+      await tg(env, "sendMessage", { chat_id: sohbet, text: `⚠️ ${kod}: videoyu sohbette bulamadım. Videoyu tekrar gönderip ardından "${kod}" yazın; taslağa eklenir.` });
+      continue;
+    }
+    const g = await oku(env, "selin:modeller", {});
+    for (const v of bulunan) {
+      g[kod].medya.push({ ...v, tur: "video" });
+      g[kod].taslak.videolar.push({ id: g[kod].taslak.videolar.length, file_id: v.file_id, boyut: v.boyut, w: v.w || 0, belge: Boolean(v.belge) });
+    }
+    g[kod].kart = [];
+    await yazKV(env, "selin:modeller", g);
+    await tg(env, "sendMessage", { chat_id: sohbet, text: `🎬 ${kod}: video taslağa eklendi (${bulunan.map((v) => v.ad || "video").join(", ")}). Güncel taslak:` });
+    await kartGoster(env, kod, sohbet);
   }
 }
 
@@ -1792,7 +1842,8 @@ export async function guncelleme(u, env) {
   // üretim SADECE bunları kullanır (kanaldan alınmaz). Yazı: "3618 askı" ya da "3618 manken".
   const medya = m.photo ? { file_id: m.photo[m.photo.length - 1].file_id, tur: "foto" }
     : m.document && /^image\//.test(m.document.mime_type || "") ? { file_id: m.document.file_id, tur: "foto", belge: true }
-      : m.video ? { file_id: m.video.file_id, tur: "video", boyut: m.video.file_size || 0 } : null;
+      : m.video ? { file_id: m.video.file_id, tur: "video", boyut: m.video.file_size || 0 }
+        : belgeVideoMu(m.document) ? { file_id: m.document.file_id, tur: "video", boyut: m.document.file_size || 0, belge: true } : null; // "dosya olarak" video (IMG_4581.MP4)
   if (medya) {
     const r = String(m.caption || "").trim().match(/^(\d{3,6})\s*(ask[ıi]|manken)/i);
     if (!r) return ozelMedya(env, m, { ...medya, uid: (m.document || m.video || (m.photo && m.photo[m.photo.length - 1]) || {}).file_unique_id || medya.file_id, w: (m.photo ? m.photo[m.photo.length - 1].width : m.video ? m.video.width : 0) || 0, h: (m.photo ? m.photo[m.photo.length - 1].height : m.video ? m.video.height : 0) || 0 }, simdi);
