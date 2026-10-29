@@ -203,6 +203,13 @@ Altyapı: Cloudflare Workers (ücretsiz katman) + kayıt için Cloudflare depola
   21:00 hatırlatma, 22:00 Murat'a "Hemra onaylamadı". Fabrika kişileri /start → Murat onayı (fa:e). sami:satisAcik=1 satış denemesi doğrulanınca açılacak.
   Köprü artık 08:55–20:55 (ayar bitisSaati 21), kalp atışı; bu akşam kurulacak (satis-deneme.bat fotoğrafı bekleniyor).
 
+- 30 Ekim PELİN kararları: bütçe ekibin 80 $'ından AYRI, aylık 150 $ (%80 uyarı), Defne de ayrı. Hedef günde 3 model (foto+video+tüm boyutlar), kalite öncelik.
+  fal.ai (20 $ yükleme, anahtar volonte-pelin Secret FAL_KEY), arşiv Cloudflare R2. Video aracı karşılaştırma denemesiyle kullanıcı seçecek:
+  Veo 3.1 Lite / Kling 3.0 Pro / Seedance 2.0, 2 model (desenli 3592 + düz siyah 3577 önerildi), askı fotoğrafıyla yan yana + renk/desen puanı + maliyet.
+  Kurallar: manken yüzü ünlüye benzemesin; Meta "AI info" etiketi (fotogerçekçi video için zorunlu); sessiz izlemede kod/beden/sipariş net;
+  paket sonunda gerçek askı fotoğrafı. Temel aşamaya ek: eleman geri bildirimi, pazartesi özeti, "beğenmedim çünkü" öğrenme, tarz şablonları
+  (Şık/Enerjik/Lüks), "acil" iş. Selin'deki eski otomatik deneme kapatıldı (URETIM_ONAYLI=false).
+
 **Sıradaki komut: 0091 hesabından Selin'e /kimim → izinliyse /sahip; değilse kimlik SAHIP_IDS'e eklenir. Sonra Sami kanala yönetici + Google B1-B9. fal.ai bekliyor.**
 
 ## 🧭 ANA PLAN (25 Eylül 2026'dan itibaren geçerli, diğer sıralamaların yerine geçer)

@@ -12,7 +12,12 @@ import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 
 // ONAY KİLİDİ: kullanıcı 28 Ekim'de araç listesini (fal.ai, Nano Banana 2.1 ve Pro, FASHN, Kling, Veo 3.1 Fast,
 // Claude kontrolü) ve 3618 + 3592 denemesini onayladı. false yapılırsa hiçbir araca istek gitmez.
-export const URETIM_ONAYLI = true;
+// 30 Ekim: Selin'deki eski otomatik deneme (3618 + 3592, Nano/FASHN/Kling/Veo) KAPATILDI; yerine Pelin'in karşılaştırma
+// denemesi gelecek (Veo 3.1 Lite / Kling 3.0 Pro / Seedance 2.0, kullanıcının seçtiği 2 model). Anahtar girilse bile çalışmaz.
+export const URETIM_ONAYLI = false;
+// Pelin bütçesi (kullanıcı kararı 30 Ekim): ekibin 80 $ Claude sınırından AYRI, aylık 150 $; %80'de uyarı.
+export const PELIN_AYLIK_SINIR_USD = 150;
+export const PELIN_UYARI_ORANI = 0.8;
 export const ayAnahtari = (simdi) => `uretim-harcama:${new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 7)}`;
 export const DENEME_SINIR_USD = 15;
 export const DENEME_KODLARI = ["3618", "3592"]; // düz renk ceket + çiçek desenli elbise (kolay + zor desen)
