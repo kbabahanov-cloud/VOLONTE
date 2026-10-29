@@ -234,6 +234,26 @@ export class StokDeposu {
     return Object.fromEntries(this.hepsi("SELECT kod, MAX(zaman) AS z FROM olay WHERE tur = 'geldi' AND zaman >= ? GROUP BY kod", basla).map((r) => [r.kod, r.z]));
   }
 
+  // Fabrika siparişi tek çağrıda (30 Ekim): kayıt + açıklar + zamanlı işler dizini + haftalık özet (Sami'nin istek sınırı için).
+  fsYaz({ rec, kapali, takip, hafta, ozet }) {
+    const oku = (k, bos) => { const v = this.ayarOku(k); return v == null ? bos : JSON.parse(v); };
+    this.ayarYaz(`fs:${rec.id}`, JSON.stringify(rec));
+    const acik = oku("fs:acik", []);
+    const yeni = kapali ? acik.filter((x) => x !== rec.id) : acik.includes(rec.id) ? acik : [...acik, rec.id];
+    if (yeni.length !== acik.length) this.ayarYaz("fs:acik", JSON.stringify(yeni));
+    const tk = oku("fs:takip", {});
+    if (takip ? tk[rec.id] !== takip : rec.id in tk) {
+      if (takip) tk[rec.id] = takip; else delete tk[rec.id];
+      this.ayarYaz("fs:takip", JSON.stringify(tk));
+    }
+    if (hafta) {
+      const h = oku(`fs:hafta:${hafta}`, {});
+      h[rec.id] = ozet;
+      this.ayarYaz(`fs:hafta:${hafta}`, JSON.stringify(h));
+    }
+    return { ok: true };
+  }
+
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
 
@@ -280,6 +300,7 @@ export class StokDO {
     if (yol === "/tg-hepsi") return cevap(d.tgHepsi());
     if (yol === "/satis-donem") return cevap(d.satisDonem(g.basla, g.bitis));
     if (yol === "/geldiler") return cevap(d.geldiler(g.basla || 0));
+    if (yol === "/fs-yaz") return cevap(d.fsYaz(g));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));

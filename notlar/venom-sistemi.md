@@ -309,6 +309,15 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   BLACK ROSE (yarın köprüyle açılacak, kod YOK): gün içinde Merdan'a hiçbir stok/eksik mesajı gitmez; her gün 19:05'ten sonra günün tüm BR satışlarıyla
   tek liste Merdan'a (6113852976); onay akışı aynı; onaylanmazsa Murat'a "Merdan onaylamadı" (kimin onaylamadığı yazar).
 
+- 29 Ekim 19:22 EKSİK LİSTESİ FOTOĞRAF + EKLER (yüklendi, 132 test; önceki mesajların yerine): Vegawin'de renk yok, renkleri Hemra yazar.
+  Hemra'ya önce özet (model sayısı, toplam satış), sonra her model ayrı mesaj: site fotoğrafı + "kod · satılan · stok" (stok 0 🔴, fotoğraf yoksa "📷 fotoğraf yok",
+  günde 10+ satan "🔥 hızlı gidiyor, fazla iste" — sadece Hemra/Murat), "Son istenen: …" (fabrika:sonIstek, onayda kaydedilir), düğmeler [🔁 Önceki gibi iste]
+  (sadece kaydı varsa) [⏭ Bu sefer isteme] (fe:o|x:<liste>:<kod>). Yazı + düğmeler birlikte; bütün modeller karara bağlanınca onay kartı. Model mesajları ve
+  fabrikaya gönderim parça parça (fabrika:kuyruk; 20 / 4 model, Cloudflare istek sınırı). Fabrikaya/Celal'e: "3183 · siyah 10 · bej 6" + site fotoğrafı
+  (yoksa kanal fotoğrafı, yazısı değiştirilerek); stok/satış/fiyat/maliyet/VOLONTE yazısı YOK. ✅ Gelecek → basana "Kaç günde hazır olur?" (1/2/3/5/7/10)
+  → o gün 10:00'dan sonra Murat + Hemra'ya "bugün hazır olmalıydı, geldi mi?" [📦 Geldi]; repete süresi için de. Sipariş kaydı tek çağrı (StokDO /fs-yaz:
+  fs:<id>, fs:acik, fs:takip zamanlı işler dizini, fs:hafta:<pazartesi>). Pazartesi 09:30 Murat'a haftalık özet (istenen, geldi, bekleniyor, gecikiyor).
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)

@@ -105,7 +105,7 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
-    if (/^f[ba]:/.test(String(cq.data || ""))) return fabrikaDugmesi(env, cq, tg, Math.floor(Date.now() / 1000));
+    if (/^f[bae]:/.test(String(cq.data || ""))) return fabrikaDugmesi(env, cq, tg, Math.floor(Date.now() / 1000));
     return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Geçersiz düğme." });
   }
   if (u.my_chat_member) return uyelik(u.my_chat_member, env);
