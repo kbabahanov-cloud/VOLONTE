@@ -302,6 +302,13 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   Kod/VOLONTE yazısı paketlemede (ham karede yazı yok, video aracı bozar); AI notu basılmaz. R2 arşivi henüz yok (R2 için Cloudflare'de ödeme yöntemi gerekir → sorulacak).
   Kullanıcının gireceği secret'lar (volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY. Selin kontrolü: üretim kapatıldıktan sonra da siteye ekleme çalışıyor (3403, 17:24).
 
+- 29 Ekim 19:07 EKSİK LİSTESİ YENİ KURALLAR (önceki iki mesajın yerine; VOLONTE yüklendi, 132 test): saat şartı YOK. Günün ilk VOLONTE satışı gelince izlenir;
+  satış listesi 10 dk değişmezse giriş bitti → Hemra'ya (saat kaç olursa olsun). Satış yoksa liste yok (köprü 20:55'te durur). Günde tek liste; sonradan yeni
+  model satılırsa (10 dk sabit) sadece yeni modeller EK liste (fabrika:<gün>-e<n>), Hemra'nın cevabı en son açık listeye. Hatırlatma listenin gidişine göre:
+  Hemra +1 saat, Murat +2 saat ("VOLONTE eksik listesi: Hemra onaylamadı"). /eksik aynı. Liste sadece VOLONTE mağazası (StokDO /satislar magaza).
+  BLACK ROSE (yarın köprüyle açılacak, kod YOK): gün içinde Merdan'a hiçbir stok/eksik mesajı gitmez; her gün 19:05'ten sonra günün tüm BR satışlarıyla
+  tek liste Merdan'a (6113852976); onay akışı aynı; onaylanmazsa Murat'a "Merdan onaylamadı" (kimin onaylamadığı yazar).
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)

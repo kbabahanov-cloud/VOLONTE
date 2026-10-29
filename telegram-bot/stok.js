@@ -198,8 +198,10 @@ export class StokDeposu {
     return { ok: true };
   }
   // Günün satılan modelleri: kod, satılan adet (mağazalar toplamı), stokta kalan.
-  satislar(gun) {
-    return this.hepsi("SELECT kod, SUM(adet) AS satilan FROM satis WHERE gun = ? GROUP BY kod ORDER BY kod", gun)
+  // magaza verilirse sadece o mağazanın satışları (VOLONTE → Hemra, Black Rose → Merdan; 30 Ekim).
+  satislar(gun, magaza = null) {
+    return (magaza ? this.hepsi("SELECT kod, SUM(adet) AS satilan FROM satis WHERE gun = ? AND magaza = ? GROUP BY kod ORDER BY kod", gun, magaza)
+      : this.hepsi("SELECT kod, SUM(adet) AS satilan FROM satis WHERE gun = ? GROUP BY kod ORDER BY kod", gun))
       .map((r) => ({ kod: r.kod, satilan: r.satilan, kalan: this.toplam(r.kod), ...this.tedarikci(r.kod) }));
   }
   tedarikci(kod) {
@@ -272,7 +274,7 @@ export class StokDO {
     if (yol === "/tum") return cevap(d.tum());
     if (yol === "/gizle") return cevap(d.gizle(g.kod, g.kim, g.simdi));
     if (yol === "/satis-yaz") return cevap(d.satisYaz(g.magaza, g.gun, g.kalemler || []));
-    if (yol === "/satislar") return cevap(d.satislar(g.gun));
+    if (yol === "/satislar") return cevap(d.satislar(g.gun, g.magaza || null));
     if (yol === "/tedarikci") return cevap(Object.fromEntries((g.kodlar || []).slice(0, 200).map((k) => [k, d.tedarikci(k)])));
     if (yol === "/tg-yaz") return cevap(d.tgYaz(g.kayitlar));
     if (yol === "/tg-hepsi") return cevap(d.tgHepsi());
