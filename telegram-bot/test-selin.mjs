@@ -545,8 +545,10 @@ test("üretim referansı: Selin'e özelden '3618 askı' yazılı fotoğraf kayde
   const r = JSON.parse(o.depo.get("selin:referans:3618"));
   assert.deepEqual(r.map((x) => [x.file_id, x.rol]), [["b1", "aski"], ["b2", "manken"]]);
   assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /askı 1, manken 1 fotoğraf[\s\S]*kanala ya da siteye gitmez/);
+  const once = cagri(o.g, "sendMessage").length;
   await guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, photo: [{ file_id: "b3" }] } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /model kodunu/);
+  assert.equal(cagri(o.g, "sendMessage").length, once); // yazısız dosya: cevap yok, kod mesajını bekler
+  assert.ok(o.depo.has("selin:bekleyenDosya:111"));
   await guncelleme({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, photo: [{ file_id: "b4" }], caption: "3618 askı" } }, o.env);
   assert.equal(JSON.parse(o.depo.get("selin:referans:3618")).length, 2);
 });
@@ -590,8 +592,8 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   const gonder = (ek) => guncelleme({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Murat" }, ...ek } }, o.env);
   await gonder({ media_group_id: "g1", document: { file_id: "d2", file_unique_id: "u2", mime_type: "image/jpeg" } });
   await gonder({ media_group_id: "g1", document: { file_id: "d1", file_unique_id: "u1", mime_type: "image/jpeg" }, caption: "3618 Büyük" });
-  await gonder({ video: { file_id: "v1", file_unique_id: "uv1", file_size: 5e6, width: 1080 } });
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /✅ 3618 alındı \(Büyük: 44-46-48-50\)/);
+  await gonder({ media_group_id: "g1", video: { file_id: "v1", file_unique_id: "uv1", file_size: 5e6, width: 1080 } });
+  assert.equal(cagri(o.g, "sendMessage").length, 1); // dosyalara tek tek cevap yok (sadece sabahki istek)
   let m = JSON.parse(o.depo.get("selin:modeller"))["3618"];
   assert.deepEqual(m.medya.map((x) => x.file_id).sort(), ["d1", "d2", "v1"]);
   const su = gun;
@@ -603,6 +605,7 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   assert.equal(m.durum, "onayda");
   assert.equal(m.taslak.fiyat, 55);
   assert.equal(m.taslak.bedenler, "44-46-48-50");
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /^✅ 3618 alındı \(2 fotoğraf, 1 video, Büyük\)$/); // tek onay mesajı
   const kart = cagri(o.g, "sendMessage").at(-1);
   assert.equal(kart.govde.chat_id, "777");
   assert.match(kart.govde.text, /Fiyat: 55 \$ \(Vegawin\) · Stok: 4 adet[\s\S]*Videolar: 1 \(sitenin kendi oynatıcısında/);
@@ -618,4 +621,27 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   assert.match(ozet, /İstenen: 15 · gelen: 1 · bugün siteye çıkan: 1 \(3618\)/);
   assert.match(ozet, /Gönderilemeyen \(sonra fal\.ai ile\): 14/);
   Date.now = gercekSaat;
+});
+
+test("yazısız dosyalar + ayrı kod mesajı: '3183 Küçük' gelince son yazısız dosyalar bağlanır, tek cevap; eski menü yok; bekleyen yoksa sohbetten geri bulunur", async () => {
+  const o = ortam();
+  const gonder = (ek) => guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, message_id: ek.message_id || 1, ...ek } }, o.env);
+  for (let i = 1; i <= 4; i++) await gonder({ message_id: 10 + i, document: { file_id: `d${i}`, file_unique_id: `u${i}`, mime_type: "image/jpeg" } });
+  await gonder({ message_id: 15, video: { file_id: "v1", file_unique_id: "uv1", file_size: 3e6 } });
+  assert.equal(cagri(o.g, "sendMessage").length, 0); // hiç cevap yok
+  await gonder({ message_id: 16, text: "3183 Küçük" });
+  const c = cagri(o.g, "sendMessage");
+  assert.equal(c.length, 1);
+  assert.match(c[0].govde.text, /^✅ 3183 alındı \(4 fotoğraf, 1 video, Küçük\)/);
+  const m = JSON.parse(o.depo.get("selin:modeller"))["3183"];
+  assert.deepEqual([m.durum, m.bedenGrubu, m.medya.length], ["geldi", "k", 5]);
+  // anlaşılmayan yazı: eski menü değil kısa uyarı
+  await gonder({ message_id: 17, text: "merhaba" });
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "Kod ve beden yazın, örnek: 3183 Küçük");
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => /Günlük hedef/.test(x.govde.text)));
+  // geri bulma: bekleyen kayıt yok, dosyalar sohbette (forwardMessage ile okunur)
+  o.g.length = 0;
+  await gonder({ message_id: 300, text: "3194 Büyük" }); // fake: 299..280 iletilir; 300 numaralı mesajdan geriye
+  const iletilen = cagri(o.g, "forwardMessage");
+  assert.ok(iletilen.length >= 1 && iletilen[0].govde.from_chat_id === 111);
 });
