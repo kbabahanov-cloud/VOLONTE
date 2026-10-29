@@ -38,6 +38,28 @@ const sitedenFoto = (env, site, kod) => {
   const u = site.find((x) => String(x.kod) === String(kod));
   return u && u.fotolar && u.fotolar.length ? `https://raw.githubusercontent.com/${env.GITHUB_REPO || "kbabahanov-cloud/VOLONTE"}/main/${u.fotolar[0]}` : null;
 };
+// Hemra'ya model mesajı: önce sitedeki fotoğraf; sitede yoksa kanaldaki en yeni paylaşım (yazısı değiştirilerek, yani
+// kanal yazısı/fiyat GİTMEZ); ikisi de yoksa yazı. Dönüş: { r, tur: "foto"|"metin", kaynak: "site"|"kanal"|null }
+async function hemraModelGonder(env, tg, kod, site, yazi, kl) {
+  const url = sitedenFoto(env, site, kod);
+  if (url) {
+    const r = await tg(env, "sendPhoto", { chat_id: sorumlu(env), photo: url, caption: yazi, reply_markup: kl });
+    if (r && r.ok) return { r, tur: "foto", kaynak: "site" };
+  }
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const gruplar = [...(((await env.KAYIT.get("kodlar", "json")) || {})[kod] || [])].sort((a, b) => b.tarih - a.tarih);
+  let deneme = 0;
+  for (const g of gruplar) {
+    for (const id of [g.y, ...g.ids].filter((x, i, l) => x > 0 && l.indexOf(x) === i)) {
+      if (!kanal || deneme++ >= 4) break;
+      const r = await tg(env, "copyMessage", { chat_id: sorumlu(env), from_chat_id: kanal.id, message_id: id, caption: yazi, reply_markup: kl });
+      if (r && r.ok) return { r, tur: "foto", kaynak: "kanal" };
+    }
+  }
+  const r = await tg(env, "sendMessage", { chat_id: sorumlu(env), text: `${yazi}\n📷 fotoğraf yok`, reply_markup: kl });
+  return { r, tur: "metin", kaynak: null };
+}
+
 async function kuyrukEkle(env, tur, anahtar) {
   const k = await ayarOku(env, "fabrika:kuyruk", { liste: [], gonderim: [] });
   if (!k[tur].includes(anahtar)) k[tur].push(anahtar);
@@ -112,7 +134,7 @@ async function listeyiGonder(env, gun, satislar, simdi, tg, kim = null, { anahta
   return modelParcasi(env, anahtar, tg);
 }
 
-function modelYazisi(x, oncekiIstek, eskiRenk, fotoVar) {
+function modelYazisi(x, oncekiIstek, eskiRenk) {
   const kalan = x.kalan == null ? null : Math.max(0, x.kalan);
   return [
     `${x.kod} · satılan ${x.satilan} · stok ${kalan == null ? "—" : kalan}${kalan === 0 ? " 🔴" : ""}`,
@@ -120,7 +142,6 @@ function modelYazisi(x, oncekiIstek, eskiRenk, fotoVar) {
     x.ikiKart ? "⚠️ iki kartı var" : null,
     Number(x.satilan) >= COK_SATAN ? "🔥 hızlı gidiyor, fazla iste" : null,
     oncekiIstek ? `Son istenen: ${renkYazi(oncekiIstek)}` : eskiRenk && eskiRenk.length ? `Daha önce istenen renkler: ${eskiRenk.join(", ")}` : null,
-    fotoVar ? null : "📷 fotoğraf yok",
   ].filter(Boolean).join("\n");
 }
 const modelKlavye = (anahtar, kod, oncekiVar) => ({ inline_keyboard: [[
@@ -141,13 +162,10 @@ async function modelParcasi(env, anahtar, tg) {
   const parca = d.gonderilmedi.slice(0, LISTE_PARCA);
   for (const kod of parca) {
     const x = d.modeller.find((m) => m.kod === kod);
-    const foto = sitedenFoto(env, site, kod);
-    const yazi = modelYazisi(x, sonIstek[kod], eskiRenkler[kod], Boolean(foto));
+    const yazi = modelYazisi(x, sonIstek[kod], eskiRenkler[kod]);
     const kl = modelKlavye(anahtar, kod, Boolean(sonIstek[kod]));
-    let r = foto ? await tg(env, "sendPhoto", { chat_id: sorumlu(env), photo: foto, caption: yazi, reply_markup: kl }) : null;
-    let tur = "foto";
-    if (!r || !r.ok) { tur = "metin"; r = await tg(env, "sendMessage", { chat_id: sorumlu(env), text: foto ? yazi + "\n📷 fotoğraf gönderilemedi" : yazi, reply_markup: kl }); }
-    if (r && r.ok) d.mesajlar[kod] = [r.result.message_id, tur, yazi];
+    const { r, tur, kaynak } = await hemraModelGonder(env, tg, kod, site, yazi, kl);
+    if (r && r.ok) d.mesajlar[kod] = [r.result.message_id, tur, tur === "metin" ? `${yazi}\n📷 fotoğraf yok` : yazi, kaynak];
   }
   // Gönderirken Hemra düğmeye basmış olabilir: güncel kaydı okuyup sadece mesajları ve kalanı yaz.
   const guncel = (await ayarOku(env, `fabrika:${anahtar}`, null)) || d;
@@ -205,6 +223,33 @@ async function kuyrukAdimi(env, simdi, tg) {
 
 // Bir kerelik (kullanıcı kararı 29 Ekim): KV "fabrika:yenidenGonder" = bugünün tarihi → eski düzende giden ve henüz fabrikaya
 // gitmemiş liste iptal edilir, Hemra'ya not düşülür, aynı günün satışları yeni düzende yeniden gönderilir. Sonuç KV'ye yazılır.
+// Bir kerelik (29 Ekim): "fabrika:fotoTamamla" = bugün → listede fotoğrafsız giden modeller için fotoğraflı mesaj yeniden gider
+// (Hemra'nın yazdıkları/seçimleri KORUNUR; yeni mesaj aynı durumu ve düğmeleri gösterir). Sonuç: "fabrika:fotoSonuc".
+async function fotoTamamla(env, gun, tg) {
+  if ((await env.KAYIT.get("fabrika:fotoTamamla")) !== gun) return false;
+  await env.KAYIT.delete("fabrika:fotoTamamla");
+  const d = await ayarOku(env, `fabrika:${gun}`, null);
+  if (!d || !d.modeller) { await env.KAYIT.put("fabrika:fotoSonuc", JSON.stringify({ gun, hata: "liste yok" }), { expirationTtl: 7 * 86400 }); return true; }
+  const site = await siteListesi(env);
+  const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
+  const eskiRenkler = await ayarOku(env, "fabrika:renkler", {});
+  const sonuc = {};
+  const eksik = d.modeller.filter((x) => { const m = d.mesajlar && d.mesajlar[x.kod]; sonuc[x.kod] = m && m[1] === "foto" ? "site" : null; return !m || m[1] !== "foto"; });
+  if (eksik.length) await tg(env, "sendMessage", { chat_id: sorumlu(env), text: `📷 Fotoğrafsız giden ${eksik.length} modelin fotoğrafları aşağıda. Yazdıklarınız kayıtlı, silinmedi.` });
+  for (const x of eksik) {
+    const s = d.secim && d.secim[x.kod];
+    const yazi = modelYazisi(x, sonIstek[x.kod], eskiRenkler[x.kod]) + (s ? `\n\n${s.isteme ? "⏭ Bu sefer istenmeyecek" : `✓ İstenecek: ${renkYazi(s.renkler)}`}` : "");
+    const { r, tur, kaynak } = await hemraModelGonder(env, tg, x.kod, site, yazi, modelKlavye(gun, x.kod, Boolean(sonIstek[x.kod])));
+    sonuc[x.kod] = kaynak || "yok";
+    if (r && r.ok && tur === "foto") d.mesajlar[x.kod] = [r.result.message_id, tur, modelYazisi(x, sonIstek[x.kod], eskiRenkler[x.kod]), kaynak];
+  }
+  const guncel = (await ayarOku(env, `fabrika:${gun}`, null)) || d;
+  guncel.mesajlar = { ...(guncel.mesajlar || {}), ...d.mesajlar };
+  await ayarYaz(env, `fabrika:${gun}`, guncel);
+  await env.KAYIT.put("fabrika:fotoSonuc", JSON.stringify({ gun, sonuc, secimler: Object.keys(guncel.secim || {}), asama: guncel.asama }), { expirationTtl: 7 * 86400 });
+  return true;
+}
+
 async function yenidenGonder(env, gun, simdi, tg) {
   if ((await env.KAYIT.get("fabrika:yenidenGonder")) !== gun) return false;
   await env.KAYIT.delete("fabrika:yenidenGonder");
@@ -227,6 +272,7 @@ export async function fabrikaAdimi(env, simdi, tg) {
   if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return; // satış okuması henüz doğrulanmadı
   const gun = gunAnahtari(simdi);
   if (await yenidenGonder(env, gun, simdi, tg)) return;
+  if (await fotoTamamla(env, gun, tg)) return;
   const d = await ayarOku(env, `fabrika:${gun}`, null);
   const satislar = await satislarAl(env, gun);
   const iz = JSON.stringify(satislar.map((x) => [x.kod, x.satilan]));

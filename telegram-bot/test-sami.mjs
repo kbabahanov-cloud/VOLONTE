@@ -657,3 +657,24 @@ test("bir kerelik: eski düzendeki liste iptal, aynı günün satışları yeni 
   await fabrikaAdimi(o.env, ist(19, 45), tg);
   assert.equal(g.length, 0); // ikinci kez gitmez
 });
+
+test("fotoğraf tamamlama: sitede yoksa kanal fotoğrafı (yazısı değiştirilerek); Hemra'nın seçimi korunur", async () => {
+  const { fabrikaAdimi } = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  o.depo.set("sami:satisAcik", "1");
+  const gun = "2026-10-28";
+  const kayit = { asama: "soruldu", zaman: ist(19), modeller: [{ kod: "3194", satilan: 2, kalan: 4, grup: "fabrika" }, { kod: "3999", satilan: 1, kalan: 0, grup: "fabrika" }], secim: { 3194: { renkler: [{ renk: "siyah", adet: 5 }] } }, mesajlar: { 3194: [1, "metin", "x"], 3999: [2, "metin", "y"] }, gonderilmedi: [], bilinen: ["3194", "3999"] };
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${gun}`, v: JSON.stringify(kayit) }) });
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun, kalemler: [{ kod: "3194", adet: 2 }, { kod: "3999", adet: 1 }] }) });
+  o.depo.set("fabrika:fotoTamamla", gun);
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 70 } }; };
+  await fabrikaAdimi(o.env, ist(19, 40), tg);
+  const kopya = g.find((x) => x.metod === "copyMessage");
+  assert.equal(kopya.govde.message_id, 500); // kanaldaki en yeni paylaşım
+  assert.match(kopya.govde.caption, /^3194 · satılan 2 · stok 4\n\n✓ İstenecek: siyah 5$/);
+  const sonuc = JSON.parse(o.depo.get("fabrika:fotoSonuc"));
+  assert.deepEqual(sonuc.sonuc, { 3194: "kanal", 3999: "yok" });
+  assert.deepEqual(sonuc.secimler, ["3194"]); // seçim korundu
+});

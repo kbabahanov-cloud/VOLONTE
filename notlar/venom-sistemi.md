@@ -320,6 +320,8 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 
 - 29 Ekim 19:30: bugünün eski düzende giden listesi iptal edildi (Hemra'ya not), 13 model / 77 adet yeni düzende yeniden gönderildi (bir kerelik KV fabrika:yenidenGonder; sonuç fabrika:yenidenSonuc). Günde tek liste kuralı aynen.
 
+- 29 Ekim 19:40: "📷 fotoğraf yok" sebebi: sitede sadece 15 model var, bugünün 13 modelinin hiçbiri sitede değil (kod eşleşmesi doğru). Düzeltme: sitede yoksa kanaldaki en yeni paylaşım (copyMessage, yazısı değiştirilerek). 13 modelin hepsi kanal fotoğrafıyla Hemra'ya yeniden gitti; Hemra'nın 3628 seçimi korundu (fabrika:fotoTamamla bir kerelik).
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
