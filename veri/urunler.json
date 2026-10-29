@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3429",
+  "baslik": "Floral Butterfly Sleeve Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length A-line dress with a V-neckline and fitted bodice that opens into a full, pleated skirt. Structured butterfly sleeves, a covered-button placket and a defined waistband frame the dusty pink floral print with its soft metallic sheen. Made for weddings, ceremonies and evening receptions. Produced in Istanbul with careful finishing.",
+   "fr": "Robe longue évasée à col en V, au buste ajusté qui s'ouvre sur une jupe ample et plissée. Les manches papillon structurées, la patte à boutons recouverts et la taille marquée mettent en valeur l'imprimé floral vieux rose aux reflets métallisés. Idéale pour les mariages, cérémonies et réceptions du soir. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Vestido longo evasê com decote em V e corpete ajustado que se abre numa saia ampla com pregas. As mangas borboleta estruturadas, a carcela de botões forrados e a cintura marcada valorizam o estampado floral rosa antigo com brilho metalizado. Pensado para casamentos, cerimónias e recepções à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3429/1.jpg",
+   "galeri/3429/2.jpg",
+   "galeri/3429/3.jpg",
+   "galeri/3429/4.jpg",
+   "galeri/3429/5.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 62,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3411",
   "baslik": "Bow Detail Midi Dress",
   "kategori": "dresses",
