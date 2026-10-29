@@ -1274,6 +1274,15 @@ async function dosyalariBagla(env, uid, kod, grup, dosyalar, simdi, { album = nu
   return x;
 }
 
+// Bugünün listesinden kalanlar (gönderilen ve /yok yazılanlar çıkar) — "alındı" mesajının altına (kullanıcı kararı 29 Ekim).
+export async function kalanSatiri(env, simdi = Math.floor(Date.now() / 1000), modeller = null) {
+  const istek = await oku(env, `selin:istek:${gunAnahtari(simdi)}`, null);
+  if (!istek || !istek.kodlar.length) return "";
+  modeller = modeller || (await oku(env, "selin:modeller", {}));
+  const kalan = istek.kodlar.filter((k) => modeller[k] && ozelMi(modeller[k]) && modeller[k].durum === "istendi");
+  return kalan.length ? `\nKalan ${kalan.length} model: ${kalan.join(", ")}` : `\nBugünün ${istek.kodlar.length} modeli tamam`;
+}
+
 async function alindiMetni(env, kod, x) {
   const foto = x.medya.filter((y) => y.tur === "foto");
   const video = x.medya.filter((y) => y.tur === "video");
@@ -1285,7 +1294,7 @@ async function alindiMetni(env, kod, x) {
   if (foto.some((f) => !f.belge)) notlar.push("Bazı fotoğraflar sıkıştırılmış geldi; en iyi kalite için 📎 → Dosya olarak gönderin.");
   if (video.some((v) => v.boyut > VIDEO_SINIR)) notlar.push("20 MB'tan büyük video sitede gösterilemez (Telegram botları indiremiyor).");
   const grupAd = x.bedenGrubu ? BEDEN_GRUPLARI[x.bedenGrubu] : null;
-  return `✅ ${kod} alındı (${foto.length} fotoğraf, ${video.length} video${grupAd ? `, ${grupAd.ad}` : ""})${notlar.length ? "\n• " + notlar.join("\n• ") : ""}`;
+  return `✅ ${kod} alındı (${foto.length} fotoğraf, ${video.length} video${grupAd ? `, ${grupAd.ad}` : ""})${notlar.length ? "\n• " + notlar.join("\n• ") : ""}${await kalanSatiri(env)}`;
 }
 
 // Kod mesajı ("3183 Küçük"): bekleyen yazısız dosyalar bağlanır. Bekleyen yoksa (ör. eski sürümde cevapsız
@@ -1902,7 +1911,7 @@ export async function guncelleme(u, env) {
     const kodlar = arg.filter((k) => /^\d{3,6}$/.test(k));
     for (const k of kodlar) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "gonderilemedi", zaman: simdi };
     await yazKV(env, "selin:modeller", modeller);
-    return yaz(kodlar.length ? `Tamam: ${kodlar.join(", ")} "gönderilemeyenler" listesine alındı (sonra fal.ai ile).` : "Örnek: /yok 3503 3518");
+    return yaz(kodlar.length ? `Tamam: ${kodlar.join(", ")} gönderilemeyenlere alındı (sonra fal.ai ile).${await kalanSatiri(env, simdi, modeller)}` : "Örnek: /yok 3503 3518");
   }
   if (komut === "/gonderilemeyenler") {
     const modeller = await oku(env, "selin:modeller", {});

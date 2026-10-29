@@ -605,7 +605,7 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   assert.equal(m.durum, "onayda");
   assert.equal(m.taslak.fiyat, 55);
   assert.equal(m.taslak.bedenler, "44-46-48-50");
-  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /^✅ 3618 alındı \(2 fotoğraf, 1 video, Büyük\)$/); // tek onay mesajı
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /^✅ 3618 alındı \(2 fotoğraf, 1 video, Büyük\)\nKalan 14 model: /); // tek onay mesajı + kalan liste
   const kart = cagri(o.g, "sendMessage").at(-1);
   assert.equal(kart.govde.chat_id, "777");
   assert.match(kart.govde.text, /Fiyat: 55 \$ \(Vegawin\) · Stok: 4 adet[\s\S]*Videolar: 1 \(sitenin kendi oynatıcısında/);
@@ -679,4 +679,22 @@ test("'dosya olarak' video (IMG_4581.MP4) video sayılır; 3183'ün bağlanmayan
   assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Videolar: 1/);
   await videoKurtarAdimi(o.env, 2000); // bir kez
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3183"].taslak.videolar.length, 1);
+});
+
+test("alındı mesajı bugünün kalan listesini gösterir; gönderilen ve /yok yazılan çıkar; bitince 'tamam'", async () => {
+  const o = ortam();
+  stokBagla(o, { "3183": { toplam: 3, fiyat: 40 }, "3186": { toplam: 2, fiyat: 30 }, "3322": { toplam: 1, fiyat: 50 } });
+  const gun = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  o.depo.set(`selin:istek:${gun}`, JSON.stringify({ kodlar: ["3183", "3186", "3322"] }));
+  o.depo.set("selin:modeller", JSON.stringify(Object.fromEntries(["3183", "3186", "3322"].map((k) => [k, { kaynak: "ozel", durum: "istendi" }]))));
+  const gonder = (ek) => guncelleme({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, ...ek } }, o.env);
+  await gonder({ message_id: 1, document: { file_id: "d1", file_unique_id: "u1", mime_type: "image/jpeg" } });
+  await gonder({ message_id: 2, text: "3183 Küçük" });
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "✅ 3183 alındı (1 fotoğraf, 0 video, Küçük)\nKalan 2 model: 3186, 3322");
+  await gonder({ message_id: 3, text: "/yok 3186" });
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Kalan 1 model: 3322$/);
+  await gonder({ message_id: 4, document: { file_id: "d2", file_unique_id: "u2", mime_type: "image/jpeg" } });
+  await gonder({ message_id: 5, text: "3322 Büyük" });
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /^✅ 3322 alındı \(1 fotoğraf, 0 video, Büyük\)[\s\S]*\nBugünün 3 modeli tamam$/);
+  assert.equal(cagri(o.g, "sendMessage").length, 3); // başka mesaj yok
 });
