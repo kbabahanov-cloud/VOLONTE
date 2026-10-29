@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3481",
+  "baslik": "Four-Piece Tailored Vest Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A four-piece tailored set in black and white: a long sleeveless vest, straight-leg trousers, a crisp white shirt and a black tie. The vest has a notched lapel, single-button closure and welt pockets, while the shirt finishes with buttoned cuffs. Ideal for the office, formal meetings and events that call for a sharp look. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble tailleur quatre pièces en noir et blanc : gilet long sans manches, pantalon droit, chemise blanche nette et cravate noire. Le gilet présente un col cranté, une fermeture à un bouton et des poches passepoilées, la chemise se termine par des poignets boutonnés. Parfait pour le bureau, les réunions officielles et les événements élégants. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de alfaiataria de quatro peças em preto e branco: colete comprido sem mangas, calça reta, camisa branca impecável e gravata preta. O colete tem gola entalhada, fecho de um botão e bolsos embutidos, e a camisa termina em punhos abotoados. Ideal para o escritório, reuniões formais e eventos que pedem um visual elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3481/1.jpg",
+   "galeri/3481/2.jpg",
+   "galeri/3481/3.jpg",
+   "galeri/3481/4.jpg",
+   "galeri/3481/5.jpg"
+  ],
+  "videolar": [
+   "selin/3481/0"
+  ],
+  "fiyat": 55,
+  "gizli": false,
+  "eklenme": "2026-10-29"
+ },
+ {
   "kod": "3439",
   "baslik": "One-Shoulder Pleated Maxi Dress",
   "kategori": "dresses",
