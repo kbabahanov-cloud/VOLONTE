@@ -285,6 +285,12 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
   (varsayılan 1, VOLONTE değişmedi); şifre sorusu ve uygulama adı ayardan. Vegawin programcısı için sami/blackrose/okuma-kullanicisi.sql (db_datareader + DENY yazma).
   Venom tarafı hazır: /kopru X-Magaza BLACKROSE + secret KOPRU_BLACKROSE (kullanıcı girer). Açık soru: Black Rose satışları 20:05 fabrika eksik listesine girsin mi?
 
+- 29 Ekim KARAR (yarın Black Rose köprüsüyle birlikte açılacak; bugün kod/yükleme YOK): eksik listesi mağazaya göre ikiye ayrılır.
+  VOLONTE satışları → Hemra (6448681578) onaylar (eskisi gibi); Black Rose satışları → Merdan (6113852976) onaylar. İki ayrı liste, akış aynı
+  (renk sorma, ✅ Onayla / ✏️ Düzelt, hatırlatmalar, fabrikaya/Celal'e dağıtım). Onaylanmazsa Murat'a giden uyarıda KİMİN onaylamadığı yazar.
+  Uygulama notu: satis tablosunda magaza sütunu var (ayrım mümkün); fabrika.js liste/hatırlatma/onay kayıtları mağaza başına (fabrika:<gun>:<magaza>);
+  Merdan'ın Sami botuna /start yazmış olduğu kontrol edilecek.
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
