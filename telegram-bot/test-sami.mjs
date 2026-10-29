@@ -227,3 +227,18 @@ test("birikmiş mesaj koruması: eski mesaja cevap yok, müşteri mesajı listey
   assert.equal(liste.length, 2);
   assert.match(liste[0].govde.text, /yeniden çalışıyor[\s\S]*1 müşteri mesajı \(HİÇBİRİNE otomatik cevap gitmedi\)[\s\S]*Aisha \(@aisha\): Price of 3194\?/);
 });
+
+test("köprü raporu: son değişiklik ve son çalışma ayrı; eski köprüde (sinyal yok) yanlış alarm verilmez; yeni köprü 16 saat susarsa uyarı", async () => {
+  const o = ortam();
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 3, fiyat: 69 }], ist(10, 0, -3)); // 3 gün önce değişiklik
+  const rapor = async (simdi) => samiRaporu({ simdi, ozet: await (await o.env.STOK.get().fetch("https://stok/ozet", { method: "POST", body: "{}" })).json(), olaylar: [], paylasimlar: [], tum: {}, site: [], kodlar: {}, sonpaylasim: {} });
+  let r = await rapor(ist(9, 5));
+  assert.match(r.metin, /son değişiklik 2[56]\.10 10:00 · 1 model\nKöprü son çalışma: yeni köprü kurulunca görünecek/);
+  assert.equal(r.sorunlar.length, 0); // yanlış alarm yok
+  await o.yaz("VOLONTE", [], ist(18, 55, -1)); // yeni köprü: boş gönderim (çalışıyorum)
+  r = await rapor(ist(9, 5));
+  assert.match(r.metin, /son değişiklik 2[56]\.10 10:00[\s\S]*Köprü son çalışma: .*18:55 ✅/);
+  r = await rapor(ist(18, 0)); // 23 saat sinyal yok
+  assert.match(r.metin, /16 saattir sinyal yok/);
+  assert.equal(r.sorunlar.length, 1);
+});

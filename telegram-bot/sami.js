@@ -142,10 +142,16 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
   const dun = gunAnahtari(simdi - 86400);
   const satir = [`📦 Sayım Sami — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`, ""];
   const sorunlar = [];
+  // Son değişiklik ile köprünün son çalışması ayrı (29 Ekim): eski köprü sadece değişiklik olunca gönderdiği için
+  // "son veri" eski görünüp yanlış alarm veriyordu. Uyarı sadece "çalışıyorum" sinyali gönderen yeni köprüde verilir.
   for (const k of ozet.kopruler) {
-    const eski = simdi - k.son > 24 * 3600;
-    satir.push(`Köprü ${k.magaza}: son veri ${tarihYaz(k.son)} ${eski ? "⚠️ 24 saatten eski (mağaza bilgisayarı kapalı olabilir)" : "✅"}`);
-    if (eski) sorunlar.push(`Köprü ${k.magaza} 24 saattir veri göndermedi`);
+    satir.push(`Köprü ${k.magaza}: son değişiklik ${tarihYaz(k.degisim || k.son)} · ${k.adet} model`);
+    if (k.kalp) {
+      const sonTemas = Math.max(k.son || 0, k.kalp || 0);
+      const durdu = simdi - sonTemas > 16 * 3600; // gece 19:00 → sabah 09:00 arası boşluk normal
+      satir.push(`Köprü son çalışma: ${tarihYaz(sonTemas)} ${durdu ? "⚠️ 16 saattir sinyal yok (mağaza bilgisayarı kapalı olabilir)" : "✅"}`);
+      if (durdu) sorunlar.push(`Köprü ${k.magaza} 16 saattir sinyal göndermedi`);
+    } else satir.push("Köprü son çalışma: yeni köprü kurulunca görünecek (eski köprü sadece değişiklik olunca veri gönderir)");
   }
   if (!ozet.kopruler.length) satir.push("⚠️ Köprüden hiç veri gelmedi.");
   satir.push(`Stokta: ${ozet.stokta} model · stoksuz: ${ozet.stoksuz}`);

@@ -40,6 +40,11 @@ export class StokDeposu {
   constructor(sql) {
     this.sql = sql;
     for (const t of TABLOLAR) this.sql.exec(t);
+    // Köprü: "son" = son temas (her gönderim), "degisim" = son değişiklikli gönderim, "kalp" = son boş gönderim
+    // (yeni köprünün "çalışıyorum" sinyali). Eski tabloya sütun ekler; kayıtlara dokunmaz.
+    for (const sutun of ["degisim", "kalp"]) {
+      try { this.sql.exec(`ALTER TABLE kopru ADD COLUMN ${sutun} INTEGER`); } catch { /* zaten var */ }
+    }
   }
   hepsi(sorgu, ...p) { return this.sql.exec(sorgu, ...p).toArray(); }
   tek(sorgu, ...p) { return this.hepsi(sorgu, ...p)[0] || null; }
@@ -85,10 +90,12 @@ export class StokDeposu {
         yeniSoru += 1;
       }
     }
+    const bos = !urunler.length;
     this.sql.exec(
-      `INSERT INTO kopru (magaza, son, adet) VALUES (?, ?, ?)
-       ON CONFLICT (magaza) DO UPDATE SET son = excluded.son, adet = excluded.adet`,
-      magaza, simdi, this.tek("SELECT COUNT(*) AS n FROM urun WHERE magaza = ?", magaza).n,
+      `INSERT INTO kopru (magaza, son, adet, degisim, kalp) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (magaza) DO UPDATE SET son = excluded.son, adet = excluded.adet,
+         degisim = COALESCE(excluded.degisim, kopru.degisim), kalp = COALESCE(excluded.kalp, kopru.kalp)`,
+      magaza, simdi, this.tek("SELECT COUNT(*) AS n FROM urun WHERE magaza = ?", magaza).n, bos ? null : simdi, bos ? simdi : null,
     );
     return { yazilan, yeniSoru };
   }
@@ -180,7 +187,7 @@ export class StokDeposu {
 
   ozet() {
     return {
-      kopruler: this.hepsi("SELECT magaza, son, adet FROM kopru ORDER BY magaza"),
+      kopruler: this.hepsi("SELECT magaza, son, adet, degisim, kalp FROM kopru ORDER BY magaza"),
       stokta: this.tek("SELECT COUNT(*) AS n FROM (SELECT kod FROM urun GROUP BY kod HAVING SUM(adet) > 0)").n,
       stoksuz: this.tek("SELECT COUNT(*) AS n FROM (SELECT kod FROM urun GROUP BY kod HAVING SUM(adet) <= 0)").n,
       kararlar: this.hepsi("SELECT durum, COUNT(*) AS n FROM karar GROUP BY durum"),
