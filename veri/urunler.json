@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3623",
+  "baslik": "Tie-Neck Blouse Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a long-sleeve blouse with a high-waisted maxi skirt that falls in soft, generous pleats. The blouse features a long tie-neck scarf, gently gathered puff shoulders, a concealed button placket and buttoned cuffs. Wear the scarf loose or tied in a bow for daytime events, ceremonies or the office. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un chemisier à manches longues et une jupe longue taille haute aux plis amples et fluides. Le chemisier se distingue par sa longue lavallière, ses épaules légèrement froncées, sa patte de boutonnage cachée et ses poignets boutonnés. La lavallière se porte libre ou nouée, pour une cérémonie, une journée habillée ou le bureau. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que une uma blusa de manga comprida a uma saia longa de cintura alta, com pregas amplas e fluidas. A blusa tem uma longa gola com laço, ombros levemente franzidos, botões escondidos e punhos abotoados. O laço pode ser usado solto ou atado, para cerimónias, eventos de dia ou o escritório. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3623/1.jpg",
+   "galeri/3623/2.jpg",
+   "galeri/3623/3.jpg",
+   "galeri/3623/4.jpg"
+  ],
+  "videolar": [
+   "selin/3623/0"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3622",
   "baslik": "Tiered Maxi Skirt Set",
   "kategori": "sets",
