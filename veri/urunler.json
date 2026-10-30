@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3598",
+  "baslik": "Tie-Dye Kaftan Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A flowing two-piece set pairing a loose tie-dye kaftan with wide satin-finish trousers in a matching solid tone. The kaftan features an embellished bib front with button placket, draped batwing sleeves and an asymmetric cascading hem. Easy to wear for family gatherings, ceremonies and elegant daytime occasions. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces fluide associant un caftan ample à motif tie-dye et un pantalon large à l'aspect satiné, dans un ton uni assorti. Le caftan se distingue par un plastron orné avec patte boutonnée, des manches chauve-souris drapées et un ourlet asymétrique en cascade. Idéal pour les réunions de famille, les cérémonies et les sorties élégantes en journée. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças fluido que combina um cafetã amplo com estampa tie-dye e calças largas de acabamento acetinado, num tom liso a condizer. O cafetã destaca-se pelo peitilho bordado com carcela de botões, mangas morcego drapeadas e bainha assimétrica em cascata. Perfeito para encontros de família, cerimónias e ocasiões elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3598/1.jpg",
+   "galeri/3598/2.jpg",
+   "galeri/3598/3.jpg",
+   "galeri/3598/4.jpg",
+   "galeri/3598/5.jpg",
+   "galeri/3598/6.jpg"
+  ],
+  "videolar": [
+   "selin/3598/0",
+   "selin/3598/1",
+   "selin/3598/2"
+  ],
+  "fiyat": 64,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3599",
   "baslik": "Crystal Button Skirt Set",
   "kategori": "sets",
