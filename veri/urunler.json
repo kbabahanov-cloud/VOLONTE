@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3607",
+  "baslik": "Pinstripe Four-Piece Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A four-piece pinstripe suit with a double-breasted jacket, white shirt, matching tie and wide-leg trousers. Sculpted shoulders, peak lapels and sculptural gold-tone buttons on the front and cuffs define the look. Wear it complete for the office and formal meetings, or style the jacket alone for a sharp evening edge. Made in Istanbul with careful tailoring.",
+   "fr": "Un costume quatre pièces à fines rayures : veste croisée, chemise blanche, cravate assortie et pantalon large. Épaules structurées, revers en pointe et boutons dorés sculptés sur le devant et les poignets lui donnent tout son caractère. À porter en entier au bureau ou pour les rendez-vous importants, ou la veste seule pour une soirée élégante. Confectionné à Istanbul avec soin.",
+   "pt": "Um fato de quatro peças com riscas finas: casaco trespassado, camisa branca, gravata a condizer e calças largas. Ombros estruturados, lapelas em bico e botões dourados esculpidos na frente e nos punhos marcam o visual. Use completo no escritório e em reuniões formais, ou apenas o casaco para uma noite elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3607/1.jpg",
+   "galeri/3607/2.jpg",
+   "galeri/3607/3.jpg",
+   "galeri/3607/4.jpg",
+   "galeri/3607/5.jpg",
+   "galeri/3607/6.jpg",
+   "galeri/3607/7.jpg"
+  ],
+  "videolar": [
+   "selin/3607/0",
+   "selin/3607/1"
+  ],
+  "fiyat": 72,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3623",
   "baslik": "Tie-Neck Blouse Skirt Set",
   "kategori": "sets",
