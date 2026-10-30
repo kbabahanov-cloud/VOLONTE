@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3592",
+  "baslik": "Floral Chiffon Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A flowing maxi dress in white chiffon with a bold black floral print, cut with a fitted bodice and a full, soft skirt. A sweetheart bodice under a sheer panel, long balloon sleeves with elasticated cuffs and a matching separate scarf define the look. Ideal for ceremonies, gatherings and refined daytime occasions. Made in Istanbul with careful workmanship.",
+   "fr": "Une robe longue fluide en mousseline blanche à imprimé floral noir, avec un buste ajusté et une jupe ample et légère. Le décolleté cœur sous un empiècement transparent, les longues manches ballon resserrées aux poignets et l'écharpe assortie fournie à part en font une pièce élégante. Idéale pour les cérémonies, les réceptions et les belles occasions de journée. Fabriquée à Istanbul avec soin.",
+   "pt": "Um vestido longo e fluido em chiffon branco com estampa floral preta, de corpete ajustado e saia ampla e leve. O decote coração sob um painel transparente, as mangas balão compridas com punhos franzidos e o lenço a condizer, vendido em conjunto, marcam o modelo. Ideal para cerimónias, encontros e ocasiões elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3592/1.jpg",
+   "galeri/3592/2.jpg",
+   "galeri/3592/3.jpg",
+   "galeri/3592/4.jpg",
+   "galeri/3592/5.jpg"
+  ],
+  "videolar": [
+   "selin/3592/0"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3583",
   "baslik": "Sequin Bodice Draped Dress",
   "kategori": "evening",
