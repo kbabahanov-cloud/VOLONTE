@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3596",
+  "baslik": "Ruffle Cape Chiffon Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing printed chiffon top with wide-leg trousers. The top features a high neck, layered ruffles across the front and down the long sides, and a split back that falls into a soft train. Elegant for celebrations, receptions and special daytime events. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant un haut fluide en mousseline imprimée à un pantalon large. Le haut se distingue par son col montant, ses volants superposés sur le devant et le long des côtés, et son dos fendu qui tombe en légère traîne. Idéal pour les cérémonies, réceptions et événements en journée. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que combina uma blusa fluida de chiffon estampado com calças de perna larga. A blusa tem gola alta, babados em camadas na frente e ao longo das laterais, e costas abertas que caem numa cauda suave. Elegante para celebrações, recepções e eventos especiais de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3596/1.jpg",
+   "galeri/3596/2.jpg",
+   "galeri/3596/3.jpg",
+   "galeri/3596/4.jpg",
+   "galeri/3596/5.jpg",
+   "galeri/3596/6.jpg",
+   "galeri/3596/7.jpg",
+   "galeri/3596/8.jpg"
+  ],
+  "videolar": [
+   "selin/3596/0",
+   "selin/3596/1",
+   "selin/3596/2",
+   "selin/3596/3"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3631",
   "baslik": "Lace Blouse Handkerchief Skirt Set",
   "kategori": "sets",
