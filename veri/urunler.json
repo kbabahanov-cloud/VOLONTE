@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3581",
+  "baslik": "Embroidered Bomber Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a cropped bomber jacket with a flowing pleated maxi skirt in a soft dusty rose. The jacket features gold floral embroidery on the front, a zip closure, a satin-finish collar and full sheer sleeves gathered into neat cuffs, while the skirt comes with a belt and decorative buckle. Wear it together for events and gatherings, or style the pieces separately. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces qui associe une veste bomber courte à une longue jupe plissée et fluide, dans un joli vieux rose. La veste se distingue par ses broderies florales dorées, sa fermeture zippée, son col à finition satinée et ses manches amples et transparentes resserrées aux poignets ; la jupe est accompagnée d'une ceinture à boucle décorative. À porter ensemble pour les réceptions et cérémonies, ou séparément. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um casaco bomber curto com uma saia longa plissada e fluida, num tom rosa antigo. O casaco destaca-se pelo bordado floral dourado, fecho de correr, gola com acabamento acetinado e mangas amplas e transparentes com punhos; a saia vem com cinto e fivela decorativa. Use o conjunto completo em eventos e celebrações ou combine as peças separadamente. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3581/1.jpg",
+   "galeri/3581/2.jpg",
+   "galeri/3581/3.jpg",
+   "galeri/3581/4.jpg"
+  ],
+  "videolar": [
+   "selin/3581/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3573",
   "baslik": "Peplum Pleated Midi Dress",
   "kategori": "dresses",
