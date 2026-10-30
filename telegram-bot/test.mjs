@@ -1285,6 +1285,22 @@ test("stok köprüsü: Sil gizler (stok gelse de); Beklesin 7 gün sonra tekrar 
   assert.deepEqual((await st.json()).map((x) => x.kod), ["3200"]);
 });
 
+test("köprü: kopru:haric listesindeki genel kod (ör. 2000) stoka ve satışa girmez; önceden gelmişse silinir", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "2000", ad: "CESITLI", adet: 50 }, { kod: "3100", ad: "ELBISE", adet: 3 }]);
+  o.depo.set("kopru:haric", JSON.stringify(["2000"]));
+  await kopru(o.env, [{ kod: "2000", ad: "CESITLI", adet: 40 }]);
+  const st = await (await o.env.STOK.get().fetch("https://stok/toplu", { method: "POST", body: JSON.stringify({ kodlar: ["2000", "3100"] }) })).json();
+  assert.ok(!st["2000"] || !(st["2000"].toplam > 0)); // silindi
+  assert.equal(st["3100"].toplam, 3);
+  const r = await worker.fetch(new Request("https://x/kopru/satis", { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: "Bearer kopru-anahtari-123" }, body: JSON.stringify({ gun: "2026-10-30", kalemler: [{ kod: "2000", adet: 25 }, { kod: "3634", adet: 8 }] }) }), o.env);
+  assert.equal(r.status, 200);
+  const sat = await (await o.env.STOK.get().fetch("https://stok/satislar", { method: "POST", body: JSON.stringify({ gun: "2026-10-30" }) })).json();
+  assert.deepEqual(JSON.stringify(sat).includes("2000"), false);
+  assert.ok(JSON.stringify(sat).includes("3634"));
+});
+
 // ---------- Karma depo: Kemal kendi nesnesinde ----------
 import { KatalogDO } from "./worker.js";
 

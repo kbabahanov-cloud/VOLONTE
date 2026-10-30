@@ -366,8 +366,15 @@ switch ($Mod) {
         $sat = Satislar $sifre $gun
         Write-Host ""
         Write-Host "$($gun.ToString('dd.MM.yyyy')) satış (belge tipi 21): $($sat.Count) model, toplam $([Math]::Round(($sat.Values | Measure-Object -Sum).Sum, 0)) adet"
-        $sat.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 10 | ForEach-Object { Write-Host ("  {0} · {1} adet" -f $_.Key, $_.Value) }
+        $sat.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object { Write-Host ("  {0} · {1} adet" -f $_.Key, $_.Value) }
       }
+      # Bugün satılan kartların Vegawin kodu ve adı (30 Ekim): genel/çeşitli kodları (ör. 2000) ayırt etmek için. Sadece SELECT.
+      $db = BagSutunu $q.sutunlar $T_DEPO
+      $kart = Sorgu $sifre ("SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD, SUM(E.ENVANTER) AS MIKTAR FROM $T_DEPO E INNER JOIN $T_STOK S ON E.$db = S.IND " +
+        "WHERE E.BELGETIPI = 21 AND E.DEPO = $DEPO AND E.$($q.tarih) >= @bas AND E.$($q.tarih) < @bit GROUP BY S.STOKKODU, S.MALINCINSI ORDER BY S.STOKKODU") @{ bas = (Get-Date).Date; bit = (Get-Date).Date.AddDays(1) }
+      Write-Host ""
+      Write-Host "Bugün satılan kartlar (Vegawin kodu | kart adı | adet):"
+      foreach ($r in $kart.Rows) { Write-Host ("  {0} | {1} | {2}" -f ([string]$r.KOD).Trim(), ([string]$r.AD).Trim(), [Math]::Abs((Num $r.MIKTAR))) }
       Write-Host ""
       Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi)." -ForegroundColor Green
     } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }

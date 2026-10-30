@@ -356,7 +356,9 @@ düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirm
   hatırlatma Merdan +1 saat, Murat +2 saat "Black Rose eksik listesi: Merdan onaylamadı"; sipariş bildirimleri Murat + liste sorumlusu.
   ⏳ Kurulum adımları kullanıcıda: kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onay → baslat.bat.
 
-**Sıradaki komut: Black Rose köprüsü — VOLONTE bilgisayarına Sami-BLACKROSE klasörü, kurulum.bat (sami_okuma şifresi) → Cloudflare KOPRU_BLACKROSE → deneme.bat ve satis-deneme.bat fotoğrafları Claude'a → onayla baslat.bat. Bekleyen: Sami ANTHROPIC_API_KEY, Pelin secret'ları + fal hazır.**
+**30 Ekim – Black Rose satis-deneme:** tip 21 doğru (bugün 11 model / 69 adet). "10 satır" sadece ekran sınırıydı (artık hepsi yazılır). "2000" kodu (25 adet) belirsiz → satis-deneme artık bugün satılan kartların Vegawin kodu + adını da gösterir (sadece SELECT). Model değilse KV `kopru:haric` = ["2000"] yazılır: stok, satış, eksik listesi, raporlara girmez (Kemal yüklemesi gerekiyor, kod hazır, testli).
+
+**Sıradaki komut: yeni Sami-kopru-BLACKROSE.zip içindeki sami.ps1'i Sami-BLACKROSE klasörüne koy → satis-deneme.bat → "Bugün satılan kartlar" fotoğrafı → 2000'e karar → (gerekirse kopru:haric + Kemal yükle) → baslat.bat (onay verildi). Bekleyen: Sami ANTHROPIC_API_KEY, Pelin secret'ları + fal hazır.**
 
 ## Kapsam kararı (24 Eylül 2026)
 
