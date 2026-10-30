@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3593",
+  "baslik": "Pleated Shoulder Blazer Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece suit pairing a tailored short-sleeve blazer with straight wide-leg trousers. The shawl collar extends into sculpted pleated shoulders, finished with a gold floral ornament closure and a slim matching belt at the waist. Wear it to the office, ceremonies or formal daytime events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un tailleur deux pièces associant une veste ajustée à manches courtes et un pantalon droit à jambes larges. Le col châle se prolonge en épaules plissées structurées, avec une fermeture ornée d'une fleur dorée et une fine ceinture assortie à la taille. Idéal pour le bureau, les cérémonies et les événements de journée. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um blazer acinturado de manga curta com calças retas de perna larga. A gola xale prolonga-se em ombros plissados estruturados, com fecho decorado por uma flor dourada e um cinto fino a condizer. Perfeito para o escritório, cerimónias e eventos formais de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3593/1.jpg",
+   "galeri/3593/2.jpg",
+   "galeri/3593/3.jpg",
+   "galeri/3593/4.jpg",
+   "galeri/3593/5.jpg"
+  ],
+  "videolar": [
+   "selin/3593/0",
+   "selin/3593/1"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3477",
   "baslik": "Polka Dot Skirt Set",
   "kategori": "sets",
