@@ -337,6 +337,14 @@ Meta doğrulaması web sitesinde şirket bilgisi (resmi unvan, adres) görmek is
 
 - 29 Ekim 20:05: Hemra'ya her model TEK mesaj (fotoğraf + bilgi + beden düğmeleri + Bu sefer isteme + durum); bugünkü 13 model kanal fotoğrafıyla yeniden gitti (fabrika:tekMesaj), seçimler korundu; bugün fabrikaya giden sipariş yoktu. Fabrikaya/Celal'e fotoğraf ZORUNLU: site → kanal (4 aday mesaj, yazısı değiştirilerek); bulunamazsa mesaj gitmez, Murat'a "📷 <kod> fotoğraf bulunamadı" (deneme hariç).
 
+## 🏢 UZUN VADELİ HEDEF: ÇOK KİRACILI (TENANT) SATIŞ (kullanıcı, 30 Ekim)
+Sistem ileride başka firmalara abonelikle satılacak. Şu anki kod TEK FİRMA (VOLONTE) için yazıldı; tenant'a hazır DEĞİL.
+Sabit yazılanlar: kişi kimlikleri (Murat, Hemra, Merdan…), kanal adı, WhatsApp numaraları, site/GitHub adresi, marka metinleri ("VOLONTE – Premium…"),
+beden grupları, Vegawin tablo adları (F0101/D0005), bütçeler, yapay zekâ istemlerindeki firma bilgisi; KV anahtarları firma öneksiz; StokDO tek nesne ("stok").
+İyi taraf: mimari (Worker + Durable Object + yerel köprü) tenant'a uygun → firma başına DO (idFromName(firma)), KV önek, firma ayar kaydı, firma başına bot.
+Kural (bundan sonra): yeni kodda firma bilgisi sabit yazılmaz, ayar/ortam değişkeninden okunur. Sıra önerisi: (1) firma ayar kaydına taşıma (VOLONTE çalışırken,
+düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirme, kurulum sihirbazı, ödeme, yönetim paneli, KVKK/GDPR, firma başına bütçe, güvenlik incelemesi.
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
