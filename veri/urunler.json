@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3448",
+  "baslik": "Beaded Kaftan Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing kaftan-style top with high-waisted wide-leg trousers. The top features a V-neckline edged with beading, wide draped sleeves and an asymmetric hem, while a tropical leaf print in coral, pink and red ties both pieces together. Easy for daytime events, holidays or relaxed gatherings. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut fluide façon caftan à un pantalon large taille haute. Le haut se distingue par un col en V bordé de perles, des manches amples et drapées et un ourlet asymétrique, tandis qu'un imprimé de feuillages tropicaux corail, rose et rouge unit les deux pièces. Idéal pour les événements de journée, les vacances ou les rencontres détendues. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina uma blusa fluida estilo cafetã com calça pantalona de cintura alta. A blusa tem decote em V debruado com pedrarias, mangas amplas e drapeadas e barra assimétrica, e o estampado de folhagens tropicais em coral, rosa e vermelho une as duas peças. Perfeito para eventos diurnos, férias ou encontros descontraídos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3448/1.jpg",
+   "galeri/3448/2.jpg",
+   "galeri/3448/3.jpg",
+   "galeri/3448/4.jpg"
+  ],
+  "videolar": [
+   "selin/3448/0"
+  ],
+  "fiyat": 38,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3563",
   "baslik": "Printed Abaya Shawl Set",
   "kategori": "sets",
