@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3618",
+  "baslik": "Striped Corset Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a structured corset top with a flowing maxi skirt, cut in bold yellow and black stripes. The sweetheart bustier has a gathered centre detail and a lace-up back, while the skirt features a layered peplum overlay with bias-cut stripes. Made for celebrations, evening events and occasion dressing. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut corset structuré à une jupe longue fluide, aux larges rayures jaunes et noires. Le bustier en cœur présente un drapé central et un laçage au dos, tandis que la jupe se distingue par un volant superposé aux rayures en biais. Idéal pour les cérémonies, soirées et grandes occasions. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um top corset estruturado com uma saia longa e fluida, em listras amarelas e pretas marcantes. O corpete em decote coração tem franzido central e amarração nas costas, enquanto a saia traz uma sobreposição em camadas com listras na diagonal. Pensado para festas, eventos noturnos e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3618/1.jpg",
+   "galeri/3618/2.jpg",
+   "galeri/3618/3.jpg",
+   "galeri/3618/4.jpg",
+   "galeri/3618/5.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 69,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3593",
   "baslik": "Pleated Shoulder Blazer Suit",
   "kategori": "sets",
