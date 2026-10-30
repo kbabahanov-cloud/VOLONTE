@@ -1173,7 +1173,8 @@ ${bloklar}</body></html>`;
 //  2) Sahip fotoğrafları ("Dosya olarak") ve videoyu gönderir; yazı: "3503 Küçük" / "3518 Büyük" / "3520 İkisi de".
 //  3) Selin başlık, açıklama (4 dil), kategori hazırlar; fiyat ve stok Vegawin'den. Taslak sahibe onaya gider.
 //  4) Onaylanınca siteye yüklenir. 20:00'de günün özeti; gönderilmeyenler "gönderilemedi" listesine (sonra fal.ai).
-export const GUNLUK_ISTEK = 15;
+export const GUNLUK_ISTEK = 30; // kullanıcı kararı 30 Ekim (önce 15)
+export const EK_ISTEK = 15; // bir kerelik ek liste (KV "venom:selinEkIstek" = gün)
 const ISTEK_SAATI = 10;
 const GUN_SONU_SAATI = 20;
 // Önce: önizlemede fotoğrafı karışan 24 model + sitedeki 4 model (yeni yolla baştan), sonra stoktaki diğerleri.
@@ -1190,7 +1191,10 @@ export async function istekAdaylari(env, modeller) {
   const uygun = (k) => !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
   const oncelik = ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k));
   const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
-  return [...oncelik, ...diger];
+  // Celal'in modelleri (Vegawin kodu "CELAL" ile biten; köprü sadece işaret gönderir): listede EN SONA (kullanıcı kararı 30 Ekim).
+  const celal = new Set(stok.filter((r) => r.tedarikci === "CELAL").map((r) => String(r.kod)));
+  const sirali = [...oncelik, ...diger];
+  return { kodlar: sirali, celal };
 }
 async function stokIste2(env, yol, govde = {}) {
   if (!env.STOK) return [];
@@ -1202,23 +1206,51 @@ async function stokIste2(env, yol, govde = {}) {
   }
 }
 
-// 10:00 — günün istek listesi (bir kez)
+// 10:00 — günün istek listesi (bir kez). Sahiplere (0091 hesabı + Merdan: SAHIP_IDS) gider; Celal'in modelleri en sonda.
 export async function istekAdimi(env, simdi) {
   const s = saat(simdi);
   if (s < ISTEK_SAATI || s >= GUN_SONU_SAATI) return;
   const gun = gunAnahtari(simdi);
+  if (await ekIstekAdimi(env, gun, simdi)) return;
   if (await env.KAYIT.get(`selin:istek:${gun}`)) return;
   const kime = await sahipler(env);
   if (!kime.length) return; // sahip (0091) tanımlanmadan istek gitmez
   const modeller = await oku(env, "selin:modeller", {});
-  const secilen = (await istekAdaylari(env, modeller)).slice(0, GUNLUK_ISTEK);
+  const { kodlar, celal } = await istekAdaylari(env, modeller);
+  // Günün 30 modeli normal sırayla seçilir; liste içinde Celal'in modelleri en sona konur.
+  const ilk = kodlar.slice(0, GUNLUK_ISTEK);
+  const secilen = [...ilk.filter((k) => !celal.has(k)), ...ilk.filter((k) => celal.has(k))];
   await yazKV(env, `selin:istek:${gun}`, { kodlar: secilen, zaman: simdi }, 30 * 86400);
   if (!secilen.length) return;
+  return istekGonder(env, kime, modeller, secilen, celal, simdi, `🌸 Günaydın! Bugün ${secilen.length} model istiyorum (Vegawin'de stokta):`);
+}
+
+// Bir kerelik ek liste (kullanıcı kararı 30 Ekim): Celal'in modelleri olmadan, istenmemiş/sitede olmayan EK_ISTEK model hemen.
+async function ekIstekAdimi(env, gun, simdi) {
+  if ((await env.KAYIT.get("venom:selinEkIstek")) !== gun) return false;
+  await env.KAYIT.delete("venom:selinEkIstek");
+  const kime = await sahipler(env);
+  if (!kime.length) return true;
+  const modeller = await oku(env, "selin:modeller", {});
+  const { kodlar, celal } = await istekAdaylari(env, modeller);
+  const secilen = kodlar.filter((k) => !celal.has(k)).slice(0, EK_ISTEK);
+  const onceki = await oku(env, `selin:istek:${gun}`, { kodlar: [], zaman: simdi });
+  await yazKV(env, `selin:istek:${gun}`, { ...onceki, kodlar: [...onceki.kodlar, ...secilen], ek: secilen }, 30 * 86400);
+  await env.KAYIT.put("venom:selinEkIstekSonuc", JSON.stringify({ gun, kodlar: secilen, kime }), { expirationTtl: 7 * 86400 });
+  if (!secilen.length) return true;
+  await istekGonder(env, kime, modeller, secilen, celal, simdi, `🌸 Ek liste: ${secilen.length} model daha (Vegawin'de stokta, sitede yok; Celal'in modelleri yok):`);
+  return true;
+}
+
+async function istekGonder(env, kime, modeller, secilen, celalKume, simdi, baslik) {
+  const normal = secilen.filter((k) => !celalKume.has(k));
+  const celal = secilen.filter((k) => celalKume.has(k));
   for (const k of secilen) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "istendi", istenme: simdi, medya: [], kart: [] };
   await yazKV(env, "selin:modeller", modeller);
   const metin = [
-    `🌸 Günaydın! Bugün ${secilen.length} model istiyorum (Vegawin'de stokta):`,
-    secilen.join(", "),
+    baslik,
+    normal.join(", "),
+    ...(celal.length ? ["", `👤 Celal'in modelleri (en son): ${celal.join(", ")}`] : []),
     "",
     "Her model için fotoğrafları 📎 → Dosya olarak gönderin (kalite düşmesin), videoyu da ekleyin.",
     "Yazıya kod ve beden: \"3503 Küçük\" · \"3518 Büyük\" · \"3520 İkisi de\" (Küçük 38-44, Büyük 44-50).",

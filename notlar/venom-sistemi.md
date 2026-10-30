@@ -347,6 +347,8 @@ düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirm
 
 - 30 Ekim KEMAL REPETE PAYLAŞIMI (yüklendi, 142 test): Hemra/Murat/Merdan Kemal'e "/repete 3394" ya da "3394, 3490 repete geldi" (tek kodda renk: "… geldi siyah 10 bej 6"). Medya site → kanal son paylaşım (yazısız). Alt yazı yeni düzen, 🔁 BACK IN STOCK. Önizleme Hemra'ya (+ yazana): ✅ Onayla / ✏️ Düzelt / ❌ İptal (rpt:<id>, rp1/rpd/rpx). Onay → hemen kanala, günlük 10'a sayılmaz, stok kontrolü yok (Vegawin gecikebilir; önizlemede uyarı), tg tarihi tabloya. Medya yoksa "fotoğraf/video bulunamadı". Sami'den gelen repete de sayaca dahil değil.
 
+- 30 Ekim SELİN LİSTESİ (yüklendi, 143 test): günde 30 model (GUNLUK_ISTEK), 10:00; 30 normal sırayla seçilir, liste içinde Celal'in modelleri (StokDO tedarikci CELAL) en sonda ayrı satırda. Liste Merdan'a da (SAHIP_IDS 6113852976) + 0091 hesabı. Bugün 14:25 bir kerelik ek liste (venom:selinEkIstek): 15 model, Celal'siz, sitede olmayan: 3633, 3631, 3626, 3623, 3622, 3607, 3606, 3604, 3599, 3598, 3596, 3582, 3581, 3573, 3569. Onay akışı aynı.
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)
