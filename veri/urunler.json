@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3622",
+  "baslik": "Tiered Maxi Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted long-sleeve top with a flowing tiered maxi skirt. The yellow striped base carries a painterly print of floral motifs and colourful circles, while the skirt's layered flounces and elasticated waist create graceful movement. Wear it to daytime celebrations, brunches or special gatherings. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut ajusté à manches longues et une jupe longue à volants superposés. Le fond rayé jaune porte un imprimé pictural de fleurs et de cercles colorés, tandis que les volants et la taille élastique donnent un joli mouvement. À porter pour les fêtes de journée, les brunchs ou les réunions spéciales. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa justa de manga comprida com uma saia longa em camadas. A base listrada amarela traz um estampado artístico de flores e círculos coloridos, e os folhos sobrepostos com cintura elástica criam um movimento elegante. Ideal para celebrações diurnas, brunches ou encontros especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3622/1.jpg",
+   "galeri/3622/2.jpg",
+   "galeri/3622/3.jpg",
+   "galeri/3622/4.jpg"
+  ],
+  "videolar": [
+   "selin/3622/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3626",
   "baslik": "Pleated Corset Maxi Dress",
   "kategori": "evening",
