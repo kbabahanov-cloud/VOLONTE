@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3631",
+  "baslik": "Lace Blouse Handkerchief Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a black lace blouse with a flowing midi-to-maxi skirt in an ochre and black floral print. The blouse has an off-the-shoulder neckline, voluminous balloon sleeves and a gathered elastic hem. The skirt has a comfortable waistband, an asymmetric handkerchief hem and black lace panels. Suited to celebrations and refined daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces qui associe une blouse en dentelle noire à une jupe longue et fluide, imprimée de fleurs noires sur fond ocre. La blouse se distingue par son encolure dégagée, ses manches ballon amples et son ourlet froncé élastiqué. La jupe offre une taille confortable, un ourlet asymétrique en pointes et des empiècements de dentelle noire. Idéal pour les cérémonies et les sorties élégantes en journée. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa de renda preta com uma saia longa e fluida, estampada com flores pretas sobre fundo ocre. A blusa tem decote ombro a ombro, mangas balão volumosas e barra franzida com elástico. A saia traz cós confortável, barra assimétrica em pontas e painéis de renda preta. Ideal para celebrações e eventos elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3631/1.jpg",
+   "galeri/3631/2.jpg",
+   "galeri/3631/3.jpg",
+   "galeri/3631/4.jpg"
+  ],
+  "videolar": [
+   "selin/3631/0"
+  ],
+  "fiyat": 56,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3598",
   "baslik": "Tie-Dye Kaftan Trouser Set",
   "kategori": "sets",
