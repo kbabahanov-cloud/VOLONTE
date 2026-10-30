@@ -1,5 +1,25 @@
 [
  {
+  "kod": "3477",
+  "baslik": "Polka Dot Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece polka dot set pairing a white blouse and matching scarf with a full black midi skirt with an elasticated waist. The blouse features voluminous balloon sleeves, a draped shoulder line and heart-shaped buttons, while the scarf ties softly at the neck. Ideal for daytime events, brunches and refined occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble trois pièces à pois qui associe un chemisier blanc et son foulard assorti à une jupe midi noire ample, à taille élastique. Le chemisier se distingue par ses manches ballon volumineuses, son drapé aux épaules et ses boutons en forme de cœur ; le foulard se noue délicatement au cou. Parfait pour les événements de jour, les brunchs et les occasions élégantes. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de três peças com bolinhas que combina uma blusa branca e um lenço a condizer com uma saia midi preta rodada, de cintura elástica. A blusa destaca-se pelas mangas balão volumosas, pelo caimento drapeado nos ombros e pelos botões em forma de coração, enquanto o lenço se ata suavemente ao pescoço. Ideal para eventos de dia, brunches e ocasiões elegantes. Produzido em Istambul com um acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3477/1.jpg",
+   "galeri/3477/2.jpg",
+   "galeri/3477/3.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 44,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3592",
   "baslik": "Floral Chiffon Maxi Dress",
   "kategori": "dresses",
