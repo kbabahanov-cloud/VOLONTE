@@ -356,9 +356,10 @@ düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirm
   hatırlatma Merdan +1 saat, Murat +2 saat "Black Rose eksik listesi: Merdan onaylamadı"; sipariş bildirimleri Murat + liste sorumlusu.
   ⏳ Kurulum adımları kullanıcıda: kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onay → baslat.bat.
 
-**30 Ekim – Black Rose satis-deneme:** tip 21 doğru (bugün 11 model / 69 adet). "10 satır" sadece ekran sınırıydı (artık hepsi yazılır). "2000" kodu (25 adet) belirsiz → satis-deneme artık bugün satılan kartların Vegawin kodu + adını da gösterir (sadece SELECT). Model değilse KV `kopru:haric` = ["2000"] yazılır: stok, satış, eksik listesi, raporlara girmez (Kemal yüklemesi gerekiyor, kod hazır, testli).
+**30 Ekim – Black Rose satis-deneme:** tip 21 doğru (bugün 11 model / 69 adet). "10 satır" sadece ekran sınırıydı (artık hepsi yazılır).
+**30 Ekim – 2000 = İNDİRİMLİ MAL (Murat):** CRY'den toplu/ucuz alınan indirimli malların ortak kodu, gerçek model değil, tekrar alınmaz; BR/VL DISCOUNT kanalında paylaşılıyor. SİLİNMEZ (stok + satış izlenir). `stok.js INDIRIMLI = ["2000"]` → hariç: eksik listesi (Hemra/Merdan/fabrika), stok-bitti soruları (repete/sil), Selin fotoğraf isteği, Kemal model seçimi + 🔥 sıralaması + /repete, Sami "2000 repete geldi", Sami beyni (satış/stoksuz; stok bilgisi sadece Murat'a). Murat'a: her gün 21:15 "🏷 İndirimli mal (2000): X adet satıldı, Y kaldı" (satış varsa) + pazartesi haftalık özette aynı satır. Kemal + Sami yüklendi. İleride DISCOUNT kanalı: 2000 orada kullanılabilir, fiyat sadece Murat/Hemra/Merdan'ın elle yazdığı rakam (henüz kurulmadı).
 
-**Sıradaki komut: yeni Sami-kopru-BLACKROSE.zip içindeki sami.ps1'i Sami-BLACKROSE klasörüne koy → satis-deneme.bat → "Bugün satılan kartlar" fotoğrafı → 2000'e karar → (gerekirse kopru:haric + Kemal yükle) → baslat.bat (onay verildi). Bekleyen: Sami ANTHROPIC_API_KEY, Pelin secret'ları + fal hazır.**
+**Sıradaki komut: VOLONTE bilgisayarında Sami-BLACKROSE klasöründe baslat.bat (onay verildi; yeni sami.ps1 gerekmez). Sonra durum.bat fotoğrafı. Bekleyen: Pelin secret'ları + fal hazır; Sami beyin denemesi sonucu kontrol.**
 
 ## Kapsam kararı (24 Eylül 2026)
 

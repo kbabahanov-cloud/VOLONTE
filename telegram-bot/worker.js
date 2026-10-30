@@ -47,7 +47,7 @@ import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } f
 export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
 import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir } from "./duzen.js";
-import { StokDO, stokKodu } from "./stok.js";
+import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi } from "./venom.js";
@@ -1325,6 +1325,7 @@ async function durumBaglami(env, kodlar, simdi) {
   const tarih = await telegramTarihleriAl(env);
   const geldi = env.STOK ? await stokIste(env, "/geldiler", { basla: simdi - 30 * 86400 }).catch(() => ({})) : {};
   const satislar = env.STOK ? await stokIste(env, "/satis-donem", { basla: gunAnahtari(simdi - COK_SATAN_GUN * 86400), bitis: gunAnahtari(simdi) }).catch(() => ({})) : {};
+  for (const k of INDIRIMLI) delete satislar[k]; // indirimli mal (2000) çok satanlar sıralamasına girmez
   return { stok, tarih, geldi, satislar };
 }
 
@@ -1441,7 +1442,7 @@ export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
   const haric = [...kuyruk.map((o) => o.kod), ...Object.entries(atlananlar).filter(([, t]) => t > simdi).map(([k]) => k)];
   const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
   const { son } = await telegramTarihleriAl(env);
-  const sec = (adet, disari = []) => gununModelleri({ site, stok, tg: son, haric: [...haric, ...disari], simdi, adet }).map((u) => String(u.kod));
+  const sec = (adet, disari = []) => gununModelleri({ site, stok, tg: son, haric: [...haric, ...disari, ...INDIRIMLI], simdi, adet }).map((u) => String(u.kod));
   if (!gruplar) gruplar = [{ baslik: null, kodlar: sec(GUNLUK_SINIR) }];
   else {
     // Deneme: elle verilen kodlar (stoğu olmayan çıkar) ya da { otomatik: n } → kuralla seçilen n model (diğer gruplar ve "haric" dışında).
@@ -1702,6 +1703,10 @@ export async function repeteIstegi(msg, env, { kodlar, renkler }) {
   const alicilar = repeteAlicilar(env, msg.chat.id);
   await telegram(env, "sendChatAction", { chat_id: msg.chat.id, action: "upload_photo" });
   for (const kod of kodlar) {
+    if (indirimliMi(kod)) { // indirimli mal (2000) ana kanalda paylaşılmaz (ileride BR/VL DISCOUNT kanalı)
+      await telegram(env, "sendMessage", { chat_id: msg.chat.id, text: `⚠️ ${kod} indirimli mal kodu — ana kanalda repete paylaşılmaz.` });
+      continue;
+    }
     let paket;
     try { paket = await repetePaketi(env, { kod, renkler: kodlar.length === 1 ? renkler : [] }, simdi); } catch (e) {
       for (const k of alicilar) await telegram(env, "sendMessage", { chat_id: k, text: /bulunamadı|medya/i.test(e.message) ? `⚠️ ${kod} için fotoğraf/video bulunamadı — paylaşılmadı.` : `⚠️ ${kod} hazırlanamadı: ${e.message}` });
@@ -1772,12 +1777,6 @@ async function stokGizliler(env) {
   try { return await stokIste(env, "/gizliler"); } catch { return []; }
 }
 
-// Model olmayan kodlar (iki köprü için ortak; aynı kod iki mağazada olmaz): stok, satış, eksik listesi ve raporlara girmez.
-async function haricKodlar(env) {
-  const l = await env.KAYIT.get("kopru:haric", "json").catch(() => null);
-  return new Set((Array.isArray(l) ? l : []).map(stokKodu));
-}
-
 // Köprüden gelen değişiklikler. Her mağazanın kendi gizli anahtarı var: KOPRU_<MAĞAZA> (secret).
 async function kopruAl(request, env) {
   const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
@@ -1787,10 +1786,8 @@ async function kopruAl(request, env) {
   if (!govde || !Array.isArray(govde.urunler) || govde.urunler.length > 2000) return new Response("geçersiz", { status: 400 });
   const simdi = Math.floor(Date.now() / 1000);
   // "0" ile başlayan kodlar (ör. 000000, 001 TEKLEME, 0002 TRS) model değil, iç kart: alınmaz.
-  // "kopru:haric" (30 Ekim): model olmayan genel kodlar (ör. çeşitli satış kartı). Önceden gelmişse silinir (yok).
-  const haric = await haricKodlar(env);
   const urunler = govde.urunler.filter((u) => !/^0/.test(stokKodu(u.kod)))
-    .map((u) => (u.yok || haric.has(stokKodu(u.kod)) ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat), celal: u.celal === true, ikiKart: u.ikiKart === true }));
+    .map((u) => (u.yok ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat), celal: u.celal === true, ikiKart: u.ikiKart === true }));
   const sonuc = await stokIste(env, "/yaz", { magaza, urunler, simdi });
   if (sonuc.yeniSoru && env.BOT_TOKEN) await stokSorulariGonder(env, simdi);
   return Response.json({ ok: true, ...sonuc });
@@ -1912,8 +1909,7 @@ async function kopruSatis(request, env) {
   if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !env.STOK || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
   const govde = await request.json().catch(() => null);
   if (!govde || !/^\d{4}-\d{2}-\d{2}$/.test(String(govde.gun || "")) || !Array.isArray(govde.kalemler) || govde.kalemler.length > 2000) return new Response("geçersiz", { status: 400 });
-  const haric = await haricKodlar(env);
-  const kalemler = govde.kalemler.filter((k) => !/^0/.test(stokKodu(k.kod)) && !haric.has(stokKodu(k.kod))).map((k) => ({ kod: stokKodu(k.kod), adet: Math.abs(Number(k.adet) || 0) }));
+  const kalemler = govde.kalemler.filter((k) => !/^0/.test(stokKodu(k.kod))).map((k) => ({ kod: stokKodu(k.kod), adet: Math.abs(Number(k.adet) || 0) }));
   return Response.json(await stokIste(env, "/satis-yaz", { magaza, gun: govde.gun, kalemler }));
 }
 

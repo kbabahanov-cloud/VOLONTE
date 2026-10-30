@@ -16,6 +16,12 @@
 export const BEKLESIN_STOK_GUN = 7;
 
 export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
+// İndirimli mal kodları (kullanıcı kararı 30 Ekim): 2000 = CRY'den toplu alınan indirimli malların ortak kodu, gerçek model
+// değil, tekrar alınmaz. SİLİNMEZ: stoğu ve satışı izlenir; ama eksik listesine (Hemra/Merdan/fabrika), stok-bitti
+// sorularına (🔁 Repete / 🗑 Sil), Selin'in fotoğraf isteğine ve Kemal'in model seçimi/repete paylaşımına girmez.
+// Satışı Murat'a ayrı tek satır gider. İleride BR/VL DISCOUNT kanalında kullanılacak (fiyatı orada elle yazılır).
+export const INDIRIMLI = ["2000"];
+export const indirimliMi = (kod) => INDIRIMLI.includes(stokKodu(kod));
 
 const TABLOLAR = [
   `CREATE TABLE IF NOT EXISTS urun (magaza TEXT NOT NULL, kod TEXT NOT NULL, ad TEXT, adet REAL, fiyat REAL,
@@ -95,7 +101,7 @@ export class StokDeposu {
       if (sonra != null && sonra > 0) {
         // Stok geldi: repete/beklesin/soru kapanır, model yeniden görünür. "Sil" (gizli) kalır.
         if (karar && karar.durum !== "gizli") this.sql.exec("DELETE FROM karar WHERE kod = ?", kod);
-      } else if (!ilkMi && once != null && once > 0 && !karar) {
+      } else if (!ilkMi && once != null && once > 0 && !karar && !indirimliMi(kod)) { // indirimli mal (2000): soru yok
         this.sql.exec("INSERT INTO karar (kod, durum, zaman) VALUES (?, 'soru', ?)", kod, simdi);
         yeniSoru += 1;
       }
@@ -161,7 +167,7 @@ export class StokDeposu {
   stoktakiler() {
     const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
     return this.hepsi("SELECT kod, SUM(adet) AS toplam, MAX(fiyat) AS fiyat, MAX(tedarikci) AS tedarikci FROM urun GROUP BY kod HAVING SUM(adet) > 0 AND MAX(fiyat) IS NOT NULL ORDER BY kod")
-      .filter((r) => !silinen.has(r.kod));
+      .filter((r) => !silinen.has(r.kod) && !indirimliMi(r.kod));
   }
 
   olaylar(basla, bitis) {

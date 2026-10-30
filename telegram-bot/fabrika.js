@@ -11,6 +11,7 @@
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
 import { stokIste } from "./stokbot.js";
+import { indirimliMi, INDIRIMLI } from "./stok.js";
 
 const SAAT_FARKI = 3 * 3600;
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
@@ -28,7 +29,8 @@ export const MAGAZALAR = [
 ];
 const kimeOf = (env, d) => (d && d.sorumlu ? String(d.sorumlu) : sorumlu(env));
 const cfgOf = (d) => MAGAZALAR.find((c) => c.magaza === ((d && d.magaza) || MAGAZA)) || MAGAZALAR[0];
-const satislarAl = (env, gun, magaza = MAGAZA) => stokIste(env, "/satislar", { gun, magaza });
+// İndirimli mal (2000) eksik listesine girmez; satışı Murat'a ayrı satırla gider (indirimliOzet).
+const satislarAl = async (env, gun, magaza = MAGAZA) => (await stokIste(env, "/satislar", { gun, magaza })).filter((x) => !indirimliMi(x.kod));
 const COK_SATAN = 10; // günde 10+ satan: "🔥 hızlı gidiyor, fazla iste" (sadece Hemra ve Murat görür, fabrikaya gitmez)
 const LISTE_PARCA = 20; // Hemra'ya bir çalışmada en fazla model mesajı (Cloudflare istek sınırı)
 const GONDERIM_PARCA = 4; // fabrikaya bir çalışmada en fazla model
@@ -432,6 +434,18 @@ async function yenidenGonder(env, gun, simdi, tg) {
   return true;
 }
 
+// İndirimli mal (2000) günlük tek satır, SADECE Murat'a: iki mağazanın listeleri bittikten sonra (21:15), satış varsa.
+const INDIRIMLI_SAAT = 21.25;
+export const indirimliSatiri = (kod, satilan, kalan) => `🏷 İndirimli mal (${kod}): ${satilan} adet satıldı, ${kalan == null ? "—" : Math.max(0, kalan)} kaldı`;
+async function indirimliOzet(env, gun, simdi, tg) {
+  if (saat(simdi) < INDIRIMLI_SAAT || (await ayarOku(env, `fabrika:indirimli:${gun}`, null))) return false;
+  await ayarYaz(env, `fabrika:indirimli:${gun}`, 1);
+  const l = (await stokIste(env, "/satislar", { gun })).filter((x) => indirimliMi(x.kod) && x.satilan > 0);
+  if (!l.length) return false;
+  await tg(env, "sendMessage", { chat_id: murat(env), text: `${gunGoster(gun)}\n${l.map((x) => indirimliSatiri(x.kod, x.satilan, x.kalan)).join("\n")}` });
+  return true;
+}
+
 // Satış girişi izlenir: ilk satış gelince başlar, liste 10 dakika değişmezse (giriş bitti) Hemra'ya gider — saat şartı yok.
 // Liste gittikten sonra yeni model satılırsa (yine 10 dk sabit kalınca) sadece yeni modeller "ek" olarak sorulur.
 // Hatırlatmalar her listenin gidişine göre: Hemra'ya 1 saat, Murat'a 2 saat sonra.
@@ -439,6 +453,7 @@ export async function fabrikaAdimi(env, simdi, tg) {
   if (await kuyrukAdimi(env, simdi, tg)) return; // önce yarım kalan gönderimler
   if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return; // satış okuması henüz doğrulanmadı
   const gun = gunAnahtari(simdi);
+  if (await indirimliOzet(env, gun, simdi, tg)) return;
   if (await yenidenGonder(env, gun, simdi, tg)) return;
   if (await fotoTamamla(env, gun, tg)) return;
   if (await bedenEkle(env, gun, tg)) return;
@@ -1043,6 +1058,7 @@ export async function repeteMetni(env, m, tg, simdi) {
   const r = metin.match(/^(\d{4,6})\s+(?:repete\s+)?geldi\b(.*)$/is);
   if (!r) return false;
   const kod = r[1];
+  if (indirimliMi(kod)) { await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${kod} indirimli mal kodu (tekrar alınmaz) — repete kaydı açılmadı.` }); return true; }
   const renkler = listeCoz(`${kod} ${r[2]}`)[0]?.renkler || null;
   const acik = await ayarOku(env, "fs:acik", []);
   const kisi = await kisiKaydi(env, m.from.id);
@@ -1111,7 +1127,11 @@ export async function haftalikOzet(env, simdi, tg) {
   if (new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() !== 1 || saat(simdi) < 9.5) return;
   if (await ayarOku(env, `fabrika:haftalik:${g}`, null)) return;
   await ayarYaz(env, `fabrika:haftalik:${g}`, 1);
-  return tg(env, "sendMessage", { chat_id: murat(env), text: haftalikMetin(simdi, await ayarOku(env, `fs:hafta:${gunAnahtari(simdi - 7 * 86400)}`, {}), await ayarOku(env, `fs:hafta:${gunAnahtari(simdi - 14 * 86400)}`, {})) });
+  // İndirimli mal (2000): geçen haftanın satışı ayrı tek satır (rapor sadece Murat'a gider)
+  const donem = await stokIste(env, "/satis-donem", { basla: gunAnahtari(simdi - 7 * 86400), bitis: gunAnahtari(simdi - 86400) }).catch(() => ({}));
+  const kalan = INDIRIMLI.some((k) => donem[k] > 0) ? await stokIste(env, "/toplu", { kodlar: INDIRIMLI }).catch(() => ({})) : {};
+  const ind = INDIRIMLI.filter((k) => donem[k] > 0).map((k) => indirimliSatiri(k, donem[k], kalan[k] ? kalan[k].toplam : null));
+  return tg(env, "sendMessage", { chat_id: murat(env), text: [haftalikMetin(simdi, await ayarOku(env, `fs:hafta:${gunAnahtari(simdi - 7 * 86400)}`, {}), await ayarOku(env, `fs:hafta:${gunAnahtari(simdi - 14 * 86400)}`, {})), ...(ind.length ? ["", ...ind] : [])].join("\n") });
 }
 export function haftalikMetin(simdi, gecen, onceki = {}) {
   const bugun = gunAnahtari(simdi);

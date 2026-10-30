@@ -8,6 +8,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { stokIste } from "./stokbot.js";
+import { indirimliMi } from "./stok.js";
 import { listeDurumu, listeyeIsle, murat, sorumlu } from "./fabrika.js";
 
 export const BEYIN_MODEL = "claude-haiku-5-5";
@@ -73,18 +74,22 @@ const ARACLAR = [
 
 async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
   if (ad === "stok_bilgisi") {
+    if (indirimliMi(girdi.kod) && String(kim) !== murat(env)) return { kod: girdi.kod, sonuc: "İndirimli mal kodu (gerçek model değil, tekrar alınmaz). Bilgisi sadece Murat'ta." };
     const b = await stokIste(env, "/bilgi", { kod: girdi.kod });
     if (!b.satirlar || !b.satirlar.length) return { kod: b.kod, sonuc: "Vegawin'de kaydı yok (Black Rose ya da pasif kart olabilir)" };
     return { kod: b.kod, toplam: b.toplam, magazalar: b.satirlar.map((s) => ({ magaza: s.magaza, adet: s.adet })), durum: b.karar ? b.karar.durum : b.toplam > 0 ? "stokta" : "bitti" };
   }
   if (ad === "satislar") {
     const gun = girdi.gun === "dun" ? gunAnahtari(simdi - 86400) : /^\d{4}-\d{2}-\d{2}$/.test(girdi.gun) ? girdi.gun : gunAnahtari(simdi);
-    const l = (await stokIste(env, "/satislar", { gun })).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })).sort((a, b) => b.satilan - a.satilan);
-    return { gun, model: l.length, toplam: l.reduce((t, x) => t + x.satilan, 0), satislar: l.slice(0, 40) };
+    const ham = await stokIste(env, "/satislar", { gun });
+    // İndirimli mal (2000) model sayılmaz; ayrı bilgi sadece Murat'a (kullanıcı kararı 30 Ekim)
+    const l = ham.filter((x) => !indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })).sort((a, b) => b.satilan - a.satilan);
+    const ind = String(kim) === murat(env) ? ham.filter((x) => indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })) : [];
+    return { gun, model: l.length, toplam: l.reduce((t, x) => t + x.satilan, 0), satislar: l.slice(0, 40), ...(ind.length ? { indirimli_mal: ind } : {}) };
   }
   if (ad === "stoksuz_modeller") {
     const t = await stokIste(env, "/tum");
-    const l = Object.entries(t).filter(([, x]) => !(x.toplam > 0)).map(([k]) => k).sort();
+    const l = Object.entries(t).filter(([k, x]) => !(x.toplam > 0) && !indirimliMi(k)).map(([k]) => k).sort();
     return { sayi: l.length, kodlar: l.slice(0, 80) };
   }
   if (ad === "eksik_listesi_durumu") return listeDurumu(env, simdi);

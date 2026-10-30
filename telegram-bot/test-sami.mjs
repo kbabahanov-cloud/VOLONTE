@@ -256,6 +256,30 @@ test("fabrika: liste çözümleme (kod 4-6 hane, adet 1-3 hane, birden çok renk
   assert.deepEqual(listeCoz("merhaba"), []);
 });
 
+test("fabrika: indirimli mal (2000) eksik listesine girmez; 21:15'te sadece Murat'a tek satır; repete kaydı açılmaz", async () => {
+  const { fabrikaAdimi, repeteMetni } = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  await o.yaz("BLACKROSE", [{ kod: "2000", adet: 140, fiyat: 5 }, { kod: "3634", adet: 4, fiyat: 30 }], ist(8));
+  const gun = "2026-10-28";
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun, kalemler: [{ kod: "2000", adet: 25 }, { kod: "3634", adet: 8 }] }) });
+  o.depo.set("sami:satisAcik", "1");
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 9 } }; };
+  await fabrikaAdimi(o.env, ist(19, 10), tg);
+  await fabrikaAdimi(o.env, ist(19, 25), tg);
+  assert.match(g[0].govde.text, /1 model, toplam 8 adet/); // Merdan'ın listesi: 2000 yok
+  assert.ok(!JSON.stringify(g).includes("2000"));
+  g.length = 0;
+  await fabrikaAdimi(o.env, ist(21, 15), tg);
+  assert.deepEqual(g.map((x) => [x.govde.chat_id, x.govde.text]), [["111", "28.10.2026\n🏷 İndirimli mal (2000): 25 adet satıldı, 140 kaldı"]]);
+  await fabrikaAdimi(o.env, ist(21, 30), tg);
+  assert.equal(g.filter((x) => /İndirimli/.test(x.govde.text)).length, 1); // günde bir kez
+  g.length = 0;
+  assert.equal(await repeteMetni(o.env, { chat: { id: 333 }, from: { id: 333 }, text: "2000 repete geldi" }, tg, ist(15)), true);
+  assert.match(g[0].govde.text, /indirimli mal kodu/);
+});
+
 test("fabrika: satış girişi 10 dk değişmeyince (saat şartı yok) Hemra'ya; sadece VOLONTE; onayla fabrikaya SADECE kod/renk/adet, Murat'a kopya; fabrika kişisi Murat onayıyla eklenir; 1 saat hatırlatma, 2 saat Murat'a haber; sonradan satılan yeni model ek liste", async () => {
   const { fabrikaAdimi } = await import("./fabrika.js");
   const { guncelleme: g2 } = await import("./sami.js");
