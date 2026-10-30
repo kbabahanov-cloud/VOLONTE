@@ -1,5 +1,33 @@
 [
  {
+  "kod": "3573",
+  "baslik": "Peplum Pleated Midi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A dark brown midi dress with a structured peplum waist and a finely pleated skirt that moves softly with every step. The draped scarf neckline is finished with a jewel brooch, black lace appliqués frame the bodice, and the back opens into a sculpted V with a wide collar. A refined choice for office days, ceremonies and elegant daytime events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Une robe midi marron foncé à taille péplum structurée, prolongée par une jupe finement plissée au mouvement fluide. L'encolure drapée façon foulard est ornée d'une broche bijou, des appliques en dentelle noire soulignent le buste et le dos s'ouvre en V sculpté sous un large col. Idéale pour le bureau, les cérémonies et les événements de journée. Confectionnée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido midi castanho-escuro com cintura peplum estruturada e saia finamente plissada, de movimento suave. O decote drapeado em estilo lenço é finalizado com um broche de pedraria, apliques de renda preta realçam o corpete e as costas abrem-se num V esculpido com gola larga. Uma escolha elegante para o escritório, cerimónias e eventos diurnos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3573/1.jpg",
+   "galeri/3573/2.jpg",
+   "galeri/3573/3.jpg",
+   "galeri/3573/4.jpg",
+   "galeri/3573/5.jpg",
+   "galeri/3573/6.jpg",
+   "galeri/3573/7.jpg",
+   "galeri/3573/8.jpg",
+   "galeri/3573/9.jpg"
+  ],
+  "videolar": [
+   "selin/3573/0"
+  ],
+  "fiyat": 66,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3569",
   "baslik": "Corset Waist Blazer Set",
   "kategori": "sets",
