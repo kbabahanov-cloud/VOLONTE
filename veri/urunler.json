@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3626",
+  "baslik": "Pleated Corset Maxi Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A strapless maxi dress with a structured corset bodice and a softly pleated, floor-length skirt. Contrast beaded boning lines trace the bodice, and a matching neck scarf drapes down the back for an elegant finish. Made for evening events, weddings and special occasions. Produced in Istanbul with careful craftsmanship.",
+   "fr": "Robe longue bustier au corsage structuré façon corset, prolongée par une jupe plissée fluide jusqu'au sol. Des baleines perlées contrastées soulignent le buste, tandis qu'une écharpe assortie se porte au cou et retombe dans le dos. Idéale pour les soirées, mariages et grandes occasions. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Vestido longo tomara que caia com corpete estruturado estilo corset e saia plissada fluida até o chão. Barbatanas com pérolas em contraste desenham o busto, e um lenço combinando envolve o pescoço e cai pelas costas. Perfeito para eventos noturnos, casamentos e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3626/1.jpg",
+   "galeri/3626/2.jpg",
+   "galeri/3626/3.jpg",
+   "galeri/3626/4.jpg"
+  ],
+  "videolar": [
+   "selin/3626/0"
+  ],
+  "fiyat": 69,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "4211",
   "baslik": "Double-Breasted Pinafore Dress Set",
   "kategori": "sets",
