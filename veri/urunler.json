@@ -1,5 +1,29 @@
 [
  {
+  "kod": "4211",
+  "baslik": "Double-Breasted Pinafore Dress Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sleeveless maxi pinafore dress with a crisp white shirt. The dress features a double-breasted button front, a fitted bodice shaped by seams and a full flared skirt, while the shirt adds puffed sleeves and deep cuffs. Ideal for the office, events or refined everyday wear. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces qui associe une robe chasuble longue sans manches à une chemise blanche impeccable. La robe se distingue par son boutonnage croisé, son buste ajusté par des coutures et sa jupe ample et évasée ; la chemise apporte des manches bouffantes et de larges poignets. Parfait pour le bureau, les événements ou un quotidien élégant. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um vestido longo sem mangas, estilo avental, com uma camisa branca impecável. O vestido tem abotoamento duplo, corpete ajustado por recortes e saia ampla e evasê; a camisa traz mangas bufantes e punhos largos. Ideal para o escritório, eventos ou o dia a dia elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/4211/1.jpg",
+   "galeri/4211/2.jpg",
+   "galeri/4211/3.jpg",
+   "galeri/4211/4.jpg",
+   "galeri/4211/5.jpg"
+  ],
+  "videolar": [
+   "selin/4211/0"
+  ],
+  "fiyat": 44,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3448",
   "baslik": "Beaded Kaftan Trouser Set",
   "kategori": "sets",
