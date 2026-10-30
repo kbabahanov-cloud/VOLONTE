@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3604",
+  "baslik": "Appliqué Peplum Jacket Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted peplum jacket with a flowing floor-length pleated skirt. The jacket features a stand collar, a row of fabric-covered buttons, 3D floral appliqué with stone detailing and an adjustable lace-up back. Made for ceremonies, receptions and refined daytime events. Produced in Istanbul with careful handwork.",
+   "fr": "Un ensemble deux pièces associant une veste péplum ajustée à une longue jupe plissée fluide. La veste se distingue par son col montant, sa rangée de boutons recouverts de tissu, ses appliqués floraux en relief rehaussés de pierres et son laçage ajustable au dos. Idéal pour les cérémonies, réceptions et événements de journée. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina um casaco peplum ajustado com uma saia plissada longa e fluida. O casaco tem gola alta, fileira de botões forrados, aplicação floral em relevo com pedrarias e amarração ajustável nas costas. Pensado para cerimónias, receções e eventos diurnos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3604/1.jpg",
+   "galeri/3604/2.jpg",
+   "galeri/3604/3.jpg",
+   "galeri/3604/4.jpg",
+   "galeri/3604/5.jpg"
+  ],
+  "videolar": [
+   "selin/3604/0",
+   "selin/3604/1"
+  ],
+  "fiyat": 89,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3596",
   "baslik": "Ruffle Cape Chiffon Set",
   "kategori": "sets",
