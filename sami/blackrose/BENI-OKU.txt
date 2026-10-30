@@ -4,17 +4,20 @@ Bu program Black Rose'un Vegawin'inden SADECE OKUR. Hiçbir şeyi silmez, ekleme
 Okuduğu: model kodu, ürün adı, adet (Merkez depo), satış fiyatı ($) ve günlük satış adedi.
 Alış fiyatı, maliyet, kâr, vergi no ve TC kimlik no okunmaz.
 Şifre bu bilgisayarda Windows'un kasasında şifreli durur; hiçbir yere gönderilmez.
-VOLONTE köprüsünden tamamen ayrıdır (ayrı anahtar: KOPRU_BLACKROSE).
 
-KURULUM (Black Rose Vegawin'inin kurulu olduğu bilgisayarda, tek seferlik):
-1) Bu klasörü masaüstüne açın (zip'e sağ tık > Tümünü ayıkla).
-2) kurulum.bat'a çift tıklayın. "Windows bilgisayarınızı korudu" derse: Ek bilgi > Yine de çalıştır.
+VOLONTE BİLGİSAYARINA KURULUR: Black Rose'un Vegawin'ine ağ üzerinden (192.168.1.192:1433) bağlanır.
+VOLONTE köprüsünden TAMAMEN AYRIDIR: ayrı klasör (Sami-BLACKROSE), ayrı şifre kaydı, ayrı günlük, ayrı görev
+(Sami-BLACKROSE), ayrı anahtar (KOPRU_BLACKROSE). VOLONTE'nin "Sami" klasörüne DOKUNMAYIN, üzerine açmayın.
+
+KURULUM (VOLONTE bilgisayarında, tek seferlik):
+1) Zip'e sağ tık > Tümünü ayıkla > masaüstüne. "Sami-BLACKROSE" adında YENİ bir klasör çıkar.
+2) Sami-BLACKROSE klasöründe kurulum.bat'a çift tıklayın. "Windows bilgisayarınızı korudu" derse: Ek bilgi > Yine de çalıştır.
    Şifreyi sorunca sami_okuma şifresini yazın (yazarken görünmez, normal) > Enter.
    Ekranda bir KÖPRÜ ANAHTARI çıkar (panoya da kopyalanır).
 3) Cloudflare'de: volonte-asistan > Settings > Variables and Secrets > Add
    Type: Secret, Name: KOPRU_BLACKROSE, Value: (yapıştır) > Deploy.
-4) deneme.bat'a çift tıklayın. Ekranın fotoğrafını Claude'a gönderin. (Bu adım hiçbir şey göndermez.)
-5) satis-deneme.bat'a çift tıklayın. Ekranın fotoğrafını Claude'a gönderin. (Bu da hiçbir şey göndermez.)
-6) Claude onay verince baslat.bat'a çift tıklayın. Bundan sonra kendisi çalışır.
+4) deneme.bat'a çift tıklayın. Ekranın fotoğrafını Claude'a gönderin. (Hiçbir şey göndermez.)
+5) satis-deneme.bat'a çift tıklayın. Ekranın fotoğrafını Claude'a gönderin. (Hiçbir şey göndermez.)
+6) Claude onay verince baslat.bat'a çift tıklayın. Bundan sonra kendisi çalışır (5 dakikada bir).
 
-DURUM: durum.bat · DURDURMAK: durdur.bat · GÜNLÜK: %LOCALAPPDATA%\Sami (gunluk-BLACKROSE.txt)
+DURUM: durum.bat · DURDURMAK: durdur.bat · GÜNLÜK: %LOCALAPPDATA%\Sami\gunluk-BLACKROSE.txt

@@ -349,7 +349,14 @@ düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirm
 
 - 30 Ekim SELİN LİSTESİ (yüklendi, 143 test): günde 30 model (GUNLUK_ISTEK), 10:00; 30 normal sırayla seçilir, liste içinde Celal'in modelleri (StokDO tedarikci CELAL) en sonda ayrı satırda. Liste Merdan'a da (SAHIP_IDS 6113852976) + 0091 hesabı. Bugün 14:25 bir kerelik ek liste (venom:selinEkIstek): 15 model, Celal'siz, sitede olmayan: 3633, 3631, 3626, 3623, 3622, 3607, 3606, 3604, 3599, 3598, 3596, 3582, 3581, 3573, 3569. Onay akışı aynı.
 
-**Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
+- 30 Ekim BLACK ROSE KÖPRÜSÜ PAKETİ TAMAM + MERDAN LİSTESİ (Sami yüklendi, 144 test): sunucu 192.168.1.192:1433, VEGADB, sami_okuma, F0101/D0005, depo 1.
+  Köprü VOLONTE bilgisayarına AYRI klasöre (Sami-BLACKROSE) kurulur, ağdan bağlanır; şifre/son durum/günlük/görev/kilit mağaza adıyla ayrı (gizli-BLACKROSE.xml,
+  Sami-BLACKROSE görevi), anahtar KOPRU_BLACKROSE. Eksik listesi mağazaya göre (fabrika.js MAGAZALAR): VOLONTE → Hemra (saat şartı yok), BLACKROSE → Merdan
+  (BR_SORUMLU, 19:05'ten önce hiçbir mesaj yok; 19:05 sonrası 10 dk sabit → tek liste, sonra yeni model olursa ek); kayıt fabrika:<gün>-BR; onay/düzelt sadece Merdan;
+  hatırlatma Merdan +1 saat, Murat +2 saat "Black Rose eksik listesi: Merdan onaylamadı"; sipariş bildirimleri Murat + liste sorumlusu.
+  ⏳ Kurulum adımları kullanıcıda: kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onay → baslat.bat.
+
+**Sıradaki komut: Black Rose köprüsü — VOLONTE bilgisayarına Sami-BLACKROSE klasörü, kurulum.bat (sami_okuma şifresi) → Cloudflare KOPRU_BLACKROSE → deneme.bat ve satis-deneme.bat fotoğrafları Claude'a → onayla baslat.bat. Bekleyen: Sami ANTHROPIC_API_KEY, Pelin secret'ları + fal hazır.**
 
 ## Kapsam kararı (24 Eylül 2026)
 

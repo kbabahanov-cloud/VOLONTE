@@ -825,3 +825,53 @@ test("fabrikaya fotoğrafsız mesaj gitmez: sitede ve kanalda fotoğraf yoksa Mu
   assert.equal([...cagri(o.g, "sendMessage"), ...cagri(o.g, "copyMessage"), ...cagri(o.g, "sendPhoto")].filter((x) => x.govde.chat_id === 555).length, 0);
   assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "111" && /^📷 3606 fotoğraf bulunamadı — fabrikaya gönderilmedi \(3606 · Büyük \(44-50\) · kırmızı 8\)/.test(x.govde.text)));
 });
+
+test("Black Rose eksik listesi: gün içinde Merdan'a mesaj yok; 19:05 sonrası (10 dk sabit) tek liste Merdan'a; Merdan onaylar (Hemra değil); onaylamazsa Murat'a 'Merdan onaylamadı'", async () => {
+  const { fabrikaAdimi } = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", BR_SORUMLU: "222" });
+  o.depo.set("sami:satisAcik", "1");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }]));
+  o.depo.set("kodlar", JSON.stringify({ 7001: [{ ids: [900], tarih: 1 }], 3183: [{ ids: [700], tarih: 1 }] }));
+  const gun = "2026-10-28";
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun, kalemler: [{ kod: "7001", adet: 3 }] }) });
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 60 + g.length } }; };
+  for (const [hh, mm] of [[11, 0], [11, 15], [18, 0], [19, 0]]) await fabrikaAdimi(o.env, ist(hh, mm), tg);
+  assert.equal(g.length, 0); // gün içinde Merdan'a hiçbir şey yok
+  await fabrikaAdimi(o.env, ist(19, 10), tg);
+  assert.equal(g.length, 0); // ilk görüş: 10 dk sabit beklenir
+  await fabrikaAdimi(o.env, ist(19, 20), tg);
+  assert.equal(g[0].govde.chat_id, "222");
+  assert.match(g[0].govde.text, /BLACK ROSE — bugün satılan modeller: 1 model, toplam 3 adet/);
+  assert.ok(g.every((x) => x.govde.chat_id === "222")); // Hemra'ya Black Rose listesi gitmez
+  // Hemra Black Rose listesine yazamaz / onaylayamaz; Merdan yazar ve onaylar
+  const gercek = Date.now; Date.now = () => ist(19, 30) * 1000;
+  try {
+    o.g.length = 0;
+    await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "7001 küçük siyah 5" } }, o.env);
+    assert.ok(!cagri(o.g, "sendMessage").some((x) => /Gidecek liste/.test(x.govde.text)));
+    await g2({ message: { chat: { id: 222, type: "private" }, from: { id: 222, first_name: "Merdan" }, text: "7001 küçük siyah 5" } }, o.env);
+    const kart = cagri(o.g, "sendMessage").find((x) => /Gidecek liste/.test(x.govde.text));
+    assert.equal(kart.govde.chat_id, "222");
+    assert.match(kart.govde.text, /Gidecek liste \(28\.10\.2026 Black Rose\)[\s\S]*7001 — Küçük \(38-44\): siyah 5/);
+    const onay = kart.govde.reply_markup.inline_keyboard[0][0].callback_data;
+    assert.equal(onay, `fb:o:${gun}-BR`);
+    await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: onay, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
+    assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Merdan'da/);
+    o.g.length = 0;
+    await g2({ callback_query: { id: "c", from: { id: 222, first_name: "Merdan" }, data: onay, message: { chat: { id: 222 }, message_id: 2 } } }, o.env);
+    assert.equal(cagri(o.g, "copyMessage").find((x) => x.govde.chat_id === 555).govde.caption, "7001 · Küçük (38-44) · siyah 5");
+    assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111").govde.text, /Black Rose eksik listesi — onaylayan: Merdan/);
+  } finally { Date.now = gercek; }
+  // Ertesi gün: onaylanmazsa Murat'a "Merdan onaylamadı"
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun: "2026-10-29", kalemler: [{ kod: "7001", adet: 1 }] }) });
+  g.length = 0;
+  await fabrikaAdimi(o.env, ist(19, 10, 1), tg);
+  await fabrikaAdimi(o.env, ist(19, 20, 1), tg);
+  await fabrikaAdimi(o.env, ist(20, 25, 1), tg);
+  assert.ok(g.some((x) => x.govde.chat_id === "222" && /⏰ Hatırlatma \(29\.10\.2026 Black Rose eksik listesi\)/.test(x.govde.text)));
+  await fabrikaAdimi(o.env, ist(21, 25, 1), tg);
+  assert.ok(g.some((x) => x.govde.chat_id === "111" && /Black Rose eksik listesi: Merdan onaylamadı/.test(x.govde.text)));
+});
