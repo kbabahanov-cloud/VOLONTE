@@ -40,6 +40,9 @@ const TABLOLAR = [
   `CREATE TABLE IF NOT EXISTS satis (magaza TEXT NOT NULL, gun TEXT NOT NULL, kod TEXT NOT NULL, adet REAL, PRIMARY KEY (magaza, gun, kod))`,
   // Telegram'da son paylaşım tarihi (29 Ekim): Kemal paylaşınca yazar; stok tablosunda sütun olarak görünür.
   `CREATE TABLE IF NOT EXISTS tg (kod TEXT PRIMARY KEY, son INTEGER)`,
+  // Fuat/Nuri Black Rose stok sorguları (30 Ekim): her sorgu kayıtlı (kim, kod, ne zaman, Hemra/Murat kararı).
+  `CREATE TABLE IF NOT EXISTS sorgu (id TEXT PRIMARY KEY, kisi TEXT, ad TEXT, kod TEXT, gun TEXT, zaman INTEGER, stok REAL,
+     durum TEXT, karar_kim TEXT, karar_zaman INTEGER, murat INTEGER, mesajlar TEXT)`,
   `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
   `CREATE INDEX IF NOT EXISTS olay_zaman ON olay (zaman)`,
   `CREATE INDEX IF NOT EXISTS paylasim_zaman ON paylasim (zaman)`,
@@ -56,7 +59,9 @@ export class StokDeposu {
       try { this.sql.exec(`ALTER TABLE kopru ADD COLUMN ${sutun} INTEGER`); } catch { /* zaten var */ }
     }
     // Tedarikçi (29 Ekim): Vegawin kodunda "CELAL" geçen kartlar Celal'in malı (köprü sadece işaret gönderir, ek yazıyı değil).
-    for (const [sutun, tur] of [["tedarikci", "TEXT"], ["ikikart", "INTEGER"]]) {
+    // Black Rose adedi (30 Ekim): Vegawin kodu "B" ile biten kartların (3900B, 3900B20) adedi; köprü sadece sayıyı gönderir,
+    // ek yazının kendisini değil. null = o modelin Black Rose kartı yok.
+    for (const [sutun, tur] of [["tedarikci", "TEXT"], ["ikikart", "INTEGER"], ["bradet", "REAL"]]) {
       try { this.sql.exec(`ALTER TABLE urun ADD COLUMN ${sutun} ${tur}`); } catch { /* zaten var */ }
     }
   }
@@ -81,11 +86,11 @@ export class StokDeposu {
       if (u.yok) this.sql.exec("DELETE FROM urun WHERE magaza = ? AND kod = ?", magaza, kod);
       else {
         this.sql.exec(
-          `INSERT INTO urun (magaza, kod, ad, adet, fiyat, guncel, tedarikci, ikikart) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO urun (magaza, kod, ad, adet, fiyat, guncel, tedarikci, ikikart, bradet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (magaza, kod) DO UPDATE SET ad = excluded.ad, adet = excluded.adet, fiyat = excluded.fiyat, guncel = excluded.guncel,
-             tedarikci = excluded.tedarikci, ikikart = excluded.ikikart`,
+             tedarikci = excluded.tedarikci, ikikart = excluded.ikikart, bradet = excluded.bradet`,
           magaza, kod, String(u.ad || "").slice(0, 120), Number(u.adet) || 0, u.fiyat == null ? null : Number(u.fiyat), simdi,
-          u.celal ? "CELAL" : null, u.ikiKart ? 1 : 0,
+          u.celal ? "CELAL" : null, u.ikiKart ? 1 : 0, u.brAdet == null || !Number.isFinite(Number(u.brAdet)) ? null : Number(u.brAdet),
         );
       }
       yazilan += 1;
@@ -161,6 +166,49 @@ export class StokDeposu {
       sonuc[kod] = { toplam: r.t, fiyat: r.f, gizli: r.t <= 0 || silinen.has(kod) };
     }
     return sonuc;
+  }
+
+  // Black Rose stoğu: sadece "B" kartlarının adedi (VOLONTE stoğu karışmaz). null = Black Rose kartı yok.
+  brStok(kod) {
+    const r = this.tek("SELECT SUM(bradet) AS t, COUNT(bradet) AS n FROM urun WHERE kod = ?", stokKodu(kod));
+    return r && r.n ? r.t : null;
+  }
+
+  // ---- Fuat/Nuri stok sorguları ----
+  // Günlük sınır dolmadıysa sorgu açılır (o anki Black Rose stoğuyla). Sınır kişi başı, gün içinde açılan bütün sorgular.
+  sorguAc({ id, kisi, ad, kod, gun, zaman, sinir }) {
+    const n = (this.tek("SELECT COUNT(*) AS n FROM sorgu WHERE kisi = ? AND gun = ?", String(kisi), gun) || {}).n || 0;
+    if (n >= sinir) return { sinir: true, sayi: n };
+    const stok = this.brStok(kod);
+    this.sql.exec("INSERT INTO sorgu (id, kisi, ad, kod, gun, zaman, stok, durum) VALUES (?, ?, ?, ?, ?, ?, ?, 'bekliyor')", id, String(kisi), ad, stokKodu(kod), gun, zaman, stok);
+    return { id, stok, sayi: n + 1 };
+  }
+  sorguOku(id) {
+    const r = this.tek("SELECT * FROM sorgu WHERE id = ?", id);
+    return r ? { ...r, mesajlar: r.mesajlar ? JSON.parse(r.mesajlar) : [] } : null;
+  }
+  sorguMesaj(id, mesajlar, murat = null) {
+    if (murat) this.sql.exec("UPDATE sorgu SET mesajlar = ?, murat = ? WHERE id = ?", JSON.stringify(mesajlar), murat, id);
+    else this.sql.exec("UPDATE sorgu SET mesajlar = ? WHERE id = ?", JSON.stringify(mesajlar), id);
+    return { ok: true };
+  }
+  // İlk karar geçerli. Gösterilecekse stok karar anında yeniden okunur (en güncel adet).
+  sorguKarar(id, durum, kim, zaman) {
+    const r = this.sorguOku(id);
+    if (!r || r.durum !== "bekliyor") return { ok: false, kayit: r };
+    const stok = durum === "gosterildi" ? this.brStok(r.kod) : r.stok;
+    this.sql.exec("UPDATE sorgu SET durum = ?, karar_kim = ?, karar_zaman = ?, stok = ? WHERE id = ?", durum, kim, zaman, stok, id);
+    return { ok: true, kayit: this.sorguOku(id) };
+  }
+  // Hemra'nın cevaplamadığı (Murat'a henüz sorulmamış) ve süresi dolan sorgular.
+  sorguBekleyen(muratSiniri, sureSiniri) {
+    const murataSor = this.hepsi("SELECT id FROM sorgu WHERE durum = 'bekliyor' AND murat IS NULL AND zaman <= ? LIMIT 5", muratSiniri).map((r) => this.sorguOku(r.id));
+    const suresi = this.hepsi("SELECT id FROM sorgu WHERE durum = 'bekliyor' AND zaman <= ? LIMIT 5", sureSiniri).map((r) => r.id);
+    for (const id of suresi) this.sql.exec("UPDATE sorgu SET durum = 'suresi' WHERE id = ?", id);
+    return { murataSor, suresi: suresi.map((id) => this.sorguOku(id)) };
+  }
+  sorguListe(basla, bitis) {
+    return this.hepsi("SELECT id FROM sorgu WHERE gun >= ? AND gun <= ? ORDER BY zaman", basla, bitis).map((r) => this.sorguOku(r.id));
   }
 
   // Stokta (toplam > 0) ve satış fiyatı olan, gizlenmemiş modeller (Selin'in toplu yüklemesi için).
@@ -310,6 +358,13 @@ export class StokDO {
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
+    if (yol === "/br-stok") return cevap({ stok: d.brStok(g.kod) });
+    if (yol === "/sorgu-ac") return cevap(d.sorguAc(g));
+    if (yol === "/sorgu-oku") return cevap(d.sorguOku(g.id));
+    if (yol === "/sorgu-mesaj") return cevap(d.sorguMesaj(g.id, g.mesajlar || [], g.murat || null));
+    if (yol === "/sorgu-karar") return cevap(d.sorguKarar(g.id, g.durum, g.kim, g.zaman));
+    if (yol === "/sorgu-bekleyen") return cevap(d.sorguBekleyen(g.murat, g.sure));
+    if (yol === "/sorgu-liste") return cevap(d.sorguListe(g.basla, g.bitis));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
     return new Response("?", { status: 404 });

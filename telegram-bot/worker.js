@@ -1787,7 +1787,7 @@ async function kopruAl(request, env) {
   const simdi = Math.floor(Date.now() / 1000);
   // "0" ile başlayan kodlar (ör. 000000, 001 TEKLEME, 0002 TRS) model değil, iç kart: alınmaz.
   const urunler = govde.urunler.filter((u) => !/^0/.test(stokKodu(u.kod)))
-    .map((u) => (u.yok ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat), celal: u.celal === true, ikiKart: u.ikiKart === true }));
+    .map((u) => (u.yok ? { kod: stokKodu(u.kod), yok: true } : { kod: stokKodu(u.kod), ad: u.ad, adet: Number(u.adet) || 0, fiyat: u.fiyat == null ? null : Number(u.fiyat), celal: u.celal === true, ikiKart: u.ikiKart === true, brAdet: u.brAdet == null ? null : Number(u.brAdet) }));
   const sonuc = await stokIste(env, "/yaz", { magaza, urunler, simdi });
   if (sonuc.yeniSoru && env.BOT_TOKEN) await stokSorulariGonder(env, simdi);
   return Response.json({ ok: true, ...sonuc });

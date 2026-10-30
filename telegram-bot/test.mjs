@@ -1301,6 +1301,15 @@ test("köprü: indirimli mal (2000) silinmez; stoğu ve satışı izlenir ama st
   assert.ok(!stk.some((x) => x.kod === "2000")); // Selin'in fotoğraf isteğine girmez
 });
 
+test("köprü: Black Rose adedi (brAdet) alınır; B kartı olmayan modelde null", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "3900", adet: 24, brAdet: 24 }, { kod: "3100", adet: 3 }]);
+  const br = async (kod) => (await (await o.env.STOK.get().fetch("https://stok/br-stok", { method: "POST", body: JSON.stringify({ kod }) })).json()).stok;
+  assert.equal(await br("3900"), 24);
+  assert.equal(await br("3100"), null);
+});
+
 // ---------- Karma depo: Kemal kendi nesnesinde ----------
 import { KatalogDO } from "./worker.js";
 

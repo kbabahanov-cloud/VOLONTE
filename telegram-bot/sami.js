@@ -19,6 +19,7 @@ import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
+import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu } from "./stoksorgu.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -65,7 +66,8 @@ export default {
     const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -107,6 +109,8 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
+    if (String(cq.data || "").startsWith("sq:")) return stokSorguDugmesi(env, cq, tg, simdiD);
+    if (String(cq.data || "").startsWith("sy:")) return stokYetkiDugmesi(env, cq, tg);
     if (/^f[bae]:/.test(String(cq.data || ""))) return fabrikaDugmesi(env, cq, tg, Math.floor(Date.now() / 1000));
     return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Geçersiz düğme." });
   }
@@ -114,12 +118,17 @@ export async function guncelleme(u, env) {
   if (u.channel_post) return kanalPaylasimi(u.channel_post, env);
   const m = u.message;
   if (!m || !m.from || m.chat.type !== "private") return;
-  if (!izinli(m.from.id, env)) return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
+  if (!izinli(m.from.id, env)) {
+    if (await stokSorguMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat/Nuri: Black Rose stok sorgusu (Hemra onaylı)
+    return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
+  }
   if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000))) return; // Hemra'nın eksik listesi
   if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return; // "3394 repete geldi …"
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   if (komut === "/stok") return stokGoster(m, env, tg);
   if (komut === "/tablo") return tabloKomutu(m, env);
+  if (komut === "/stokyetki") return stokYetkiKomutu(env, m, tg);
+  if (komut === "/sorgular") return sorgularKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/eksik") return eksikKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/fabrikadeneme") return fabrikaDenemesi(env, m, tg, Math.floor(Date.now() / 1000));
   // Komut değilse beyin (Haiku): normal cümleyle soru / eksik listesine serbest yazı.

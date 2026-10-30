@@ -359,7 +359,10 @@ düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirm
 **30 Ekim – Black Rose satis-deneme:** tip 21 doğru (bugün 11 model / 69 adet). "10 satır" sadece ekran sınırıydı (artık hepsi yazılır).
 **30 Ekim – 2000 = İNDİRİMLİ MAL (Murat):** CRY'den toplu/ucuz alınan indirimli malların ortak kodu, gerçek model değil, tekrar alınmaz; BR/VL DISCOUNT kanalında paylaşılıyor. SİLİNMEZ (stok + satış izlenir). `stok.js INDIRIMLI = ["2000"]` → hariç: eksik listesi (Hemra/Merdan/fabrika), stok-bitti soruları (repete/sil), Selin fotoğraf isteği, Kemal model seçimi + 🔥 sıralaması + /repete, Sami "2000 repete geldi", Sami beyni (satış/stoksuz; stok bilgisi sadece Murat'a). Murat'a: her gün 21:15 "🏷 İndirimli mal (2000): X adet satıldı, Y kaldı" (satış varsa) + pazartesi haftalık özette aynı satır. Kemal + Sami yüklendi. İleride DISCOUNT kanalı: 2000 orada kullanılabilir, fiyat sadece Murat/Hemra/Merdan'ın elle yazdığı rakam (henüz kurulmadı).
 
-**Sıradaki komut: VOLONTE bilgisayarında Sami-BLACKROSE klasöründe baslat.bat (onay verildi; yeni sami.ps1 gerekmez). Sonra durum.bat fotoğrafı. Bekleyen: Pelin secret'ları + fal hazır; Sami beyin denemesi sonucu kontrol.**
+**30 Ekim – Black Rose köprüsü çalışıyor (baslat.bat yapıldı).**
+**30 Ekim – Fuat/Nuri Black Rose stok sorgusu (stoksorgu.js):** Black Rose modeli = Vegawin kodu rakamdan sonra "B" ile biten kart (3900B, 3900B20); köprü sadece adedi gönderir (`brAdet`), ek yazı gitmez. "/stok 3900" → Hemra'ya "Fuat 3900 stoğunu soruyor · stok: 24" [✅ Göster][❌ Gösterme]; 1 saat cevapsız → Murat; 24 saatte düşer. Fuat'a sade kod + sadece B stoğu (VOLONTE, fiyat, satış YOK). 2000 sorgulanamaz. Yetki: Murat /stokyetki (sadece fabrika grubu; Celal hariç). Günde kişi başı 10. Kayıt StokDO `sorgu` tablosu; Murat /sorgular (son 3 gün). Kemal + Sami yüklendi. Kayıtlı fabrika kişileri: Sinem, Eraslan, "Blacrose best", Celal — Fuat/Nuri hangisi belli değil.
+
+**Sıradaki komut: yeni Sami-kopru-BLACKROSE.zip içindeki sami.ps1 → VOLONTE bilgisayarında Sami-BLACKROSE klasörüne (üzerine yaz) → deneme.bat fotoğrafı ("Black Rose kartı olan model: N"). Sonra Murat /stokyetki ile Fuat ve Nuri'ye yetki. Bekleyen: Pelin secret'ları + fal hazır.**
 
 ## Kapsam kararı (24 Eylül 2026)
 

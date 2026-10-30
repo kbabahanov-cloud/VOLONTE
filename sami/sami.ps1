@@ -184,14 +184,18 @@ function Urunler([string]$sifre) {
     $adet = Num $r.ADET; if ($null -eq $adet) { $adet = 0 }
     $fiyat = Num $r.FIYAT
     $celalKart = ([string]$r.KOD) -match '(?i)CELAL'
+    # Black Rose kartı (30 Ekim): Vegawin kodu rakamlardan sonra "B" ile biten kart (3900B, 3900B20). Dışarıya SADECE adedi
+    # gider (brAdet); "B", "B20" gibi ekler iç bilgidir, gitmez. Kodun başına göre ayrım yapılmaz (907 gibi kodlar da var).
+    $brKart = ([string]$r.KOD).Trim().ToUpperInvariant() -cmatch '^\d{3,6}B(?![A-Z])'
     if ($sonuc.ContainsKey($kod)) {
       $u = $sonuc[$kod]; $u.adet += $adet
       if ($null -ne $fiyat -and ($null -eq $u.fiyat -or $fiyat -gt $u.fiyat)) { $u.fiyat = $fiyat }
     } else {
-      $u = @{ kod = $kod; ad = ([string]$r.AD).Trim(); adet = $adet; fiyat = $fiyat; nC = 0; nN = 0 }
+      $u = @{ kod = $kod; ad = ([string]$r.AD).Trim(); adet = $adet; fiyat = $fiyat; nC = 0; nN = 0; brAdet = $null }
       $sonuc[$kod] = $u
     }
     if ($celalKart) { $u.nC++ } else { $u.nN++ }
+    if ($brKart) { if ($null -eq $u.brAdet) { $u.brAdet = 0 }; $u.brAdet += $adet }
   }
   foreach ($u in $sonuc.Values) {
     $u.celal = ($u.nC -gt 0); $u.ikiKart = ($u.nC -gt 0 -and $u.nN -gt 0)
@@ -210,7 +214,7 @@ function Gonder([string]$anahtar, [object[]]$liste) {
   }
 }
 
-function Imza($u) { return "$($u.adet)|$($u.fiyat)|$($u.ad)|$($u.celal)|$($u.ikiKart)" }
+function Imza($u) { return "$($u.adet)|$($u.fiyat)|$($u.ad)|$($u.celal)|$($u.ikiKart)|$($u.brAdet)" }
 
 # Sadece değişenleri gönderir. Gönderim başarılı olunca son durum kaydedilir; bilgisayar kapalıyken
 # kaçan değişiklikler açılınca bu karşılaştırmayla gider (kaldığı yerden devam).
@@ -295,6 +299,8 @@ switch ($Mod) {
       $u = Urunler $sifre
       Write-Host ""
       Write-Host "Vegawin'de $($u.satir) stok kartı; $($u.urunler.Count) model koduna birleşti; kod kalıbına uymayan: $($u.uymayan)."
+      $brl = @($u.urunler.Values | Where-Object { $null -ne $_.brAdet })
+      Write-Host "Black Rose kartı (kodu 'B' ile biten) olan model: $($brl.Count); örnek: $(($brl | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object { "$($_.kod) → $($_.brAdet) adet" }) -join ', ')"
       Write-Host ""
       Write-Host "5 örnek ürün (model kodu | ad | adet | satış fiyatı $):"
       $u.urunler.Values | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object {

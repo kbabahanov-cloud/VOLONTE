@@ -752,7 +752,8 @@ export async function yabanciMesaji(env, m, tg) {
   if (await fabrikaKisisiMi(env, m.from.id)) {
     if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return;
     const celalMi = kisiGrubu(await kisiKaydi(env, m.from.id)) === "celal";
-    return tg(env, "sendMessage", { chat_id: m.chat.id, text: `Bu bot size sadece ${celalMi ? "sizden istenen modellerin listesini" : "VOLONTE fabrika eksik listesini"} gönderir. Repete gelince: "3394 geldi" ya da "3394 repete geldi siyah 10 bej 6" yazabilirsiniz.` });
+    const sorgu = !celalMi && ((await env.KAYIT.get("sami:stokSorguIds", "json")) || []).map(String).includes(String(m.from.id));
+    return tg(env, "sendMessage", { chat_id: m.chat.id, text: `Bu bot size sadece ${celalMi ? "sizden istenen modellerin listesini" : "VOLONTE fabrika eksik listesini"} gönderir. Repete gelince: "3394 geldi" ya da "3394 repete geldi siyah 10 bej 6" yazabilirsiniz.${sorgu ? "\nBlack Rose stoğu için: /stok 3900 (onaylanınca cevap gelir)." : ""}` });
   }
   if (!/^\/start\b/i.test(String(m.text || "").trim())) return;
   if (await env.KAYIT.get(`sami:fabrikaAday:${m.from.id}`)) return;

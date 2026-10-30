@@ -899,3 +899,88 @@ test("Black Rose eksik listesi: gün içinde Merdan'a mesaj yok; 19:05 sonrası 
   await fabrikaAdimi(o.env, ist(21, 25, 1), tg);
   assert.ok(g.some((x) => x.govde.chat_id === "111" && /Black Rose eksik listesi: Merdan onaylamadı/.test(x.govde.text)));
 });
+
+test("Black Rose stok sorgusu: Fuat /stok → Hemra onayı; sade kod, sadece B stoğu; 1 saat → Murat; 2000 ve Sinem/Celal yok; günde 10; kayıt", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const { stokSorguTakip } = await import("./stoksorgu.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 501, ad: "Fuat" }, { id: 502, ad: "Sinem" }, { id: 503, ad: "Celal", grup: "celal" }]));
+  // VOLONTE'de 3900 (B'siz) 7 adet; Black Rose'da 3900B + 3900B20 → 24 adet. Fuat'a sadece 24 gider.
+  await o.yaz("VOLONTE", [{ kod: "3900", adet: 7, fiyat: 40 }], ist(8));
+  await o.yaz("BLACKROSE", [{ kod: "3900", adet: 24, fiyat: 45, brAdet: 24 }, { kod: "907", adet: 5, fiyat: 30, brAdet: 5 }, { kod: "2000", adet: 140, fiyat: 5 }], ist(8));
+  const mesaj = (id, text) => g2({ message: { chat: { id, type: "private" }, from: { id, first_name: "X" }, text } }, o.env);
+  const son = (chat) => cagri(o.g, "sendMessage").filter((x) => String(x.govde.chat_id) === String(chat)).at(-1);
+
+  // Yetki Murat'ta: /stokyetki → Fuat'a ver (Celal listede yok)
+  await mesaj(111, "/stokyetki");
+  const ekran = son(111);
+  assert.deepEqual(ekran.govde.reply_markup.inline_keyboard.map((r) => r[0].text), ["⛔ Fuat", "⛔ Sinem"]);
+  await g2({ callback_query: { id: "c", from: { id: 333 }, data: "sy:501", message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
+  assert.ok(!o.depo.has("sami:stokSorguIds")); // Hemra veremez
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: "sy:503", message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.ok(!o.depo.has("sami:stokSorguIds")); // Celal'e verilemez
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: "sy:501", message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.deepEqual(JSON.parse(o.depo.get("sami:stokSorguIds")), ["501"]);
+
+  // Sinem ve Celal sorgulayamaz
+  o.g.length = 0;
+  await mesaj(502, "/stok 3900");
+  await mesaj(503, "/stok 3900");
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "333"));
+  assert.ok(!JSON.stringify(o.g).includes("24"));
+
+  // Fuat: 2000 sorgulanamaz
+  await mesaj(501, "/stok 2000");
+  assert.equal(son(501).govde.text, "2000 kodu sorgulanamaz.");
+
+  // Fuat /stok 3900 → cevap hemen gitmez, Hemra'ya onay
+  o.g.length = 0;
+  Date.now = () => ist(14) * 1000;
+  await mesaj(501, "/stok 3900");
+  const soru = son(333);
+  assert.equal(soru.govde.text, "🔎 Fuat 3900 stoğunu soruyor · stok: 24");
+  assert.deepEqual(soru.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Göster", "❌ Gösterme"]);
+  assert.match(son(501).govde.text, /iletildi/);
+  assert.ok(!son(501).govde.text.includes("24"));
+  const id = soru.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  // Hemra gösterir → Fuat'a sade kod + sadece Black Rose stoğu
+  await g2({ callback_query: { id: "c", from: { id: 333 }, data: `sq:g:${id}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
+  assert.equal(son(501).govde.text, "📦 3900 · Black Rose stok: 24 adet");
+  assert.ok(!/B20|3900B|VOLONTE|\$|fiyat|satı/i.test(son(501).govde.text));
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: `sq:x:${id}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Hemra zaten karar verdi/);
+
+  // Hemra 1 saat cevap vermezse Murat'a; Murat "Gösterme" → Fuat'a bilgi yok
+  o.g.length = 0;
+  await mesaj(501, "/stok 907");
+  const id2 = son(333).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await stokSorguTakip(o.env, ist(14, 30), async (e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 7 } }; });
+  assert.ok(!son(111));
+  const tgc = async (e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 7 } }; };
+  await stokSorguTakip(o.env, ist(15, 1), tgc);
+  assert.match(son(111).govde.text, /🔎 Fuat 907 stoğunu soruyor · stok: 5\n\(Hemra 1 saattir cevap vermedi\)/);
+  await stokSorguTakip(o.env, ist(15, 10), tgc);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "111").length, 1); // bir kez
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: `sq:x:${id2}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.equal(son(501).govde.text, "907: stok bilgisi şu an paylaşılamıyor.");
+
+  // Günde en fazla 10 sorgu (bugün 2 yapıldı + 2000 sayılmaz)
+  for (let i = 0; i < 8; i++) await mesaj(501, "/stok 3900");
+  o.g.length = 0;
+  await mesaj(501, "/stok 3900");
+  assert.match(son(501).govde.text, /sınırına ulaştınız \(10\)/);
+  assert.ok(!son(333));
+
+  // Kayıt: /sorgular (Murat)
+  await mesaj(111, "/sorgular");
+  const kayit = son(111).govde.text;
+  assert.match(kayit, /Stok sorguları \(son 3 gün, 10\)/);
+  assert.match(kayit, /28\.10 14:00 · Fuat · 3900 · ✅ gösterildi \(Hemra\)/);
+  assert.match(kayit, /Fuat · 907 · ❌ gösterilmedi \(Murat\)/);
+  // 24 saatte cevap yoksa düşer: Fuat'a "cevap verilmedi", butonlar kapanır
+  o.g.length = 0;
+  await stokSorguTakip(o.env, ist(15, 0, 1), async (e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 7 } }; });
+  assert.match(son(501).govde.text, /3900: sorunuza cevap verilmedi/);
+  assert.match(cagri(o.g, "editMessageText")[0].govde.text, /⌛ Cevap verilmedi/);
+});
