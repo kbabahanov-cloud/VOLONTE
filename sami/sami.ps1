@@ -164,7 +164,10 @@ function SatisGonder([string]$anahtar, [hashtable]$satis, [datetime]$gun) {
 # Vegawin kodundaki ek (ör. "3194B20" → "3194") iç bilgidir, dışarı gitmez.
 function ModelKodu([string]$kod) {
   $k = "$kod".Trim().ToUpperInvariant()
-  if ($k -match $Ayar.kodKalibi) { return $Matches[1] }
+  if ($k -match $Ayar.kodKalibi) {
+    if ($Matches[1] -like "0*") { return $null }   # "0000", "001", "002" gibi iç kartlar model değil (30 Ekim)
+    return $Matches[1]
+  }
   return $null   # kalıba uymayan kod gönderilmez
 }
 
@@ -184,9 +187,10 @@ function Urunler([string]$sifre) {
     $adet = Num $r.ADET; if ($null -eq $adet) { $adet = 0 }
     $fiyat = Num $r.FIYAT
     $celalKart = ([string]$r.KOD) -match '(?i)CELAL'
-    # Black Rose kartı (30 Ekim): Vegawin kodu rakamlardan sonra "B" ile biten kart (3900B, 3900B20). Dışarıya SADECE adedi
-    # gider (brAdet); "B", "B20" gibi ekler iç bilgidir, gitmez. Kodun başına göre ayrım yapılmaz (907 gibi kodlar da var).
-    $brKart = ([string]$r.KOD).Trim().ToUpperInvariant() -cmatch '^\d{3,6}B(?![A-Z])'
+    # Black Rose kartı (30 Ekim): Vegawin kodunda rakamlardan sonra (boşluklu ya da bitişik) "B" gelen kart: "3634 B 20",
+    # "3634 B", "3634B", "3634B20". "B"den sonra harf gelirse (ör. "3634 BEJ") sayılmaz. Dışarıya SADECE adedi gider (brAdet);
+    # "B 20" gibi ekler iç bilgidir, gitmez. Kodun başına göre ayrım yapılmaz (907 gibi kodlar da var).
+    $brKart = ([string]$r.KOD).Trim().ToUpperInvariant() -cmatch '^\d{3,6}\s*B(?![A-Z])'
     if ($sonuc.ContainsKey($kod)) {
       $u = $sonuc[$kod]; $u.adet += $adet
       if ($null -ne $fiyat -and ($null -eq $u.fiyat -or $fiyat -gt $u.fiyat)) { $u.fiyat = $fiyat }
@@ -300,7 +304,16 @@ switch ($Mod) {
       Write-Host ""
       Write-Host "Vegawin'de $($u.satir) stok kartı; $($u.urunler.Count) model koduna birleşti; kod kalıbına uymayan: $($u.uymayan)."
       $brl = @($u.urunler.Values | Where-Object { $null -ne $_.brAdet })
-      Write-Host "Black Rose kartı (kodu 'B' ile biten) olan model: $($brl.Count); örnek: $(($brl | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object { "$($_.kod) → $($_.brAdet) adet" }) -join ', ')"
+      $brsiz = @($u.urunler.Values | Where-Object { $null -eq $_.brAdet })
+      Write-Host "Black Rose kartı (kodda rakamdan sonra 'B') olan model: $($brl.Count); örnek: $(($brl | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object { "$($_.kod) → $($_.brAdet) adet" }) -join ', ')"
+      Write-Host "'B' kartı OLMAYAN model: $($brsiz.Count)"
+      if ($brsiz.Count) {
+        $ornekB = Sorgu $sifre "SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD FROM $T_STOK S WHERE S.STATUS = 1 AND S.IND >= 100"
+        $brsizKod = @($brsiz | ForEach-Object { $_.kod })
+        Write-Host "'B'siz kartlardan örnekler (Vegawin kodu | ad):"
+        @($ornekB.Rows | Where-Object { $m = ModelKodu ([string]$_.KOD); $m -and ($brsizKod -contains $m) -and -not (([string]$_.KOD).Trim().ToUpperInvariant() -cmatch '^\d{3,6}\s*B(?![A-Z])') } | Select-Object -First 12) |
+          ForEach-Object { Write-Host ("  {0} | {1}" -f ([string]$_.KOD).Trim(), ([string]$_.AD).Trim()) }
+      }
       Write-Host ""
       Write-Host "5 örnek ürün (model kodu | ad | adet | satış fiyatı $):"
       $u.urunler.Values | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object {
