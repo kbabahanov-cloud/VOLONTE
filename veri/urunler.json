@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3567",
+  "baslik": "Corset Blazer Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece set with a tailored blazer, high-neck lace inner top and flared wide-leg trousers. The jacket features a sheer boned corset panel at the waist, framed by hand-applied crystal and pearl embellishment front and back, with a centre back zip. Suited to evening events, ceremonies and celebrations. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble trois pièces composé d'une veste ajustée, d'un haut intérieur en dentelle à col montant et d'un pantalon large évasé. La veste présente un panneau corseté transparent à baleines à la taille, souligné de cristaux et perles appliqués à la main devant et dos, avec fermeture zippée au dos. Idéal pour les soirées, cérémonies et célébrations. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de três peças com blazer acinturado, top interior de renda com gola alta e calça pantalona de corte evasê. O blazer traz um painel de corset transparente com barbatanas na cintura, contornado por cristais e pérolas aplicados à mão na frente e nas costas, com fecho nas costas. Ideal para eventos noturnos, cerimónias e celebrações. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3567/1.jpg",
+   "galeri/3567/2.jpg",
+   "galeri/3567/3.jpg",
+   "galeri/3567/4.jpg",
+   "galeri/3567/5.jpg",
+   "galeri/3567/6.jpg",
+   "galeri/3567/7.jpg",
+   "galeri/3567/8.jpg",
+   "galeri/3567/9.jpg"
+  ],
+  "videolar": [
+   "selin/3567/0",
+   "selin/3567/1",
+   "selin/3567/2"
+  ],
+  "fiyat": 94,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3565",
   "baslik": "Pinstripe Double-Breasted Suit Set",
   "kategori": "sets",
