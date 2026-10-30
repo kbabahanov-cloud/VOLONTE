@@ -1582,3 +1582,46 @@ test("Black Rose (VOLONTE Vegawin'de kartı yok): stok şartı yok, sitede olmas
   assert.match(kontrolMetni(p, simdi), /⚠️ Black Rose – stok kontrol edilemedi/);
   assert.ok(!/Black Rose/i.test(duzen.altYazi(p)));
 });
+
+test("repete: komut/yazı ayrıştırma (çok kod, tek kodda renk)", async () => {
+  const { repeteAyikla } = await import("./worker.js");
+  assert.deepEqual(repeteAyikla("/repete 3394"), { kodlar: ["3394"], renkler: [] });
+  assert.deepEqual(repeteAyikla("3394, 3490 repete geldi"), { kodlar: ["3394", "3490"], renkler: [] });
+  assert.deepEqual(repeteAyikla("3394 repete geldi siyah 10 bej 6").renkler, [{ renk: "siyah", adet: 10 }, { renk: "bej", adet: 6 }]);
+  assert.equal(repeteAyikla("3394 kaç tane kaldı?"), null);
+  assert.equal(repeteAyikla("bugün ne geldi"), null);
+});
+
+test("repete: Hemra yazar → önizleme (🔁 BACK IN STOCK, fiyatsız) Hemra'ya; onay → hemen kanala, günlük sayaca dahil değil, tarih tabloya; Aziz yazamaz; medya yoksa söyler", async () => {
+  const o = await yeniOrtam();
+  o.env.EKIP_IDS = "333,444";
+  const yaz = (kim, text) => guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(kim), from: { id: kim, first_name: kim === 333 ? "Hemra" : "Aziz" }, text } }, o.env);
+  await yaz(444, "3403 repete geldi");
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length, 0); // Aziz yetkisiz
+  await yaz(333, "3403, 9999 repete geldi");
+  const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "333");
+  assert.match(album.govde.media[0].caption, /^🔁 BACK IN STOCK \/ DE RETOUR\n<b>✅ CODE: 3403<\/b>/);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(o.gonderilen)));
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === "333" && /9999 için fotoğraf\/video bulunamadı/.test(m.govde.text)));
+  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "333" && /^🔁 Repete paylaşımı — 3403/.test(m.govde.text));
+  const [onay, duzelt] = kontrol.govde.reply_markup.inline_keyboard[0].map((d) => d.callback_data);
+  // Düzelt → renk
+  await bas(o.env, 333, duzelt);
+  o.gonderilen.length = 0;
+  await yaz(333, "renk: black, beige");
+  const yeni = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "333");
+  assert.match(yeni.govde.media[0].caption, /🎨 Colors \/ Couleurs: black, beige/);
+  // Onay → hemen kanala
+  const gun = gunAnahtari(ist(10));
+  o.depo.set(`sayac:${gun}`, "10"); // günlük sınır dolu olsa da repete gider
+  o.gonderilen.length = 0;
+  const gercek = Date.now; Date.now = () => ist(10) * 1000;
+  try { await bas(o.env, 333, onay); } finally { Date.now = gercek; }
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+  assert.equal(o.depo.get(`sayac:${gun}`), "10"); // sayaca dahil değil
+  const { stokIste } = await import("./stokbot.js");
+  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3403"], ist(10));
+  o.gonderilen.length = 0;
+  await bas(o.env, 333, onay); // ikinci basış
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length, 0);
+});

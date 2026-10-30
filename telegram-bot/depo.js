@@ -111,7 +111,7 @@ export async function gocBirKez(state, kv, kurallar, isim) {
 export const KEMAL_YEREL = {
   anahtarlar: ["tur", "sonraki", "kopya", "ozet", "istekler", "marka", "altyaziSira", "altyaziNo", "bicim"],
   onekler: ["kuyruk:", "sayac:", "gun:", "gunsonu:", "rapor:", "hatirlatma:", "onay:", "oneri:", "iletim:", "silinecek:",
-    "altyazi:", "katalog:", "ai:", "sohbet:", "m:", "mf:", "mtoplam:", "mftoplam:", "mhaber:", "msohbet:", "bekleyen:", "duzelt:"],
+    "altyazi:", "katalog:", "ai:", "sohbet:", "m:", "mf:", "mtoplam:", "mftoplam:", "mhaber:", "msohbet:", "bekleyen:", "duzelt:", "rpt:"],
 };
 
 // Selin'in kayıtları; hata/durum kayıtları izlenebilsin diye KV'de kalır.

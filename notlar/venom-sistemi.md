@@ -345,6 +345,8 @@ beden grupları, Vegawin tablo adları (F0101/D0005), bütçeler, yapay zekâ is
 Kural (bundan sonra): yeni kodda firma bilgisi sabit yazılmaz, ayar/ortam değişkeninden okunur. Sıra önerisi: (1) firma ayar kaydına taşıma (VOLONTE çalışırken,
 düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirme, kurulum sihirbazı, ödeme, yönetim paneli, KVKK/GDPR, firma başına bütçe, güvenlik incelemesi.
 
+- 30 Ekim KEMAL REPETE PAYLAŞIMI (yüklendi, 142 test): Hemra/Murat/Merdan Kemal'e "/repete 3394" ya da "3394, 3490 repete geldi" (tek kodda renk: "… geldi siyah 10 bej 6"). Medya site → kanal son paylaşım (yazısız). Alt yazı yeni düzen, 🔁 BACK IN STOCK. Önizleme Hemra'ya (+ yazana): ✅ Onayla / ✏️ Düzelt / ❌ İptal (rpt:<id>, rp1/rpd/rpx). Onay → hemen kanala, günlük 10'a sayılmaz, stok kontrolü yok (Vegawin gecikebilir; önizlemede uyarı), tg tarihi tabloya. Medya yoksa "fotoğraf/video bulunamadı". Sami'den gelen repete de sayaca dahil değil.
+
 **Sıradaki komut: (30 Ekim, Vegawin programcısı Murat abi gelince) Black Rose bilgisayarında okuma kullanıcısı (okuma-kullanicisi.sql) + firma/dönem/veritabanı/depo no/sunucu-port fotoğrafı → Claude ayar.json'u doldurup paketi verir → kurulum.bat → KOPRU_BLACKROSE → deneme.bat + satis-deneme.bat fotoğrafı → onayla baslat.bat.**
 
 ## Kapsam kararı (24 Eylül 2026)

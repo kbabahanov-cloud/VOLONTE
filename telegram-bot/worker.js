@@ -410,6 +410,8 @@ async function mesajIsle(msg, env) {
       return telegram(env, "sendMessage", { chat_id: msg.chat.id, text: "Düzeltme iptal edildi." });
     }
     if (await duzeltmeIsle(msg, env)) return;
+    const rp = repeteYetkili(env, kimden.id) && repeteAyikla(msg.text);
+    if (rp) return repeteIstegi(msg, env, rp);
   }
   if (ekipMi(kimden.id, env)) return ekipMesaji(msg, env);
   if (!izinliMi(kimden.id, env)) {
@@ -559,6 +561,7 @@ async function dugmeIsle(cq, env) {
   const veri = String(cq.data || "");
   if (veri.startsWith("mk:") && !izinliMi(cq.from.id, env)) return cevapla("Bu ayar sadece Murat ve Merdan'da.");
   if (/^(y1|yd|yg|yb):/.test(veri)) return yeniTurDugmesi(cq, env);
+  if (/^(rp1|rpd|rpx):/.test(veri)) return repeteDugmesi(cq, env);
   if (/^(t1|t7|tx|ty|tv|tg|tb):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
@@ -1585,6 +1588,7 @@ async function duzeltmeIsle(msg, env) {
     return true;
   }
   await env.KAYIT.delete(`duzelt:${msg.from.id}`);
+  if (bekleyen.no === "r") return repeteDuzelt(msg, env, bekleyen.id, d);
   const { kod } = bekleyen;
   const simdi = Math.floor(Date.now() / 1000);
   const yazi = (await env.KAYIT.get(`yazi:${kod}`, "json")) || {};
@@ -1621,10 +1625,11 @@ async function duzeltmeIsle(msg, env) {
 }
 
 // Sıradaki yeni düzen paylaşımı: stok hâlâ varsa kanala gönderir; tarih Sami'nin deposuna (tablo) yazılır.
-export async function yeniKanalaPaylas(env, paket, simdi) {
+// sayma: günlük 10 paylaşım sayacına dahil mi (repete paylaşımı dahil değil); stokKontrol: repete'de Vegawin gecikebilir → kapalı.
+export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true } = {}) {
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
-  if (env.STOK) {
+  if (env.STOK && stokKontrol) {
     const st = (await stokIste(env, "/toplu", { kodlar: [paket.kod] }).catch(() => ({})))[paket.kod];
     if (st && (st.gizli || !(st.toplam > 0))) return { ok: false, hata: "stoğu bitti (Sami'ye göre) — paylaşılmadı", stoksuz: true };
   }
@@ -1638,9 +1643,122 @@ export async function yeniKanalaPaylas(env, paket, simdi) {
   sonpaylasim[paket.kod] = simdi;
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
-  await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
+  if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
   const ilk = g.ids.find((id) => id > 0);
   return { ok: true, link: kanal.kullanici && ilk ? `https://t.me/${kanal.kullanici}/${ilk}` : null, markaNotu: g.not || null };
+}
+
+// ---------- REPETE PAYLAŞIMI (kullanıcı kararı 30 Ekim) ----------
+// Hemra, Murat ya da Merdan: "/repete 3394", "3394 repete geldi", "3394, 3490 repete geldi" (tek kodda renk de yazılabilir:
+// "3394 repete geldi siyah 10 bej 6"). Medya önce siteden, yoksa kanaldaki son paylaşımdan (yazısı/fiyatı değil). Alt yazı yeni
+// düzende "🔁 BACK IN STOCK / DE RETOUR". Önizleme Hemra'ya (ve yazana): ✅ Onayla / ✏️ Düzelt / ❌ İptal. Onayla → sıra beklemeden
+// hemen kanala, günlük 10'a sayılmaz; Telegram son paylaşım tarihi tabloya yazılır. Medya yoksa paylaşılmaz, söylenir.
+const REPETE_EN_FAZLA = 5;
+const repeteYetkili = (env, id) => izinliMi(id, env) || String(id) === hemraId(env);
+export function repeteAyikla(metin) {
+  const t = String(metin || "").trim();
+  let m = t.match(/^\/repete(?:@\w+)?\s+(.+)$/is);
+  let kodYazi = m ? m[1] : null;
+  let ek = "";
+  if (!m) {
+    m = t.match(/^((?:\d{4,6}[\s,;]*(?:ve\s+)?)+?)\s*(?:repete\s+)?(?:geldi|gelmiş|geldı)\b(.*)$/is);
+    if (!m || !/repete|geldi/i.test(t)) return null;
+    kodYazi = m[1];
+    ek = m[2] || "";
+  }
+  const kodlar = [...new Set((kodYazi.match(/\b\d{4,6}\b/g) || []))].slice(0, REPETE_EN_FAZLA);
+  if (!kodlar.length) return null;
+  // Tek kodda yazılan renkler (Türkçe) → İngilizceye çevrilebilirse alt yazıya
+  const renkler = kodlar.length === 1 ? [...(m && ek ? ek : kodYazi.replace(/\b\d{4,6}\b/g, "")).matchAll(/([a-zçğıöşü][a-zçğıöşü\s-]*?)\s*(\d{1,3})\b/gi)].map((r) => ({ renk: r[1].trim().toLocaleLowerCase("tr"), adet: Number(r[2]) })).filter((r) => r.renk && !/repete|geldi/.test(r.renk)) : [];
+  return { kodlar, renkler };
+}
+
+const repeteKlavye = (id) => ({ inline_keyboard: [[{ text: "✅ Onayla", callback_data: `rp1:${id}` }, { text: "✏️ Düzelt", callback_data: `rpd:${id}` }, { text: "❌ İptal", callback_data: `rpx:${id}` }]] });
+const repeteAlicilar = (env, kim) => [...new Set([hemraId(env), String(kim)])];
+
+async function repeteOnizlemeGonder(env, rec) {
+  const bicim = (await env.KAYIT.get("bicim")) || "album";
+  const simdi = Math.floor(Date.now() / 1000);
+  rec.mesajlar = [];
+  for (const kisi of rec.alicilar) {
+    const g = await paketGonder(env, kisi, rec.paket, bicim);
+    if (!g.ok) { await telegram(env, "sendMessage", { chat_id: kisi, text: `⚠️ ${rec.kod} önizlemesi gönderilemedi: ${g.hata}` }); continue; }
+    const k = await telegram(env, "sendMessage", { chat_id: kisi, text: repeteKontrol(rec, simdi) + (g.not ? `\n⚠️ ${g.not}` : ""), reply_markup: repeteKlavye(rec.id), disable_web_page_preview: true });
+    if (k.ok) rec.mesajlar.push([kisi, k.result.message_id]);
+  }
+}
+const repeteKontrol = (rec, simdi) => [
+  `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
+  `Medya: ${rec.kaynak === "site" ? "siteden" : "kanaldaki son paylaşımdan (eski yazı kullanılmadı)"}`,
+  `Renkler: ${rec.paket.renkEmin && rec.paket.renkler.length ? rec.paket.renkler.join(", ") : "yazılmadı → satır yok (✏️ Düzelt ile ekleyebilirsiniz)"}`,
+  rec.stokUyari ? `⚠️ ${rec.stokUyari}` : null,
+  `Telegram'da son paylaşım: ${rec.paket.tgSon ? tarihUzun(rec.paket.tgSon) : "—"}`,
+  "✅ Onayla → sıra beklemeden hemen kanala (günlük 10'a sayılmaz). Fiyat yazılmaz.",
+].filter(Boolean).join("\n");
+
+export async function repeteIstegi(msg, env, { kodlar, renkler }) {
+  const simdi = Math.floor(Date.now() / 1000);
+  const kim = kisiAdi(msg.from);
+  const alicilar = repeteAlicilar(env, msg.chat.id);
+  await telegram(env, "sendChatAction", { chat_id: msg.chat.id, action: "upload_photo" });
+  for (const kod of kodlar) {
+    let paket;
+    try { paket = await repetePaketi(env, { kod, renkler: kodlar.length === 1 ? renkler : [] }, simdi); } catch (e) {
+      for (const k of alicilar) await telegram(env, "sendMessage", { chat_id: k, text: /bulunamadı|medya/i.test(e.message) ? `⚠️ ${kod} için fotoğraf/video bulunamadı — paylaşılmadı.` : `⚠️ ${kod} hazırlanamadı: ${e.message}` });
+      continue;
+    }
+    const st = env.STOK ? (await stokIste(env, "/toplu", { kodlar: [kod] }).catch(() => ({})))[kod] : null;
+    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    const rec = { id, kod, paket, kim, kimId: msg.from.id, alicilar, kaynak: paket.kaynak, stokUyari: st && !(st.toplam > 0) ? "Vegawin'de stok henüz 0 görünüyor (giriş yapılmamış olabilir)" : null, durum: null, zaman: simdi };
+    await repeteOnizlemeGonder(env, rec);
+    await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 });
+  }
+}
+
+async function repeteDugmesi(cq, env) {
+  const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!repeteYetkili(env, cq.from.id)) return cevapla("Bu onay Hemra, Murat ve Merdan'da.");
+  const [islem, id] = String(cq.data).split(":");
+  const rec = await env.KAYIT.get(`rpt:${id}`, "json");
+  if (!rec || rec.durum) return cevapla(rec ? `${rec.karar || "Karar"} verildi.` : "Bu önizleme artık geçerli değil.");
+  const kim = kisiAdi(cq.from);
+  const simdi = Math.floor(Date.now() / 1000);
+  const hepsi = async (ek) => { for (const [k, m] of rec.mesajlar) await telegram(env, "editMessageText", { chat_id: k, message_id: m, text: `${repeteKontrol(rec, simdi)}\n\n${ek}`, disable_web_page_preview: true }); };
+  if (islem === "rpd") {
+    await env.KAYIT.put(`duzelt:${cq.from.id}`, JSON.stringify({ no: "r", id }), { expirationTtl: 3600 });
+    await cevapla("Düzeltmeyi yazın");
+    return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${rec.kod} repete paylaşımı için düzeltmeyi yazın (1 saat içinde).\n${DUZELT_ORNEK.replace("durum: new | back | best | last | available\n", "")}` });
+  }
+  rec.durum = islem;
+  rec.karar = `${kim}: ${islem === "rp1" ? "onayla" : "iptal"}`;
+  await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 }); // önce kilitle
+  if (islem === "rpx") { await cevapla("İptal"); return hepsi(`❌ ${kim} iptal etti — kanalda paylaşılmadı.`); }
+  await cevapla("Paylaşılıyor");
+  const p = await yeniKanalaPaylas(env, rec.paket, simdi, { sayma: false, stokKontrol: false });
+  return hepsi(p.ok ? `✅ ${kim} onayladı — kanalda paylaşıldı${p.link ? `: ${p.link}` : ""}. Telegram son paylaşım tarihi güncellendi.${p.markaNotu ? ` ⚠️ ${p.markaNotu}` : ""}` : `⚠️ Paylaşılamadı: ${p.hata}`);
+}
+
+async function repeteDuzelt(msg, env, id, d) {
+  const rec = await env.KAYIT.get(`rpt:${id}`, "json");
+  const yaz = (text) => telegram(env, "sendMessage", { chat_id: msg.chat.id, text });
+  if (!rec || rec.durum) { await yaz("Bu repete önizlemesi artık açık değil."); return true; }
+  const p = rec.paket;
+  if (d.renkler) Object.assign(p, { renkler: d.renkler, renkEmin: d.renkler.length > 0, renkNotu: "" });
+  if ("kumas" in d) p.kumas = d.kumas;
+  if (d.en) p.en = d.en;
+  if (d.fr) p.fr = d.fr;
+  p.durum = "donus";
+  const yazi = (await env.KAYIT.get(`yazi:${rec.kod}`, "json")) || {};
+  if (d.renkler) Object.assign(yazi, { renkler: d.renkler, renkEmin: d.renkler.length > 0, renkNotu: "" });
+  if ("kumas" in d) yazi.kumas = d.kumas;
+  if (d.en) yazi.en = d.en;
+  if (d.fr) yazi.fr = d.fr;
+  await env.KAYIT.put(`yazi:${rec.kod}`, JSON.stringify(yazi));
+  const simdi = Math.floor(Date.now() / 1000);
+  for (const [k, m] of rec.mesajlar) await telegram(env, "editMessageText", { chat_id: k, message_id: m, text: `${repeteKontrol(rec, simdi)}\n\n✏️ ${kisiAdi(msg.from)} düzeltti — yeni önizleme aşağıda.` });
+  await repeteOnizlemeGonder(env, rec);
+  await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 });
+  return true;
 }
 
 // ---------- Fotoğraf tanıma: katalog ve tanıma ----------
@@ -1719,13 +1837,13 @@ async function repetePaketi(env, r, simdi) {
   const baglam = await durumBaglami(env, [String(r.kod)], simdi);
   const renkler = renkCevir((r.renkler || []).map((x) => x.renk));
   let paket;
-  if (u) paket = await paketHazirla(env, u, baglam, simdi, { durum: "donus" });
+  if (u) paket = { ...(await paketHazirla(env, u, baglam, simdi, { durum: "donus" })), kaynak: "site" };
   else {
     const ids = modelSecenekleri(r.kod, (await env.KAYIT.get("kodlar", "json")) || {}, {}, 1).flatMap((g) => g.ids);
     const medya = ids.length ? await kanalMedyasi(env, ids) : [];
     if (!medya.length) throw new Error("sitede yok, kanalda da medya bulunamadı");
     const yazi = (await env.KAYIT.get(`yazi:${r.kod}`, "json")) || {};
-    paket = { kod: String(r.kod), baslik: "", durum: "donus", renkler: [], renkEmin: false, renkNotu: "", kumas: yazi.kumas || null, en: yazi.en || "", fr: yazi.fr || "", bedenler: "", medya, video: 0, tgSon: baglam.tarih.son[r.kod] || null };
+    paket = { kod: String(r.kod), baslik: "", durum: "donus", renkler: [], renkEmin: false, renkNotu: "", kumas: yazi.kumas || null, en: yazi.en || "", fr: yazi.fr || "", bedenler: "", medya, video: 0, tgSon: baglam.tarih.son[r.kod] || null, kaynak: "kanal" };
   }
   if (renkler) Object.assign(paket, { renkler, renkEmin: true, renkNotu: "" });
   else if (!u) paket.renkEmin = false;
@@ -1775,7 +1893,7 @@ async function repetePaylasKarari(cq, env) {
   Object.assign(r, { durum: "paylasildi", karar: `${kim}: onayla` });
   await env.KAYIT.put(`venom:rp:${id}`, JSON.stringify(r), { expirationTtl: 30 * 86400 });
   await cevapla("Paylaşılıyor");
-  const p = await yeniKanalaPaylas(env, r.paket, simdi);
+  const p = await yeniKanalaPaylas(env, r.paket, simdi, { sayma: false, stokKontrol: false });
   return hepsi(p.ok ? `✅ ${kim} onayladı — kanalda paylaşıldı (yeni düzen)${p.link ? `: ${p.link}` : ""}.` : `⚠️ Paylaşılamadı: ${p.hata}`);
 }
 
