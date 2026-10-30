@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3599",
+  "baslik": "Crystal Button Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a tailored short-sleeve top with a flowing pleated midi skirt. The top features a soft stand collar, crystal buttons and flap pocket details, with a fitted waist that flares gently at the hem. Made for ceremonies, church and refined daytime events. Produced in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un haut ajusté à manches courtes et une jupe midi plissée et fluide. Le haut se distingue par son col montant souple, ses boutons ornés de cristaux et ses rabats de poches, avec une taille marquée qui s'évase légèrement. Idéal pour les cérémonies, l'église et les occasions élégantes en journée. Fabriqué à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de duas peças que combina uma blusa ajustada de manga curta com uma saia midi plissada e fluida. A blusa destaca-se pela gola alta suave, botões com cristais e detalhes de pala nos bolsos, com cintura marcada que se abre levemente na barra. Ideal para cerimónias, igreja e eventos elegantes de dia. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3599/1.jpg",
+   "galeri/3599/2.jpg",
+   "galeri/3599/3.jpg",
+   "galeri/3599/4.jpg"
+  ],
+  "videolar": [
+   "selin/3599/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3606",
   "baslik": "Embroidered Tiered Satin Dress",
   "kategori": "dresses",
