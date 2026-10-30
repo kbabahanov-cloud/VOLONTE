@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3578",
+  "baslik": "Polka Dot Tiered Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sheer polka dot blouse with a tiered, pleated maxi skirt. The blouse features a tie neck and generous balloon sleeves, while a slim belt with a gold-tone buckle defines the waist. Easy to style for special occasions, ceremonies and elegant daytime events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un chemisier transparent à pois et une jupe longue plissée à volants étagés. Le chemisier se distingue par son col à nouer et ses amples manches ballon, tandis qu'une fine ceinture à boucle dorée marque la taille. Idéal pour les cérémonies, les occasions spéciales et les journées élégantes. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa transparente de bolinhas com uma saia longa plissada em camadas. A blusa tem gola com laço e mangas balão amplas, e um cinto fino com fivela dourada marca a cintura. Perfeito para cerimónias, ocasiões especiais e eventos elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3578/1.jpg",
+   "galeri/3578/2.jpg",
+   "galeri/3578/3.jpg",
+   "galeri/3578/4.jpg",
+   "galeri/3578/5.jpg",
+   "galeri/3578/6.jpg",
+   "galeri/3578/7.jpg"
+  ],
+  "videolar": [
+   "selin/3578/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-30"
+ },
+ {
   "kod": "3567",
   "baslik": "Corset Blazer Trouser Set",
   "kategori": "sets",
