@@ -56,7 +56,7 @@ export async function topluRapor(env, simdi, tgf) {
   for (const b of ["sami", "kemal", "selin"]) satir.push(`${ad[b]}: ${r[b] ? r[b].ozet : "rapor gelmedi ⚠️"}`);
   const sorunlar = ["sami", "kemal", "selin"].flatMap((b) => (r[b] ? r[b].sorunlar.map((x) => `${ad[b]} → ${x}`) : []));
   const yapilacak = ["sami", "kemal", "selin"].flatMap((b) => (r[b] ? r[b].yapilacak : []));
-  satir.push("", sorunlar.length ? "⚠️ Kontrollerde yakalananlar:" : "✅ Kontroller temiz: stoksuz paylaşım yok, sitede fiyatlar doğru.");
+  satir.push("", sorunlar.length ? "⚠️ Kontrollerde yakalananlar:" : "✅ Kontroller temiz: stoksuz paylaşım yok, sitede fiyat görünmüyor.");
   for (const x of sorunlar) satir.push(`• ${x}`);
   if (yapilacak.length) satir.push("", "📋 Bugün yapılacaklar:", ...yapilacak.map((x) => `• ${x}`));
   const yorum = await yapayZekaYorumu(env, simdi, satir.join("\n")).catch(() => null);

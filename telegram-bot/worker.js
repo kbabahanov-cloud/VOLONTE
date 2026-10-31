@@ -1433,6 +1433,15 @@ async function yeniParcaGonder(env, govde) {
 
 // Yeni tur: modeller seçilir; yazıları birkaç çalışmada hazırlanır, hepsi hazır olunca önizlemeler gider.
 // gruplar: (deneme) [{ baslik, kodlar }]; yoksa günün 10 modeli.
+const PAYLASILMAMIS_GUNLUK = 2;
+// sec(adet, disari) → kurala göre sıralı kodlar (hiç paylaşılmamışlar en başta gelir). Günde en fazla 2 hiç paylaşılmamış:
+// biri listenin başında (sabah), biri sonunda (akşam); diğerleri normal kuralla.
+export function gunlukSecim(sec, son, adet = GUNLUK_SINIR) {
+  const hic = sec(999).filter((k) => !son[k]);
+  const iki = hic.slice(0, PAYLASILMAMIS_GUNLUK);
+  const normal = sec(adet - iki.length, hic);
+  return [...iki.slice(0, 1), ...normal, ...iki.slice(1)];
+}
 export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
   const site = await siteUrunleriAl(env);
   const kuyruk = await kuyrukListesi(env);
@@ -1441,7 +1450,11 @@ export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
   const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
   const { son } = await telegramTarihleriAl(env);
   const sec = (adet, disari = []) => gununModelleri({ site, stok, tg: son, haric: [...haric, ...disari, ...INDIRIMLI], simdi, adet }).map((u) => String(u.kod));
-  if (!gruplar) gruplar = [{ baslik: null, kodlar: sec(GUNLUK_SINIR) }];
+  if (!gruplar) {
+    // Kullanıcı kararı (31 Ekim): stokta olup Telegram'da HİÇ paylaşılmamış modeller (sitede medyası olanlar) günde en fazla 2:
+    // biri listenin başında (sabah), biri sonunda (akşam). Liste bitene kadar. Diğer 8 normal kuralla; 2000 hariç.
+    gruplar = [{ baslik: null, kodlar: gunlukSecim(sec, son) }];
+  }
   else {
     // Deneme: elle verilen kodlar (stoğu olmayan çıkar) ya da { otomatik: n } → kuralla seçilen n model (diğer gruplar ve "haric" dışında).
     const elle = gruplar.flatMap((g) => g.kodlar || []).map(String);

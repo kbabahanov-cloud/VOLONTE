@@ -10,7 +10,7 @@ HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-sami
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
 source scripts/kimlikler.sh
-KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS MURAT_ID FABRIKA_SORUMLU BR_SORUMLU)
+KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS MURAT_ID FABRIKA_SORUMLU BR_SORUMLU FUAT_ID)
 # Site sayımı (haftalık özet): canlı site (www) varsa ona, yoksa aynı kodla çalışan deneme adresine (volonte-taslak) bağlanır.
 SITE_WORKER=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/www/settings" | python3 -c 'import sys,json;print("www" if json.load(sys.stdin).get("success") else "volonte-taslak")')
 echo "site bağlantısı: $SITE_WORKER"

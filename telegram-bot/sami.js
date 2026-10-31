@@ -17,11 +17,15 @@
 import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
+import { gunDokumu, raporTekrar } from "./gun-dokum.js";
+import { paylasimTakip } from "./paylasim-takip.js";
+import { indirimliMi } from "./stok.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
-import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu } from "./stoksorgu.js";
+import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu, brSayKomutu } from "./stoksorgu.js";
+import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi } from "./mutabakat.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -70,8 +74,11 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
+    const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); };
+    const paylasilmamis = (e, t) => paylasimTakip(e, t, tg);
+    const mutabakat = (e, t) => mutabakatAdimi(e, t, tg);
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis, mutabakat } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -111,6 +118,7 @@ export async function guncelleme(u, env) {
     // Fabrika düğmeleri: fabrika kişileri de basabilir (sadece bunlar)
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
+    if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
     if (String(cq.data || "").startsWith("sq:")) return stokSorguDugmesi(env, cq, tg, simdiD);
@@ -123,6 +131,7 @@ export async function guncelleme(u, env) {
   const m = u.message;
   if (!m || !m.from || m.chat.type !== "private") return;
   if (!izinli(m.from.id, env)) {
+    if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması
     if (await stokSorguMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat/Nuri: Black Rose stok sorgusu (Hemra onaylı)
     return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
   }
@@ -132,6 +141,8 @@ export async function guncelleme(u, env) {
   if (komut === "/stok") return stokGoster(m, env, tg);
   if (komut === "/tablo") return tabloKomutu(m, env);
   if (komut === "/stokyetki") return stokYetkiKomutu(env, m, tg);
+  if (komut === "/mutabakat") return mutabakatKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/brsay") return brSayKomutu(env, m, tg);
   if (komut === "/sorgular") return sorgularKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/eksik") return eksikKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/fabrikadeneme") return fabrikaDenemesi(env, m, tg, Math.floor(Date.now() / 1000));
@@ -164,7 +175,7 @@ const siteUrunleri = (env) => siteVerisi(env); // Selin'in iç bağlantısıyla 
 const liste = (kodlar, n = 15) => (kodlar.length > n ? `${kodlar.slice(0, n).join(", ")} … (+${kodlar.length - n})` : kodlar.join(", "));
 
 // Saf rapor: test edilebilir.
-export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodlar, sonpaylasim }) {
+export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodlar, sonpaylasim, siteFiyat = null }) {
   const dun = gunAnahtari(simdi - 86400);
   const satir = [`📦 Sayım Sami — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`, ""];
   const sorunlar = [];
@@ -188,7 +199,7 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
   satir.push(`Dün biten (${biten.length}): ${biten.length ? liste(biten) : "yok"}`);
   satir.push(`Dün gelen (${gelen.length}): ${gelen.length ? liste(gelen) : "yok"}`);
   if (fiyat.length) satir.push(`Fiyatı değişen: ${fiyat.slice(0, 10).map((o) => `${o.kod} ${o.onceki}→${o.sonraki} $`).join(", ")}`);
-  const paylasilmamis = Object.entries(tum).filter(([k, x]) => x.toplam > 0 && x.fiyat != null && !kodlar[k]).map(([k]) => k).sort();
+  const paylasilmamis = Object.entries(tum).filter(([k, x]) => x.toplam > 0 && x.fiyat != null && !kodlar[k] && !indirimliMi(k)).map(([k]) => k).sort();
   satir.push(`Stokta ama Telegram'da hiç paylaşılmamış (${paylasilmamis.length}): ${paylasilmamis.length ? liste(paylasilmamis) : "yok"}`);
 
   satir.push("", "🔎 Kontroller:");
@@ -202,18 +213,16 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
       sorunlar.push(metin);
     }
   } else satir.push(`• ✅ Dün (${dun}) stoksuz model paylaşılmadı (${paylasimlar.length} paylaşım kontrol edildi)`);
-  // 2) Sitede fiyat Vegawin ile aynı mı? 3) Sitede görünen ama stoğu biten var mı?
-  const yanlisFiyat = [];
+  // 2) Yeni sitede fiyat GÖRÜNMEMELİ (kullanıcı kararı 31 Ekim; sitenin kendi sayfaları iç bağlantıyla denenir)
+  // 3) Sitede görünen ama stoğu biten var mı?
+  if (siteFiyat === false) satir.push("• ✅ Sitede fiyat görünmüyor");
+  else if (siteFiyat === true) { satir.push("• ⚠️ Sitede fiyat görünüyor!"); sorunlar.push("Sitede fiyat görünüyor"); }
+  else satir.push("• ❔ Sitede fiyat kontrolü yapılamadı (site bağlantısı yok)");
   const gorunenStoksuz = [];
   for (const u of site) {
     const x = tum[u.kod];
-    if (!x) continue; // Vegawin'de yok (Black Rose / pasif): "Ask price" ile kalır, hata değil
-    if (x.fiyat != null && u.fiyat != null && Number(u.fiyat) !== Number(x.fiyat)) yanlisFiyat.push(`${u.kod} sitede ${u.fiyat} $, Vegawin ${x.fiyat} $`);
-    if (x.fiyat != null && u.fiyat == null && !u.gizli) yanlisFiyat.push(`${u.kod} sitede fiyatsız, Vegawin ${x.fiyat} $`);
-    if (x.gizli && !u.gizli) gorunenStoksuz.push(u.kod);
+    if (x && x.gizli && !u.gizli) gorunenStoksuz.push(u.kod);
   }
-  if (yanlisFiyat.length) for (const y of yanlisFiyat) { satir.push(`• ⚠️ Sitede yanlış fiyat: ${y}`); sorunlar.push(`Sitede yanlış fiyat: ${y}`); }
-  else satir.push(`• ✅ Sitedeki fiyatlar Vegawin ile aynı (${site.length} model)`);
   if (gorunenStoksuz.length) { satir.push(`• ⚠️ Sitede görünüyor ama stoğu bitmiş: ${liste(gorunenStoksuz)}`); sorunlar.push(`Sitede görünen stoksuz: ${gorunenStoksuz.join(", ")}`); }
   else satir.push("• ✅ Sitede stoğu bitmiş model görünmüyor");
   return {
@@ -264,6 +273,7 @@ async function sabahRaporu(env, simdi) {
     site: await siteUrunleri(env),
     kodlar,
     sonpaylasim: (await env.KAYIT.get("sonpaylasim", "json")) || {},
+    siteFiyat: env.SITE_IC ? await env.SITE_IC.dene(["/", "/veri"]).then((l) => l.some((r) => r.fiyat)).catch(() => null) : null,
   });
   await env.KAYIT.put(`venom:samiMetin:${gun}`, rapor.metin, { expirationTtl: 7 * 86400 }); // tam metin (kontrol için)
   if (elle) return;

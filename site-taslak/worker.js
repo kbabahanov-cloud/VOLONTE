@@ -15,6 +15,9 @@ import { SAYFALAR } from "./dist/sayfalar.js";
 import SECIM from "./kaynak/secim.json";
 
 const HAM = "https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/main/";
+// Ana adres (31 Ekim, alan adı alındı): www.wearvolonte.com. wearvolonte.com, http ve (YONLENDIR=1 iken) www.volonte.workers.dev
+// buraya kalıcı (301) yönlenir; eski linkler (urun.html?kod=…) doğru sayfaya gider.
+const ANA = "www.wearvolonte.com";
 const GENISLIK = [120, 160, 320, 480, 720, 960, 1280, 1600];
 const bugun = () => new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
 
@@ -149,6 +152,10 @@ async function istekIsle(istek, env, ctx) {
   const p = url.pathname;
   const canli = env.CANLI === "1";
   if (canli) {
+    const workersDev = /\.workers\.dev$/.test(url.hostname);
+    if (url.hostname === "wearvolonte.com" || (url.hostname === ANA && url.protocol === "http:") || (workersDev && env.YONLENDIR === "1")) {
+      return Response.redirect(`https://${ANA}${eskiLink(url) || `${url.pathname}${url.search}`}`, 301);
+    }
     if (p === "/" || p === "") return sayfa("d", env, true);
     const eski = eskiLink(url);
     if (eski) return Response.redirect(new URL(eski, url).toString(), 301);
@@ -178,7 +185,7 @@ export class SiteIc extends WorkerEntrypoint {
   async dene(yollar) {
     const sonuc = [];
     for (const y of yollar) {
-      const r = await istekIsle(new Request(`https://www.volonte.workers.dev${y}`, { headers: { accept: "image/webp,*/*" }, redirect: "manual" }), this.env, this.ctx);
+      const r = await istekIsle(new Request(`https://${ANA}${y}`, { headers: { accept: "image/webp,*/*" }, redirect: "manual" }), this.env, this.ctx);
       const tur = r.headers.get("content-type") || "";
       const metin = /text|json/.test(tur) ? await r.text() : "";
       sonuc.push({ yol: y, durum: r.status, tur, boyut: metin ? metin.length : (await r.arrayBuffer()).byteLength, yer: r.headers.get("location"),

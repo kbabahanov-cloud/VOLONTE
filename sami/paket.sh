@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 MAGAZA=${1:?"mağaza: VOLONTE ya da BLACKROSE"}
 case "$MAGAZA" in VOLONTE) KAYNAK=. ; KLASOR=Sami ;; BLACKROSE) KAYNAK=blackrose ; KLASOR=Sami-BLACKROSE ;; *) echo "bilinmeyen mağaza"; exit 1 ;; esac
 T=$(mktemp -d); mkdir "$T/$KLASOR"
-cp sami.ps1 sami.vbs kurulum.bat deneme.bat satis-deneme.bat baslat.bat durdur.bat durum.bat "$T/$KLASOR/"
+cp sami.ps1 sami.vbs kurulum.bat deneme.bat satis-deneme.bat cari-deneme.bat baslat.bat durdur.bat durum.bat "$T/$KLASOR/"
 cp "$KAYNAK/BENI-OKU.txt" "$T/$KLASOR/"
 python3 ../araclar/gizli-kayit.py oku venom:kopru-ayar "$T/gizli.json"
 python3 - "$T/gizli.json" "$MAGAZA" "$KAYNAK/ayar.json" "$T/$KLASOR/ayar.json" <<'PY'

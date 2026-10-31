@@ -25,7 +25,10 @@ export async function sorguYetkilisi(env, id) {
 }
 
 const stokYazi = (stok) => (stok == null ? "— (Black Rose kartı yok)" : String(Math.max(0, stok)));
-const soruMetni = (r) => `🔎 ${r.ad} ${r.kod} stoğunu soruyor · stok: ${stokYazi(r.stok)}`;
+// İki mağazadaki Black Rose kodlarının dağılımı (kullanıcı kararı 31 Ekim): "Black Rose mağazası 20 · VOLONTE mağazası 4"
+const MAGAZA_AD = { BLACKROSE: "Black Rose mağazası", VOLONTE: "VOLONTE mağazası" };
+export const dagilimYazi = (d) => (d && Object.keys(d).length > 1 ? ` (${["BLACKROSE", "VOLONTE"].filter((m) => m in d).map((m) => `${MAGAZA_AD[m]} ${Math.max(0, d[m])}`).join(" · ")})` : "");
+const soruMetni = (r) => `🔎 ${r.ad} ${r.kod} stoğunu soruyor · stok: ${stokYazi(r.stok)}${r.stok == null ? "" : dagilimYazi(r.detay)}`;
 const klavye = (id) => ({ inline_keyboard: [[{ text: "✅ Göster", callback_data: `sq:g:${id}` }, { text: "❌ Gösterme", callback_data: `sq:x:${id}` }]] });
 
 // Fabrika kişisinin "/stok …" mesajı. Yetkisi yoksa false (normal fabrika cevabı verilir).
@@ -40,7 +43,7 @@ export async function stokSorguMesaji(env, m, tg, simdi) {
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10);
   const r = await stokIste(env, "/sorgu-ac", { id, kisi: String(m.from.id), ad: kisi.ad, kod, gun: gunAnahtari(simdi), zaman: simdi, sinir: GUNLUK_SORGU });
   if (r.sinir) { await yaz(`Bugünlük sorgu sınırına ulaştınız (${GUNLUK_SORGU}). Yarın tekrar sorabilirsiniz.`); return true; }
-  const g = await tg(env, "sendMessage", { chat_id: sorumlu(env), text: soruMetni({ ad: kisi.ad, kod, stok: r.stok }), reply_markup: klavye(id) });
+  const g = await tg(env, "sendMessage", { chat_id: sorumlu(env), text: soruMetni({ ad: kisi.ad, kod, stok: r.stok, detay: r.detay }), reply_markup: klavye(id) });
   await stokIste(env, "/sorgu-mesaj", { id, mesajlar: g && g.ok ? [[sorumlu(env), g.result.message_id]] : [] });
   await yaz(`${kod} için sorunuz iletildi. Onaylanınca cevap buradan gelecek.`);
   return true;
@@ -60,7 +63,7 @@ export async function stokSorguDugmesi(env, cq, tg, simdi) {
   const r = s.kayit;
   await cevapla(islem === "g" ? "Gösterildi" : "Gösterilmedi");
   await tg(env, "sendMessage", { chat_id: r.kisi, text: islem === "g"
-    ? (r.stok == null ? `📦 ${r.kod}: Black Rose'da bu model yok.` : `📦 ${r.kod} · Black Rose stok: ${Math.max(0, r.stok)} adet`)
+    ? (r.stok == null ? `📦 ${r.kod}: Black Rose'da bu model yok.` : `📦 ${r.kod} · Black Rose stok: ${Math.max(0, r.stok)} adet${dagilimYazi(r.detay)}`)
     : `${r.kod}: stok bilgisi şu an paylaşılamıyor.` });
   const ek = islem === "g" ? `✅ ${kim} gösterdi${r.stok == null ? "" : ` (${Math.max(0, r.stok)} adet)`}` : `❌ ${kim}: gösterilmedi`;
   for (const [chat, mesaj] of r.mesajlar) await tg(env, "editMessageText", { chat_id: chat, message_id: mesaj, text: `${soruMetni(r)}\n\n${ek}`, reply_markup: { inline_keyboard: [] } });
@@ -112,4 +115,21 @@ export async function sorgularKomutu(env, m, tg, simdi) {
   const durum = { bekliyor: "⏳ bekliyor", gosterildi: "✅ gösterildi", gosterilmedi: "❌ gösterilmedi", suresi: "⌛ cevapsız" };
   const satir = (r) => `${r.gun.slice(8, 10)}.${r.gun.slice(5, 7)} ${saatYaz(r.zaman)} · ${r.ad} · ${r.kod} · ${durum[r.durum] || r.durum}${r.karar_kim ? ` (${r.karar_kim})` : ""}`;
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: l.length ? `🔎 Stok sorguları (son 3 gün, ${l.length}):\n${l.slice(-40).map(satir).join("\n")}` : "Son 3 günde stok sorgusu yok." });
+}
+
+// /brsay (sadece Patron): B'siz Black Rose modelleri listesi — "/brsay" göster, "/brsay 3634 3700" ekle, "/brsay sil 3634" çıkar.
+// Bu modellerin Black Rose mağazasındaki adedi Black Rose stoğu sayılır (Fuat/Nuri sorgusu ve cuma mutabakatı).
+export async function brSayKomutu(env, m, tg) {
+  const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text });
+  if (!muratMi(env, m.from.id)) return yaz("Bu komut sadece Patron'da.");
+  const v = (await stokIste(env, "/ayar-oku", { k: "br:say" })).v;
+  let l = v ? JSON.parse(v) : [];
+  const [, ...kelimeler] = String(m.text || "").trim().split(/\s+/);
+  const sil = /^sil$/i.test(kelimeler[0] || "");
+  const kodlar = kelimeler.filter((k) => /^\d{3,6}$/.test(k) && k !== "2000");
+  if (kodlar.length) {
+    l = sil ? l.filter((k) => !kodlar.includes(k)) : [...new Set([...l, ...kodlar])];
+    await stokIste(env, "/ayar-yaz", { k: "br:say", v: JSON.stringify(l) });
+  }
+  return yaz(`Black Rose sayılan B'siz modeller (${l.length}): ${l.join(", ") || "yok"}\nEklemek: /brsay 3634 3700 · Çıkarmak: /brsay sil 3634`);
 }
