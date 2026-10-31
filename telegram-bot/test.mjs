@@ -1650,3 +1650,18 @@ test("repete: Hemra yazar → önizleme (🔁 BACK IN STOCK, fiyatsız) Hemra'ya
   await bas(o.env, 333, onay); // ikinci basış
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length, 0);
 });
+
+test("Kemal günlük seçim: hiç paylaşılmamışlardan günde en fazla 2 (biri başta, biri sonda), diğer 8 normal kural", async () => {
+  const { gunlukSecim } = await import("./worker.js");
+  const sirali = ["3000", "3002", "3044", "3050", "3100", "3101", "3102", "3103", "3104", "3105", "3106", "3107", "3108", "3109"]; // ilk 4 hiç paylaşılmamış
+  const son = Object.fromEntries(sirali.slice(4).map((k, i) => [k, 1000 + i]));
+  const sec = (adet, disari = []) => sirali.filter((k) => !disari.includes(k)).slice(0, adet);
+  const l = gunlukSecim(sec, son, 10);
+  assert.equal(l.length, 10);
+  assert.equal(l[0], "3000");
+  assert.equal(l.at(-1), "3002");
+  assert.deepEqual(l.slice(1, -1), ["3100", "3101", "3102", "3103", "3104", "3105", "3106", "3107"]);
+  assert.ok(!l.includes("3044") && !l.includes("3050"));
+  // hiç paylaşılmamış kalmadıysa 10'u da normal
+  assert.deepEqual(gunlukSecim((a, d = []) => sirali.slice(4).filter((k) => !d.includes(k)).slice(0, a), son, 10), sirali.slice(4, 14));
+});

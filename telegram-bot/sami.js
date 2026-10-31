@@ -18,6 +18,8 @@ import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
 import { gunDokumu, raporTekrar } from "./gun-dokum.js";
+import { paylasimTakip } from "./paylasim-takip.js";
+import { indirimliMi } from "./stok.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
@@ -72,8 +74,9 @@ export default {
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
     const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); };
+    const paylasilmamis = (e, t) => paylasimTakip(e, t, tg);
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -166,7 +169,7 @@ const siteUrunleri = (env) => siteVerisi(env); // Selin'in iç bağlantısıyla 
 const liste = (kodlar, n = 15) => (kodlar.length > n ? `${kodlar.slice(0, n).join(", ")} … (+${kodlar.length - n})` : kodlar.join(", "));
 
 // Saf rapor: test edilebilir.
-export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodlar, sonpaylasim }) {
+export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodlar, sonpaylasim, siteFiyat = null }) {
   const dun = gunAnahtari(simdi - 86400);
   const satir = [`📦 Sayım Sami — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`, ""];
   const sorunlar = [];
@@ -190,7 +193,7 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
   satir.push(`Dün biten (${biten.length}): ${biten.length ? liste(biten) : "yok"}`);
   satir.push(`Dün gelen (${gelen.length}): ${gelen.length ? liste(gelen) : "yok"}`);
   if (fiyat.length) satir.push(`Fiyatı değişen: ${fiyat.slice(0, 10).map((o) => `${o.kod} ${o.onceki}→${o.sonraki} $`).join(", ")}`);
-  const paylasilmamis = Object.entries(tum).filter(([k, x]) => x.toplam > 0 && x.fiyat != null && !kodlar[k]).map(([k]) => k).sort();
+  const paylasilmamis = Object.entries(tum).filter(([k, x]) => x.toplam > 0 && x.fiyat != null && !kodlar[k] && !indirimliMi(k)).map(([k]) => k).sort();
   satir.push(`Stokta ama Telegram'da hiç paylaşılmamış (${paylasilmamis.length}): ${paylasilmamis.length ? liste(paylasilmamis) : "yok"}`);
 
   satir.push("", "🔎 Kontroller:");
@@ -204,18 +207,16 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
       sorunlar.push(metin);
     }
   } else satir.push(`• ✅ Dün (${dun}) stoksuz model paylaşılmadı (${paylasimlar.length} paylaşım kontrol edildi)`);
-  // 2) Sitede fiyat Vegawin ile aynı mı? 3) Sitede görünen ama stoğu biten var mı?
-  const yanlisFiyat = [];
+  // 2) Yeni sitede fiyat GÖRÜNMEMELİ (kullanıcı kararı 31 Ekim; sitenin kendi sayfaları iç bağlantıyla denenir)
+  // 3) Sitede görünen ama stoğu biten var mı?
+  if (siteFiyat === false) satir.push("• ✅ Sitede fiyat görünmüyor");
+  else if (siteFiyat === true) { satir.push("• ⚠️ Sitede fiyat görünüyor!"); sorunlar.push("Sitede fiyat görünüyor"); }
+  else satir.push("• ❔ Sitede fiyat kontrolü yapılamadı (site bağlantısı yok)");
   const gorunenStoksuz = [];
   for (const u of site) {
     const x = tum[u.kod];
-    if (!x) continue; // Vegawin'de yok (Black Rose / pasif): "Ask price" ile kalır, hata değil
-    if (x.fiyat != null && u.fiyat != null && Number(u.fiyat) !== Number(x.fiyat)) yanlisFiyat.push(`${u.kod} sitede ${u.fiyat} $, Vegawin ${x.fiyat} $`);
-    if (x.fiyat != null && u.fiyat == null && !u.gizli) yanlisFiyat.push(`${u.kod} sitede fiyatsız, Vegawin ${x.fiyat} $`);
-    if (x.gizli && !u.gizli) gorunenStoksuz.push(u.kod);
+    if (x && x.gizli && !u.gizli) gorunenStoksuz.push(u.kod);
   }
-  if (yanlisFiyat.length) for (const y of yanlisFiyat) { satir.push(`• ⚠️ Sitede yanlış fiyat: ${y}`); sorunlar.push(`Sitede yanlış fiyat: ${y}`); }
-  else satir.push(`• ✅ Sitedeki fiyatlar Vegawin ile aynı (${site.length} model)`);
   if (gorunenStoksuz.length) { satir.push(`• ⚠️ Sitede görünüyor ama stoğu bitmiş: ${liste(gorunenStoksuz)}`); sorunlar.push(`Sitede görünen stoksuz: ${gorunenStoksuz.join(", ")}`); }
   else satir.push("• ✅ Sitede stoğu bitmiş model görünmüyor");
   return {
@@ -266,6 +267,7 @@ async function sabahRaporu(env, simdi) {
     site: await siteUrunleri(env),
     kodlar,
     sonpaylasim: (await env.KAYIT.get("sonpaylasim", "json")) || {},
+    siteFiyat: env.SITE_IC ? await env.SITE_IC.dene(["/", "/veri"]).then((l) => l.some((r) => r.fiyat)).catch(() => null) : null,
   });
   await env.KAYIT.put(`venom:samiMetin:${gun}`, rapor.metin, { expirationTtl: 7 * 86400 }); // tam metin (kontrol için)
   if (elle) return;
