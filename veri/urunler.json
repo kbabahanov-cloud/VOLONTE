@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3608",
+  "baslik": "Peplum Vest Satin Ball Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A sleeveless evening gown pairing a tailored black peplum bodice with a full, floor-length satin skirt in a rich olive gold. The bodice features sharp notched lapels, a deep V-neckline and a beaded floral appliqué at the waist. Made for galas, weddings and formal evenings. Produced in Istanbul with careful attention to finish.",
+   "fr": "Robe de soirée sans manches associant un buste péplum noir ajusté à une jupe longue et ample en satin vert olive doré. Le buste se distingue par ses revers crantés, un décolleté en V profond et une applique florale perlée à la taille. Idéale pour les galas, mariages et soirées habillées. Fabriquée à Istanbul avec un soin particulier apporté aux finitions.",
+   "pt": "Vestido de noite sem mangas que une um corpete peplum preto estruturado a uma saia longa e ampla em cetim verde-oliva dourado. O corpete destaca-se pelas lapelas entalhadas, decote em V profundo e um aplique floral bordado com pedrarias na cintura. Pensado para galas, casamentos e noites formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3608/1.jpg",
+   "galeri/3608/2.jpg",
+   "galeri/3608/3.jpg",
+   "galeri/3608/4.jpg",
+   "galeri/3608/5.jpg"
+  ],
+  "videolar": [
+   "selin/3608/0"
+  ],
+  "fiyat": 82,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3614",
   "baslik": "Cape Sleeve Belted Set",
   "kategori": "sets",
