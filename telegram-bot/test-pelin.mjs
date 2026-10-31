@@ -3,8 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { guncelleme, pelinCron, maliyet, harfDagit, sonucMetni, videoGirdisi, buAyHarcanan, onizlemeGonder } from "./pelin.js";
 
-const MURAT = 2005113508;
-const HEMRA = 6448681578;
+const MURAT = 9000000001;
+const HEMRA = 9000000002;
 const ay = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7);
 
 function ortam({ fal = true } = {}) {
@@ -40,7 +40,7 @@ function ortam({ fal = true } = {}) {
     return Response.json({ ok: true, result: { message_id: id++, url: "", file_path: "x.jpg" } });
   };
   const env = {
-    BOT_TOKEN: "t", ANTHROPIC_API_KEY: "k", SELF_URL: "https://pelin.test", WEBHOOK_SECRET: "s", ALLOWED_IDS: `${MURAT},6113852976`,
+    BOT_TOKEN: "t", ANTHROPIC_API_KEY: "k", SELF_URL: "https://pelin.test", WEBHOOK_SECRET: "s", ALLOWED_IDS: `${MURAT},9000000003`, MURAT_ID: String(MURAT), HEMRA_ID: String(HEMRA),
     ...(fal ? { FAL_KEY: "fal-anahtar" } : {}),
     KAYIT: {
       async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; },
@@ -164,7 +164,7 @@ test("video denemesi: aynı kareden 3 araç × 2 model; kareler + puan; kör tes
 test("kör test: harfler karışık, sonuçta araç adları, maliyet ve oylar açılır", () => {
   const h = harfDagit(["veo", "kling", "seedance", "gercek"], () => 0);
   assert.deepEqual(Object.values(h).sort(), ["gercek", "kling", "seedance", "veo"]);
-  const env = {};
+  const env = { MURAT_ID: String(MURAT), HEMRA_ID: String(HEMRA) };
   const d = { modeller: {
     3592: { harfler: { A: "kling", B: "gercek" }, oylar: { [MURAT]: "A", [HEMRA]: "B" }, videolar: { kling: { url: "u", fiyat: 0.672 }, gercek: { url: "g", fiyat: 0 } }, puan: { kling: { renk: 9, desen: 8, kesim: 9, not: "iyi" } } },
     3577: { harfler: { A: "veo" }, oylar: {}, videolar: { veo: { url: "u", fiyat: 0.3 }, seedance: { hata: "422", fiyat: 0 } }, puan: {} },

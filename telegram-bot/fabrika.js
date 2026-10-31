@@ -25,7 +25,7 @@ const MAGAZA = "VOLONTE";
 // BLACK ROSE → Merdan, satışlar gün içinde anlık girildiği için 19:05'ten sonra tek liste (gün içinde mesaj yok).
 export const MAGAZALAR = [
   { magaza: "VOLONTE", ek: "", ad: "Hemra", etiket: "VOLONTE", basla: null, kime: (env) => sorumlu(env) },
-  { magaza: "BLACKROSE", ek: "-BR", ad: "Merdan", etiket: "Black Rose", basla: 19 + 5 / 60, kime: (env) => String(env.BR_SORUMLU || "6113852976") },
+  { magaza: "BLACKROSE", ek: "-BR", ad: "Merdan", etiket: "Black Rose", basla: 19 + 5 / 60, kime: (env) => String(env.BR_SORUMLU || "") },
 ];
 const kimeOf = (env, d) => (d && d.sorumlu ? String(d.sorumlu) : sorumlu(env));
 const cfgOf = (d) => MAGAZALAR.find((c) => c.magaza === ((d && d.magaza) || MAGAZA)) || MAGAZALAR[0];
@@ -77,8 +77,9 @@ async function kuyrukEkle(env, tur, anahtar) {
   await ayarYaz(env, "fabrika:kuyruk", k);
 }
 
-export const sorumlu = (env) => String(env.FABRIKA_SORUMLU || "6448681578");
-export const murat = (env) => String(env.MURAT_ID || "2005113508");
+// Kimlikler ortamdan (yükleme betikleri gizli kayıttan, KV venom:kimlikler, okur); kodda sabit kimlik yok.
+export const sorumlu = (env) => String(env.FABRIKA_SORUMLU || "");
+export const murat = (env) => String(env.MURAT_ID || "");
 
 async function ayarOku(env, k, bos) {
   const v = (await stokIste(env, "/ayar-oku", { k })).v;

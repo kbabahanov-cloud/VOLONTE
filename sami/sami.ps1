@@ -23,6 +23,8 @@ $ErrorActionPreference = "Stop"
 
 $Klasor = $PSScriptRoot
 $Ayar = Get-Content (Join-Path $Klasor "ayar.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+# Depodaki ayar.json şablondur (adres/kullanıcı gizli kayıtta); sadece paket.sh ile üretilen paketteki ayar çalışır.
+if ((Get-Content (Join-Path $Klasor "ayar.json") -Raw -Encoding UTF8) -match 'GIZLI_KAYITTAN') { Write-Host "ayar.json eksik: paket.sh ile üretilen paketi kullanın." -ForegroundColor Red; exit 1 }
 if ($Ayar.magaza -notmatch '^[A-Z0-9_]{2,20}$' -or $Ayar.firma -notmatch '^F\d{4}$' -or $Ayar.donem -notmatch '^D\d{4}$') {
   throw "ayar.json hatalı (magaza / firma / donem)."
 }

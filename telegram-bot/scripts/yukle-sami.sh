@@ -9,6 +9,8 @@ npm run build:sami >/dev/null
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-sami
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
+source scripts/kimlikler.sh
+KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS MURAT_ID FABRIKA_SORUMLU BR_SORUMLU)
 META=$(mktemp)
 GIZLI=""
 if [ "$ILK" = "evet" ]; then
@@ -19,10 +21,7 @@ cat > "$META" <<JSON
  "placement":{"region":"aws:us-east-1"},
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
-             {"type":"plain_text","name":"ALLOWED_IDS","text":"2005113508,6113852976"},
-             {"type":"plain_text","name":"EKIP_IDS","text":"6448681578,8369444291"},
-             {"type":"plain_text","name":"FABRIKA_SORUMLU","text":"6448681578"},
-             {"type":"plain_text","name":"MURAT_ID","text":"2005113508"},
+             $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-sami.volonte.workers.dev"},
              {"type":"plain_text","name":"GITHUB_REPO","text":"kbabahanov-cloud/VOLONTE"}$GIZLI]}
 JSON

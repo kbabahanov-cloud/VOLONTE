@@ -2,45 +2,29 @@
 
 Bu dosya, bu projede benimle (kullanıcıyla) nasıl çalışacağını anlatır. Her oturumda bunu dikkate al.
 
+## GİZLİLİK — önce bunu oku
+
+- Bu depo **herkese açık**. Ekip bilgileri, Telegram ID'leri, telefon numaraları, iş düzeni, hedefler ve proje notları depoya **yazılmaz**.
+- Hepsi Cloudflare KV'de gizli kayıtta (`python3 araclar/gizli-kayit.py oku <anahtar>`):
+  - `venom:notlar` — proje notları, ANA PLAN, "Sıradaki komut"
+  - `venom:ekip` — kişiler, roller, kimlikler, hesaplar, köprü bilgileri
+  - `venom:hedefler` — kalıcı hedefler (her yeni işte bunlara uygun davran)
+  - `venom:claude` — benim ve işimin ayrıntılı tanımı
+  - `venom:kimlikler`, `venom:kopru-ayar` — botların ve köprülerin ayarları (yükleme betikleri buradan okur)
+- Her oturumda önce bu kayıtları oku; notları güncelleyince yine oraya yaz. Kodda kişi kimliği, numara ya da anahtar sabit yazma.
+
 ## Ben kimim
 
 - VOLONTE adlı bir kadın giyim markasını yönetiyorum.
 - Teknik biri değilim.
 - Türkçe ve Rusça konuşuyorum.
-
-## VOLONTE hakkında
-
-- Kadın kıyafetleri üreten, kaliteye odaklı bir toptan satış markası.
-- Ana pazar: Afrika pazarı ve Afrikalı kadınlar.
-- Dünya genelinde de satış yapıyoruz (örneğin Amerika, Kanada, Avustralya, Fransa).
-- Kalite bizim temelimiz: ucuz ürün değil, kaliteli ürün satıyoruz.
-- Telegram şu anda ana vitrinimiz (yaklaşık 14 bin takipçi).
-- Siparişleri çoğunlukla WhatsApp üzerinden tamamlıyoruz.
-- Sosyal medya kullanımı ve içerik üretimi gelecekte geliştireceğimiz alanlar.
-- İstanbul Laleli'de toptan mağazamız var.
-- Katalog sitesi: https://kbabahanov-cloud.github.io/VOLONTE/ (bu depo, GitHub Pages).
+- Ayrıntılar: `venom:claude`.
 
 ## Devam eden büyük proje: VENOM sistemi
 
-Yapay zekâ destekli ana iş sistemi (stok, kanallar, içerik, sesli asistan).
-İstekler, sıralama ve açık sorular: `notlar/venom-sistemi.md`. Her oturumda önce bu dosyaya bak ve durumu güncel tut.
+Yapay zekâ destekli ana iş sistemi. Notlar ve sıralama `venom:notlar` içinde.
 
-**Çalışma şekli (kullanıcı kararı):** Süreci Claude yönetir. `notlar/venom-sistemi.md` içindeki **ANA PLAN → "Sıradaki komut"** satırından devam et. Kullanıcıya her seferinde **tek bir** net komut ver, yapınca işaretle ve sıradakine geç. Para harcama, asıl WhatsApp numarası ve geri alınamaz işlemler için yine onay al.
-
-## Benim rolüm
-
-- WhatsApp üzerinden müşterilerle ilgilenmek.
-- Telegram'ı takip etmek.
-- Yeni modeller araştırmak, seçmek, üretime almak.
-- Kaliteyi kontrol etmek.
-- Model seçerken önce kendi zevkime ve güncel modaya bakarım; modern ve genç tarzları tercih ederim.
-
-## Uzun vadeli hedefler
-
-- VOLONTE'yi dünya çapında büyütmek.
-- İş yükünü azaltmak.
-- Tekrar eden işleri otomatikleştirmek.
-- Sosyal medyayı ve içerik üretimini geliştirmek.
+**Çalışma şekli (kullanıcı kararı):** Süreci Claude yönetir. `venom:notlar` içindeki **ANA PLAN → "Sıradaki komut"** satırından devam et. Kullanıcıya her seferinde **tek bir** net komut ver, yapınca işaretle ve sıradakine geç. Para harcama, asıl WhatsApp numarası ve geri alınamaz işlemler için yine onay al.
 
 ## Claude'dan beklentilerim
 

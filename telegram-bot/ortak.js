@@ -1,6 +1,6 @@
 // ORTAK BEYİN — Kemal, Selin (ve ileride Defne) aynı KV deposunu (KAYIT) kullanır.
 // Kural: herkes her şeyi OKUYABİLİR, ama her anahtarı SADECE sahibi YAZAR.
-// Böylece bir eleman bozulursa diğerinin verisi bozulmaz. Ayrıntı: notlar/ortak-beyin.md
+// Böylece bir eleman bozulursa diğerinin verisi bozulmaz. Ayrıntı: gizli kayıt venom:ortak-beyin
 //
 // Kemal'in yazdığı (kanal ve turlar):
 //   kanal, kodlar, kodsuz, tarifler, hicgelmeyecek, atlananlar, sonpaylasim,

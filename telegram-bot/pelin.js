@@ -101,8 +101,8 @@ async function claudeHarcama(env, model, u, simdi) {
 
 // ---------- Kişiler ----------
 const kimlikler = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
-export const murat = (env) => String(env.MURAT_ID || "2005113508");
-export const hemra = (env) => String(env.HEMRA_ID || "6448681578");
+export const murat = (env) => String(env.MURAT_ID || ""); // kimlikler ortamdan (KV venom:kimlikler)
+export const hemra = (env) => String(env.HEMRA_ID || "");
 const yonetici = (env, id) => [murat(env), ...kimlikler(env.ALLOWED_IDS)].includes(String(id));
 const oylayan = (env, id) => [murat(env), hemra(env)].includes(String(id));
 

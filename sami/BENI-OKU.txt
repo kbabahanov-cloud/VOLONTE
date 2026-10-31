@@ -8,7 +8,7 @@ Alış fiyatı, maliyet, kâr, vergi no ve TC kimlik no okunmaz.
 KURULUM (Vegawin'in kurulu olduğu bilgisayarda, tek seferlik):
 1) Bu klasörü masaüstüne açın (zip'e sağ tık > Tümünü ayıkla).
 2) kurulum.bat'a çift tıklayın. "Windows bilgisayarınızı korudu" derse: Ek bilgi > Yine de çalıştır.
-   Şifreyi sorunca volonte_okuma şifresini yazın (yazarken görünmez, normal) > Enter.
+   Şifreyi sorunca okuma kullanıcısının şifresini yazın (yazarken görünmez, normal) > Enter.
    Ekranda bir KÖPRÜ ANAHTARI çıkar (panoya da kopyalanır).
 3) Cloudflare'de: volonte-asistan > Settings > Variables and Secrets > Add
    Type: Secret, Name: KOPRU_VOLONTE, Value: (yapıştır) > Deploy.

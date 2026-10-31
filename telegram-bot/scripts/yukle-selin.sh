@@ -9,6 +9,8 @@ npm run build:selin >/dev/null
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-selin
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
+source scripts/kimlikler.sh
+KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS SAHIP_IDS)
 META=$(mktemp)
 GOC=""
 GIZLI=""
@@ -23,9 +25,7 @@ cat > "$META" <<JSON
              {"type":"durable_object_namespace","name":"SELIN","class_name":"SelinDO"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
              {"type":"images","name":"IMAGES"},
-             {"type":"plain_text","name":"ALLOWED_IDS","text":"2005113508,6113852976"},
-             {"type":"plain_text","name":"EKIP_IDS","text":"6448681578,8369444291"},
-             {"type":"plain_text","name":"SAHIP_IDS","text":"6113852976"},
+             $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-selin.volonte.workers.dev"},
              {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},
              {"type":"plain_text","name":"GITHUB_REPO","text":"kbabahanov-cloud/VOLONTE"},

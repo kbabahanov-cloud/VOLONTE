@@ -9,6 +9,8 @@ npm run build:pelin >/dev/null
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-pelin
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
+source scripts/kimlikler.sh
+KIMLIK=$(kimlik_bagla ALLOWED_IDS MURAT_ID HEMRA_ID)
 META=$(mktemp)
 GOC=""
 GIZLI=""
@@ -21,9 +23,7 @@ cat > "$META" <<JSON
  "placement":{"region":"aws:us-east-1"}, $GOC
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"PELIN","class_name":"PelinDO"},
-             {"type":"plain_text","name":"ALLOWED_IDS","text":"2005113508,6113852976"},
-             {"type":"plain_text","name":"MURAT_ID","text":"2005113508"},
-             {"type":"plain_text","name":"HEMRA_ID","text":"6448681578"},
+             $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-pelin.volonte.workers.dev"},
              {"type":"plain_text","name":"KEMAL_URL","text":"https://volonte-asistan.volonte.workers.dev"}$GIZLI]}
 JSON

@@ -5,14 +5,14 @@ Okuduğu: model kodu, ürün adı, adet (Merkez depo), satış fiyatı ($) ve g�
 Alış fiyatı, maliyet, kâr, vergi no ve TC kimlik no okunmaz.
 Şifre bu bilgisayarda Windows'un kasasında şifreli durur; hiçbir yere gönderilmez.
 
-VOLONTE BİLGİSAYARINA KURULUR: Black Rose'un Vegawin'ine ağ üzerinden (192.168.1.192:1433) bağlanır.
+VOLONTE BİLGİSAYARINA KURULUR: Black Rose'un Vegawin'ine ağ üzerinden (adres ayar.json'da) bağlanır.
 VOLONTE köprüsünden TAMAMEN AYRIDIR: ayrı klasör (Sami-BLACKROSE), ayrı şifre kaydı, ayrı günlük, ayrı görev
 (Sami-BLACKROSE), ayrı anahtar (KOPRU_BLACKROSE). VOLONTE'nin "Sami" klasörüne DOKUNMAYIN, üzerine açmayın.
 
 KURULUM (VOLONTE bilgisayarında, tek seferlik):
 1) Zip'e sağ tık > Tümünü ayıkla > masaüstüne. "Sami-BLACKROSE" adında YENİ bir klasör çıkar.
 2) Sami-BLACKROSE klasöründe kurulum.bat'a çift tıklayın. "Windows bilgisayarınızı korudu" derse: Ek bilgi > Yine de çalıştır.
-   Şifreyi sorunca sami_okuma şifresini yazın (yazarken görünmez, normal) > Enter.
+   Şifreyi sorunca okuma kullanıcısının şifresini yazın (yazarken görünmez, normal) > Enter.
    Ekranda bir KÖPRÜ ANAHTARI çıkar (panoya da kopyalanır).
 3) Cloudflare'de: volonte-asistan > Settings > Variables and Secrets > Add
    Type: Secret, Name: KOPRU_BLACKROSE, Value: (yapıştır) > Deploy.
