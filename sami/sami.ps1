@@ -403,6 +403,37 @@ switch ($Mod) {
     Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
     Bekle
   }
+  "cari-deneme" {
+    # Cuma mutabakatı (31 Ekim): Black Rose cari hesaplarının bakiyesi okunabiliyor mu? SADECE SELECT, hiçbir şey gönderilmez.
+    Write-Host "=== Sayım Sami cari hesap denemesi ($($Ayar.magaza)) — sadece okuma, Venom'a hiçbir şey gönderilmez ===" -ForegroundColor Cyan
+    try {
+      $g = Gizliler; $sifre = Duz $g.Sifre
+      $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "%CARI%" }
+      Write-Host "Adında CARI geçen tablolar: $($tablolar.Rows.Count)"
+      foreach ($t in $tablolar.Rows) {
+        $ad = [string]$t.AD
+        try { $n = (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$ad]").Rows[0].N } catch { $n = "OKUNAMADI: $($_.Exception.Message)" }
+        Write-Host ""
+        Write-Host "■ $ad  ($n satır)" -ForegroundColor Yellow
+        Write-Host "  Sütunlar: $((Sutunlar $sifre $ad) -join ', ')"
+        if ($n -is [int] -and $n -gt 0 -and $n -lt 200000) {
+          $metin = Sorgu $sifre "SELECT COLUMN_NAME AS C FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t AND DATA_TYPE IN ('varchar','nvarchar','char','nchar')" @{ t = $ad }
+          foreach ($c in $metin.Rows) {
+            $sutun = [string]$c.C
+            try {
+              $bul = Sorgu $sifre "SELECT DISTINCT TOP 12 [$sutun] AS V FROM [$ad] WHERE [$sutun] LIKE @b OR [$sutun] LIKE @c" @{ b = "%BLACK%"; c = "%ROSE%" }
+              if ($bul.Rows.Count) { Write-Host ("  '{0}' sütununda: {1}" -f $sutun, (($bul.Rows | ForEach-Object { ([string]$_.V).Trim() }) -join " | ")) -ForegroundColor Green }
+            } catch { Write-Host "  '$sutun' okunamadı: $($_.Exception.Message)" }
+          }
+        }
+      }
+      Write-Host ""
+      Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi, Vegawin'e hiçbir şey yazılmadı)." -ForegroundColor Green
+    } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını (gerekirse birkaç parça) Claude'a gönderin."
+    Bekle
+  }
   "durum" {
     Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
     try {

@@ -169,9 +169,35 @@ export class StokDeposu {
   }
 
   // Black Rose stoğu: sadece "B" kartlarının adedi (VOLONTE stoğu karışmaz). null = Black Rose kartı yok.
+  // Black Rose kodu (kullanıcı kararı 31 Ekim): İKİ mağazada da Vegawin kodu "B" ile biten kartlar (bradet) + Murat'ın
+  // "Black Rose say" dediği B'siz modeller (ayar "br:say"; o modelin Black Rose mağazasındaki adedi). 2000 hariç.
+  brSayListesi() { return JSON.parse(this.ayarOku("br:say") || "[]"); }
+  brStokDetay(kod) {
+    const k = stokKodu(kod);
+    if (indirimliMi(k)) return null;
+    const say = this.brSayListesi().includes(k);
+    const d = {};
+    for (const r of this.hepsi("SELECT magaza, bradet, adet FROM urun WHERE kod = ?", k)) {
+      const v = r.bradet != null ? r.bradet : say && r.magaza === "BLACKROSE" ? r.adet : null;
+      if (v != null) d[r.magaza] = (d[r.magaza] || 0) + v;
+    }
+    return Object.keys(d).length ? d : null;
+  }
   brStok(kod) {
-    const r = this.tek("SELECT SUM(bradet) AS t, COUNT(bradet) AS n FROM urun WHERE kod = ?", stokKodu(kod));
-    return r && r.n ? r.t : null;
+    const d = this.brStokDetay(kod);
+    return d ? Object.values(d).reduce((s, x) => s + x, 0) : null;
+  }
+  // Cuma mutabakatı için: mağaza başına Black Rose kodlarının stoğu (adet > 0), kod sırasıyla
+  brStoklar() {
+    const say = new Set(this.brSayListesi());
+    const sonuc = { BLACKROSE: [], VOLONTE: [] };
+    for (const r of this.hepsi("SELECT magaza, kod, bradet, adet FROM urun ORDER BY kod")) {
+      if (indirimliMi(r.kod) || !sonuc[r.magaza]) continue;
+      const v = r.bradet != null ? r.bradet : say.has(r.kod) && r.magaza === "BLACKROSE" ? r.adet : null;
+      if (v != null && v > 0) sonuc[r.magaza].push([r.kod, v]);
+    }
+    for (const l of Object.values(sonuc)) l.sort((a, b) => a[0].localeCompare(b[0], "tr", { numeric: true }));
+    return sonuc;
   }
 
   // ---- Fuat/Nuri stok sorguları ----
@@ -181,11 +207,11 @@ export class StokDeposu {
     if (n >= sinir) return { sinir: true, sayi: n };
     const stok = this.brStok(kod);
     this.sql.exec("INSERT INTO sorgu (id, kisi, ad, kod, gun, zaman, stok, durum) VALUES (?, ?, ?, ?, ?, ?, ?, 'bekliyor')", id, String(kisi), ad, stokKodu(kod), gun, zaman, stok);
-    return { id, stok, sayi: n + 1 };
+    return { id, stok, detay: this.brStokDetay(kod), sayi: n + 1 };
   }
   sorguOku(id) {
     const r = this.tek("SELECT * FROM sorgu WHERE id = ?", id);
-    return r ? { ...r, mesajlar: r.mesajlar ? JSON.parse(r.mesajlar) : [] } : null;
+    return r ? { ...r, mesajlar: r.mesajlar ? JSON.parse(r.mesajlar) : [], detay: this.brStokDetay(r.kod) } : null;
   }
   sorguMesaj(id, mesajlar, murat = null) {
     if (murat) this.sql.exec("UPDATE sorgu SET mesajlar = ?, murat = ? WHERE id = ?", JSON.stringify(mesajlar), murat, id);
@@ -358,7 +384,8 @@ export class StokDO {
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
-    if (yol === "/br-stok") return cevap({ stok: d.brStok(g.kod) });
+    if (yol === "/br-stok") return cevap({ stok: d.brStok(g.kod), detay: d.brStokDetay(g.kod) });
+    if (yol === "/br-stoklar") return cevap(d.brStoklar());
     if (yol === "/sorgu-ac") return cevap(d.sorguAc(g));
     if (yol === "/sorgu-oku") return cevap(d.sorguOku(g.id));
     if (yol === "/sorgu-mesaj") return cevap(d.sorguMesaj(g.id, g.mesajlar || [], g.murat || null));

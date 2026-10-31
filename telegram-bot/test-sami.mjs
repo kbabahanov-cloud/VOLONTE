@@ -1100,3 +1100,80 @@ test("mal girişi: fabrikadan 'geldi' + 2 saat Vegawin'de stok artmadıysa Hemra
   await siparisTakip(o.env, T + 9000, tg);
   assert.equal(g.length, 0); // bir kez sorulur
 });
+
+test("Black Rose kodları iki mağazadan: B kartları + /brsay listesi; Fuat sorgusunda dağılım; 2000 hariç", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999,111", FABRIKA_SORUMLU: "333", ALLOWED_IDS: "999,111,222" });
+  await o.yaz("BLACKROSE", [{ kod: "3634", adet: 20, fiyat: 40, brAdet: 20 }, { kod: "907", adet: 6, fiyat: 30 }, { kod: "2000", adet: 99, fiyat: 5, brAdet: 99 }], ist(8));
+  await o.yaz("VOLONTE", [{ kod: "3634", adet: 9, fiyat: 40, brAdet: 4 }, { kod: "3194", adet: 7, fiyat: 60 }], ist(8));
+  const br = async () => (await o.env.STOK.get().fetch("https://stok/br-stoklar", { method: "POST", body: "{}" })).json();
+  assert.deepEqual(await br(), { BLACKROSE: [["3634", 20]], VOLONTE: [["3634", 4]] }); // VOLONTE'nin kendi 3194'ü ve 2000 yok
+  await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/brsay 907" } }, o.env); // Patron: 907 Black Rose say
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /\(1\): 907/);
+  assert.deepEqual((await br()).BLACKROSE, [["907", 6], ["3634", 20]]);
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333 }, text: "/brsay 3194" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /sadece Patron/);
+  // Fuat sorgusu: dağılım
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 501, ad: "Fuat" }]));
+  o.depo.set("sami:stokSorguIds", JSON.stringify(["501"]));
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "/stok 3634" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /Fuat 3634 stoğunu soruyor · stok: 24 \(Black Rose mağazası 20 · VOLONTE mağazası 4\)/);
+});
+
+test("cuma mutabakatı: 17:00 önizleme Patron'a; gönder → Fuat; Uyuşmuyor → fark Patron'a; Sonra → 12:00 hatırlatma, 3 günde Patron'a bilgi; başkaları basamaz", async () => {
+  const { mutabakatAdimi } = await import("./mutabakat.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999,111", FABRIKA_SORUMLU: "333", FUAT_ID: "501" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 501, ad: "Fuat" }, { id: 502, ad: "Nuri" }]));
+  await o.yaz("BLACKROSE", [{ kod: "3634", adet: 20, fiyat: 40, brAdet: 20 }], ist(8));
+  await o.yaz("VOLONTE", [{ kod: "3634", adet: 9, fiyat: 40, brAdet: 4 }, { kod: "3194", adet: 7, fiyat: 60 }], ist(8));
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 40 + g.length } }; };
+  const cuma = Date.UTC(2026, 10, 6, 14, 1) / 1000; // 6 Kasım 2026 cuma 17:01
+  await mutabakatAdimi(o.env, cuma - 3600, tg);
+  assert.equal(g.length, 0); // 16:01: henüz değil
+  await mutabakatAdimi(o.env, cuma, tg);
+  assert.equal(g.length, 1);
+  const on = g[0].govde;
+  assert.equal(on.chat_id, "999"); // Patron
+  assert.match(on.text, /📋 Cuma mutabakatı – 06\.11\.2026\n\n📦 BÖLÜM 1 – BLACK ROSE MAĞAZASI \(1 model, 20 adet\)\n3634 · 20\n\n📦 BÖLÜM 2 – VOLONTE MAĞAZASI \(Black Rose kodları; 1 model, 4 adet\)\n3634 · 4\n\n💰 BÖLÜM 3 – BAKİYELER/);
+  assert.ok(!/3194|\$\s?\d|fiyat/i.test(on.text.split("BAKİYELER")[0])); // VOLONTE modeli ve fiyat yok
+  const id = on.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await mutabakatAdimi(o.env, cuma + 600, tg);
+  assert.equal(g.length, 1); // cuma günü bir kez
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 333 }, data: `mt:g:${id}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Patron'da/); // Hemra gönderemez
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: `mt:g:${id}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env); // eski hesap da Patron yetkisinde
+  const fuatMsj = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "501");
+  assert.match(fuatMsj.govde.text, /^📋 Cuma mutabakatı – 06\.11\.2026/);
+  assert.deepEqual(fuatMsj.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Mutabıkım", "❌ Uyuşmuyor", "⏳ Sonra kontrol edeceğim"]);
+  // Nuri basamaz; Fuat "Sonra"
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 502 }, data: `mt:m:${id}`, message: { chat: { id: 502 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Fuat'ta/);
+  await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:s:${id}`, message: { chat: { id: 501 }, message_id: 2 } } }, o.env);
+  g.length = 0;
+  const cmt = cuma + 86400; // cumartesi
+  await mutabakatAdimi(o.env, cmt - 6 * 3600, tg); // 11:01 → henüz değil
+  assert.equal(g.length, 0);
+  await mutabakatAdimi(o.env, cmt - 5 * 3600 + 60, tg); // 12:02
+  await mutabakatAdimi(o.env, cmt + 3600, tg); // aynı gün ikinci kez sorulmaz
+  assert.equal(g.length, 1);
+  assert.match(g[0].govde.text, /Mutabakatı kontrol ettiniz mi\?/);
+  await mutabakatAdimi(o.env, cmt + 86400, tg); // pazar: yok
+  assert.equal(g.length, 1);
+  await mutabakatAdimi(o.env, cmt + 2 * 86400, tg); // pazartesi
+  await mutabakatAdimi(o.env, cmt + 3 * 86400, tg); // salı → 3. hatırlatma + Patron'a bilgi
+  assert.ok(g.some((x) => x.govde.chat_id === "999" && /mutabakatına 3 gündür cevap vermedi/.test(x.govde.text)));
+  // Uyuşmuyor → fark yazısı Patron'a
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:u:${id}`, message: { chat: { id: 501 }, message_id: 3 } } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Fark ne\?/);
+  await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "3634 bizde 18 görünüyor" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Fuat mutabakatta uyuşmuyor \(06\.11\.2026\):\n3634 bizde 18 görünüyor/);
+});
