@@ -1,5 +1,33 @@
 [
  {
+  "kod": "3609",
+  "baslik": "Floral Tunic Palazzo Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a long floral tunic with wide-leg satin-look palazzo trousers. The tunic features a stand collar with button front, balloon sleeves with elastic cuffs, a waist-defining belt and a flowing hem with a front slit. Ideal for celebrations, receptions and elegant daytime events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant une longue tunique fleurie à un pantalon palazzo large à l'aspect satiné. La tunique se distingue par son col montant boutonné, ses manches ballon resserrées aux poignets, sa ceinture qui marque la taille et son bas fluide fendu devant. Parfait pour les cérémonies, réceptions et sorties élégantes. Fabriqué à Istanbul avec un soin minutieux.",
+   "pt": "Um conjunto de duas peças que combina uma túnica longa estampada com flores e calça pantalona larga com aspeto acetinado. A túnica tem gola alta com botões, mangas balão com punhos elásticos, cinto que marca a cintura e barra fluida com abertura frontal. Ideal para celebrações, recepções e eventos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3609/1.jpg",
+   "galeri/3609/2.jpg",
+   "galeri/3609/3.jpg",
+   "galeri/3609/4.jpg",
+   "galeri/3609/5.jpg",
+   "galeri/3609/6.jpg",
+   "galeri/3609/7.jpg"
+  ],
+  "videolar": [
+   "selin/3609/0",
+   "selin/3609/1",
+   "selin/3609/2"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3608",
   "baslik": "Peplum Vest Satin Ball Gown",
   "kategori": "evening",
