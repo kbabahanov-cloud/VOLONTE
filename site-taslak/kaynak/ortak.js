@@ -12,8 +12,8 @@
     yildizlar: false, // "Stars in VOLONTE": ilk ünlü işbirliğinde true yapılır
     yeniGun: 21, // son 21 günde eklenen = "New"
   };
-  // Beden rehberi (EU → UK/Afrika, US; yaklaşık vücut ölçüleri cm). Murat kontrol edecek.
-  const BEDENLER = [[38, 10, 6, 88, 72, 97], [40, 12, 8, 92, 76, 100], [42, 14, 10, 96, 80, 103], [44, 16, 12, 100, 84, 106], [46, 18, 14, 106, 90, 112], [48, 20, 16, 112, 96, 118], [50, 22, 18, 118, 102, 124]];
+  // Beden karşılık tablosu (Murat onayı 31 Ekim): TR/EU · Rusya · UK/Afrika · US. Vücut ölçüsü (cm) GÖSTERİLMEZ.
+  const BEDENLER = [[38, 44, 10, 6], [40, 46, 12, 8], [42, 48, 14, 10], [44, 50, 16, 12], [46, 52, 18, 14], [48, 54, 20, 16], [50, 56, 22, 18]];
   const KUCUK = [38, 40, 42, 44];
   const BUYUK = [44, 46, 48, 50];
 
@@ -29,7 +29,7 @@
       wishEmpty: "Tap the heart on any model to add it to your list.", sendList: "Send my list on WhatsApp", wishText: "Choose models with the heart, then send the whole list to us in one message.",
       zoomHint: "Pinch or double-tap to see the fabric", soldBy: "Wholesale · sold by series", notFound: "This model is no longer on the site.", back: "Back",
       sizeTitle: "Find your size", sizeText: "Our models come in sizes 38 to 50, in two groups. Wholesale orders are by series (one piece of each size in the group).",
-      sizeNote: "Body measurements are approximate. If you are unsure, ask us on WhatsApp.", bust: "Bust (cm)", waist: "Waist (cm)", hips: "Hips (cm)", ukAfrica: "UK / Africa",
+      sizeNote: "If you are unsure about your size, ask us on WhatsApp.", trEu: "Turkey / EU", ru: "Russia", ukAfrica: "UK / Africa",
      
      
      
@@ -51,7 +51,7 @@
       wishEmpty: "Touchez le cœur d'un modèle pour l'ajouter à votre liste.", sendList: "Envoyer ma liste sur WhatsApp", wishText: "Choisissez des modèles avec le cœur, puis envoyez-nous toute la liste en un seul message.",
       zoomHint: "Pincez ou touchez deux fois pour voir le tissu", soldBy: "Vente en gros · par série", notFound: "Ce modèle n'est plus sur le site.", back: "Retour",
       sizeTitle: "Trouvez votre taille", sizeText: "Nos modèles vont du 38 au 50, en deux groupes. Les commandes en gros se font par série (une pièce de chaque taille du groupe).",
-      sizeNote: "Les mesures sont approximatives. En cas de doute, demandez-nous sur WhatsApp.", bust: "Poitrine (cm)", waist: "Taille (cm)", hips: "Hanches (cm)", ukAfrica: "UK / Afrique",
+      sizeNote: "En cas de doute sur votre taille, demandez-nous sur WhatsApp.", trEu: "Turquie / UE", ru: "Russie", ukAfrica: "UK / Afrique",
      
      
      
@@ -73,7 +73,7 @@
       wishEmpty: "Listeye eklemek için modeldeki kalbe dokunun.", sendList: "Listemi WhatsApp'tan gönder", wishText: "Kalple modelleri seçin, listenin tamamını bize tek mesajla gönderin.",
       zoomHint: "Kumaşı görmek için iki parmakla büyütün ya da çift dokunun", soldBy: "Toptan · seri hâlinde", notFound: "Bu model artık sitede yok.", back: "Geri",
       sizeTitle: "Bedeninizi bulun", sizeText: "Modellerimiz 38'den 50'ye, iki grupta. Toptan sipariş seri hâlindedir (gruptaki her bedenden bir adet).",
-      sizeNote: "Vücut ölçüleri yaklaşıktır. Emin değilseniz WhatsApp'tan sorun.", bust: "Göğüs (cm)", waist: "Bel (cm)", hips: "Kalça (cm)", ukAfrica: "UK / Afrika",
+      sizeNote: "Bedeninizden emin değilseniz WhatsApp'tan sorun.", trEu: "Türkiye / AB", ru: "Rusya", ukAfrica: "UK / Afrika",
      
      
      
@@ -296,12 +296,12 @@
         <div class="iki-sutun" style="margin-top:30px"><div class="yer-tutucu"><div><b>${esc(t("storyVideo"))}</b>${esc(t("soon"))}</div></div><div class="yer-tutucu"><div><b>${esc(t("storyAtelier"))}</b>${esc(t("soon"))}</div></div></div></section>`;
     },
     sizes() {
-      const satir = (b) => `<tr><td><b>${b[0]}</b></td><td>${b[1]}</td><td>${b[2]}</td><td>${b[3]}</td><td>${b[4]}</td><td>${b[5]}</td></tr>`;
+      const satir = (b) => `<tr><td><b>${b[0]}</b></td><td>${b[1]}</td><td>${b[2]}</td><td>${b[3]}</td></tr>`;
       return `<section class="bolum"><p class="baslik-ust">${esc(t("sizes"))}</p><h1 class="baslik">${esc(t("sizeTitle"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("sizeText"))}</p>
         <div class="gruplar"><div class="grup"><b>${esc(t("small"))} · 38–44</b>${esc(t("series"))}</div><div class="grup"><b>${esc(t("large"))} · 44–50</b>${esc(t("series"))}</div></div>
-        <div class="tablo-kap"><table><thead><tr><th>EU</th><th>${esc(t("ukAfrica"))}</th><th>US</th><th>${esc(t("bust"))}</th><th>${esc(t("waist"))}</th><th>${esc(t("hips"))}</th></tr></thead><tbody>
-          <tr class="grup-satir"><td colspan="6">${esc(t("small"))} · 38–44</td></tr>${BEDENLER.slice(0, 4).map(satir).join("")}
-          <tr class="grup-satir"><td colspan="6">${esc(t("large"))} · 44–50</td></tr>${BEDENLER.slice(3).map(satir).join("")}
+        <div class="tablo-kap"><table><thead><tr><th>${esc(t("trEu"))}</th><th>${esc(t("ru"))}</th><th>${esc(t("ukAfrica"))}</th><th>US</th></tr></thead><tbody>
+          <tr class="grup-satir"><td colspan="4">${esc(t("small"))} · 38–44</td></tr>${BEDENLER.slice(0, 4).map(satir).join("")}
+          <tr class="grup-satir"><td colspan="4">${esc(t("large"))} · 44–50</td></tr>${BEDENLER.slice(3).map(satir).join("")}
         </tbody></table></div><p class="not">${esc(t("sizeNote"))}</p>
         <p style="margin-top:22px"><a class="dugme" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></p></section>`;
     },

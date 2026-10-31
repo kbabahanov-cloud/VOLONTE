@@ -18,6 +18,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { karmaDepo } from "./depo.js";
+import { patronDenemesi } from "./venom.js";
 
 export const AYLIK_SINIR_USD = 150;
 export const UYARI_ORANI = 0.8;
@@ -101,10 +102,12 @@ async function claudeHarcama(env, model, u, simdi) {
 
 // ---------- Kişiler ----------
 const kimlikler = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
-export const murat = (env) => String(env.MURAT_ID || ""); // kimlikler ortamdan (KV venom:kimlikler)
+// MURAT_ID listesi: ilk = Patron hesabı (mesajlar oraya); hepsi Murat yetkisinde (kimlikler ortamdan, KV venom:kimlikler)
+export const murat = (env) => String(env.MURAT_ID || "").split(",").map((x) => x.trim()).filter(Boolean)[0] || "";
+const muratMi = (env, id) => String(env.MURAT_ID || "").split(",").map((x) => x.trim()).includes(String(id));
 export const hemra = (env) => String(env.HEMRA_ID || "");
-const yonetici = (env, id) => [murat(env), ...kimlikler(env.ALLOWED_IDS)].includes(String(id));
-const oylayan = (env, id) => [murat(env), hemra(env)].includes(String(id));
+const yonetici = (env, id) => muratMi(env, id) || kimlikler(env.ALLOWED_IDS).includes(String(id));
+const oylayan = (env, id) => muratMi(env, id) || String(id) === hemra(env);
 
 // ---------- Telegram ----------
 export async function tg(env, metod, govde) {
@@ -178,7 +181,7 @@ function adimEngeli(env, d, adim) {
 async function onizlemeKarari(env, cq, simdi) {
   const [islem, no] = cq.data.split(":");
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  if (String(cq.from.id) !== murat(env)) return cevap("Harcama onayı sadece Murat'ta.");
+  if (!muratMi(env, cq.from.id)) return cevap("Harcama onayı sadece Murat'ta.");
   const o = await oku(env, `pelin:onizleme:${no}`, null);
   if (!o || o.durum) return cevap("Bu önizleme artık geçerli değil.");
   o.durum = islem;
@@ -281,7 +284,7 @@ async function yuzleriGonder(env, d) {
 
 async function yuzSecimi(env, cq) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  if (String(cq.from.id) !== murat(env)) return cevap("Yüz onayı sadece Murat'ta.");
+  if (!muratMi(env, cq.from.id)) return cevap("Yüz onayı sadece Murat'ta.");
   const [islem, m, i] = cq.data.split(":");
   const d = await denemeOku(env);
   const y = d.yuzler[m];
@@ -326,7 +329,7 @@ async function fotolariGonder(env, d) {
 }
 async function fotoKarari(env, cq) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  if (String(cq.from.id) !== murat(env)) return cevap("Sadece Murat.");
+  if (!muratMi(env, cq.from.id)) return cevap("Sadece Murat.");
   const [islem, kod] = cq.data.split(":");
   const d = await denemeOku(env);
   const m = d.modeller[kod];
@@ -455,14 +458,14 @@ async function oyVer(env, cq) {
   if (!oylayan(env, cq.from.id)) return cevap("Oylamayı Murat ve Hemra yapar.");
   const d = await denemeOku(env);
   if (cq.data === "pa") {
-    if (String(cq.from.id) !== murat(env)) return cevap("Sadece Murat.");
+    if (!muratMi(env, cq.from.id)) return cevap("Sadece Murat.");
     await cevap("Açılıyor");
     return sonucAc(env, d);
   }
   const [, kod, harf] = cq.data.split(":");
   const m = d.modeller[kod];
   if (!m || !m.harfler || !m.harfler[harf] || d.asama !== "oylama") return cevap("Oylama kapalı.");
-  m.oylar[String(cq.from.id)] = harf;
+  m.oylar[muratMi(env, cq.from.id) ? murat(env) : String(cq.from.id)] = harf; // Murat hangi hesabından oylarsa oylasın
   await kaydet(env, "pelin:deneme", d);
   await cevap(`Oyunuz: ${kod} → ${harf}`);
   await tg(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: `${kod}: oyunuz 🏆 ${harf} (değiştirmek için tekrar basabilirsiniz)`, reply_markup: { inline_keyboard: [Object.keys(m.harfler).map((h) => ({ text: `${h === harf ? "✓ " : ""}🏆 ${h}`, callback_data: `pv:${kod}:${h}` }))] } });
@@ -605,14 +608,14 @@ export async function guncelleme(u, env) {
   if (komut === "/start") return yaz(env, m.chat.id, `Merhaba ${m.from.first_name || ""}! Ben Pelin, VOLONTE'nin görsel ve video yapımcısıyım. Benimle normal konuşabilirsiniz. Para harcayan her iş önce maliyet önizlemesiyle Murat'ın onayına gelir.`);
   if (komut === "/durum") return yaz(env, m.chat.id, await durumMetni(env, simdi));
   if (komut === "/beyin") {
-    if (id !== murat(env)) return yaz(env, m.chat.id, "Bu ayar sadece Murat'ta.");
+    if (!muratMi(env, id)) return yaz(env, m.chat.id, "Bu ayar sadece Murat'ta.");
     const sec = (metin.split(/\s+/)[1] || "").toLowerCase();
     if (!BEYINLER[sec]) return yaz(env, m.chat.id, `Şu an: ${(await env.KAYIT.get("pelin:beyin")) || "sonnet"}. Değiştirmek için: /beyin opus ya da /beyin sonnet`);
     await env.KAYIT.put("pelin:beyin", sec);
     return yaz(env, m.chat.id, `🧠 Beyin: ${sec === "opus" ? "Opus (daha güçlü, ~2 kat pahalı)" : "Sonnet"}.`);
   }
   if (/^fal\s+haz[ıi]r\b/i.test(metin)) {
-    if (id !== murat(env)) return yaz(env, m.chat.id, "\"fal hazır\" onayını Murat verir.");
+    if (!muratMi(env, id)) return yaz(env, m.chat.id, "\"fal hazır\" onayını Murat verir.");
     if (!env.FAL_KEY) return yaz(env, m.chat.id, "FAL_KEY henüz görünmüyor. Cloudflare → Workers & Pages → volonte-pelin → Settings → Variables and Secrets → Add → Type: Secret, Name: FAL_KEY → Deploy. Sonra tekrar \"fal hazır\" yazın.");
     const d = await denemeOku(env);
     if (d.asama === "fal") d.asama = "hazir";
@@ -672,6 +675,7 @@ export default {
   },
   async scheduled(olay, env) {
     if (!env.BOT_TOKEN) return;
+    try { await patronDenemesi(env, "Pelin", tg); } catch { /* */ }
     if (env.PELIN) await nesne(env).fetch("https://pelin/cron", { method: "POST" });
     else await pelinCron(env, Math.floor(Date.now() / 1000));
   },

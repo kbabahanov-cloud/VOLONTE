@@ -17,7 +17,7 @@ import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 import { eskiBilgiler, BEDEN_GRUPLARI, bedenOnerisi } from "./altyazi.js";
 import { karmaDepo, gocBirKez, SELIN_YEREL } from "./depo.js";
-import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { uretimAdimi, aracOzeti, uretimHarcanan, ARACLAR, DENEME_SINIR_USD } from "./uretim.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -148,6 +148,7 @@ export default {
   },
   async scheduled(olay, env) {
     if (!env.BOT_TOKEN) return;
+    try { await patronDenemesi(env, "Selin", tg); } catch { /* */ }
     try { await birikimAdimi(env, "selin", Math.floor(Date.now() / 1000), tg); } catch { /* bir sonraki çalışmada */ }
     if (env.SELIN) {
       const nesne = selinNesne(env);
@@ -832,7 +833,7 @@ async function siteyeYukle(env, kod, kim, simdi) {
   await siteyeYaz(env, dosyalar, yeniListe, `Selin: ${kod} siteye eklendi (onaylayan: ${kim})`);
   modeller[kod] = { ...modeller[kod], durum: "sitede", zaman: simdi, onaylayan: kim };
   await yazKV(env, "selin:modeller", modeller);
-  return `${env.SITE_URL}/urun.html?kod=${encodeURIComponent(kod)}`;
+  return `${env.SITE_URL}/#model/${encodeURIComponent(kod)}`;
 }
 
 async function sitedenKaldir(env, kod, kim, simdi) {
@@ -1986,7 +1987,7 @@ async function siteListesi(env, sohbet, sayfa) {
   const parca = liste.slice((sayfa - 1) * boy, sayfa * boy);
   return tg(env, "sendMessage", {
     chat_id: sohbet,
-    text: `Sitedeki modeller (${liste.length}) — sayfa ${sayfa}:\n${parca.map((u) => `• ${u.kod} — ${u.baslik} · ${env.SITE_URL}/urun.html?kod=${encodeURIComponent(u.kod)}`).join("\n")}\n\nKaldırmak için düğmeye basın (onay sorulur). Sonraki sayfa: /site ${sayfa + 1}`,
+    text: `Sitedeki modeller (${liste.length}) — sayfa ${sayfa}:\n${parca.map((u) => `• ${u.kod} — ${u.baslik} · ${env.SITE_URL}/#model/${encodeURIComponent(u.kod)}`).join("\n")}\n\nKaldırmak için düğmeye basın (onay sorulur). Sonraki sayfa: /site ${sayfa + 1}`,
     disable_web_page_preview: true,
     reply_markup: { inline_keyboard: parca.map((u) => [{ text: `🗑 ${u.kod} siteden kaldır`, callback_data: `sk:${u.kod}` }]) },
   });

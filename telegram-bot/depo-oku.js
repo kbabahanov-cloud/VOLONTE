@@ -3,6 +3,9 @@
 // Selin'e Cloudflare iç bağlantısıyla (SELIN_DEPO, internetten erişilemez) sorar. Bağlantı yoksa (testler) ham adres.
 // Sadece site dosyaları okunabilir: veri/urunler.json, galeri/<kod>/<dosya>, eski sitenin css/style.css'i, slogan ses kaydı.
 
+// Canlı sitenin adresi (31 Ekim'den itibaren; eski GitHub Pages adresi buraya yönlenir). Alan adı alınınca değişecek.
+export const SITE_ADRESI = "https://www.volonte.workers.dev";
+
 export const SITE_DOSYASI = /^(veri\/urunler\.json|galeri\/[\w-]+\/[\w.-]+\.(jpe?g|png|webp)|css\/style\.css|site-taslak\/ses\/[\w-]+\.mp3)$/i;
 const TUR = (yol) => (/\.json$/i.test(yol) ? "application/json" : /\.mp3$/i.test(yol) ? "audio/mpeg" : /\.css$/i.test(yol) ? "text/css" : /\.png$/i.test(yol) ? "image/png" : /\.webp$/i.test(yol) ? "image/webp" : "image/jpeg");
 

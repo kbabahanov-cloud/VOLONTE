@@ -18,7 +18,7 @@ import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
-import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu } from "./stoksorgu.js";
@@ -62,6 +62,7 @@ export default {
   async scheduled(olay, env) {
     if (!env.STOK) return;
     const simdi = Math.floor(Date.now() / 1000);
+    if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
@@ -69,7 +70,7 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
-    const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "")); };
+    const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
     const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {

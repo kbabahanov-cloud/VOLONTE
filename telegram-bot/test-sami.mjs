@@ -1004,3 +1004,21 @@ test("site haftalık özet: pazartesi 09:35'ten sonra bir kez, sadece Murat'a; �
   assert.equal(g[0].text, siteOzetMetni(satirlar, "2026-10-26", "2026-11-01"));
   assert.match(g[0].text, /Ziyaret: 50\nÜlkeler: Nijerya 40 · Kenya 10\nDil: EN %60 · FR %40\nEn çok bakılan modeller: 3609 \(12\), 3630 \(7\)/);
 });
+
+test("Patron hesabı: MURAT_ID listesinde iki hesap; ikisi de Murat yetkisinde, mesajlar ilk hesaba (Patron)", async () => {
+  const { murat, muratMi } = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999,111", FABRIKA_SORUMLU: "333", ALLOWED_IDS: "111,222,999" });
+  assert.equal(murat(o.env), "999");
+  assert.ok(muratMi(o.env, 111) && muratMi(o.env, "999") && !muratMi(o.env, 333));
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 501, ad: "Fuat" }]));
+  for (const id of [999, 111]) {
+    o.g.length = 0;
+    await g2({ message: { chat: { id, type: "private" }, from: { id, first_name: "Murat" }, text: "/stokyetki" } }, o.env);
+    assert.match(cagri(o.g, "sendMessage")[0].govde.text, /stok sorgusu yetkisi/); // eski ve yeni hesap: ikisi de Murat
+  }
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333 }, text: "/stokyetki" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /sadece Murat/);
+});

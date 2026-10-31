@@ -51,7 +51,7 @@ import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
-import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { murat as muratId, sorumlu as hemraId, denemeKaydi, denemeOzeti, DENEME } from "./fabrika.js";
 
 export { StokDO };
@@ -110,6 +110,7 @@ export default {
   // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
+    try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     if (env.KATALOG) {
       const nesne = kemalNesne(env);

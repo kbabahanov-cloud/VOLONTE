@@ -8,7 +8,7 @@
 
 import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
-import { murat, sorumlu, kisiKaydi, kisiGrubu, fabrikaKisileri } from "./fabrika.js";
+import { murat, muratMi, sorumlu, kisiKaydi, kisiGrubu, fabrikaKisileri } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
@@ -50,8 +50,8 @@ export async function stokSorguMesaji(env, m, tg, simdi) {
 export async function stokSorguDugmesi(env, cq, tg, simdi) {
   const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const [, islem, id] = String(cq.data || "").split(":");
-  if (![sorumlu(env), murat(env)].includes(String(cq.from.id))) return cevapla("Bu onay Hemra ve Murat'ta.");
-  const kim = String(cq.from.id) === murat(env) ? "Murat" : "Hemra";
+  if (!(muratMi(env, cq.from.id) || String(cq.from.id) === sorumlu(env))) return cevapla("Bu onay Hemra ve Murat'ta.");
+  const kim = muratMi(env, cq.from.id) ? "Murat" : "Hemra";
   const s = await stokIste(env, "/sorgu-karar", { id, durum: islem === "g" ? "gosterildi" : "gosterilmedi", kim, zaman: simdi });
   if (!s.ok) {
     const k = s.kayit;
@@ -81,7 +81,7 @@ export async function stokSorguTakip(env, simdi, tg) {
 
 // /stokyetki (sadece Murat): fabrika kişilerine Black Rose stok sorgusu yetkisi ver/kaldır. Celal listede yok.
 export async function stokYetkiKomutu(env, m, tg) {
-  if (String(m.from.id) !== murat(env)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Murat'ta." });
+  if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Murat'ta." });
   return tg(env, "sendMessage", { chat_id: m.chat.id, ...(await yetkiEkrani(env)) });
 }
 async function yetkiEkrani(env) {
@@ -94,7 +94,7 @@ async function yetkiEkrani(env) {
   };
 }
 export async function stokYetkiDugmesi(env, cq, tg) {
-  if (String(cq.from.id) !== murat(env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Bu ayar sadece Murat'ta." });
+  if (!muratMi(env, cq.from.id)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Bu ayar sadece Murat'ta." });
   const id = String(cq.data).split(":")[1];
   const k = await kisiKaydi(env, id);
   if (!k || kisiGrubu(k) !== "fabrika") return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Bu kişiye verilemez." });
@@ -107,7 +107,7 @@ export async function stokYetkiDugmesi(env, cq, tg) {
 
 // /sorgular (sadece Murat): son 3 günün sorgu kaydı.
 export async function sorgularKomutu(env, m, tg, simdi) {
-  if (String(m.from.id) !== murat(env)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Murat'ta." });
+  if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Murat'ta." });
   const l = await stokIste(env, "/sorgu-liste", { basla: gunAnahtari(simdi - 2 * 86400), bitis: gunAnahtari(simdi) });
   const durum = { bekliyor: "⏳ bekliyor", gosterildi: "✅ gösterildi", gosterilmedi: "❌ gösterilmedi", suresi: "⌛ cevapsız" };
   const satir = (r) => `${r.gun.slice(8, 10)}.${r.gun.slice(5, 7)} ${saatYaz(r.zaman)} · ${r.ad} · ${r.kod} · ${durum[r.durum] || r.durum}${r.karar_kim ? ` (${r.karar_kim})` : ""}`;

@@ -13,7 +13,7 @@ function ortam() {
   const github = { dosyalar: new Map(), commitler: [], istekler: [] };
   const env = {
     BOT_TOKEN: "selin-token", WEBHOOK_SECRET: "s", KILIT_TEST_ACIK: "1", ALLOWED_IDS: "111,222", ANTHROPIC_API_KEY: "k",
-    GITHUB_TOKEN: "gh", GITHUB_REPO: "kbabahanov-cloud/VOLONTE", SITE_URL: "https://kbabahanov-cloud.github.io/VOLONTE",
+    GITHUB_TOKEN: "gh", GITHUB_REPO: "kbabahanov-cloud/VOLONTE", SITE_URL: "https://www.volonte.workers.dev",
     KAYIT: {
       async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; },
       async put(k, v) { depo.set(k, v); },
@@ -271,7 +271,7 @@ test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülü
   assert.ok(o.github.dosyalar.get("galeri/3194/1.jpg").startsWith("blob:"));
   assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH" && y === "/git/refs/heads/main").length, 1);
   const son = cagri(o.g, "editMessageText").at(-1).govde.text;
-  assert.match(son, /3194 siteye eklendi \(Murat\)[\s\S]*urun\.html\?kod=3194/);
+  assert.match(son, /3194 siteye eklendi \(Murat\)[\s\S]*www\.volonte\.workers\.dev\/#model\/3194/);
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3194"].durum, "sitede");
 
   // Saatlik eşitleme: stok biterse sitede gizlenir (silinmez), fiyat güncellenir; değişiklik yoksa commit yok
