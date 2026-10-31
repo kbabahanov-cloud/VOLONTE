@@ -1,5 +1,34 @@
 [
  {
+  "kod": "3586",
+  "baslik": "Draped Button Blazer Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A tailored two-piece suit pairing a fitted blazer with high-waisted wide-leg trousers. The blazer features a pleated diagonal drape across the front, fastened with sculpted metallic buttons, alongside peak lapels and flap pockets. It works for the office, business meetings and evening events alike. Made in Istanbul with careful attention to finishing.",
+   "fr": "Un tailleur deux pièces structuré, associant une veste ajustée à un pantalon large taille haute. La veste se distingue par un drapé plissé en diagonale, fermé par des boutons métalliques sculptés, ainsi que par ses revers pointus et ses poches à rabat. Il convient au bureau, aux rendez-vous professionnels comme aux soirées. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças com corte alfaiataria, que combina um blazer acinturado com calça pantalona de cintura alta. O blazer destaca-se pelo drapeado pregueado em diagonal, preso por botões metálicos esculpidos, além das lapelas pontiagudas e bolsos com aba. Ideal para o escritório, reuniões de negócios e eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3586/1.jpg",
+   "galeri/3586/2.jpg",
+   "galeri/3586/3.jpg",
+   "galeri/3586/4.jpg",
+   "galeri/3586/5.jpg",
+   "galeri/3586/6.jpg",
+   "galeri/3586/7.jpg",
+   "galeri/3586/8.jpg"
+  ],
+  "videolar": [
+   "selin/3586/0",
+   "selin/3586/1",
+   "selin/3586/2"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3590",
   "baslik": "Printed Cape Shirt Set",
   "kategori": "sets",
