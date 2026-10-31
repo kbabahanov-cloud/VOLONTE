@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3279",
+  "baslik": "Off-Shoulder Pleated Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length off-shoulder gown with a fitted bodice and a fluid, layered silhouette. The wide folded neckline is finished with a fine row of pearl-like beading, while an asymmetric overlay falls over a softly pleated skirt and flows into long back panels. Made for weddings, receptions and formal evenings. Produced in Istanbul with careful finishing.",
+   "fr": "Une robe longue à épaules dénudées, au buste ajusté et à la silhouette fluide en plusieurs épaisseurs. Le large col replié est souligné d'une fine rangée de perles, tandis qu'une surjupe asymétrique tombe sur une jupe plissée et se prolonge en longs pans dans le dos. Idéale pour les mariages, réceptions et soirées habillées. Confectionnée à Istanbul avec soin.",
+   "pt": "Um vestido longo de ombros descobertos, com corpete ajustado e silhueta fluida em camadas. O amplo decote dobrado é rematado com uma delicada fila de pérolas, enquanto uma sobressaia assimétrica cai sobre a saia plissada e se prolonga em longos painéis nas costas. Pensado para casamentos, recepções e noites formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3279/1.jpg",
+   "galeri/3279/2.jpg",
+   "galeri/3279/3.jpg",
+   "galeri/3279/4.jpg"
+  ],
+  "videolar": [
+   "selin/3279/0"
+  ],
+  "fiyat": 55,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3582",
   "baslik": "Beaded Asymmetric Draped Gown",
   "kategori": "evening",
