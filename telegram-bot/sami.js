@@ -17,6 +17,7 @@
 import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
+import { gunDokumu, raporTekrar } from "./gun-dokum.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
@@ -70,8 +71,9 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
+    const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); };
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
