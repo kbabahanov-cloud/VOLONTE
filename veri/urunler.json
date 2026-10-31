@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3632",
+  "baslik": "Embroidered Peplum Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted peplum jacket with a long pleated maxi skirt that moves softly with every step. The jacket features a notched stand collar, delicate embroidered appliqué along the front and waist, pleated balloon sleeves with buttoned cuffs, and a corset-style lace-up back. Ideal for ceremonies, church services and refined daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une veste péplum ajustée à une longue jupe plissée qui bouge avec légèreté à chaque pas. La veste se distingue par son col montant échancré, ses broderies délicates sur le devant et à la taille, ses manches ballon plissées à poignets boutonnés et son laçage façon corset au dos. Parfait pour les cérémonies, la messe et les événements élégants de journée. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um casaco peplum ajustado com uma saia longa plissada de movimento suave. O casaco destaca-se pela gola alta com abertura em V, bordados delicados na frente e na cintura, mangas balão plissadas com punhos abotoados e costas com amarração estilo corset. Ideal para cerimónias, culto e eventos diurnos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3632/1.jpg",
+   "galeri/3632/2.jpg",
+   "galeri/3632/3.jpg",
+   "galeri/3632/4.jpg",
+   "galeri/3632/5.jpg",
+   "galeri/3632/6.jpg",
+   "galeri/3632/7.jpg"
+  ],
+  "videolar": [
+   "selin/3632/0",
+   "selin/3632/1"
+  ],
+  "fiyat": 89,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3595",
   "baslik": "Printed Cape Satin Set",
   "kategori": "sets",
