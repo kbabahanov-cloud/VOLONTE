@@ -1,5 +1,33 @@
 [
  {
+  "kod": "3597",
+  "baslik": "Floral Cape Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A flowing maxi dress with a fitted column silhouette and a sheer chiffon-look cape that falls from the shoulders. A border floral print with delicate vine motifs runs along the hem, cape edges and waist panel, which gives the look of a two-piece. Elegant for ceremonies, gatherings and special daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Une robe longue fluide à la silhouette droite, accompagnée d'une cape légère et transparente qui tombe des épaules. Un imprimé floral en bordure, orné de fines tiges, souligne l'ourlet, les bords de la cape et la taille, avec un effet deux pièces. Idéale pour les cérémonies, les réceptions et les journées habillées. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Um vestido longo e fluido de silhueta reta, com uma capa leve e transparente que cai dos ombros. O estampado floral em barra, com delicados ramos, acompanha a bainha, as bordas da capa e a cintura, criando um efeito de duas peças. Elegante para cerimónias, encontros e eventos especiais durante o dia. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3597/1.jpg",
+   "galeri/3597/2.jpg",
+   "galeri/3597/3.jpg",
+   "galeri/3597/4.jpg",
+   "galeri/3597/5.jpg",
+   "galeri/3597/6.jpg",
+   "galeri/3597/7.jpg"
+  ],
+  "videolar": [
+   "selin/3597/0",
+   "selin/3597/1",
+   "selin/3597/2"
+  ],
+  "fiyat": 49,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3609",
   "baslik": "Floral Tunic Palazzo Set",
   "kategori": "sets",
