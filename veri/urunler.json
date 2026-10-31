@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3615",
+  "baslik": "Tiered Ruffle Maxi Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length gown with a fitted bodice and a cascading tiered ruffle skirt. Sheer ruffled sleeves frame the neckline, a soft draped waist defines the figure, and a vibrant pink, purple and blue floral print adds depth to every layer. Made for weddings, receptions and celebratory evenings. Produced in Istanbul with careful finishing.",
+   "fr": "Une robe longue au buste ajusté, prolongée par une jupe à volants superposés en cascade. Des manches volantées et légères encadrent le décolleté, une taille drapée souligne la silhouette et un imprimé floral rose, violet et bleu anime chaque couche. Idéale pour les mariages, réceptions et soirées de fête. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Um vestido longo com corpete ajustado e saia de babados em camadas que caem em cascata. Mangas com folhos leves emolduram o decote, a cintura drapeada valoriza a silhueta e o estampado floral em rosa, roxo e azul dá vida a cada camada. Pensado para casamentos, recepções e noites de celebração. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3615/1.jpg",
+   "galeri/3615/2.jpg",
+   "galeri/3615/3.jpg",
+   "galeri/3615/4.jpg",
+   "galeri/3615/5.jpg"
+  ],
+  "videolar": [
+   "selin/3615/0"
+  ],
+  "fiyat": 60,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3617",
   "baslik": "Pinstripe Suit with Beaded Tie",
   "kategori": "sets",
