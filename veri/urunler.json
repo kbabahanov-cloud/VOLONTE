@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3587",
+  "baslik": "Prince of Wales Suit Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A four-piece suit set in grey Prince of Wales check: a double-breasted blazer with peak lapels, high-waisted wide-leg trousers, a matching tie and a crisp white shirt. The blazer has covered buttons, flap pockets and a contrast lining. Wear it complete for business and formal occasions, or style the pieces separately. Made in Istanbul with careful tailoring.",
+   "fr": "Un ensemble tailleur quatre pièces en carreaux prince-de-galles gris : blazer croisé à revers pointus, pantalon large taille haute, cravate assortie et chemise blanche nette. Le blazer se distingue par ses boutons recouverts, ses poches à rabat et sa doublure contrastée. À porter complet pour le bureau et les occasions formelles, ou en pièces séparées. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de alfaiataria de quatro peças em xadrez príncipe de gales cinzento: blazer trespassado com lapelas em bico, calça larga de cintura alta, gravata a condizer e camisa branca. O blazer tem botões forrados, bolsos com pala e forro em contraste. Ideal completo para o trabalho e ocasiões formais, ou com as peças usadas em separado. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3587/1.jpg",
+   "galeri/3587/2.jpg",
+   "galeri/3587/3.jpg",
+   "galeri/3587/4.jpg",
+   "galeri/3587/5.jpg",
+   "galeri/3587/6.jpg",
+   "galeri/3587/7.jpg"
+  ],
+  "videolar": [
+   "selin/3587/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3586",
   "baslik": "Draped Button Blazer Suit",
   "kategori": "sets",
