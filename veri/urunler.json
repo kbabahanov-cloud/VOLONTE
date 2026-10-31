@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3630",
+  "baslik": "Gold Trim Boubou Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A flowing boubou-style maxi dress with a relaxed, generous silhouette and wide batwing sleeves. A gold braided trim frames the neckline and runs down the front opening, set against a watercolour print in red, magenta and black. Easy to wear for celebrations, family gatherings and elegant daytime occasions. Made in Istanbul with careful finishing.",
+   "fr": "Une robe boubou longue et fluide, à la silhouette ample et aux larges manches chauve-souris. Un galon doré souligne l'encolure et suit l'ouverture devant, sur un imprimé aquarelle rouge, magenta et noir. Idéale pour les fêtes, les réunions de famille et les occasions élégantes en journée. Confectionnée à Istanbul avec des finitions soignées.",
+   "pt": "Um vestido boubou longo e fluido, com silhueta ampla e mangas largas tipo morcego. Um galão dourado contorna o decote e acompanha a abertura frontal, sobre um estampado aguarela em vermelho, magenta e preto. Ideal para celebrações, encontros de família e ocasiões elegantes durante o dia. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3630/1.jpg",
+   "galeri/3630/2.jpg",
+   "galeri/3630/3.jpg",
+   "galeri/3630/4.jpg"
+  ],
+  "videolar": [
+   "selin/3630/0"
+  ],
+  "fiyat": 56,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3632",
   "baslik": "Embroidered Peplum Skirt Set",
   "kategori": "sets",
