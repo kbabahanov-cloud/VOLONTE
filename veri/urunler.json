@@ -1,5 +1,33 @@
 [
  {
+  "kod": "3585",
+  "baslik": "Pleated Tie-Neck Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A maxi dress with a relaxed drop-waist bodice and a fully pleated skirt that moves with every step. The high neck is finished with a draped tie and ring detail, while the open V-back carries three jewelled flower buttons, with a contrast band marking the waist. Elegant for events, gatherings and dressed-up days. Made in Istanbul with careful finishing.",
+   "fr": "Une robe longue au buste ample taille basse, prolongée d'une jupe entièrement plissée qui accompagne chaque pas. Le col montant s'orne d'un nœud drapé et d'un anneau, tandis que le dos ouvert en V porte trois boutons fleurs ornés de strass, avec une bande contrastante à la taille. Idéale pour les cérémonies, réceptions et sorties habillées. Confectionnée à Istanbul avec soin.",
+   "pt": "Um vestido longo com corpo solto de cintura descida e saia toda plissada que acompanha cada passo. A gola alta tem laço drapeado com detalhe de argola, e as costas abertas em V trazem três botões em flor com pedraria, com uma faixa em contraste na cintura. Elegante para eventos, encontros e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3585/1.jpg",
+   "galeri/3585/2.jpg",
+   "galeri/3585/3.jpg",
+   "galeri/3585/4.jpg",
+   "galeri/3585/5.jpg",
+   "galeri/3585/6.jpg",
+   "galeri/3585/7.jpg",
+   "galeri/3585/8.jpg",
+   "galeri/3585/9.jpg"
+  ],
+  "videolar": [
+   "selin/3585/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3587",
   "baslik": "Prince of Wales Suit Set",
   "kategori": "sets",
