@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3595",
+  "baslik": "Printed Cape Satin Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing printed chiffon cape-sleeve overlay with a fluid satin maxi underlayer. A high neckline with a long satin tie, an adjustable side drawstring at the waist and soft, wide sleeves give it a graceful line. Ideal for celebrations, receptions and special daytime events. Made in Istanbul with careful attention to finish.",
+   "fr": "Un ensemble deux pièces qui associe un voile imprimé à manches cape fluides et une longue base en satin au tombé souple. Le col montant avec un long lien en satin, le cordon ajustable à la taille et les manches amples dessinent une silhouette élégante. Idéal pour les cérémonies, réceptions et événements de journée. Fabriqué à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de duas peças que combina uma sobreposição estampada em chiffon, com mangas amplas tipo capa, e uma base longa em cetim de caimento fluido. A gola alta com laço comprido em cetim, o cordão lateral ajustável na cintura e as mangas soltas criam uma silhueta elegante. Ideal para cerimónias, recepções e eventos especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3595/1.jpg",
+   "galeri/3595/2.jpg",
+   "galeri/3595/3.jpg",
+   "galeri/3595/4.jpg",
+   "galeri/3595/5.jpg",
+   "galeri/3595/6.jpg",
+   "galeri/3595/7.jpg",
+   "galeri/3595/8.jpg"
+  ],
+  "videolar": [
+   "selin/3595/0"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3279",
   "baslik": "Off-Shoulder Pleated Gown",
   "kategori": "evening",
