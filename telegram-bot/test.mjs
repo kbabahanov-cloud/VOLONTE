@@ -1385,7 +1385,7 @@ test("yeni düzen alt yazısı: sıra, kalın CODE, fiyat yok, sadece EN/FR; ren
   assert.match(y, /📏 Size: 38-\u200B40-\u200B42-\u200B44 \/ 44-\u200B46-\u200B48-\u200B50\n📦 Series: 4 pcs/);
   assert.ok(!/\d{2}-\d/.test(y)); // telefon numarası sanılmasın
   const d = duzen.dugmeler().inline_keyboard.flat();
-  assert.deepEqual(d.map((x) => x.url), ["https://wa.me/905362390091", "https://wa.me/905363448488", "https://www.volonte.workers.dev/"]);
+  assert.deepEqual(d.map((x) => x.url), ["https://wa.me/905362390091", "https://wa.me/905363448488", "https://www.wearvolonte.com/"]);
   assert.deepEqual(d.map((x) => x.text), ["🛒 Order", "📞 Info", "🌐 All models / Tous les modèles"]);
 });
 
@@ -1463,7 +1463,7 @@ test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modelle
   assert.deepEqual(Object.keys(tur.ogeler).sort(), ["3403", "3520"]); // 3411: 5 gün önce; 3999: stok yok
   assert.equal(tur.durum, "toplaniyor"); // 2 model tek çalışmada hazırlandı ve gönderildi
   assert.equal(o.claude.length, 2);
-  assert.ok(o.claude[0].messages[0].content.some((c) => c.type === "image" && c.source.url === "https://www.volonte.workers.dev/galeri/3403/1.jpg"));
+  assert.ok(o.claude[0].messages[0].content.some((c) => c.type === "image" && c.source.url === "https://www.wearvolonte.com/galeri/3403/1.jpg"));
   for (const kisi of ["111", "333"]) assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => String(m.govde.chat_id) === kisi).length, 2);
   const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "111" && m.govde.media[0].caption.includes("3403"));
   assert.equal(album.govde.media[0].caption, "✅ AVAILABLE / DISPONIBLE\n<b>✅ CODE: 3403</b>\n🎨 Colors / Couleurs: black-gold floral\n📏 Size: 38-\u200B40-\u200B42-\u200B44\n📦 Series: 4 pcs / Série : 4 pièces\n🇬🇧 Model 3403 line.\n🇫🇷 Ligne 3403.\nVOLONTE – Premium Women's Fashion");

@@ -10,7 +10,7 @@ python3 derle.py
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 if [ "$MOD" = "canli" ]; then
   AD=www
-  EK=',{"type":"plain_text","name":"CANLI","text":"1"},{"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"}'
+  EK=',{"type":"plain_text","name":"CANLI","text":"1"},{"type":"plain_text","name":"YONLENDIR","text":"'"${YONLENDIR:-1}"'"},{"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"}'
 else
   AD=volonte-taslak
   EK=''
