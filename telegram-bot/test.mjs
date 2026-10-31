@@ -1677,3 +1677,34 @@ test("köprü cari: anahtarlı köprü Black Rose hesap bakiyelerini gönderir; 
   assert.equal(v.hesaplar[0].kart, -1000);
   assert.equal(v.ozel[0].kod, "BLACK ROSE BORC VERDIM");
 });
+
+test("yeni model: Selin siteye ekleyince Kemal önizlemeyi SADECE Patron'a (🆕 YENİ MODEL); Patron ✅ → hemen kanala, günlük 10'a sayılmaz, tarih güncellenir; Hemra basamaz; 2000 yok", async () => {
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "999,111", ALLOWED_IDS: "999,111,222", EKIP_IDS: "333" });
+  const { yeniModelIsleri } = await import("./worker.js");
+  await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]); // Vegawin'de stok henüz 0 → uyarı (engel değil)
+  o.depo.set("venom:yeniModel", JSON.stringify([{ kod: "3403", kim: "MURAT BABAHANOV", zaman: 1 }, { kod: "2000", kim: "x", zaman: 1 }, { kod: "7777", kim: "x", zaman: 1 }]));
+  o.gonderilen.length = 0;
+  await yeniModelIsleri(o.env, ist(10));
+  const albumler = cagrilar(o.gonderilen, "sendMediaGroup");
+  assert.deepEqual(albumler.map((m) => m.govde.chat_id), ["999"]); // sadece Patron
+  assert.match(albumler[0].govde.media[0].caption, /^🆕 NEW \/ NOUVEAU\n<b>✅ CODE: 3403<\/b>/);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(o.gonderilen)));
+  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => /^🆕 YENİ MODEL — 3403 \(siteye ekleyen: MURAT BABAHANOV\)/.test(m.govde.text));
+  assert.equal(kontrol.govde.chat_id, "999");
+  assert.match(kontrol.govde.text, /⚠️ Vegawin'de .*paylaşım engellenmez/);
+  assert.ok(!cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === "333"));
+  assert.deepEqual(JSON.parse(o.depo.get("venom:yeniModel")), [{ kod: "7777", kim: "x", zaman: 1, deneme: 1 }]); // sitede henüz yok → tekrar denenecek; 2000 çıkarıldı
+  const onay = kontrol.govde.reply_markup.inline_keyboard[0][0].callback_data;
+  o.gonderilen.length = 0;
+  await bas(o.env, 333, onay); // Hemra basamaz
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
+  const gun = gunAnahtari(ist(10));
+  o.depo.set(`sayac:${gun}`, "10");
+  const gercek = Date.now; Date.now = () => ist(10) * 1000;
+  try { await bas(o.env, 111, onay); } finally { Date.now = gercek; } // Murat'ın eski hesabı da Patron yetkisinde
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+  assert.equal(o.depo.get(`sayac:${gun}`), "10");
+  const { stokIste } = await import("./stokbot.js");
+  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3403"], ist(10));
+});

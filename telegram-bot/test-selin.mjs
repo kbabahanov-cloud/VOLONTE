@@ -272,6 +272,7 @@ test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülü
   assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH" && y === "/git/refs/heads/main").length, 1);
   const son = cagri(o.g, "editMessageText").at(-1).govde.text;
   assert.match(son, /3194 siteye eklendi \(Murat\)[\s\S]*www\.wearvolonte\.com\/#model\/3194/);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:yeniModel")).map((x) => [x.kod, x.kim]), [["3194", "Murat"]]); // Kemal'e: sıra beklemeden Patron önizlemesi
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3194"].durum, "sitede");
 
   // Saatlik eşitleme: stok biterse sitede gizlenir (silinmez), fiyat güncellenir; değişiklik yoksa commit yok

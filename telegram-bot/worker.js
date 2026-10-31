@@ -52,7 +52,7 @@ import { siteVerisi } from "./depo-oku.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
-import { murat as muratId, sorumlu as hemraId, denemeKaydi, denemeOzeti, DENEME } from "./fabrika.js";
+import { murat as muratId, muratMi, sorumlu as hemraId, denemeKaydi, denemeOzeti, DENEME } from "./fabrika.js";
 
 export { StokDO };
 import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
@@ -1701,7 +1701,7 @@ async function repeteOnizlemeGonder(env, rec) {
   }
 }
 const repeteKontrol = (rec, simdi) => [
-  `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
+  rec.tur === "yeni" ? `🆕 YENİ MODEL — ${rec.kod} (siteye ekleyen: ${rec.kim})` : `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
   `Medya: ${rec.kaynak === "site" ? "siteden" : "kanaldaki son paylaşımdan (eski yazı kullanılmadı)"}`,
   `Renkler: ${rec.paket.renkEmin && rec.paket.renkler.length ? rec.paket.renkler.join(", ") : "yazılmadı → satır yok (✏️ Düzelt ile ekleyebilirsiniz)"}`,
   rec.stokUyari ? `⚠️ ${rec.stokUyari}` : null,
@@ -1734,9 +1734,9 @@ export async function repeteIstegi(msg, env, { kodlar, renkler }) {
 
 async function repeteDugmesi(cq, env) {
   const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  if (!repeteYetkili(env, cq.from.id)) return cevapla("Bu onay Hemra, Murat ve Merdan'da.");
   const [islem, id] = String(cq.data).split(":");
   const rec = await env.KAYIT.get(`rpt:${id}`, "json");
+  if (rec && rec.tur === "yeni" ? !muratMi(env, cq.from.id) : !repeteYetkili(env, cq.from.id)) return cevapla(rec && rec.tur === "yeni" ? "Yeni model onayı Patron'da." : "Bu onay Hemra, Murat ve Merdan'da.");
   if (!rec || rec.durum) return cevapla(rec ? `${rec.karar || "Karar"} verildi.` : "Bu önizleme artık geçerli değil.");
   const kim = kisiAdi(cq.from);
   const simdi = Math.floor(Date.now() / 1000);
@@ -1744,7 +1744,7 @@ async function repeteDugmesi(cq, env) {
   if (islem === "rpd") {
     await env.KAYIT.put(`duzelt:${cq.from.id}`, JSON.stringify({ no: "r", id }), { expirationTtl: 3600 });
     await cevapla("Düzeltmeyi yazın");
-    return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${rec.kod} repete paylaşımı için düzeltmeyi yazın (1 saat içinde).\n${DUZELT_ORNEK.replace("durum: new | back | best | last | available\n", "")}` });
+    return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${rec.kod} ${rec.tur === "yeni" ? "yeni model" : "repete"} paylaşımı için düzeltmeyi yazın (1 saat içinde).\n${DUZELT_ORNEK.replace("durum: new | back | best | last | available\n", "")}` });
   }
   rec.durum = islem;
   rec.karar = `${kim}: ${islem === "rp1" ? "onayla" : "iptal"}`;
@@ -1764,7 +1764,7 @@ async function repeteDuzelt(msg, env, id, d) {
   if ("kumas" in d) p.kumas = d.kumas;
   if (d.en) p.en = d.en;
   if (d.fr) p.fr = d.fr;
-  p.durum = "donus";
+  p.durum = rec.tur === "yeni" ? "yeni" : "donus";
   const yazi = (await env.KAYIT.get(`yazi:${rec.kod}`, "json")) || {};
   if (d.renkler) Object.assign(yazi, { renkler: d.renkler, renkEmin: d.renkler.length > 0, renkNotu: "" });
   if ("kumas" in d) yazi.kumas = d.kumas;
@@ -1810,7 +1810,39 @@ async function kopruAl(request, env) {
 // ("Paylaşılsın mı? Onayla / Bekle"); onaylanınca yeni düzende "🔁 BACK IN STOCK" olarak paylaşılır (fiyat yok; medya siteden,
 // sitede yoksa en yeni kanal paylaşımının medyası). DENEMEDE kanalda ASLA paylaşılmaz.
 // "venom:kanalSil": fabrika bitti + Murat/Hemra "Sil" (ikinci onaylı) → kanaldaki paylaşımlar silinir.
+// Yeni model (Selin siteye ekledi): sıra beklemeden önizleme SADECE Patron'a, "🆕 YENİ MODEL"; ✅ → hemen kanala,
+// günlük 10'a sayılmaz, son paylaşım tarihi güncellenir; Vegawin'de stok yoksa uyarı (engel değil). 2000 hariç, fiyat yok.
+// Site listesi henüz güncellenmediyse (GitHub birkaç dakika) sonraki turda yeniden denenir (en fazla 12 kez).
+export async function yeniModelIsleri(env, simdi) {
+  const sira = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+  if (!sira.length) return;
+  const site = await siteUrunleriAl(env);
+  const islenen = new Set();
+  const tekrar = {};
+  for (const r of sira.slice(0, 3)) {
+    islenen.add(r.kod);
+    if (indirimliMi(r.kod)) continue;
+    const u = site.find((x) => String(x.kod) === String(r.kod) && !x.gizli);
+    if (!u) { if ((r.deneme || 0) < 12) tekrar[r.kod] = (r.deneme || 0) + 1; continue; }
+    let paket;
+    try { paket = { ...(await paketHazirla(env, u, await durumBaglami(env, [String(r.kod)], simdi), simdi, { durum: "yeni" })), kaynak: "site" }; } catch (e) {
+      await telegram(env, "sendMessage", { chat_id: muratId(env), text: `⚠️ 🆕 ${r.kod} yeni model önizlemesi hazırlanamadı: ${e.message}` });
+      continue;
+    }
+    const st = env.STOK ? (await stokIste(env, "/toplu", { kodlar: [String(r.kod)] }).catch(() => ({})))[String(r.kod)] : null;
+    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    const rec = { id, tur: "yeni", kod: String(r.kod), paket, kim: r.kim || "Selin", alicilar: [muratId(env)], kaynak: "site", durum: null, zaman: simdi,
+      stokUyari: !st ? "Vegawin'de bu modelin stok kaydı henüz görünmüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : !(st.toplam > 0) ? "Vegawin'de stok henüz 0 görünüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : null };
+    await repeteOnizlemeGonder(env, rec);
+    await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 });
+  }
+  // Bu arada Selin yeni model eklemiş olabilir: güncel kuyruğu okuyup sadece işlenenleri çıkar
+  const guncel = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+  await env.KAYIT.put("venom:yeniModel", JSON.stringify(guncel.flatMap((x) => (!islenen.has(x.kod) ? [x] : tekrar[x.kod] ? [{ ...x, deneme: tekrar[x.kod] }] : []))));
+}
+
 export async function fabrikaIsleri(env, simdi) {
+  await yeniModelIsleri(env, simdi);
   const sira = (await env.KAYIT.get("venom:repetePaylas", "json")) || [];
   if (sira.length) {
     await env.KAYIT.put("venom:repetePaylas", "[]");

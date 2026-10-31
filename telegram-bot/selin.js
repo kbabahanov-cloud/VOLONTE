@@ -836,6 +836,14 @@ async function siteyeYukle(env, kod, kim, simdi) {
   return `${env.SITE_URL}/#model/${encodeURIComponent(kod)}`;
 }
 
+// Kemal'e haber (kullanıcı kararı 31 Ekim): siteye yeni eklenen model sıra beklemeden "🆕 YENİ MODEL" önizlemesiyle
+// SADECE Patron'a gider; ✅ ile hemen kanala (günlük 10'a sayılmaz). Kuyruk ortak KV'de: "venom:yeniModel".
+async function yeniModelBildir(env, kod, kim, simdi) {
+  const s = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+  if (!s.some((x) => x.kod === kod)) s.push({ kod, kim, zaman: simdi });
+  await env.KAYIT.put("venom:yeniModel", JSON.stringify(s.slice(-30)));
+}
+
 async function sitedenKaldir(env, kod, kim, simdi) {
   const { liste } = await siteVerisi(env);
   const urun = liste.find((u) => u.kod === kod);
@@ -2052,6 +2060,7 @@ async function dugme(cq, env) {
     await cevapla("Siteye yükleniyor...");
     try {
       const link = await siteyeYukle(env, kod, kim, simdi);
+      try { await yeniModelBildir(env, kod, kim, simdi); } catch { /* Kemal'e haber gidemezse site yüklemesi yine tamam */ }
       for (const [k, id] of kartlar) await tg(env, "editMessageText", { chat_id: k, message_id: id, text: `✅ ${kod} siteye eklendi (${kim}). Sayfa 1–2 dakikada yayında:\n${link}`, disable_web_page_preview: true });
     } catch (e) {
       const geri = await oku(env, "selin:modeller", {});
