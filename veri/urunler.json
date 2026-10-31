@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3617",
+  "baslik": "Pinstripe Suit with Beaded Tie",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A four-piece pinstripe suit in black with fine white stripes: a double-breasted jacket with a fitted waist, a crisp white shirt, wide-leg tailored trousers and a red beaded tie. Strong shoulders, peak lapels and flap pockets give the jacket clean structure, while the textured tie adds a distinctive touch. Made for the office, meetings and polished evenings out. Produced in Istanbul with careful tailoring.",
+   "fr": "Un tailleur-pantalon quatre pièces noir à fines rayures blanches : veste croisée cintrée, chemise blanche nette, pantalon large et cravate rouge perlée. Épaules marquées, revers pointus et poches à rabat structurent la veste, tandis que la cravate texturée apporte une touche singulière. Idéal pour le bureau, les rendez-vous professionnels et les sorties élégantes. Fabriqué à Istanbul avec une finition soignée.",
+   "pt": "Um conjunto de quatro peças em preto com risca de giz branca: blazer trespassado acinturado, camisa branca impecável, calça de alfaiataria de perna larga e gravata vermelha com contas. Ombros marcados, lapelas pontiagudas e bolsos com aba dão estrutura ao blazer, e a gravata texturizada traz um detalhe marcante. Pensado para o escritório, reuniões e saídas elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3617/1.jpg",
+   "galeri/3617/2.jpg",
+   "galeri/3617/3.jpg",
+   "galeri/3617/4.jpg",
+   "galeri/3617/5.jpg"
+  ],
+  "videolar": [
+   "selin/3617/0"
+  ],
+  "fiyat": 79,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3629",
   "baslik": "Layered Skirt Blouse Set",
   "kategori": "sets",
