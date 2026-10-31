@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3629",
+  "baslik": "Layered Skirt Blouse Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a relaxed button-front blouse with a long, high-waisted skirt in a soft, flowing silhouette. The blouse features a classic shirt collar and voluminous balloon sleeves gathered at the cuff, while the skirt's asymmetric layered tiers create graceful movement. A scattered red and black print on white keeps it fresh for daytime events, gatherings and elegant everyday wear. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un chemisier boutonné à la coupe souple et une longue jupe taille haute à la silhouette fluide. Le chemisier se distingue par son col chemise classique et ses manches ballon froncées aux poignets, tandis que les volants asymétriques de la jupe apportent un joli mouvement. L'imprimé rouge et noir sur fond blanc convient aux événements de journée, aux réceptions et aux tenues élégantes du quotidien. Fabriqué à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de duas peças que combina uma blusa de botões com caimento solto e uma saia longa de cintura alta, com silhueta fluida. A blusa tem gola clássica de camisa e mangas balão franzidas no punho, enquanto as camadas assimétricas da saia criam um movimento elegante. O estampado vermelho e preto sobre fundo branco é ideal para eventos diurnos, encontros e um visual sofisticado no dia a dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3629/1.jpg",
+   "galeri/3629/2.jpg",
+   "galeri/3629/3.jpg",
+   "galeri/3629/4.jpg"
+  ],
+  "videolar": [
+   "selin/3629/0"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3630",
   "baslik": "Gold Trim Boubou Dress",
   "kategori": "dresses",
