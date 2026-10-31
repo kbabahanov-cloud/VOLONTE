@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3588",
+  "baslik": "Pleated Cape Sleeve Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a high-neck blouse with a full pleated maxi skirt. The blouse features a soft front tie and flowing pleated cape sleeves, while the skirt has an elastic waist, a slim belt with a metal buckle and a delicate lace hem. Elegant for ceremonies, evening events and refined daytime occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un chemisier à col montant et une jupe longue entièrement plissée. Le chemisier se distingue par un lien noué sur le devant et des manches cape plissées, tandis que la jupe offre une taille élastique, une fine ceinture à boucle métallique et un ourlet en dentelle. Idéal pour les cérémonies, les soirées et les occasions élégantes. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina uma blusa de gola alta com uma saia longa totalmente plissada. A blusa tem laço frontal e mangas capa plissadas e fluidas; a saia traz cós elástico, cinto fino com fivela metálica e barra em renda delicada. Perfeito para cerimónias, eventos à noite e ocasiões elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3588/1.jpg",
+   "galeri/3588/2.jpg",
+   "galeri/3588/3.jpg",
+   "galeri/3588/4.jpg"
+  ],
+  "videolar": [
+   "selin/3588/0"
+  ],
+  "fiyat": 64,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3585",
   "baslik": "Pleated Tie-Neck Maxi Dress",
   "kategori": "dresses",
