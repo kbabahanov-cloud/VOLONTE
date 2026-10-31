@@ -11,6 +11,7 @@
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
 import { stokIste } from "./stokbot.js";
+import { siteVerisi } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI } from "./stok.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -38,12 +39,7 @@ const TESLIM_GUNLERI = [1, 2, 3, 5, 7, 10];
 const renkYazi = (renkler) => renkler.map((r) => `${r.renk} ${r.adet}`).join(", ");
 const gunBasi = (g) => Date.UTC(Number(g.slice(0, 4)), Number(g.slice(5, 7)) - 1, Number(g.slice(8, 10))) / 1000 - SAAT_FARKI;
 const pazartesi = (t) => gunAnahtari(t - ((new Date((t + SAAT_FARKI) * 1000).getUTCDay() + 6) % 7) * 86400);
-async function siteListesi(env) {
-  try {
-    const r = await fetch(`https://raw.githubusercontent.com/${env.GITHUB_REPO || "kbabahanov-cloud/VOLONTE"}/main/veri/urunler.json`, { cf: { cacheTtl: 60 } });
-    return r.ok ? await r.json() : [];
-  } catch { return []; }
-}
+const siteListesi = (env) => siteVerisi(env); // Selin'in iç bağlantısıyla (depo gizli olsa da çalışır)
 const sitedenFoto = (env, site, kod) => {
   const u = site.find((x) => String(x.kod) === String(kod));
   return u && u.fotolar && u.fotolar.length ? `https://raw.githubusercontent.com/${env.GITHUB_REPO || "kbabahanov-cloud/VOLONTE"}/main/${u.fotolar[0]}` : null;

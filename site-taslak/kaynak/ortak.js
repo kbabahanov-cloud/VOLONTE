@@ -1,5 +1,5 @@
 // VOLONTE yeni site — ortak çekirdek (üç taslakta aynı): veri, dil, vitrin, sayfalar, sipariş, istek listesi,
-// beden rehberi, kargo, yakınlaştırma, ses, gizlilik dostu sayım. Görünüm ve giriş sahnesi tema dosyasından (TEMA).
+// beden rehberi, yakınlaştırma, ses, gizlilik dostu sayım. Görünüm ve giriş sahnesi tema dosyasından (TEMA).
 // FİYAT YOK: sunucu veriden fiyatı zaten çıkarır; burada da hiçbir yerde gösterilmez.
 (function () {
   "use strict";
@@ -12,13 +12,6 @@
     yildizlar: false, // "Stars in VOLONTE": ilk ünlü işbirliğinde true yapılır
     yeniGun: 21, // son 21 günde eklenen = "New"
   };
-  // Tahmini kargo süreleri (iş günü, İstanbul'dan). FİYAT YOK. Murat/Hemra'nın onayıyla güncellenecek.
-  const KARGO = [
-    ["NG", "Nigeria", "5–10"], ["GH", "Ghana", "5–10"], ["KE", "Kenya", "5–9"], ["ZA", "South Africa", "5–9"],
-    ["CI", "Côte d'Ivoire", "6–10"], ["SN", "Senegal", "6–10"], ["CM", "Cameroon", "6–12"], ["CD", "DR Congo", "7–14"],
-    ["TZ", "Tanzania", "6–10"], ["UG", "Uganda", "6–10"], ["ET", "Ethiopia", "5–9"], ["RW", "Rwanda", "6–10"],
-    ["US", "United States", "4–7"], ["CA", "Canada", "5–8"], ["AU", "Australia", "6–10"], ["FR", "France", "3–6"], ["GB", "United Kingdom", "3–6"],
-  ];
   // Beden rehberi (EU → UK/Afrika, US; yaklaşık vücut ölçüleri cm). Murat kontrol edecek.
   const BEDENLER = [[38, 10, 6, 88, 72, 97], [40, 12, 8, 92, 76, 100], [42, 14, 10, 96, 80, 103], [44, 16, 12, 100, 84, 106], [46, 18, 14, 106, 90, 112], [48, 20, 16, 112, 96, 118], [50, 22, 18, 118, 102, 124]];
   const KUCUK = [38, 40, 42, 44];
@@ -26,7 +19,7 @@
 
   const S = {
     en: {
-      home: "Home", new: "New Collection", lookbook: "Lookbook", story: "Designer's Story", sizes: "Size Guide", shipping: "Shipping", wishlist: "Wishlist", privacy: "Privacy", stars: "Stars in VOLONTE",
+      home: "Home", new: "New Collection", lookbook: "Lookbook", story: "Designer's Story", sizes: "Size Guide", wishlist: "Wishlist", privacy: "Privacy", stars: "Stars in VOLONTE",
       tap: "Tap to enter", tapStart: "Tap to start", skip: "Skip", discover: "Discover", all: "All", cat_dresses: "Dresses", cat_sets: "Sets", cat_evening: "Evening",
       lead: "Premium women's fashion, made in Istanbul. Wholesale to boutiques all over the world.",
       quality: "Quality is our foundation", qualityText: "Every model is cut, draped and finished in our Istanbul workshops. We sell by series to boutiques and resellers worldwide.",
@@ -37,9 +30,9 @@
       zoomHint: "Pinch or double-tap to see the fabric", soldBy: "Wholesale · sold by series", notFound: "This model is no longer on the site.", back: "Back",
       sizeTitle: "Find your size", sizeText: "Our models come in sizes 38 to 50, in two groups. Wholesale orders are by series (one piece of each size in the group).",
       sizeNote: "Body measurements are approximate. If you are unsure, ask us on WhatsApp.", bust: "Bust (cm)", waist: "Waist (cm)", hips: "Hips (cm)", ukAfrica: "UK / Africa",
-      shipTitle: "Delivery to your country", shipText: "Choose your country to see the estimated delivery time from Istanbul.", chooseCountry: "Choose your country", estimate: "Estimated delivery",
-      workDays: "working days", otherCountry: "Other country", shipOther: "We ship worldwide — ask us on WhatsApp for your country.",
-      shipNote: "Times are estimates; they depend on the cargo company and customs. We confirm the best option for you on WhatsApp.",
+     
+     
+     
       storyTitle: "From the first sketch to the final drape", storyText: "The VOLONTE atelier in Istanbul: designing, draping on the stand, fitting and finishing — the hands behind every model.",
       soon: "Coming soon", storyVideo: "Draping videos", storyAtelier: "The atelier", playFilm: "Play the film", pause: "Pause",
       lookText: "Each collection, told like a film.", film: ["Live your life.", "Made in Istanbul.", "Every drape, by hand.", "For the woman who leads.", "Quality is our foundation.", "Elegance, every day."],
@@ -48,7 +41,7 @@
       starsText: "Our first collaborations are coming.", address: "Showroom", draft: "DRAFT",
     },
     fr: {
-      home: "Accueil", new: "Nouvelle Collection", lookbook: "Lookbook", story: "L'histoire du créateur", sizes: "Guide des tailles", shipping: "Livraison", wishlist: "Ma liste", privacy: "Confidentialité", stars: "Stars in VOLONTE",
+      home: "Accueil", new: "Nouvelle Collection", lookbook: "Lookbook", story: "L'histoire du créateur", sizes: "Guide des tailles", wishlist: "Ma liste", privacy: "Confidentialité", stars: "Stars in VOLONTE",
       tap: "Touchez pour entrer", tapStart: "Touchez pour commencer", skip: "Passer", discover: "Découvrir", all: "Tout", cat_dresses: "Robes", cat_sets: "Ensembles", cat_evening: "Soirée",
       lead: "Mode féminine haut de gamme, fabriquée à Istanbul. Vente en gros aux boutiques du monde entier.",
       quality: "La qualité est notre fondation", qualityText: "Chaque modèle est coupé, drapé et fini dans nos ateliers d'Istanbul. Nous vendons par série aux boutiques et revendeurs du monde entier.",
@@ -59,9 +52,9 @@
       zoomHint: "Pincez ou touchez deux fois pour voir le tissu", soldBy: "Vente en gros · par série", notFound: "Ce modèle n'est plus sur le site.", back: "Retour",
       sizeTitle: "Trouvez votre taille", sizeText: "Nos modèles vont du 38 au 50, en deux groupes. Les commandes en gros se font par série (une pièce de chaque taille du groupe).",
       sizeNote: "Les mesures sont approximatives. En cas de doute, demandez-nous sur WhatsApp.", bust: "Poitrine (cm)", waist: "Taille (cm)", hips: "Hanches (cm)", ukAfrica: "UK / Afrique",
-      shipTitle: "Livraison dans votre pays", shipText: "Choisissez votre pays pour voir le délai de livraison estimé depuis Istanbul.", chooseCountry: "Choisissez votre pays", estimate: "Livraison estimée",
-      workDays: "jours ouvrables", otherCountry: "Autre pays", shipOther: "Nous livrons dans le monde entier — demandez-nous sur WhatsApp pour votre pays.",
-      shipNote: "Délais estimés ; ils dépendent du transporteur et de la douane. Nous confirmons la meilleure option sur WhatsApp.",
+     
+     
+     
       storyTitle: "Du premier croquis au drapé final", storyText: "L'atelier VOLONTE à Istanbul : création, drapé sur mannequin, essayages et finitions — les mains derrière chaque modèle.",
       soon: "Bientôt", storyVideo: "Vidéos de drapé", storyAtelier: "L'atelier", playFilm: "Lancer le film", pause: "Pause",
       lookText: "Chaque collection, racontée comme un film.", film: ["Live your life.", "Fabriqué à Istanbul.", "Chaque drapé, à la main.", "Pour la femme qui avance.", "La qualité est notre fondation.", "L'élégance, chaque jour."],
@@ -70,7 +63,7 @@
       starsText: "Nos premières collaborations arrivent.", address: "Showroom", draft: "BROUILLON",
     },
     tr: {
-      home: "Ana Sayfa", new: "Yeni Koleksiyon", lookbook: "Lookbook", story: "Tasarımcının Hikâyesi", sizes: "Beden Rehberi", shipping: "Kargo", wishlist: "İstek Listesi", privacy: "Gizlilik", stars: "Stars in VOLONTE",
+      home: "Ana Sayfa", new: "Yeni Koleksiyon", lookbook: "Lookbook", story: "Tasarımcının Hikâyesi", sizes: "Beden Rehberi", wishlist: "İstek Listesi", privacy: "Gizlilik", stars: "Stars in VOLONTE",
       tap: "Girmek için dokunun", tapStart: "Başlamak için dokunun", skip: "Atla", discover: "Keşfet", all: "Tümü", cat_dresses: "Elbiseler", cat_sets: "Takımlar", cat_evening: "Abiye",
       lead: "İstanbul'da üretilen kaliteli kadın giyimi. Dünyanın her yerindeki butiklere toptan satış.",
       quality: "Kalite bizim temelimiz", qualityText: "Her model İstanbul'daki atölyelerimizde kesilir, drape edilir ve bitirilir. Dünya genelindeki butik ve satıcılara seri hâlinde satıyoruz.",
@@ -81,9 +74,9 @@
       zoomHint: "Kumaşı görmek için iki parmakla büyütün ya da çift dokunun", soldBy: "Toptan · seri hâlinde", notFound: "Bu model artık sitede yok.", back: "Geri",
       sizeTitle: "Bedeninizi bulun", sizeText: "Modellerimiz 38'den 50'ye, iki grupta. Toptan sipariş seri hâlindedir (gruptaki her bedenden bir adet).",
       sizeNote: "Vücut ölçüleri yaklaşıktır. Emin değilseniz WhatsApp'tan sorun.", bust: "Göğüs (cm)", waist: "Bel (cm)", hips: "Kalça (cm)", ukAfrica: "UK / Afrika",
-      shipTitle: "Ülkenize teslimat", shipText: "İstanbul'dan tahmini teslim süresini görmek için ülkenizi seçin.", chooseCountry: "Ülkenizi seçin", estimate: "Tahmini teslimat",
-      workDays: "iş günü", otherCountry: "Diğer ülke", shipOther: "Dünyanın her yerine gönderiyoruz — ülkeniz için WhatsApp'tan sorun.",
-      shipNote: "Süreler tahminidir; kargo firmasına ve gümrüğe göre değişir. En uygun seçeneği WhatsApp'ta teyit ederiz.",
+     
+     
+     
       storyTitle: "İlk çizimden son drapeye", storyText: "İstanbul'daki VOLONTE atölyesi: tasarım, mankende drape, prova ve son dokunuşlar — her modelin arkasındaki eller.",
       soon: "Yakında", storyVideo: "Drape videoları", storyAtelier: "Atölye", playFilm: "Filmi oynat", pause: "Durdur",
       lookText: "Her koleksiyon, bir film gibi.", film: ["Live your life.", "İstanbul'da üretildi.", "Her drape, el emeği.", "Öne çıkan kadın için.", "Kalite bizim temelimiz.", "Her gün zarafet."],
@@ -312,12 +305,6 @@
         </tbody></table></div><p class="not">${esc(t("sizeNote"))}</p>
         <p style="margin-top:22px"><a class="dugme" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></p></section>`;
     },
-    shipping() {
-      const ulke = sakla.al("ulke", window.VOLONTE_ULKE || "");
-      return `<section class="bolum"><p class="baslik-ust">${esc(t("shipping"))}</p><h1 class="baslik">${esc(t("shipTitle"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("shipText"))}</p>
-        <p style="margin-top:22px"><select id="ulke" aria-label="${esc(t("chooseCountry"))}"><option value="">${esc(t("chooseCountry"))}</option>${KARGO.map((k) => `<option value="${k[0]}" ${k[0] === ulke ? "selected" : ""}>${esc(k[1])}</option>`).join("")}<option value="XX">${esc(t("otherCountry"))}</option></select></p>
-        <div id="kargo-sonuc"></div><p class="not">${esc(t("shipNote"))}</p></section>`;
-    },
     wishlist() {
       const l = istek.map(modelBul).filter(Boolean);
       return `<section class="bolum"><p class="baslik-ust">${esc(t("wishlist"))}</p><h1 class="baslik">${esc(t("wishlist"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("wishText"))}</p>
@@ -359,18 +346,6 @@
         $("#izgara").innerHTML = MODELLER.filter((u) => k === "all" || u.kategori === k).map((u) => kart(u)).join("");
         tembelKur($("#izgara"));
       }));
-    },
-    shipping() {
-      const sec = $("#ulke");
-      const yaz = () => {
-        const k = KARGO.find((x) => x[0] === sec.value);
-        if (sec.value) sakla.koy("ulke", sec.value);
-        $("#kargo-sonuc").innerHTML = !sec.value ? "" : k
-          ? `<div class="kargo-sonuc"><span class="baslik-ust">${esc(t("estimate"))} · ${esc(k[1])}</span><b>${esc(k[2])} ${esc(t("workDays"))}</b><a class="dugme" style="margin-top:12px" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></div>`
-          : `<div class="kargo-sonuc"><p>${esc(t("shipOther"))}</p><a class="dugme" style="margin-top:12px" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></div>`;
-      };
-      sec.addEventListener("change", yaz);
-      yaz();
     },
     film() {
       const film = $("#film");
@@ -451,7 +426,7 @@
   }
 
   // ---------- Yönlendirme ----------
-  const MENU = ["home", "new", "lookbook", "story", "sizes", "shipping"];
+  const MENU = ["home", "new", "lookbook", "story", "sizes"];
   function yol() {
     const h = decodeURIComponent(location.hash.replace(/^#\/?/, "")) || "home";
     const [ad, arg] = h.split("/");
@@ -484,7 +459,7 @@
       <main id="sayfa"></main>
       <footer class="alt"><div class="logo">VOLONTE</div><p class="slogan-kucuk">Live your life</p>
         <p><a class="dugme dolu" target="_blank" rel="noopener" href="${esc(wa(AYAR.siparisNo, t("waHello")))}">${IKON.wa} ${esc(t("order"))}</a></p>
-        <div class="alt-linkler"><a target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${esc(t("info"))}</a><a target="_blank" rel="noopener" href="${AYAR.telegram}">Telegram</a><a href="#sizes">${esc(t("sizes"))}</a><a href="#shipping">${esc(t("shipping"))}</a><a href="#privacy">${esc(t("privacy"))}</a></div>
+        <div class="alt-linkler"><a target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${esc(t("info"))}</a><a target="_blank" rel="noopener" href="${AYAR.telegram}">Telegram</a><a href="#sizes">${esc(t("sizes"))}</a><a href="#privacy">${esc(t("privacy"))}</a></div>
         <p>${esc(t("address"))}: ${esc(AYAR.adres)}</p><p style="margin-top:8px">© ${new Date().getFullYear()} VOLONTE · VOLONTE & BLACK ROSE</p></footer>`;
     $$("[data-dil]").forEach((b) => b.addEventListener("click", () => { dil = b.dataset.dil; sakla.koy("dil", dil); document.documentElement.lang = dil; iskelet(); sayfaGoster(); }));
     const cek = $(".cekmece");

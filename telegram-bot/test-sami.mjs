@@ -984,3 +984,23 @@ test("Black Rose stok sorgusu: Fuat /stok → Hemra onayı; sade kod, sadece B s
   assert.match(son(501).govde.text, /3900: sorunuza cevap verilmedi/);
   assert.match(cagri(o.g, "editMessageText")[0].govde.text, /⌛ Cevap verilmedi/);
 });
+
+test("site haftalık özet: pazartesi 09:35'ten sonra bir kez, sadece Murat'a; ülke, dil, modeller", async () => {
+  const { siteHaftalik, siteOzetMetni } = await import("./site-ozet.js");
+  const o = ortam();
+  const satirlar = [{ tur: "ulke", anahtar: "NG", n: 40 }, { tur: "ulke", anahtar: "KE", n: 10 }, { tur: "dil", anahtar: "en", n: 30 }, { tur: "dil", anahtar: "fr", n: 20 }, { tur: "model", anahtar: "3609", n: 12 }, { tur: "model", anahtar: "3630", n: 7 }];
+  let sorulan = null;
+  o.env.SITE_IC = { ozet: async (bas, bit) => { sorulan = [bas, bit]; return satirlar; } };
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push(govde); return { ok: true }; };
+  const pazartesi = Date.UTC(2026, 10, 2, 6, 40) / 1000; // 2 Kasım 2026 Pazartesi 09:40 (TR)
+  await siteHaftalik(o.env, pazartesi - 600, tg, "111"); // 09:30: henüz değil
+  assert.equal(g.length, 0);
+  await siteHaftalik(o.env, pazartesi, tg, "111");
+  await siteHaftalik(o.env, pazartesi + 300, tg, "111");
+  assert.equal(g.length, 1);
+  assert.equal(g[0].chat_id, "111");
+  assert.deepEqual(sorulan, ["2026-10-26", "2026-11-01"]);
+  assert.equal(g[0].text, siteOzetMetni(satirlar, "2026-10-26", "2026-11-01"));
+  assert.match(g[0].text, /Ziyaret: 50\nÜlkeler: Nijerya 40 · Kenya 10\nDil: EN %60 · FR %40\nEn çok bakılan modeller: 3609 \(12\), 3630 \(7\)/);
+});

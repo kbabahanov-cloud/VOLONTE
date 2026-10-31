@@ -202,9 +202,6 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 420p
 th, td { padding: 11px 12px; text-align: center; border-bottom: 1px solid rgba(201, 164, 92, .14); }
 th { font: 500 10px/1.3 var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--altin); background: rgba(201, 164, 92, .06); }
 tr.grup-satir td { text-align: left; font: italic 500 16px/1 var(--serif); color: var(--altin-acik); background: rgba(11, 20, 48, .5); }
-select { width: 100%; max-width: 420px; min-height: 48px; padding: 0 14px; background: var(--lacivert); color: var(--yazi); border: 1px solid var(--cizgi); font: inherit; border-radius: 2px; }
-.kargo-sonuc { margin-top: 18px; padding: 20px; border: 1px solid var(--cizgi); background: var(--kart); max-width: 520px; }
-.kargo-sonuc b { font: 500 30px/1.1 var(--serif); color: var(--altin-acik); display: block; margin: 6px 0; }
 .bos { padding: 40px 20px; text-align: center; color: var(--soluk); border: 1px dashed var(--cizgi); }
 .liste-satir { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(201, 164, 92, .14); }
 .liste-satir img { width: 64px; height: 84px; object-fit: cover; }

@@ -11,6 +11,9 @@ API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
 source scripts/kimlikler.sh
 KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS MURAT_ID FABRIKA_SORUMLU BR_SORUMLU)
+# Site sayımı (haftalık özet): canlı site (www) varsa ona, yoksa aynı kodla çalışan deneme adresine (volonte-taslak) bağlanır.
+SITE_WORKER=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/www/settings" | python3 -c 'import sys,json;print("www" if json.load(sys.stdin).get("success") else "volonte-taslak")')
+echo "site bağlantısı: $SITE_WORKER"
 META=$(mktemp)
 GIZLI=""
 if [ "$ILK" = "evet" ]; then
@@ -21,6 +24,8 @@ cat > "$META" <<JSON
  "placement":{"region":"aws:us-east-1"},
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
+             {"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"},
+             {"type":"service","name":"SITE_IC","service":"$SITE_WORKER","entrypoint":"SiteIc"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-sami.volonte.workers.dev"},
              {"type":"plain_text","name":"GITHUB_REPO","text":"kbabahanov-cloud/VOLONTE"}$GIZLI]}
