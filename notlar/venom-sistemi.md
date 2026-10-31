@@ -364,7 +364,12 @@ düşük risk), (2) ilk dış müşteri gelmeden: veri ayrımı, bot yönlendirm
 
 **30 Ekim: ilk deneme "B kartı 0" çıktı (kodlar boşluklu "3634 B 20") → düzeltildi; "0000/001/002" iç kartları köprüde de atlanır.
 
-**Sıradaki komut: yeni zip içindeki sami.ps1 → Sami-BLACKROSE (üzerine yaz) → deneme.bat fotoğrafı (B kartı olan / olmayan model sayısı + B siz örnekler) → hepsini Black Rose sayma kararı. Sonra Murat /stokyetki ile Fuat ve Nuri'ye yetki. Bekleyen: Pelin secret'ları + fal hazır.**
+**31 Ekim – YENİ SİTE TASLAKLARI (deneme adresi, canlı site DEĞİŞMEDİ):** https://volonte-taslak.volonte.workers.dev (/a Evren, /b Gece Denizi, /c Altın İpek). Kod: `site-taslak/` (kaynak/ortak.js+css ortak çekirdek, a/b/c tema, derle.py, worker.js, yukle.sh). Eski site yedeği: `yedek/eski-site-2026-10-31/`.
+  Giriş: karanlık sahne + "VOLONTE – Live your life"; dokununca kendi sentez müziğimiz + slogan (ses/slogan.mp3 gelene kadar tarayıcı sesi), ses kapatma düğmesi; bulut/sis geçişi. İçeride kendiliğinden dönen vitrin (foto + video), Home / New Collection / Lookbook (film) / Designer's Story (yer hazır) / Beden Rehberi / Kargo / İstek listesi (kalp → tek WhatsApp mesajı) / Gizlilik; Stars gizli (AYAR.yildizlar). EN/FR/TR. Yakınlaştırma. WhatsApp Order 0091 / Info 488, kod mesajda. FİYAT YOK (sunucu veriden çıkarır). VOLONTE + BLACK ROSE arka planda.
+  Hız: yavaş 3G taklidinde ilk görüntü ~0.9 sn; vitrin fotoğrafı giriş sırasında arkada iner; fotoğraflar Cloudflare Images ile küçük WebP; videolar sadece hızlı ağda, sırayla. Sayım: ülke/dil/model, kişisel veri yok (SayimDO; /sayim SAYIM_ANAHTAR ile). Haftalık Murat özeti seçilen tasarım canlıya alınınca bağlanacak.
+  ONAY BEKLEYENLER: Murat'ın seçimi; beden ölçüleri (cm) ve kargo süreleri tahmini → Murat/Hemra teyit; slogan ses kaydı; TR ürün açıklamaları yok (EN gösteriliyor); Designer's Story içerikleri.
+
+**Sıradaki komut: Murat telefonda https://volonte-taslak.volonte.workers.dev adresini açıp A, B, C'yi dener ve birini seçer (ya da karışım: "A'nın girişi + C'nin vitrini" gibi). Black Rose: yeni sami.ps1 → deneme.bat fotoğrafı bekleniyor. Bekleyen: Pelin secret'ları + fal hazır.**
 
 ## Kapsam kararı (24 Eylül 2026)
 

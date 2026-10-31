@@ -1,0 +1,19 @@
+/* TASLAK B — Gece Denizi */
+:root { --lacivert: #0a1636; --lacivert2: #10224c; }
+.giris { background: linear-gradient(#03050d 0%, #0a1433 40%, #0f1f4a 56%, #050a1c 100%); }
+.giris-yazi { margin-top: -14vh; }
+.giris .marka { letter-spacing: .2em; }
+body { background: linear-gradient(180deg, #071029 0%, var(--siyah) 70%) fixed var(--siyah); }
+
+/* Vitrin: sinema şeridi — kartlar yana kayar, ortadaki öne çıkar */
+.vitrin-serit { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 26px 11vw 30px; scrollbar-width: none; }
+.vitrin-serit::-webkit-scrollbar { display: none; }
+.vitrin-serit .slayt { position: relative; inset: auto; flex: 0 0 78vw; max-width: 460px; aspect-ratio: 3 / 4.4; opacity: .45; transform: scale(.92); transition: opacity .9s, transform .9s; scroll-snap-align: center; overflow: hidden; border-radius: 3px; }
+.vitrin-serit .slayt.gorunur { opacity: 1; transform: none; box-shadow: 0 30px 80px rgba(20, 40, 110, .5), 0 0 0 1px rgba(201, 164, 92, .35); }
+.vitrin-serit .slayt img { position: absolute; inset: 0; }
+.vitrin-serit .noktalar { display: none; }
+.vitrin-serit .slayt-ad { font-size: clamp(22px, 6vw, 34px); }
+@media (min-width: 900px) { .vitrin-serit { padding: 40px 30vw; } .vitrin-serit .slayt { flex-basis: 34vw; } }
+.izgara { gap: 18px 12px; }
+.kart-foto { border-radius: 3px; }
+.kart-foto::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 70%, rgba(10, 22, 54, .55)); }

@@ -1,0 +1,27 @@
+/* TASLAK C — Altın İpek (editoryal) */
+:root { --altin: #cfa857; }
+.giris { background: radial-gradient(ellipse at 50% 60%, #0d1530 0%, #05060b 70%); }
+.giris-yazi { animation: yaklas 28s ease-in-out infinite alternate; }
+@keyframes yaklas { from { transform: scale(1); } to { transform: scale(1.06); } }
+.giris .marka { font-style: italic; letter-spacing: .1em; }
+body { background: var(--siyah); }
+.ust { background: rgba(5, 6, 11, .9); }
+
+/* Vitrin: dergi kapağı — büyük foto, altın çerçeve, büyük yazı */
+.vitrin-editoryal { height: calc(100svh - var(--ust)); min-height: 520px; max-height: 960px; margin: 0 auto; }
+.vitrin-editoryal::before { content: ""; position: absolute; z-index: 2; inset: 14px; border: 1px solid rgba(207, 168, 87, .45); pointer-events: none; }
+.vitrin-editoryal .slayt img { filter: saturate(.95) contrast(1.04); }
+.vitrin-editoryal .slayt.gorunur img { animation: yavas 11s ease-out both; }
+@keyframes yavas { from { transform: scale(1.08); } to { transform: scale(1); } }
+.vitrin-editoryal .slayt-yazi { padding: 140px 34px 58px; background: linear-gradient(transparent, rgba(5, 6, 11, .92) 70%); }
+.vitrin-editoryal .slayt-kod::before { content: "N° "; }
+.vitrin-editoryal .slayt-ad { font-size: clamp(36px, 10vw, 84px); font-style: italic; line-height: 1; max-width: 12ch; }
+.vitrin-editoryal .noktalar { right: 34px; bottom: 32px; z-index: 3; }
+@media (min-width: 960px) {
+  .vitrin-editoryal .slayt img { width: 58%; margin-left: auto; }
+  .vitrin-editoryal .slayt-yazi { top: 0; right: auto; width: 46%; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(90deg, var(--siyah) 70%, transparent); padding: 60px; }
+}
+.izgara { gap: 26px 14px; }
+.kart-foto { outline: 1px solid rgba(207, 168, 87, .25); outline-offset: 5px; margin: 6px; }
+.kart-ad { font-style: italic; }
+.baslik { font-style: italic; }
