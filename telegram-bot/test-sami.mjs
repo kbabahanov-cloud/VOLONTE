@@ -1177,3 +1177,23 @@ test("cuma mutabakatı: 17:00 önizleme Patron'a; gönder → Fuat; Uyuşmuyor �
   await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "3634 bizde 18 görünüyor" } }, o.env);
   assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Fuat mutabakatta uyuşmuyor \(06\.11\.2026\):\n3634 bizde 18 görünüyor/);
 });
+
+test("mutabakat bakiyeleri: Patron'a iki taraf yan yana + fark (⚠️), Fuat'a sadece Black Rose tarafı ve toplam; kaynak seçilebilir", async () => {
+  const { mutabakatMetni, bakiyeBolumu } = await import("./mutabakat.js");
+  const o = ortam();
+  const ayar = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k, v: JSON.stringify(v) }) });
+  const h = (anahtar, kart, d5) => ({ anahtar, ad: `BLACK ROSE ${anahtar}`, kart, donemler: { D0005TBLCARIGENELHAREKET: { n: 3, borc: d5[0], alacak: d5[1] } } });
+  await ayar("cari:BLACKROSE", { hesaplar: [h("15", 1000, [1500, 500]), h("20", 2500, [2500, 0]), h("25", 0, [0, 0]), h("00", 300, [300, 0])] });
+  await ayar("cari:VOLONTE", { hesaplar: [h("15", -1000, [0, 1000]), h("20", -2400, [0, 2400]), h("25", 0, [0, 0]), h("00", -300, [0, 300])] });
+  const m = await mutabakatMetni(o.env, "2026-11-06");
+  assert.ok(m.farkVar);
+  assert.match(m.patron, /✅ Black Rose 15: Black Rose kaydı 1\.000,00 \(B\) · VOLONTE kaydı 1\.000,00 \(A\) · fark 0,00/);
+  assert.match(m.patron, /⚠️ Black Rose 20: Black Rose kaydı 2\.500,00 \(B\) · VOLONTE kaydı 2\.400,00 \(A\) · fark 100,00/);
+  assert.match(m.patron, /⚠️ TOPLAM: Black Rose kaydı 3\.800,00 \(B\) · VOLONTE kaydı 3\.700,00 \(A\) · fark 100,00/);
+  assert.match(m.fuat, /💰 BÖLÜM 3 – BAKİYELER\nBlack Rose 15: 1\.000,00 \(B\)\nBlack Rose 20: 2\.500,00 \(B\)\nBlack Rose 25: 0,00\nBlack Rose 00: 300,00 \(B\)\nTOPLAM: 3\.800,00 \(B\)$/);
+  assert.ok(!/VOLONTE kaydı|fark/.test(m.fuat)); // Fuat VOLONTE tarafını ve farkı görmez
+  // kaynak: dönem tablosu toplamı
+  const d = bakiyeBolumu({ hesaplar: [h("15", 1000, [1500, 400])] }, { hesaplar: [h("15", -1000, [0, 1100])] }, { tur: "donem", tablolar: ["D0005TBLCARIGENELHAREKET"] });
+  assert.match(d.patron[0], /✅ Black Rose 15: Black Rose kaydı 1\.100,00 \(B\) · VOLONTE kaydı 1\.100,00 \(A\)/);
+  assert.match(d.patron.at(-1), /kaynak: dönem toplamı \(D0005TBLCARIGENELHAREKET\)/);
+});

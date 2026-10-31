@@ -18,18 +18,48 @@ const tarihYaz = (g) => g.split("-").reverse().join(".");
 const ayarOku = async (env, k, bos) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? bos : JSON.parse(v); };
 const ayarYaz = (env, k, v) => stokIste(env, "/ayar-yaz", { k, v: JSON.stringify(v) });
 export const fuat = (env) => String(env.FUAT_ID || "");
-const HESAPLAR = ["Black Rose 15", "Black Rose 20", "Black Rose 25", "Black Rose 00"];
+// Hesaplar (Patron eşleştirmesi 31 Ekim): Black Rose Vegawin "BLACK ROSE 00/15/20/25" ↔ VOLONTE Vegawin "BLACK ROSE 000 /
+// BLACKROSE 15 / BLACKROSE 20 / BLACK ROSE 25" — köprü sondaki sayıyla eşler (000 → 00).
+const HESAPLAR = ["15", "20", "25", "00"];
+const para = (x) => Number(x).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Vegawin işareti: borç − alacak; artı = (B) borçlu, eksi = (A) alacaklı
+const tutar = (x) => (x == null ? "—" : `${para(Math.abs(x))}${Math.abs(x) < 0.005 ? "" : x > 0 ? " (B)" : " (A)"}`);
+// Bakiye kaynağı (ayar "cari:yontem"): { tur: "kart" } = cari kartındaki BAKIYE (varsayılan) ya da
+// { tur: "donem", tablolar: ["D0005TBLCARIGENELHAREKET", …] } = seçilen dönem tablolarındaki borç − alacak toplamı
+export function bakiyeDegeri(h, yontem = { tur: "kart" }) {
+  if (!h) return null;
+  if (yontem.tur === "donem") {
+    const l = (yontem.tablolar || []).map((t) => h.donemler && h.donemler[t]).filter(Boolean);
+    return l.length ? l.reduce((s, x) => s + (Number(x.borc) || 0) - (Number(x.alacak) || 0), 0) : null;
+  }
+  return h.kart == null ? null : Number(h.kart);
+}
+export function bakiyeBolumu(br, vl, yontem = { tur: "kart" }) {
+  const bul = (c, a) => c && (c.hesaplar || []).find((h) => h.anahtar === a);
+  const satirlar = HESAPLAR.map((a) => ({ a, br: bakiyeDegeri(bul(br, a), yontem), vl: bakiyeDegeri(bul(vl, a), yontem) }));
+  const top = (k) => (satirlar.some((x) => x[k] != null) ? satirlar.reduce((s, x) => s + (x[k] || 0), 0) : null);
+  const fark = (x, y) => (x == null || y == null ? null : Math.abs(x) - Math.abs(y));
+  const isaret = (f) => (f == null ? "❔" : Math.abs(f) < 0.005 ? "✅" : "⚠️");
+  const kaynak = yontem.tur === "kart" ? "cari kart bakiyesi" : `dönem toplamı (${(yontem.tablolar || []).join(", ")})`;
+  const fuat = br ? [...satirlar.map((x) => `Black Rose ${x.a}: ${tutar(x.br)}`), `TOPLAM: ${tutar(top("br"))}`] : ["Bakiyeler henüz okunamıyor."];
+  const tb = top("br"), tv = top("vl"), tf = fark(tb, tv);
+  const patron = br || vl ? [
+    ...satirlar.map((x) => { const f = fark(x.br, x.vl); return `${isaret(f)} Black Rose ${x.a}: Black Rose kaydı ${tutar(x.br)} · VOLONTE kaydı ${tutar(x.vl)} · fark ${f == null ? "—" : para(f)}`; }),
+    `${isaret(tf)} TOPLAM: Black Rose kaydı ${tutar(tb)} · VOLONTE kaydı ${tutar(tv)} · fark ${tf == null ? "—" : para(tf)}`,
+    `(kaynak: ${kaynak}; (B) borçlu, (A) alacaklı; fark = tutar farkı)`,
+  ] : ["Bakiyeler henüz okunamıyor (köprüler cari bakiyeyi göndermedi)."];
+  const farkVar = satirlar.some((x) => { const f = fark(x.br, x.vl); return f != null && Math.abs(f) >= 0.005; });
+  return { fuat, patron, farkVar };
+}
 
+// Fuat'a giden metin: stok bölümleri + SADECE Black Rose tarafının bakiyesi ve toplamı. Patron'unki: iki taraf yan yana + fark.
 export async function mutabakatMetni(env, gun) {
   const s = await stokIste(env, "/br-stoklar");
-  const bakiye = await ayarOku(env, "cari:bakiye", null); // köprü cari hesapları okuyabildiğinde yazar
+  const [br, vl, yontem] = await Promise.all([ayarOku(env, "cari:BLACKROSE", null), ayarOku(env, "cari:VOLONTE", null), ayarOku(env, "cari:yontem", { tur: "kart" })]);
+  const b = bakiyeBolumu(br, vl, yontem);
   const bolum = (l) => (l.length ? l.map(([k, a]) => `${k} · ${a}`).join("\n") : "—");
   const toplam = (l) => l.reduce((t, [, a]) => t + a, 0);
-  const para = (x) => Number(x).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const bakiyeSatir = bakiye && bakiye.hesaplar
-    ? [...HESAPLAR.map((h) => `${h}: ${bakiye.hesaplar[h] == null ? "—" : `${para(bakiye.hesaplar[h])} ${bakiye.birim || "$"}`}`), `TOPLAM: ${para(HESAPLAR.reduce((t, h) => t + (Number(bakiye.hesaplar[h]) || 0), 0))} ${bakiye.birim || "$"}`]
-    : ["Bakiyeler henüz okunamıyor (Vegawin cari hesap okuması deneniyor)."];
-  return [
+  const ust = [
     `📋 Cuma mutabakatı – ${tarihYaz(gun)}`,
     "",
     `📦 BÖLÜM 1 – BLACK ROSE MAĞAZASI (${s.BLACKROSE.length} model, ${toplam(s.BLACKROSE)} adet)`,
@@ -39,8 +69,8 @@ export async function mutabakatMetni(env, gun) {
     bolum(s.VOLONTE),
     "",
     "💰 BÖLÜM 3 – BAKİYELER",
-    ...bakiyeSatir,
-  ].join("\n");
+  ];
+  return { fuat: [...ust, ...b.fuat].join("\n"), patron: [...ust, ...b.patron].join("\n"), farkVar: b.farkVar };
 }
 
 const onizlemeKlavye = (id) => ({ inline_keyboard: [[{ text: "✅ Fuat'a gönder", callback_data: `mt:g:${id}` }, { text: "🔄 Yenile", callback_data: `mt:y:${id}` }, { text: "❌ İptal", callback_data: `mt:x:${id}` }]] });
@@ -67,12 +97,15 @@ async function gonder(env, tg, chat, metin, klavye) {
   return son && son.ok ? son.result.message_id : null;
 }
 
+// Patron önizlemesi: iki taraf yan yana; fark varsa en üstte ⚠️. Fuat'a SADECE Black Rose tarafı gider.
+const onizlemeYazi = (m, ek = "") => `👁 ÖNİZLEME${ek ? ` (${ek})` : ""} — sadece siz görüyorsunuz${m.farkVar ? "\n⚠️ BAKİYELERDE FARK VAR (aşağıda ⚠️ satırlar)" : ""}\nFuat'a giden mesajda VOLONTE tarafı ve farklar YOK; sadece Black Rose kaydı ve toplamı.\n\n${m.patron}`;
+
 export async function onizlemeGonder(env, tg, simdi, kaynak = "cuma") {
   const gun = gunAnahtari(simdi);
   const id = `${gun}-${simdi.toString(36)}`;
-  const metin = await mutabakatMetni(env, gun);
-  const r = { id, gun, kaynak, olusturma: simdi, metin, durum: "onizleme", gecmis: [[simdi, `önizleme (${kaynak})`]] };
-  r.onizlemeMesaj = await gonder(env, tg, murat(env), `👁 ÖNİZLEME (sadece siz görüyorsunuz)\n\n${metin}`, onizlemeKlavye(id));
+  const m = await mutabakatMetni(env, gun);
+  const r = { id, gun, kaynak, olusturma: simdi, metin: m.fuat, patronMetin: m.patron, durum: "onizleme", gecmis: [[simdi, `önizleme (${kaynak})`]] };
+  r.onizlemeMesaj = await gonder(env, tg, murat(env), onizlemeYazi(m), onizlemeKlavye(id));
   await kayitYaz(env, r);
   return r;
 }
@@ -99,9 +132,10 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
       return tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text: "❌ İptal edildi", callback_data: "mt:-" }]] } });
     }
     if (islem === "y") {
-      r.metin = await mutabakatMetni(env, r.gun); r.gecmis.push([simdi, "yenilendi"]);
+      const m = await mutabakatMetni(env, r.gun);
+      Object.assign(r, { metin: m.fuat, patronMetin: m.patron }); r.gecmis.push([simdi, "yenilendi"]);
       await kayitYaz(env, r); await cevapla("Yenilendi");
-      return gonder(env, tg, cq.message.chat.id, `👁 ÖNİZLEME (yenilendi)\n\n${r.metin}`, onizlemeKlavye(id));
+      return gonder(env, tg, cq.message.chat.id, onizlemeYazi(m, "yenilendi"), onizlemeKlavye(id));
     }
     // g: Fuat'a gönder
     r.fuatMesaj = await gonder(env, tg, fuat(env), r.metin, fuatKlavye(id));

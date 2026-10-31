@@ -163,6 +163,70 @@ function SatisGonder([string]$anahtar, [hashtable]$satis, [datetime]$gun) {
     -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
 }
 
+# ---- Cari hesap bakiyeleri (cuma mutabakatı, 31 Ekim) — SADECE SELECT ----
+# Black Rose hesapları (adında BLACK ROSE / BLACKROSE geçen cari kartlar): kart BAKIYE sütunu + her dönemin cari hareket
+# tablolarındaki BORC/ALACAK toplamları ayrı ayrı okunur; hangisinin doğru kaynak olduğu karşılaştırılarak seçilir.
+# Hesap eşleştirme anahtarı: sondaki sayı (000 → 00, 15, 20, 25). Özel kodunda BLACK geçen hareketler (ör. ödemeler) ayrıca.
+$CARI_BAG = @("CARIIND", "CARINO", "CARIID", "CARI_IND", "CARIKARTIND", "CARIKARTNO", "CARIKART", "CARI")
+function HesapAnahtari([string]$ad) {
+  $a = $ad.ToUpperInvariant() -replace '\s', ''
+  if ($a -notmatch 'BLACKROSE') { return $null }
+  if ($a -match '(\d+)$') { return ('{0:D2}' -f [int]$Matches[1]) }
+  return $null
+}
+function TarihYaz($v) { if ($null -eq $v -or $v -is [DBNull]) { return $null } return ([datetime]$v).ToString("yyyy-MM-dd") }
+function CariBakiyeleri([string]$sifre) {
+  $T_CARI = "$($Ayar.firma)TBLCARI"
+  $kartSutun = Sutunlar $sifre $T_CARI
+  if ($kartSutun -notcontains "IND") { throw "$T_CARI tablosunda IND sütunu yok. Sütunlar: $($kartSutun -join ', ')" }
+  $metinler = Sorgu $sifre "SELECT COLUMN_NAME AS C FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t AND DATA_TYPE IN ('varchar','nvarchar','char','nchar')" @{ t = $T_CARI }
+  $adSutun = $null
+  foreach ($c in $metinler.Rows) {
+    $sutun = [string]$c.C
+    try { $n = (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$T_CARI] WHERE REPLACE([$sutun], ' ', '') LIKE @b" @{ b = "%BLACKROSE%" }).Rows[0].N } catch { $n = 0 }
+    if ($n -gt 0) { $adSutun = $sutun; break }
+  }
+  if (-not $adSutun) { throw "$T_CARI tablosunda BLACK ROSE adlı hesap bulunamadı." }
+  $bakiyeVar = $kartSutun -contains "BAKIYE"
+  $sec = "SELECT IND, [$adSutun] AS AD" + $(if ($bakiyeVar) { ", BAKIYE" } else { "" }) + " FROM [$T_CARI] WHERE REPLACE([$adSutun], ' ', '') LIKE @b"
+  $sonuc = @{}
+  foreach ($k in (Sorgu $sifre $sec @{ b = "%BLACKROSE%" }).Rows) {
+    $an = HesapAnahtari ([string]$k.AD)
+    if (-not $an) { continue }
+    $sonuc[$an] = @{ anahtar = $an; ad = ([string]$k.AD).Trim(); ind = [string]$k.IND; kart = $(if ($bakiyeVar) { Num $k.BAKIYE } else { $null }); donemler = @{} }
+  }
+  $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLCARI%HAREKET%" }
+  $notlar = @()
+  $ozel = @()
+  foreach ($t in $tablolar.Rows) {
+    $ad = [string]$t.AD
+    $sut = Sutunlar $sifre $ad
+    $bag = $null; foreach ($a in $CARI_BAG) { if ($sut -contains $a) { $bag = $a; break } }
+    $tarih = $null; foreach ($a in $TARIH_ADAYLARI) { if ($sut -contains $a) { $tarih = $a; break } }
+    if (-not $bag -or ($sut -notcontains "BORC") -or ($sut -notcontains "ALACAK")) { $notlar += "${ad}: uygun değil (sütunlar: $($sut -join ', '))"; continue }
+    $etiket = $ad.Substring($Ayar.firma.Length)   # ör. D0005TBLCARIGENELHAREKET
+    foreach ($h in $sonuc.Values) {
+      $q = "SELECT COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A" + $(if ($tarih) { ", MIN([$tarih]) AS ILK, MAX([$tarih]) AS SON" } else { "" }) + " FROM [$ad] WHERE [$bag] = @i"
+      $r = (Sorgu $sifre $q @{ i = $h.ind }).Rows[0]
+      $h.donemler[$etiket] = @{ n = [int]$r.N; borc = (Num $r.B); alacak = (Num $r.A); ilk = $(if ($tarih) { TarihYaz $r.ILK } else { $null }); son = $(if ($tarih) { TarihYaz $r.SON } else { $null }) }
+    }
+    if ($sut -contains "OZELKOD") {
+      foreach ($x in (Sorgu $sifre "SELECT OZELKOD AS K, [$bag] AS C, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$ad] WHERE OZELKOD LIKE @b GROUP BY OZELKOD, [$bag]" @{ b = "%BLACK%" }).Rows) {
+        $cariAd = ""
+        try { $cariAd = ([string](Sorgu $sifre "SELECT [$adSutun] AS AD FROM [$T_CARI] WHERE IND = @i" @{ i = [string]$x.C }).Rows[0].AD).Trim() } catch { }
+        $ozel += @{ tablo = $etiket; kod = ([string]$x.K).Trim(); cari = $cariAd; n = [int]$x.N; borc = (Num $x.B); alacak = (Num $x.A) }
+      }
+    }
+  }
+  return @{ hesaplar = @($sonuc.Values | Sort-Object { $_.anahtar }); ozel = $ozel; notlar = $notlar; adSutun = $adSutun; kartBakiye = $bakiyeVar }
+}
+function CariGonder([string]$anahtar, $c) {
+  $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; kartBakiye = $c.kartBakiye } | ConvertTo-Json -Depth 8 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/cari" -TimeoutSec 60 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
+}
+
 # Vegawin kodundaki ek (ör. "3194B20" → "3194") iç bilgidir, dışarı gitmez.
 function ModelKodu([string]$kod) {
   $k = "$kod".Trim().ToUpperInvariant()
@@ -253,6 +317,13 @@ function Esitle([switch]$Zorla) {
   $satisNot = ""
   try { $sat = Satislar (Duz $g.Sifre) (Get-Date); SatisGonder (Duz $g.Anahtar) $sat (Get-Date); $satisNot = ", bugün satılan $($sat.Count) model" }
   catch { $satisNot = ", satış okunamadı: $($_.Exception.Message)" }
+  # Cari bakiyeler (cuma mutabakatı): saatte bir; hata olursa stok ve satış etkilenmez
+  $cariDosya = Join-Path $VeriKlasoru "cari-son-$($Ayar.magaza).txt"
+  $cariSon = if (Test-Path $cariDosya) { [datetime]::Parse((Get-Content $cariDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
+  if ($Zorla -or ((Get-Date) - $cariSon).TotalMinutes -ge 60) {
+    try { CariGonder (Duz $g.Anahtar) (CariBakiyeleri (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $cariDosya; $satisNot += ", cari bakiyeler gönderildi" }
+    catch { $satisNot += ", cari okunamadı: $($_.Exception.Message)" }
+  }
   return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi$satisNot"
 }
 
@@ -398,6 +469,34 @@ switch ($Mod) {
       foreach ($r in $kart.Rows) { Write-Host ("  {0} | {1} | {2}" -f ([string]$r.KOD).Trim(), ([string]$r.AD).Trim(), [Math]::Abs((Num $r.MIKTAR))) }
       Write-Host ""
       Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi)." -ForegroundColor Green
+    } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
+    Bekle
+  }
+  "cari-bakiye" {
+    # Black Rose hesaplarının bakiyesi: kart BAKIYE ve dönem dönem hareket toplamları (SADECE SELECT, hiçbir şey gönderilmez)
+    Write-Host "=== Sayım Sami cari bakiye ($($Ayar.magaza)) — sadece okuma, hiçbir şey gönderilmez ===" -ForegroundColor Cyan
+    try {
+      $g = Gizliler
+      $c = CariBakiyeleri (Duz $g.Sifre)
+      Write-Host "Hesap adı sütunu: $($c.adSutun) · kartta BAKIYE sütunu: $(if ($c.kartBakiye) { 'var' } else { 'yok' })"
+      foreach ($h in $c.hesaplar) {
+        Write-Host ""
+        Write-Host ("■ {0}  (anahtar {1})   KART BAKIYE: {2:N2}" -f $h.ad, $h.anahtar, $h.kart) -ForegroundColor Yellow
+        foreach ($d in ($h.donemler.Keys | Sort-Object)) {
+          $x = $h.donemler[$d]
+          Write-Host ("  {0}: {1} hareket · borç {2:N2} · alacak {3:N2} · borç−alacak {4:N2} · {5} → {6}" -f $d, $x.n, $x.borc, $x.alacak, ([double]$x.borc - [double]$x.alacak), $x.ilk, $x.son)
+        }
+      }
+      if ($c.ozel.Count) {
+        Write-Host ""
+        Write-Host "Özel kodunda BLACK geçen hareketler:" -ForegroundColor Yellow
+        foreach ($o in $c.ozel) { Write-Host ("  {0} · '{1}' · hesap: {2} · {3} hareket · borç {4:N2} · alacak {5:N2}" -f $o.tablo, $o.kod, $o.cari, $o.n, $o.borc, $o.alacak) }
+      }
+      foreach ($n in $c.notlar) { Write-Host "  not: $n" }
+      Write-Host ""
+      Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi, Vegawin'e hiçbir şey yazılmadı)." -ForegroundColor Green
     } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
     Write-Host ""
     Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."

@@ -1665,3 +1665,15 @@ test("Kemal günlük seçim: hiç paylaşılmamışlardan günde en fazla 2 (bir
   // hiç paylaşılmamış kalmadıysa 10'u da normal
   assert.deepEqual(gunlukSecim((a, d = []) => sirali.slice(4).filter((k) => !d.includes(k)).slice(0, a), son, 10), sirali.slice(4, 14));
 });
+
+test("köprü cari: anahtarlı köprü Black Rose hesap bakiyelerini gönderir; Sami'nin deposunda cari:<MAĞAZA>", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  const gonder = (govde, anahtar = "kopru-anahtari-123") => worker.fetch(new Request("https://x/kopru/cari", { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: `Bearer ${anahtar}` }, body: JSON.stringify(govde) }), o.env);
+  assert.equal((await gonder({ hesaplar: [] }, "yanlis")).status, 401);
+  const r = await gonder({ hesaplar: [{ anahtar: "15", ad: "BLACKROSE 15", kart: -1000, donemler: { D0005TBLCARIGENELHAREKET: { n: 2, borc: 0, alacak: 1000, ilk: "2026-01-02", son: "2026-10-30" } } }, { anahtar: "x", ad: "kötü" }], ozel: [{ tablo: "D0001TBLCARIHAREKETLERI", kod: "BLACK ROSE BORC VERDIM", cari: "KASA", n: 5, borc: 5000, alacak: 0 }] });
+  assert.deepEqual(await r.json(), { ok: true, hesap: 1 });
+  const v = JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "cari:VOLONTE" }) })).json()).v);
+  assert.equal(v.hesaplar[0].kart, -1000);
+  assert.equal(v.ozel[0].kod, "BLACK ROSE BORC VERDIM");
+});

@@ -101,6 +101,7 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
+    if (request.method === "POST" && url.pathname === "/kopru/cari") return kopruCari(request, env);
     // Pelin'in kör testi: modelin gerçek mankenli kanal videosu (tek seferlik anahtar Pelin'den, ortak kayıtta).
     if (request.method === "GET" && /^\/kanal-video\/[a-f0-9]{32}$/.test(url.pathname)) return kanalVideo(env, url.pathname.split("/")[2], request.headers.get("Range"));
 
@@ -1922,6 +1923,24 @@ async function kopruSatis(request, env) {
   if (!govde || !/^\d{4}-\d{2}-\d{2}$/.test(String(govde.gun || "")) || !Array.isArray(govde.kalemler) || govde.kalemler.length > 2000) return new Response("geçersiz", { status: 400 });
   const kalemler = govde.kalemler.filter((k) => !/^0/.test(stokKodu(k.kod))).map((k) => ({ kod: stokKodu(k.kod), adet: Math.abs(Number(k.adet) || 0) }));
   return Response.json(await stokIste(env, "/satis-yaz", { magaza, gun: govde.gun, kalemler }));
+}
+
+// Cari bakiyeler (cuma mutabakatı, 31 Ekim; köprü sadece okur): Black Rose hesaplarının kart bakiyesi ve dönem hareket
+// toplamları. Sami'nin deposunda "cari:<MAĞAZA>" — SADECE Patron ve Fuat'a giden mutabakatta kullanılır.
+async function kopruCari(request, env) {
+  const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
+  const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !env.STOK || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
+  const g = await request.json().catch(() => null);
+  if (!g || !Array.isArray(g.hesaplar) || g.hesaplar.length > 20) return new Response("geçersiz", { status: 400 });
+  const sayi = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
+  const hesaplar = g.hesaplar.filter((h) => /^\d{2}$/.test(String(h.anahtar))).map((h) => ({
+    anahtar: String(h.anahtar), ad: String(h.ad || "").slice(0, 60), kart: sayi(h.kart),
+    donemler: Object.fromEntries(Object.entries(h.donemler || {}).slice(0, 20).map(([d, x]) => [String(d).slice(0, 60), { n: Number(x.n) || 0, borc: sayi(x.borc), alacak: sayi(x.alacak), ilk: x.ilk || null, son: x.son || null }])),
+  }));
+  const ozel = (Array.isArray(g.ozel) ? g.ozel : []).slice(0, 50).map((o) => ({ tablo: String(o.tablo || "").slice(0, 60), kod: String(o.kod || "").slice(0, 60), cari: String(o.cari || "").slice(0, 60), n: Number(o.n) || 0, borc: sayi(o.borc), alacak: sayi(o.alacak) }));
+  await stokIste(env, "/ayar-yaz", { k: `cari:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), kartBakiye: g.kartBakiye !== false, hesaplar, ozel }) });
+  return Response.json({ ok: true, hesap: hesaplar.length });
 }
 
 // Stok soruları ve /stok: ortak kod (stokbot.js). "sami:aktif" varsa sorular Sami'nin botundan gider.
