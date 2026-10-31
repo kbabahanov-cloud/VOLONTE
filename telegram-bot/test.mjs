@@ -13,6 +13,8 @@ function sahteOrtam() {
   const env = {
     BOT_TOKEN: "test-token",
     MESAJ_ARASI_MS: 0,
+    ESKI_TUR: "1", // eski tur testleri; yeni düzen testleri bunu siler
+    ALTYAZI_ACIK: "1",
     WEBHOOK_SECRET: "gizli123",
     ALLOWED_IDS: "111, 222",
     KAYIT: {
@@ -160,68 +162,7 @@ test("kod dizini albümün tüm parçalarını tutar", async () => {
   assert.deepEqual(kodlar["3329"][0].ids, [20, 21, 22]);
 });
 
-test("/paylas önizler, onaysız kanala hiçbir şey gitmez, onayla paylaşır", async () => {
-  const { env, gonderilen } = sahteOrtam();
-  await albumKur(env);
-  telegramTaklit(gonderilen);
-  gonderilen.length = 0;
-
-  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 3329" } }, env);
-  const kopyalar = gonderilen.filter((g) => g.url.endsWith("copyMessages"));
-  assert.equal(kopyalar.length, 1);
-  assert.equal(kopyalar[0].govde.chat_id, 222); // önizleme sadece kullanıcıya
-  assert.deepEqual(kopyalar[0].govde.message_ids, [20, 21, 22]);
-  const dugmeler = gonderilen.at(-1).govde.reply_markup.inline_keyboard[0];
-  const ok = dugmeler[0].callback_data;
-
-  // İzinsiz biri basarsa paylaşılmaz
-  gonderilen.length = 0;
-  await guncellemeIsle({ callback_query: { id: "x", from: { id: 999 }, data: ok, message: { chat: { id: 999 }, message_id: 1 } } }, env);
-  assert.equal(gonderilen.filter((g) => g.url.endsWith("copyMessages")).length, 0);
-
-  // Sahibi onaylar → kanala kopyalanır
-  await guncellemeIsle({ callback_query: { id: "y", from: { id: 222 }, data: ok, message: { chat: { id: 222 }, message_id: 7 } } }, env);
-  const kanalaKopya = gonderilen.filter((g) => g.url.endsWith("copyMessages"));
-  assert.equal(kanalaKopya.length, 1);
-  assert.equal(kanalaKopya[0].govde.chat_id, -100);
-  assert.equal(kanalaKopya[0].govde.from_chat_id, -100);
-  assert.match(gonderilen.at(-1).govde.text, /yeniden paylaşıldı[\s\S]*t\.me\/Volonteroseoffical\/900/);
-
-  // İkinci basış tekrar paylaşmaz
-  gonderilen.length = 0;
-  await guncellemeIsle({ callback_query: { id: "z", from: { id: 222 }, data: ok, message: { chat: { id: 222 }, message_id: 7 } } }, env);
-  assert.equal(gonderilen.filter((g) => g.url.endsWith("copyMessages")).length, 0);
-});
-
-test("İptal kanala paylaşmaz", async () => {
-  const { env, gonderilen } = sahteOrtam();
-  await albumKur(env);
-  telegramTaklit(gonderilen);
-  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 3329" } }, env);
-  const iptal = gonderilen.at(-1).govde.reply_markup.inline_keyboard[0][1].callback_data;
-  gonderilen.length = 0;
-  await guncellemeIsle({ callback_query: { id: "y", from: { id: 222 }, data: iptal, message: { chat: { id: 222 }, message_id: 7 } } }, env);
-  assert.equal(gonderilen.filter((g) => g.url.endsWith("copyMessages")).length, 0);
-  assert.match(gonderilen.at(-1).govde.text, /iptal edildi/);
-});
-
-test("yetki yoksa anlaşılır uyarı", async () => {
-  const { env, gonderilen } = sahteOrtam();
-  await albumKur(env);
-  telegramTaklit(gonderilen, "Bad Request: need administrator rights in the channel chat");
-  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 3329" } }, env);
-  const ok = gonderilen.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data;
-  await guncellemeIsle({ callback_query: { id: "y", from: { id: 222 }, data: ok, message: { chat: { id: 222 }, message_id: 7 } } }, env);
-  assert.match(gonderilen.at(-1).govde.text, /Mesaj gönderme/);
-});
-
-test("bilinmeyen kod", async () => {
-  const { env, gonderilen } = sahteOrtam();
-  await albumKur(env);
-  telegramTaklit(gonderilen);
-  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 9999" } }, env);
-  assert.match(gonderilen.at(-1).govde.text, /9999 kodlu kayıtlı paylaşım bulamadım/);
-});
+// /paylas testleri: yeni düzen bölümünde (aşağıda).
 
 test("eski paylaşımları içe aktarma: albüm gruplama ve kod", async () => {
   const { gruplaVeDizinle } = await import("./ice-aktar.mjs");
@@ -683,18 +624,6 @@ test("eski liste düğmeleri artık işlem yapmaz", async () => {
   assert.equal([...o.depo.keys()].filter((k) => k.startsWith("kuyruk:")).length, 0);
 });
 
-test("elle /paylas günlük sınıra dahil", async () => {
-  const { env, gonderilen, depo } = rotasyonOrtami();
-  const bugun = gunAnahtari(Math.floor(Date.now() / 1000));
-  depo.set(`sayac:${bugun}`, "10");
-  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(111), from: { id: 111 }, text: "/paylas 3329" } }, env);
-  const ok = cagrilar(gonderilen, "sendMessage").at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data;
-  gonderilen.length = 0;
-  await bas(env, 111, ok);
-  assert.equal(cagrilar(gonderilen, "copyMessages").length, 0);
-  assert.match(cagrilar(gonderilen, "editMessageText")[0].govde.text, /sınırı doldu/);
-});
-
 test("kanala yeni kodsuz DISPONIBLE albümü kodsuz dizinine girer", async () => {
   const { env, depo } = sahteOrtam();
   const t = ist(10);
@@ -1054,7 +983,8 @@ test("tepki sayıları kaydedilir; 20:00 raporu bugünkü paylaşımları, en ç
   assert.equal(dugme.callback_data, "rp:3100");
   o.gonderilen.length = 0;
   await bas(o.env, 111, "rp:3100");
-  assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.chat_id, 111); // sadece önizleme, kanala değil
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0); // kanala bir şey gitmez
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /3100 sitede yok/); // yeni düzen: medya siteden
 });
 
 // ---------- Alt yazı önerisi ----------
@@ -1355,6 +1285,31 @@ test("stok köprüsü: Sil gizler (stok gelse de); Beklesin 7 gün sonra tekrar 
   assert.deepEqual((await st.json()).map((x) => x.kod), ["3200"]);
 });
 
+test("köprü: indirimli mal (2000) silinmez; stoğu ve satışı izlenir ama stok-bitti sorusu açılmaz", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "2000", ad: "CRY INDIRIMLI", adet: 50 }, { kod: "3100", ad: "ELBISE", adet: 3 }]);
+  const r = await kopru(o.env, [{ kod: "2000", ad: "CRY INDIRIMLI", adet: 0 }, { kod: "3100", ad: "ELBISE", adet: 0 }]);
+  assert.equal((await r.json()).yeniSoru, 1); // sadece 3100 sorulur
+  const st = await (await o.env.STOK.get().fetch("https://stok/toplu", { method: "POST", body: JSON.stringify({ kodlar: ["2000"] }) })).json();
+  assert.equal(st["2000"].toplam, 0); // kayıt duruyor
+  await worker.fetch(new Request("https://x/kopru/satis", { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: "Bearer kopru-anahtari-123" }, body: JSON.stringify({ gun: "2026-10-30", kalemler: [{ kod: "2000", adet: 25 }, { kod: "3634", adet: 8 }] }) }), o.env);
+  const sat = await (await o.env.STOK.get().fetch("https://stok/satislar", { method: "POST", body: JSON.stringify({ gun: "2026-10-30" }) })).json();
+  assert.deepEqual(sat.map((x) => [x.kod, x.satilan]), [["2000", 25], ["3634", 8]]); // satış izleniyor
+  await kopru(o.env, [{ kod: "2000", adet: 30, fiyat: 5 }]);
+  const stk = await (await o.env.STOK.get().fetch("https://stok/stoktakiler", { method: "POST", body: "{}" })).json();
+  assert.ok(!stk.some((x) => x.kod === "2000")); // Selin'in fotoğraf isteğine girmez
+});
+
+test("köprü: Black Rose adedi (brAdet) alınır; B kartı olmayan modelde null", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "3900", adet: 24, brAdet: 24 }, { kod: "3100", adet: 3 }]);
+  const br = async (kod) => (await (await o.env.STOK.get().fetch("https://stok/br-stok", { method: "POST", body: JSON.stringify({ kod }) })).json()).stok;
+  assert.equal(await br("3900"), 24);
+  assert.equal(await br("3100"), null);
+});
+
 // ---------- Karma depo: Kemal kendi nesnesinde ----------
 import { KatalogDO } from "./worker.js";
 
@@ -1406,4 +1361,292 @@ test("stok soruları: Sami'nin botu açıksa ('sami:aktif') Kemal soru gönderme
   const r = await kopru(o.env, [{ kod: "3100", adet: 0 }]);
   assert.equal((await r.json()).yeniSoru, 1); // soru Sami'nin deposunda bekliyor
   assert.equal(cagrilar(o.gonderilen, "copyMessage").length + cagrilar(o.gonderilen, "sendMessage").length, 0);
+});
+
+// ---------- Yeni kanal düzeni (29 Ekim) ----------
+const duzen = await import("./duzen.js");
+
+test("yeni düzen alt yazısı: sıra, kalın CODE, fiyat yok, sadece EN/FR; renk onaysızsa ve kumaş yoksa satır yok", () => {
+  const p = { kod: "3596", durum: "donus", renkler: ["orange-brown", "pink-blue", "multicolor"], renkEmin: true, bedenler: "44-46-48-50", kumas: "chiffon", en: "Elegant ruffled kimono set.", fr: "Ensemble kimono élégant à volants." };
+  assert.equal(duzen.altYazi(p), [
+    "🔁 BACK IN STOCK / DE RETOUR",
+    "<b>✅ CODE: 3596</b>",
+    "🎨 Colors / Couleurs: orange-brown, pink-blue, multicolor",
+    "📏 Size: 44-\u200B46-\u200B48-\u200B50",
+    "📦 Series: 4 pcs / Série : 4 pièces",
+    "🧵 Fabric / Tissu: chiffon",
+    "🇬🇧 Elegant ruffled kimono set.",
+    "🇫🇷 Ensemble kimono élégant à volants.",
+    "VOLONTE – Premium Women's Fashion",
+  ].join("\n"));
+  const y = duzen.altYazi({ ...p, durum: "yeni", renkEmin: false, kumas: null, bedenler: "38-40-42-44-46-48-50" });
+  assert.ok(!/Colors|Fabric|\$|🇹🇷|🇵🇹|price|prix/i.test(y));
+  assert.match(y, /^🆕 NEW \/ NOUVEAU\n/);
+  assert.match(y, /📏 Size: 38-\u200B40-\u200B42-\u200B44 \/ 44-\u200B46-\u200B48-\u200B50\n📦 Series: 4 pcs/);
+  assert.ok(!/\d{2}-\d/.test(y)); // telefon numarası sanılmasın
+  const d = duzen.dugmeler().inline_keyboard.flat();
+  assert.deepEqual(d.map((x) => x.url), ["https://wa.me/905362390091", "https://wa.me/905363448488", "https://kbabahanov-cloud.github.io/VOLONTE/"]);
+  assert.deepEqual(d.map((x) => x.text), ["🛒 Order", "📞 Info", "🌐 All models / Tous les modèles"]);
+});
+
+test("durum etiketi: stoğa döndü > yeni > son seriler > çok satan > mevcut; seçim: stokta + sitede + 14 gün, en eski önce", () => {
+  const simdi = ist(9);
+  const temel = { kod: "1", ilkPaylasim: simdi - 100 * GUN, toplam: 40, bedenler: "38-40-42-44", satislar: {}, simdi };
+  assert.equal(duzen.durumSec({ ...temel, geldiZaman: simdi - 3 * GUN }), "donus");
+  assert.equal(duzen.durumSec({ ...temel, ilkPaylasim: null }), "yeni");
+  assert.equal(duzen.durumSec({ ...temel, ilkPaylasim: simdi - 10 * GUN }), "yeni");
+  assert.equal(duzen.durumSec({ ...temel, toplam: 8 }), "son");
+  assert.equal(duzen.durumSec({ ...temel, satislar: { 1: 20, 2: 5 } }), "cok");
+  assert.equal(duzen.durumSec({ ...temel, satislar: { 1: 8 } }), "hazir");
+  const site = ["A", "B", "C", "D", "E"].map((kod) => ({ kod, fotolar: ["galeri/x.jpg"] }));
+  site.push({ kod: "F", fotolar: ["x"], gizli: true });
+  const stok = { A: { toplam: 5 }, B: { toplam: 5 }, C: { toplam: 0 }, D: { toplam: 5 }, E: { toplam: 5, gizli: true }, F: { toplam: 9 } };
+  const tg = { A: simdi - 20 * GUN, B: simdi - 3 * GUN };
+  assert.deepEqual(duzen.gununModelleri({ site, stok, tg, simdi }).map((u) => u.kod), ["D", "A"]); // hiç paylaşılmayan önce
+  assert.deepEqual(duzen.gununModelleri({ site, stok, tg, simdi, haric: ["D"] }).map((u) => u.kod), ["A"]);
+});
+
+test("Düzelt metni ve repete renk çevirisi", () => {
+  assert.deepEqual(duzen.duzeltmeCoz("Renk: Black, beige\nKumaş: chiffon\ndurum: best\nen: Nice set.\nfr: Bel ensemble."),
+    { renkler: ["Black", "beige"], kumas: "chiffon", durum: "cok", en: "Nice set.", fr: "Bel ensemble." });
+  assert.deepEqual(duzen.duzeltmeCoz("kumaş: yok"), { kumas: null });
+  assert.deepEqual(duzen.duzeltmeCoz("merhaba"), {});
+  assert.deepEqual(duzen.renkCevir(["Siyah", "bej", "siyah"]), ["black", "beige"]);
+  assert.equal(duzen.renkCevir(["siyah", "acayip"]), null); // bilinmeyen renk uydurulmaz
+});
+
+const SITE_TEST = [
+  { kod: "3403", baslik: "Floral Belted Shirt Dress", bedenler: "38-40-42-44", fotolar: ["galeri/3403/1.jpg", "galeri/3403/2.jpg"], videolar: [], fiyat: 44, gizli: false, aciklama: { en: "x" } },
+  { kod: "3520", baslik: "Satin Kimono Trouser Set", bedenler: "44-46-48-50", fotolar: ["galeri/3520/1.jpg"], videolar: ["selin/3520/0"], fiyat: 52, gizli: false, aciklama: { en: "y" } },
+  { kod: "3411", baslik: "Bow Detail Midi Dress", bedenler: "38-40-42-44", fotolar: ["galeri/3411/1.jpg"], videolar: [], fiyat: 55, gizli: false },
+  { kod: "3999", baslik: "Stoksuz", bedenler: "38-40-42-44", fotolar: ["galeri/3999/1.jpg"], videolar: [], fiyat: 1, gizli: false },
+];
+async function yeniOrtam() {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  delete o.env.ESKI_TUR;
+  delete o.env.ALTYAZI_ACIK;
+  Object.assign(o.env, { ANTHROPIC_API_KEY: "k", MURAT_ID: "111", FABRIKA_SORUMLU: "333", EKIP_IDS: "333" });
+  const t = ist(9);
+  o.depo.set("kodlar", JSON.stringify({ 3403: [{ ids: [700], tarih: t - 50 * GUN }], 3520: [{ ids: [710], tarih: t - 30 * GUN }], 3411: [{ ids: [720], tarih: t - 5 * GUN }] }));
+  o.depo.set("kodsuz", "{}");
+  await kopru(o.env, [{ kod: "3403", adet: 40, fiyat: 44 }, { kod: "3520", adet: 40, fiyat: 52 }, { kod: "3411", adet: 40, fiyat: 55 }, { kod: "3999", adet: 0, fiyat: 1 }]);
+  o.claude = [];
+  let id = 3000;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres === duzen.SITE_VERI) return new Response(JSON.stringify(SITE_TEST));
+    const govde = istek && istek.body ? JSON.parse(istek.body) : {};
+    if (adres.startsWith("https://api.anthropic.com")) {
+      o.claude.push(govde);
+      const metin = govde.messages[0].content.at(-1).text;
+      const kod = metin.match(/model (\d+)/)[1];
+      const cevap = kod === "3520" ? { renkler: ["champagne"], renk_emin: false, renk_notu: "Şampanya mı bej mi emin değilim.", en: "Satin kimono set.", fr: "Ensemble kimono satiné." }
+        : { renkler: ["black-gold floral"], renk_emin: true, renk_notu: "", en: `Model ${kod} line.`, fr: `Ligne ${kod}.` };
+      return new Response(JSON.stringify({ id: "m", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(cevap) }], usage: { input_tokens: 10, output_tokens: 10 } }), { headers: { "content-type": "application/json" } });
+    }
+    o.gonderilen.push({ url: adres, govde });
+    if (adres.endsWith("/sendMediaGroup")) return new Response(JSON.stringify({ ok: true, result: govde.media.map(() => ({ message_id: id++ })) }));
+    return new Response(JSON.stringify({ ok: true, result: { message_id: id++ } }));
+  };
+  return o;
+}
+const kontrolDugme = (g, kisi, kod, on) => cagrilar(g, "sendMessage").filter((m) => String(m.govde.chat_id) === kisi && (m.govde.reply_markup || {}).inline_keyboard)
+  .flatMap((m) => m.govde.reply_markup.inline_keyboard.flat()).find((d) => d.callback_data && d.callback_data.startsWith(on) && d.callback_data.endsWith(":" + kod)).callback_data;
+
+test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modeller; önizleme Murat'a ve Hemra'ya yeni düzende, fiyatsız", async () => {
+  const o = await yeniOrtam();
+  await rotasyon(o.env, ist(7, 55));
+  assert.equal(o.depo.get("tur"), undefined);
+  await rotasyon(o.env, ist(8, 0));
+  const tur = JSON.parse(o.depo.get("tur"));
+  assert.deepEqual(Object.keys(tur.ogeler).sort(), ["3403", "3520"]); // 3411: 5 gün önce; 3999: stok yok
+  assert.equal(tur.durum, "toplaniyor"); // 2 model tek çalışmada hazırlandı ve gönderildi
+  assert.equal(o.claude.length, 2);
+  assert.ok(o.claude[0].messages[0].content.some((c) => c.type === "image" && c.source.url === "https://kbabahanov-cloud.github.io/VOLONTE/galeri/3403/1.jpg"));
+  for (const kisi of ["111", "333"]) assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => String(m.govde.chat_id) === kisi).length, 2);
+  const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "111" && m.govde.media[0].caption.includes("3403"));
+  assert.equal(album.govde.media[0].caption, "✅ AVAILABLE / DISPONIBLE\n<b>✅ CODE: 3403</b>\n🎨 Colors / Couleurs: black-gold floral\n📏 Size: 38-\u200B40-\u200B42-\u200B44\n📦 Series: 4 pcs / Série : 4 pièces\n🇬🇧 Model 3403 line.\n🇫🇷 Ligne 3403.\nVOLONTE – Premium Women's Fashion");
+  assert.equal(album.govde.media[0].parse_mode, "HTML");
+  assert.ok(!/\$|Wholesale|price|prix|fiyat/i.test(JSON.stringify(o.gonderilen))); // fiyat hiçbir yerde
+  const not = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "111" && /👆/.test(m.govde.text));
+  assert.equal(not.govde.reply_markup.inline_keyboard.flat()[0].url, "https://wa.me/905362390091");
+  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "111" && /^⬆️ 3520/.test(m.govde.text));
+  assert.match(kontrol.govde.text, /Renkler: ⚠️ Emin değilim \(champagne\)/);
+  assert.match(kontrol.govde.text, /1 video var/);
+  assert.equal(o.depo.get("yazi:3403") != null, true); // yazı bir kez hazırlanır
+});
+
+test("✅ Paylaş sıraya alır, renk emin değilse önce ✏️ Düzelt; düzeltme yeni önizleme getirir; sıra kanala yeni düzende gider, tarih tabloya", async () => {
+  const o = await yeniOrtam();
+  await rotasyon(o.env, ist(8, 0));
+  const p3403 = kontrolDugme(o.gonderilen, "111", "3403", "y1");
+  const p3520 = kontrolDugme(o.gonderilen, "111", "3520", "y1");
+  o.gonderilen.length = 0;
+  await bas(o.env, 333, p3520);
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Önce renkleri yazın/);
+  assert.equal(o.depo.get("kuyruk:3520"), undefined);
+  await bas(o.env, 333, p3520.replace("y1:", "yd:"));
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 9, date: 1, chat: ozel(333), from: { id: 333, first_name: "Hemra" }, text: "renk: champagne, black\nkumaş: satin" } }, o.env);
+  const yeni = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.media[0].caption.includes("3520"));
+  assert.equal(yeni.length, 2); // ikisine yeni önizleme
+  assert.match(yeni[0].govde.media[0].caption, /🎨 Colors \/ Couleurs: champagne, black\n📏 Size: 44-\u200B46-\u200B48-\u200B50\n📦 Series: 4 pcs \/ Série : 4 pièces\n🧵 Fabric \/ Tissu: satin/);
+  assert.ok(cagrilar(o.gonderilen, "editMessageText").some((m) => /Hemra düzeltti/.test(m.govde.text)));
+  // Düzeltmeden sonra paylaş
+  const yeniDugme = kontrolDugme(o.gonderilen, "111", "3520", "y1");
+  await bas(o.env, 111, yeniDugme);
+  await bas(o.env, 111, p3403);
+  assert.ok(o.depo.get("kuyruk:3520") && o.depo.get("kuyruk:3403"));
+  await bas(o.env, 333, p3403); // ikinci basış işlemez
+  // Sıra: kanala yeni düzende (albüm + 👆 düğmeli mesaj)
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, ist(8, 5));
+  const kanalda = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
+  assert.equal(kanalda.length, 1);
+  assert.match(kanalda[0].govde.media[0].caption, /<b>✅ CODE: 3520<\/b>/);
+  assert.equal(kanalda[0].govde.media[1].media, "https://volonte-selin.volonte.workers.dev/v2/3520/0");
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === -100 && m.govde.text === "👆 <b>CODE: 3520</b>"));
+  const { stokIste } = await import("./stokbot.js");
+  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3520"], ist(8, 5));
+  // 20:00 gün sonu: onaylanan yeni düzen paylaşımı sıradan çıkmaz, ertesi güne kalır
+  await rotasyon(o.env, ist(20, 0));
+  assert.ok(o.depo.get("kuyruk:3403"));
+});
+
+test("❌ Geç 7 gün; stoğu biten model sıradan paylaşılmaz; eski düzen sıradakiler yeni turda çıkarılır", async () => {
+  const o = await yeniOrtam();
+  o.depo.set("kuyruk:4444", JSON.stringify({ kod: "4444", ids: [1], kim: "x", zaman: 1, tur: 1 }));
+  await rotasyon(o.env, ist(8, 0));
+  assert.equal(o.depo.get("kuyruk:4444"), undefined);
+  await bas(o.env, 111, kontrolDugme(o.gonderilen, "111", "3520", "yg"));
+  assert.ok(JSON.parse(o.depo.get("atlananlar"))["3520"] > ist(8) + 6 * GUN);
+  await bas(o.env, 111, kontrolDugme(o.gonderilen, "111", "3403", "y1"));
+  await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]);
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, ist(8, 5));
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0);
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /stoğu bitti/.test(m.govde.text)));
+});
+
+test("deneme turu (gruplar) akşam da gider; A/B biçim karşılaştırması ve seçim", async () => {
+  const o = await yeniOrtam();
+  o.depo.set("kemal:yeniDeneme", JSON.stringify({ gruplar: [{ baslik: "(a) yeni", kodlar: ["3403", "3999"] }, { baslik: "(b) eski", otomatik: 5, haric: ["3411"] }] }));
+  await rotasyon(o.env, ist(21, 0));
+  const tur = JSON.parse(o.depo.get("tur"));
+  assert.deepEqual(tur.gruplar.map((g) => g.kodlar), [["3403"], ["3520"]]); // 3999 stoksuz; 3411 hariç; 3403 (a)'da
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.text === "(b) eski"));
+  assert.ok(cagrilar(o.gonderilen, "sendPhoto").some((m) => m.govde.chat_id === "111" && m.govde.reply_markup.inline_keyboard[0][0].url)); // A: tek + düğme
+  await bas(o.env, 333, "yb:tek");
+  assert.equal(o.depo.get("bicim"), "tek");
+});
+
+test("/paylas yeni düzende önizler; sitede olmayan kod için açıklama; onayla kanala gider", async () => {
+  const o = await yeniOrtam();
+  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 9999" } }, o.env);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /9999 sitede yok/);
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 3411" } }, o.env);
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length + cagrilar(o.gonderilen, "sendPhoto").length, 1);
+  const ok = cagrilar(o.gonderilen, "sendMessage").at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data;
+  o.gonderilen.length = 0;
+  await bas(o.env, 222, ok);
+  assert.equal(cagrilar(o.gonderilen, "sendPhoto").filter((m) => m.govde.chat_id === -100).length, 1);
+  assert.match(cagrilar(o.gonderilen, "editMessageText").at(-1).govde.text, /paylaşıldı/);
+  o.gonderilen.length = 0;
+  await bas(o.env, 222, ok); // ikinci basış tekrar paylaşmaz
+  assert.equal(cagrilar(o.gonderilen, "sendPhoto").length, 0);
+});
+
+test("/paylas: İptal paylaşmaz; izinsiz kişi basamaz; günlük sınır; yetki hatası anlaşılır", async () => {
+  const o = await yeniOrtam();
+  const onizle = async () => {
+    await guncellemeIsle({ message: { message_id: 5, date: 1, chat: ozel(222), from: { id: 222 }, text: "/paylas 3411" } }, o.env);
+    return cagrilar(o.gonderilen, "sendMessage").at(-1).govde.reply_markup.inline_keyboard[0].map((d) => d.callback_data);
+  };
+  let [ok, , iptal] = await onizle();
+  o.gonderilen.length = 0;
+  await bas(o.env, 999, ok);
+  await bas(o.env, 222, iptal);
+  assert.equal(cagrilar(o.gonderilen, "sendPhoto").length, 0);
+  assert.match(cagrilar(o.gonderilen, "editMessageText").at(-1).govde.text, /iptal edildi/);
+  o.depo.set(`sayac:${gunAnahtari(Math.floor(Date.now() / 1000))}`, "10");
+  [ok] = await onizle();
+  o.gonderilen.length = 0;
+  await bas(o.env, 222, ok);
+  assert.match(cagrilar(o.gonderilen, "editMessageText").at(-1).govde.text, /sınırı doldu/);
+  o.depo.delete(`sayac:${gunAnahtari(Math.floor(Date.now() / 1000))}`);
+  [ok] = await onizle();
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).endsWith("/sendPhoto") && JSON.parse(istek.body).chat_id === -100
+    ? new Response(JSON.stringify({ ok: false, description: "Bad Request: need administrator rights in the channel chat" })) : onceki(url, istek));
+  await bas(o.env, 222, ok);
+  assert.match(cagrilar(o.gonderilen, "editMessageText").at(-1).govde.text, /Mesaj gönderme/);
+});
+
+test("repete paylaşımı: önizlemede fiyat yok; onayla 🔁 BACK IN STOCK yeni düzende, renkler İngilizce", async () => {
+  const o = await yeniOrtam();
+  o.depo.set("venom:repetePaylas", JSON.stringify([{ id: "r1", kod: "3403", renkler: [{ renk: "siyah", adet: 10 }, { renk: "bej", adet: 6 }], bildiren: "Nuri" }]));
+  const { fabrikaIsleri } = await import("./worker.js");
+  await fabrikaIsleri(o.env, ist(10));
+  const bilgi = cagrilar(o.gonderilen, "sendMessage").find((m) => /Repete geldi/.test(m.govde.text));
+  assert.ok(!/Fiyat|\$/.test(bilgi.govde.text));
+  o.gonderilen.length = 0;
+  await bas(o.env, 111, "kr:o:r1");
+  const kanal = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === -100);
+  assert.match(kanal.govde.media[0].caption, /^🔁 BACK IN STOCK \/ DE RETOUR\n<b>✅ CODE: 3403<\/b>\n🎨 Colors \/ Couleurs: black, beige\n/);
+});
+
+test("Black Rose (VOLONTE Vegawin'de kartı yok): stok şartı yok, sitede olması yeter; önizlemede not, kanal yazısında yok", async () => {
+  const simdi = ist(9);
+  const site = [{ kod: "BR1", fotolar: ["x"] }, { kod: "V1", fotolar: ["x"] }];
+  assert.deepEqual(duzen.gununModelleri({ site, stok: { V1: { toplam: 0 } }, tg: {}, simdi }).map((u) => u.kod), ["BR1"]);
+  assert.deepEqual(duzen.gununModelleri({ site, stok: {}, tg: {}, simdi }), []); // stok okunamadıysa kimse "Black Rose" sayılmaz
+  const { kontrolMetni } = await import("./worker.js");
+  const p = { kod: "BR1", durum: "yeni", renkler: ["black"], renkEmin: true, bedenler: "38-40-42-44", en: "a", fr: "b", blackRose: true };
+  assert.match(kontrolMetni(p, simdi), /⚠️ Black Rose – stok kontrol edilemedi/);
+  assert.ok(!/Black Rose/i.test(duzen.altYazi(p)));
+});
+
+test("repete: komut/yazı ayrıştırma (çok kod, tek kodda renk)", async () => {
+  const { repeteAyikla } = await import("./worker.js");
+  assert.deepEqual(repeteAyikla("/repete 3394"), { kodlar: ["3394"], renkler: [] });
+  assert.deepEqual(repeteAyikla("3394, 3490 repete geldi"), { kodlar: ["3394", "3490"], renkler: [] });
+  assert.deepEqual(repeteAyikla("3394 repete geldi siyah 10 bej 6").renkler, [{ renk: "siyah", adet: 10 }, { renk: "bej", adet: 6 }]);
+  assert.equal(repeteAyikla("3394 kaç tane kaldı?"), null);
+  assert.equal(repeteAyikla("bugün ne geldi"), null);
+});
+
+test("repete: Hemra yazar → önizleme (🔁 BACK IN STOCK, fiyatsız) Hemra'ya; onay → hemen kanala, günlük sayaca dahil değil, tarih tabloya; Aziz yazamaz; medya yoksa söyler", async () => {
+  const o = await yeniOrtam();
+  o.env.EKIP_IDS = "333,444";
+  const yaz = (kim, text) => guncellemeIsle({ message: { message_id: 1, date: 1, chat: ozel(kim), from: { id: kim, first_name: kim === 333 ? "Hemra" : "Aziz" }, text } }, o.env);
+  await yaz(444, "3403 repete geldi");
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length, 0); // Aziz yetkisiz
+  await yaz(333, "3403, 9999 repete geldi");
+  const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "333");
+  assert.match(album.govde.media[0].caption, /^🔁 BACK IN STOCK \/ DE RETOUR\n<b>✅ CODE: 3403<\/b>/);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(o.gonderilen)));
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === "333" && /9999 için fotoğraf\/video bulunamadı/.test(m.govde.text)));
+  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "333" && /^🔁 Repete paylaşımı — 3403/.test(m.govde.text));
+  const [onay, duzelt] = kontrol.govde.reply_markup.inline_keyboard[0].map((d) => d.callback_data);
+  // Düzelt → renk
+  await bas(o.env, 333, duzelt);
+  o.gonderilen.length = 0;
+  await yaz(333, "renk: black, beige");
+  const yeni = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "333");
+  assert.match(yeni.govde.media[0].caption, /🎨 Colors \/ Couleurs: black, beige/);
+  // Onay → hemen kanala
+  const gun = gunAnahtari(ist(10));
+  o.depo.set(`sayac:${gun}`, "10"); // günlük sınır dolu olsa da repete gider
+  o.gonderilen.length = 0;
+  const gercek = Date.now; Date.now = () => ist(10) * 1000;
+  try { await bas(o.env, 333, onay); } finally { Date.now = gercek; }
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+  assert.equal(o.depo.get(`sayac:${gun}`), "10"); // sayaca dahil değil
+  const { stokIste } = await import("./stokbot.js");
+  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3403"], ist(10));
+  o.gonderilen.length = 0;
+  await bas(o.env, 333, onay); // ikinci basış
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length, 0);
 });

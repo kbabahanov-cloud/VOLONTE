@@ -562,17 +562,18 @@ test("/kimim: izinsiz kişi de kendi kimliğini öğrenir, başka cevap almaz", 
   assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /izinlisiniz/);
 });
 
-test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (öncelik karışık 24); 'Dosya olarak' albüm + video gelir; taslak Vegawin fiyatıyla sahibe; onayla siteye (kilit yeni akışı engellemez); 20:00 özet, gelmeyenler gönderilemedi", async () => {
+test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 30 model sahibe istenir (Celal'in modelleri en sonda) (öncelik karışık 24); 'Dosya olarak' albüm + video gelir; taslak Vegawin fiyatıyla sahibe; onayla siteye (kilit yeni akışı engellemez); 20:00 özet, gelmeyenler gönderilemedi", async () => {
   const { istekAdimi, ozelHazirlaAdimi, gunSonuOzeti, ozelVideo, GUNLUK_ISTEK } = await import("./selin.js");
   const o = ortam();
   delete o.env.KILIT_TEST_ACIK; // site kilidi açık değil: yeni akış yine de onayla yüklenir
   o.env.SAHIP_IDS = "777";
   const stok = { "3618": { toplam: 4, fiyat: 55 }, "3100": { toplam: 2, fiyat: 30 } };
-  for (let i = 0; i < 20; i++) stok[String(5000 + i)] = { toplam: 1, fiyat: 10 };
+  for (let i = 0; i < 40; i++) stok[String(5000 + i)] = { toplam: 1, fiyat: 10 };
+  stok["9100"] = { toplam: 3, fiyat: 20, tedarikci: "CELAL" }; // en büyük kod ama Celal'in → en sonda
   stokBagla(o, stok);
   const stokFetch = o.env.STOK.get().fetch;
   o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
-    ? Response.json(Object.entries(o.stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat })))
+    ? Response.json(Object.entries(o.stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat, tedarikci: x.tedarikci || null })))
     : stokFetch(url, init) }) };
   const gun = ist(10, 5);
   const gercekSaat = Date.now;
@@ -585,8 +586,10 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   assert.equal(istek.length, 1);
   assert.equal(istek[0].govde.chat_id, "777");
   const kodlar = istek[0].govde.text.split("\n")[1].split(", ");
-  assert.equal(kodlar.length, GUNLUK_ISTEK);
+  assert.equal(kodlar.length, GUNLUK_ISTEK - 1);
   assert.equal(kodlar[0], "3618"); // öncelikli (karışık 24)
+  assert.ok(!kodlar.includes("9100"));
+  assert.match(istek[0].govde.text, /\n\n👤 Celal'in modelleri \(en son\): 9100\n/); // Celal en sonda (30. model)
   assert.match(istek[0].govde.text, /Dosya olarak[\s\S]*3503 Küçük[\s\S]*\/yok 3503/);
   // albüm: yazısız parça önce gelir, sonra yazılı (Dosya olarak) + video
   const gonder = (ek) => guncelleme({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Murat" }, ...ek } }, o.env);
@@ -605,7 +608,7 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   assert.equal(m.durum, "onayda");
   assert.equal(m.taslak.fiyat, 55);
   assert.equal(m.taslak.bedenler, "44-46-48-50");
-  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /^✅ 3618 alındı \(2 fotoğraf, 1 video, Büyük\)\nKalan 14 model: /); // tek onay mesajı + kalan liste
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /^✅ 3618 alındı \(2 fotoğraf, 1 video, Büyük\)\nKalan 29 model: /); // tek onay mesajı + kalan liste
   const kart = cagri(o.g, "sendMessage").at(-1);
   assert.equal(kart.govde.chat_id, "777");
   assert.match(kart.govde.text, /Fiyat: 55 \$ \(Vegawin\) · Stok: 4 adet[\s\S]*Videolar: 1 \(sitenin kendi oynatıcısında/);
@@ -618,8 +621,8 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 15 model sahibe istenir (önceli
   o.g.length = 0;
   await gunSonuOzeti(o.env, ist(20, 5));
   const ozet = cagri(o.g, "sendMessage")[0].govde.text;
-  assert.match(ozet, /İstenen: 15 · gelen: 1 · bugün siteye çıkan: 1 \(3618\)/);
-  assert.match(ozet, /Gönderilemeyen \(sonra fal\.ai ile\): 14/);
+  assert.match(ozet, /İstenen: 30 · gelen: 1 · bugün siteye çıkan: 1 \(3618\)/);
+  assert.match(ozet, /Gönderilemeyen \(sonra fal\.ai ile\): 29/);
   Date.now = gercekSaat;
 });
 
@@ -697,4 +700,31 @@ test("alındı mesajı bugünün kalan listesini gösterir; gönderilen ve /yok 
   await gonder({ message_id: 5, text: "3322 Büyük" });
   assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /^✅ 3322 alındı \(1 fotoğraf, 0 video, Büyük\)[\s\S]*\nBugünün 3 modeli tamam$/);
   assert.equal(cagri(o.g, "sendMessage").length, 3); // başka mesaj yok
+});
+
+test("bir kerelik ek liste: Celal'in modelleri olmadan, bugün istenmemiş 15 model hemen (sahiplere)", async () => {
+  const { istekAdimi } = await import("./selin.js");
+  const o = ortam();
+  o.env.SAHIP_IDS = "777,888";
+  const stok = {};
+  for (let i = 0; i < 40; i++) stok[String(6000 + i)] = { toplam: 1, fiyat: 10 };
+  stok["6100"] = { toplam: 2, fiyat: 10, tedarikci: "CELAL" };
+  stokBagla(o, stok);
+  const stokFetch = o.env.STOK.get().fetch;
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
+    ? Response.json(Object.entries(o.stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat, tedarikci: x.tedarikci || null })))
+    : stokFetch(url, init) }) };
+  await istekAdimi(o.env, ist(10, 5)); // sabah listesi (30)
+  const sabah = cagri(o.g, "sendMessage")[0].govde.text.split("\n")[1].split(", ");
+  o.g.length = 0;
+  o.depo.set("venom:selinEkIstek", "2026-10-22");
+  await istekAdimi(o.env, ist(15, 0));
+  const ek = cagri(o.g, "sendMessage");
+  assert.deepEqual(ek.map((x) => x.govde.chat_id).sort(), ["777", "888"]);
+  const kodlar = ek[0].govde.text.split("\n")[1].split(", ");
+  assert.equal(kodlar.length, 11); // 41 aday − 30 sabah (Celal 6100 sabah listesinde, en sonda) = 11 kaldı
+  assert.ok(!kodlar.includes("6100") && !kodlar.some((k) => sabah.includes(k)));
+  assert.match(ek[0].govde.text, /^🌸 Ek liste: 11 model daha/);
+  assert.equal(sabah.length, 29); // 6100 ayrı satırda: "👤 Celal'in modelleri (en son)"
+  assert.ok(!o.depo.has("venom:selinEkIstek"));
 });

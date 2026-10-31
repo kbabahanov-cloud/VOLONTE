@@ -13,6 +13,8 @@
 #   sami.ps1 baslat    ilk gönderimi yapar, 5 dakikalık görevi kurar
 #   sami.ps1 calistir  (görev çalıştırır) 09:00-19:00 arası değişen ürünleri gönderir
 #   sami.ps1 durdur    5 dakikalık görevi kaldırır
+#   sami.ps1 satis-deneme  bugünün satışlarını (belge tipi 21) okur ve ekrana yazar; hiçbir şey göndermez
+#   sami.ps1 durum     görevin durumu + günlüğün son satırları (sorun olursa ekran fotoğrafı Claude'a)
 
 param([string]$Mod = "calistir")
 
@@ -21,6 +23,8 @@ $ErrorActionPreference = "Stop"
 
 $Klasor = $PSScriptRoot
 $Ayar = Get-Content (Join-Path $Klasor "ayar.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+# Depodaki ayar.json şablondur (adres/kullanıcı gizli kayıtta); sadece paket.sh ile üretilen paketteki ayar çalışır.
+if ((Get-Content (Join-Path $Klasor "ayar.json") -Raw -Encoding UTF8) -match 'GIZLI_KAYITTAN') { Write-Host "ayar.json eksik: paket.sh ile üretilen paketi kullanın." -ForegroundColor Red; exit 1 }
 if ($Ayar.magaza -notmatch '^[A-Z0-9_]{2,20}$' -or $Ayar.firma -notmatch '^F\d{4}$' -or $Ayar.donem -notmatch '^D\d{4}$') {
   throw "ayar.json hatalı (magaza / firma / donem)."
 }
@@ -35,6 +39,8 @@ $GorevAdi = "Sami-$($Ayar.magaza)"
 $T_STOK = "$($Ayar.firma)TBLSTOKLAR"
 $T_BIRIM = "$($Ayar.firma)TBLBIRIMLEREX"
 $T_DEPO = "$($Ayar.firma)$($Ayar.donem)TBLDEPOENVANTER"
+# Merkez depo numarası (VOLONTE: 1; Black Rose'da farklı olabilir → ayar.json "depo"). Sadece tam sayı.
+$DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 
@@ -72,7 +78,7 @@ function Baglanti([string]$sifre) {
   $b["Password"] = $sifre
   $b["Connect Timeout"] = 10
   $b["ApplicationIntent"] = "ReadOnly"   # KİLİT 2
-  $b["Application Name"] = "Sami (VOLONTE, salt okuma)"
+  $b["Application Name"] = "Sami ($($Ayar.magaza), salt okuma)"
   return New-Object System.Data.SqlClient.SqlConnection $b.ConnectionString
 }
 
@@ -116,21 +122,62 @@ function StokSorgusu([string]$sifre) {
   $db = BagSutunu $d $T_DEPO
   $sql = "SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD, " +
     "(SELECT TOP 1 B.SATISFIYATI1 FROM $T_BIRIM B WHERE B.$bb = S.IND) AS FIYAT, " +
-    "(SELECT SUM(E.ENVANTER) FROM $T_DEPO E WHERE E.$db = S.IND AND E.DEPO = 1 AND (E.BELGETIPI IS NULL OR E.BELGETIPI <> 67)) AS ADET " +
+    "(SELECT SUM(E.ENVANTER) FROM $T_DEPO E WHERE E.$db = S.IND AND E.DEPO = $DEPO AND (E.BELGETIPI IS NULL OR E.BELGETIPI <> 67)) AS ADET " +
     "FROM $T_STOK S WHERE S.STATUS = 1 AND S.IND >= 100"
   return @{ sql = $sql; birimBag = $bb; depoBag = $db; stok = $s; birim = $b; depo = $d }
+}
+
+# ---- Günlük satış (fabrika eksik listesi, 29 Ekim) ----
+# Belge tipi 21 = satış faturası. Stok hareketlerinden (depo envanter) o günün satış miktarı model başına toplanır.
+# Sadece kod ve adet okunur; fiyat, maliyet, müşteri okunmaz. Yine sadece SELECT (aynı kilitler).
+$TARIH_ADAYLARI = @("TARIH", "ISLEMTARIHI", "BELGETARIHI", "FISTARIHI", "EVRAKTARIHI", "KAYITTARIHI")
+function SatisSorgusu([string]$sifre) {
+  $d = Sutunlar $sifre $T_DEPO
+  foreach ($sutun in @("ENVANTER", "DEPO", "BELGETIPI")) { if ($d -notcontains $sutun) { throw "$T_DEPO tablosunda $sutun sütunu yok." } }
+  $tarih = $null
+  foreach ($a in $TARIH_ADAYLARI) { if ($d -contains $a) { $tarih = $a; break } }
+  if (-not $tarih) { throw "$T_DEPO tablosunda tarih sütunu bulunamadı. Sütunlar: $($d -join ', ')" }
+  $db = BagSutunu $d $T_DEPO
+  $sql = "SELECT S.STOKKODU AS KOD, SUM(E.ENVANTER) AS MIKTAR FROM $T_DEPO E INNER JOIN $T_STOK S ON E.$db = S.IND " +
+    "WHERE E.BELGETIPI = 21 AND E.DEPO = $DEPO AND E.$tarih >= @bas AND E.$tarih < @bit GROUP BY S.STOKKODU"
+  return @{ sql = $sql; tarih = $tarih; sutunlar = $d }
+}
+function Satislar([string]$sifre, [datetime]$gun) {
+  $q = SatisSorgusu $sifre
+  $tablo = Sorgu $sifre $q.sql @{ bas = $gun.Date; bit = $gun.Date.AddDays(1) }
+  $sonuc = @{}
+  foreach ($r in $tablo.Rows) {
+    $kod = ModelKodu ([string]$r.KOD)
+    if (-not $kod) { continue }
+    $m = Num $r.MIKTAR; if ($null -eq $m) { continue }
+    $m = [Math]::Abs($m)
+    if ($sonuc.ContainsKey($kod)) { $sonuc[$kod] += $m } else { $sonuc[$kod] = $m }
+  }
+  return $sonuc
+}
+function SatisGonder([string]$anahtar, [hashtable]$satis, [datetime]$gun) {
+  $kalemler = @($satis.Keys | ForEach-Object { @{ kod = $_; adet = $satis[$_] } })
+  $govde = @{ gun = $gun.ToString("yyyy-MM-dd"); kalemler = [object[]]$kalemler } | ConvertTo-Json -Depth 4 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/satis" -TimeoutSec 60 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
 }
 
 # Vegawin kodundaki ek (ör. "3194B20" → "3194") iç bilgidir, dışarı gitmez.
 function ModelKodu([string]$kod) {
   $k = "$kod".Trim().ToUpperInvariant()
-  if ($k -match $Ayar.kodKalibi) { return $Matches[1] }
+  if ($k -match $Ayar.kodKalibi) {
+    if ($Matches[1] -like "0*") { return $null }   # "0000", "001", "002" gibi iç kartlar model değil (30 Ekim)
+    return $Matches[1]
+  }
   return $null   # kalıba uymayan kod gönderilmez
 }
 
 function Num($v) { if ($v -is [DBNull] -or $null -eq $v) { return $null } return [double]$v }
 
 # Aynı model koduna düşen kartlar birleşir: adet toplanır, fiyat en yüksek, ad ilk kart.
+# Tedarikçi (29 Ekim): kodunda "CELAL" geçen kart Celal'in malıdır; dışarıya SADECE celal=true işareti gider
+# (ek yazının kendisi gitmez). Aynı kodun hem normal hem CELAL kartı varsa model Celal'e sayılır, ikiKart=true.
 function Urunler([string]$sifre) {
   $q = StokSorgusu $sifre
   $tablo = Sorgu $sifre $q.sql
@@ -141,12 +188,24 @@ function Urunler([string]$sifre) {
     if (-not $kod) { $uymayan++; continue }
     $adet = Num $r.ADET; if ($null -eq $adet) { $adet = 0 }
     $fiyat = Num $r.FIYAT
+    $celalKart = ([string]$r.KOD) -match '(?i)CELAL'
+    # Black Rose kartı (30 Ekim): Vegawin kodunda rakamlardan sonra (boşluklu ya da bitişik) "B" gelen kart: "3634 B 20",
+    # "3634 B", "3634B", "3634B20". "B"den sonra harf gelirse (ör. "3634 BEJ") sayılmaz. Dışarıya SADECE adedi gider (brAdet);
+    # "B 20" gibi ekler iç bilgidir, gitmez. Kodun başına göre ayrım yapılmaz (907 gibi kodlar da var).
+    $brKart = ([string]$r.KOD).Trim().ToUpperInvariant() -cmatch '^\d{3,6}\s*B(?![A-Z])'
     if ($sonuc.ContainsKey($kod)) {
       $u = $sonuc[$kod]; $u.adet += $adet
       if ($null -ne $fiyat -and ($null -eq $u.fiyat -or $fiyat -gt $u.fiyat)) { $u.fiyat = $fiyat }
     } else {
-      $sonuc[$kod] = @{ kod = $kod; ad = ([string]$r.AD).Trim(); adet = $adet; fiyat = $fiyat }
+      $u = @{ kod = $kod; ad = ([string]$r.AD).Trim(); adet = $adet; fiyat = $fiyat; nC = 0; nN = 0; brAdet = $null }
+      $sonuc[$kod] = $u
     }
+    if ($celalKart) { $u.nC++ } else { $u.nN++ }
+    if ($brKart) { if ($null -eq $u.brAdet) { $u.brAdet = 0 }; $u.brAdet += $adet }
+  }
+  foreach ($u in $sonuc.Values) {
+    $u.celal = ($u.nC -gt 0); $u.ikiKart = ($u.nC -gt 0 -and $u.nN -gt 0)
+    $u.Remove("nC"); $u.Remove("nN")
   }
   return @{ urunler = $sonuc; uymayan = $uymayan; satir = $tablo.Rows.Count }
 }
@@ -161,7 +220,7 @@ function Gonder([string]$anahtar, [object[]]$liste) {
   }
 }
 
-function Imza($u) { return "$($u.adet)|$($u.fiyat)|$($u.ad)" }
+function Imza($u) { return "$($u.adet)|$($u.fiyat)|$($u.ad)|$($u.celal)|$($u.ikiKart)|$($u.brAdet)" }
 
 # Sadece değişenleri gönderir. Gönderim başarılı olunca son durum kaydedilir; bilgisayar kapalıyken
 # kaçan değişiklikler açılınca bu karşılaştırmayla gider (kaldığı yerden devam).
@@ -181,10 +240,20 @@ function Esitle([switch]$Zorla) {
   }
   foreach ($kod in @($son.Keys)) { if (-not $simdiki.ContainsKey($kod)) { [void]$degisen.Add(@{ kod = $kod; yok = $true }) } }
   if ($degisen.Count -gt 0) { Gonder (Duz $g.Anahtar) $degisen.ToArray() }
+  else {
+    # Kalp atışı (29 Ekim): değişiklik yoksa boş liste gider; Sami köprünün çalıştığını görür.
+    Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru" -TimeoutSec 60 `
+      -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $(Duz $g.Anahtar)" } `
+      -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes('{"urunler":[]}')) | Out-Null
+  }
   $yeni = @{}
   foreach ($kod in $simdiki.Keys) { $yeni[$kod] = Imza $simdiki[$kod] }
   $yeni | ConvertTo-Json -Compress | Set-Content -Path $SonDosya -Encoding UTF8
-  return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi"
+  # Günün satış toplamı (stok gönderiminden bağımsız; hata olursa stok etkilenmez)
+  $satisNot = ""
+  try { $sat = Satislar (Duz $g.Sifre) (Get-Date); SatisGonder (Duz $g.Anahtar) $sat (Get-Date); $satisNot = ", bugün satılan $($sat.Count) model" }
+  catch { $satisNot = ", satış okunamadı: $($_.Exception.Message)" }
+  return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi$satisNot"
 }
 
 function Bekle { Write-Host ""; Read-Host "Kapatmak için Enter'a basın" | Out-Null }
@@ -194,7 +263,7 @@ switch ($Mod) {
     Get-ChildItem -Path $Klasor | Unblock-File -ErrorAction SilentlyContinue   # internetten inen dosyaların uyarısını kaldır
     Write-Host "=== Sayım Sami kurulumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
     Write-Host "Vegawin'e SADECE OKUMA için bağlanacak. Şifre bu bilgisayarda şifreli saklanır, hiçbir yere gönderilmez."
-    $sifre = Read-Host "volonte_okuma kullanıcısının şifresini yazın" -AsSecureString
+    $sifre = Read-Host "$($Ayar.kullanici) kullanıcısının şifresini yazın" -AsSecureString
     try {
       $t = Sorgu (Duz $sifre) "SELECT COUNT(*) AS N FROM INFORMATION_SCHEMA.TABLES"
       Write-Host "✓ Vegawin'e bağlanıldı ($($t.Rows[0].N) tablo görünüyor)." -ForegroundColor Green
@@ -236,6 +305,17 @@ switch ($Mod) {
       $u = Urunler $sifre
       Write-Host ""
       Write-Host "Vegawin'de $($u.satir) stok kartı; $($u.urunler.Count) model koduna birleşti; kod kalıbına uymayan: $($u.uymayan)."
+      $brl = @($u.urunler.Values | Where-Object { $null -ne $_.brAdet })
+      $brsiz = @($u.urunler.Values | Where-Object { $null -eq $_.brAdet })
+      Write-Host "Black Rose kartı (kodda rakamdan sonra 'B') olan model: $($brl.Count); örnek: $(($brl | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object { "$($_.kod) → $($_.brAdet) adet" }) -join ', ')"
+      Write-Host "'B' kartı OLMAYAN model: $($brsiz.Count)"
+      if ($brsiz.Count) {
+        $ornekB = Sorgu $sifre "SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD FROM $T_STOK S WHERE S.STATUS = 1 AND S.IND >= 100"
+        $brsizKod = @($brsiz | ForEach-Object { $_.kod })
+        Write-Host "'B'siz kartlardan örnekler (Vegawin kodu | ad):"
+        @($ornekB.Rows | Where-Object { $m = ModelKodu ([string]$_.KOD); $m -and ($brsizKod -contains $m) -and -not (([string]$_.KOD).Trim().ToUpperInvariant() -cmatch '^\d{3,6}\s*B(?![A-Z])') } | Select-Object -First 12) |
+          ForEach-Object { Write-Host ("  {0} | {1}" -f ([string]$_.KOD).Trim(), ([string]$_.AD).Trim()) }
+      }
       Write-Host ""
       Write-Host "5 örnek ürün (model kodu | ad | adet | satış fiyatı $):"
       $u.urunler.Values | Sort-Object { $_.kod } | Select-Object -First 5 | ForEach-Object {
@@ -272,16 +352,70 @@ switch ($Mod) {
       Bekle; exit 1
     }
     $eylem = New-ScheduledTaskAction -Execute "wscript.exe" -Argument ('"' + (Join-Path $Klasor "sami.vbs") + '"')
-    $tetik = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+    # Tetikler (29 Ekim): (1) bilgisayar açılıp oturum açılınca, (2) her gün 08:55'ten itibaren — ikisi de 5 dakikada bir.
+    # Eski tek seferlik tetik bazı Windows sürümlerinde bir gün sonra duruyordu.
+    $tekrar = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Hours 12)).Repetition
+    $girisTetik = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $girisTetik.Repetition = $tekrar
+    $gunTetik = New-ScheduledTaskTrigger -Daily -At "08:55"
+    $gunTetik.Repetition = $tekrar
+    $tetik = @($girisTetik, $gunTetik)
     $ayarlar = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName $GorevAdi -Action $eylem -Trigger $tetik -Settings $ayarlar -Description "Sayım Sami: Vegawin stok köprüsü (sadece okuma), 5 dakikada bir" -Force | Out-Null
-    Write-Host "✓ Görev kuruldu: $($Ayar.baslangicSaati):00-$($Ayar.bitisSaati):00 arası 5 dakikada bir çalışır." -ForegroundColor Green
+    Write-Host "✓ Görev kuruldu: $($Ayar.baslangicSaati):00-$($Ayar.bitisSaati):00 arası 5 dakikada bir çalışır; bilgisayar açılınca kendiliğinden başlar." -ForegroundColor Green
     Write-Host "Durdurmak için: durdur.bat"
     Bekle
   }
   "durdur" {
     try { Unregister-ScheduledTask -TaskName $GorevAdi -Confirm:$false; Write-Host "✓ Sami durduruldu." -ForegroundColor Green }
     catch { Write-Host "Görev zaten yok." }
+    Bekle
+  }
+  "satis-deneme" {
+    Write-Host "=== Sayım Sami satış denemesi ($($Ayar.magaza)) — Venom'a hiçbir şey gönderilmez ===" -ForegroundColor Cyan
+    try {
+      $g = Gizliler; $sifre = Duz $g.Sifre
+      $q = SatisSorgusu $sifre
+      Write-Host "Hareket tablosu: $T_DEPO  ·  tarih sütunu: $($q.tarih)"
+      Write-Host "Sütunlar: $($q.sutunlar -join ', ')"
+      Write-Host ""
+      Write-Host "Son 7 gün belge tipleri (adet satır · toplam miktar):"
+      $dag = Sorgu $sifre "SELECT TOP 15 E.BELGETIPI AS TIP, COUNT(*) AS SATIR, SUM(E.ENVANTER) AS TOPLAM FROM $T_DEPO E WHERE E.DEPO = $DEPO AND E.$($q.tarih) >= @bas GROUP BY E.BELGETIPI ORDER BY COUNT(*) DESC" @{ bas = (Get-Date).Date.AddDays(-7) }
+      foreach ($r in $dag.Rows) { Write-Host ("  tip {0} · {1} satır · toplam {2}" -f $r.TIP, $r.SATIR, $r.TOPLAM) }
+      foreach ($gunEk in @(0, -1)) {
+        $gun = (Get-Date).Date.AddDays($gunEk)
+        $sat = Satislar $sifre $gun
+        Write-Host ""
+        Write-Host "$($gun.ToString('dd.MM.yyyy')) satış (belge tipi 21): $($sat.Count) model, toplam $([Math]::Round(($sat.Values | Measure-Object -Sum).Sum, 0)) adet"
+        $sat.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object { Write-Host ("  {0} · {1} adet" -f $_.Key, $_.Value) }
+      }
+      # Bugün satılan kartların Vegawin kodu ve adı (30 Ekim): genel/çeşitli kodları (ör. 2000) ayırt etmek için. Sadece SELECT.
+      $db = BagSutunu $q.sutunlar $T_DEPO
+      $kart = Sorgu $sifre ("SELECT S.STOKKODU AS KOD, S.MALINCINSI AS AD, SUM(E.ENVANTER) AS MIKTAR FROM $T_DEPO E INNER JOIN $T_STOK S ON E.$db = S.IND " +
+        "WHERE E.BELGETIPI = 21 AND E.DEPO = $DEPO AND E.$($q.tarih) >= @bas AND E.$($q.tarih) < @bit GROUP BY S.STOKKODU, S.MALINCINSI ORDER BY S.STOKKODU") @{ bas = (Get-Date).Date; bit = (Get-Date).Date.AddDays(1) }
+      Write-Host ""
+      Write-Host "Bugün satılan kartlar (Vegawin kodu | kart adı | adet):"
+      foreach ($r in $kart.Rows) { Write-Host ("  {0} | {1} | {2}" -f ([string]$r.KOD).Trim(), ([string]$r.AD).Trim(), [Math]::Abs((Num $r.MIKTAR))) }
+      Write-Host ""
+      Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi)." -ForegroundColor Green
+    } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
+    Bekle
+  }
+  "durum" {
+    Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
+    try {
+      $gorev = Get-ScheduledTask -TaskName $GorevAdi -ErrorAction Stop
+      $bilgi = Get-ScheduledTaskInfo -TaskName $GorevAdi
+      Write-Host "Görev: $($gorev.State)  ·  son çalışma: $($bilgi.LastRunTime)  ·  sonuç: $($bilgi.LastTaskResult)  ·  sıradaki: $($bilgi.NextRunTime)"
+    } catch { Write-Host "✗ Görev YOK (baslat.bat çalıştırılmalı)." -ForegroundColor Red }
+    Write-Host "Şifre kaydı: $(if (Test-Path $GizliDosya) { 'var ✓' } else { 'YOK ✗ (kurulum.bat gerekli)' })"
+    Write-Host ""
+    Write-Host "Günlüğün son satırları:"
+    if (Test-Path $Gunluk) { Get-Content $Gunluk -Encoding UTF8 -Tail 15 | ForEach-Object { Write-Host "  $_" } } else { Write-Host "  (günlük yok)" }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
     Bekle
   }
   "calistir" {

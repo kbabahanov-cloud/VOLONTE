@@ -1,13 +1,13 @@
 {
   "magaza": "VOLONTE",
-  "sunucu": "127.0.0.1",
+  "sunucu": "GIZLI_KAYITTAN",
   "port": 1433,
-  "veritabani": "VEGADB",
-  "kullanici": "volonte_okuma",
-  "firma": "F0101",
-  "donem": "D0005",
+  "veritabani": "GIZLI_KAYITTAN",
+  "kullanici": "GIZLI_KAYITTAN",
+  "firma": "GIZLI_KAYITTAN",
+  "donem": "GIZLI_KAYITTAN",
   "kodKalibi": "^(\\d{3,6})",
   "baslangicSaati": 9,
-  "bitisSaati": 19,
+  "bitisSaati": 21,
   "venom": "https://volonte-asistan.volonte.workers.dev"
 }

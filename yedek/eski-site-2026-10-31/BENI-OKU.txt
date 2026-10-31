@@ -1,0 +1,3 @@
+Eski VOLONTE sitesinin yedeği (31 Ekim 2026, main dalı 4d89a2a).
+Fotoğraflar (galeri/) yedeğe kopyalanmadı: onlar main'de aynen duruyor ve yeni site de aynı dosyaları kullanıyor.
+Geri dönmek için bu klasördeki dosyalar sitenin köküne geri konur.
