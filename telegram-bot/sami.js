@@ -15,8 +15,10 @@
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
 import { kodBul } from "./ortak.js";
+import { siteVerisi } from "./depo-oku.js";
+import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
-import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu } from "./stoksorgu.js";
@@ -60,6 +62,7 @@ export default {
   async scheduled(olay, env) {
     if (!env.STOK) return;
     const simdi = Math.floor(Date.now() / 1000);
+    if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
@@ -67,7 +70,8 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -155,14 +159,7 @@ async function kanalPaylasimi(p, env) {
   await stokIste(env, "/paylasim-kaydet", { mesaj: p.message_id, kod, zaman: p.date });
 }
 
-async function siteUrunleri(env) {
-  try {
-    const r = await fetch(`https://raw.githubusercontent.com/${env.GITHUB_REPO}/main/veri/urunler.json`, { cf: { cacheTtl: 60 } });
-    return r.ok ? await r.json() : [];
-  } catch {
-    return [];
-  }
-}
+const siteUrunleri = (env) => siteVerisi(env); // Selin'in iç bağlantısıyla (depo gizli olsa da çalışır)
 
 const liste = (kodlar, n = 15) => (kodlar.length > n ? `${kodlar.slice(0, n).join(", ")} … (+${kodlar.length - n})` : kodlar.join(", "));
 

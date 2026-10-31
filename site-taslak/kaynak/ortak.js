@@ -1,5 +1,5 @@
 // VOLONTE yeni site — ortak çekirdek (üç taslakta aynı): veri, dil, vitrin, sayfalar, sipariş, istek listesi,
-// beden rehberi, kargo, yakınlaştırma, ses, gizlilik dostu sayım. Görünüm ve giriş sahnesi tema dosyasından (TEMA).
+// beden rehberi, yakınlaştırma, ses, gizlilik dostu sayım. Görünüm ve giriş sahnesi tema dosyasından (TEMA).
 // FİYAT YOK: sunucu veriden fiyatı zaten çıkarır; burada da hiçbir yerde gösterilmez.
 (function () {
   "use strict";
@@ -12,22 +12,15 @@
     yildizlar: false, // "Stars in VOLONTE": ilk ünlü işbirliğinde true yapılır
     yeniGun: 21, // son 21 günde eklenen = "New"
   };
-  // Tahmini kargo süreleri (iş günü, İstanbul'dan). FİYAT YOK. Murat/Hemra'nın onayıyla güncellenecek.
-  const KARGO = [
-    ["NG", "Nigeria", "5–10"], ["GH", "Ghana", "5–10"], ["KE", "Kenya", "5–9"], ["ZA", "South Africa", "5–9"],
-    ["CI", "Côte d'Ivoire", "6–10"], ["SN", "Senegal", "6–10"], ["CM", "Cameroon", "6–12"], ["CD", "DR Congo", "7–14"],
-    ["TZ", "Tanzania", "6–10"], ["UG", "Uganda", "6–10"], ["ET", "Ethiopia", "5–9"], ["RW", "Rwanda", "6–10"],
-    ["US", "United States", "4–7"], ["CA", "Canada", "5–8"], ["AU", "Australia", "6–10"], ["FR", "France", "3–6"], ["GB", "United Kingdom", "3–6"],
-  ];
-  // Beden rehberi (EU → UK/Afrika, US; yaklaşık vücut ölçüleri cm). Murat kontrol edecek.
-  const BEDENLER = [[38, 10, 6, 88, 72, 97], [40, 12, 8, 92, 76, 100], [42, 14, 10, 96, 80, 103], [44, 16, 12, 100, 84, 106], [46, 18, 14, 106, 90, 112], [48, 20, 16, 112, 96, 118], [50, 22, 18, 118, 102, 124]];
+  // Beden karşılık tablosu (Murat onayı 31 Ekim): TR/EU · Rusya · UK/Afrika · US. Vücut ölçüsü (cm) GÖSTERİLMEZ.
+  const BEDENLER = [[38, 44, 10, 6], [40, 46, 12, 8], [42, 48, 14, 10], [44, 50, 16, 12], [46, 52, 18, 14], [48, 54, 20, 16], [50, 56, 22, 18]];
   const KUCUK = [38, 40, 42, 44];
   const BUYUK = [44, 46, 48, 50];
 
   const S = {
     en: {
-      home: "Home", new: "New Collection", lookbook: "Lookbook", story: "Designer's Story", sizes: "Size Guide", shipping: "Shipping", wishlist: "Wishlist", privacy: "Privacy", stars: "Stars in VOLONTE",
-      tap: "Tap to enter", discover: "Discover", all: "All", cat_dresses: "Dresses", cat_sets: "Sets", cat_evening: "Evening",
+      home: "Home", new: "New Collection", lookbook: "Lookbook", story: "Designer's Story", sizes: "Size Guide", wishlist: "Wishlist", privacy: "Privacy", stars: "Stars in VOLONTE",
+      tap: "Tap to enter", tapStart: "Tap to start", skip: "Skip", discover: "Discover", all: "All", cat_dresses: "Dresses", cat_sets: "Sets", cat_evening: "Evening",
       lead: "Premium women's fashion, made in Istanbul. Wholesale to boutiques all over the world.",
       quality: "Quality is our foundation", qualityText: "Every model is cut, draped and finished in our Istanbul workshops. We sell by series to boutiques and resellers worldwide.",
       newBadge: "New", models: "models", order: "Order on WhatsApp", info: "Ask a question", sizesLbl: "Sizes", small: "Small", large: "Large", series: "series of 4 pieces",
@@ -36,10 +29,10 @@
       wishEmpty: "Tap the heart on any model to add it to your list.", sendList: "Send my list on WhatsApp", wishText: "Choose models with the heart, then send the whole list to us in one message.",
       zoomHint: "Pinch or double-tap to see the fabric", soldBy: "Wholesale · sold by series", notFound: "This model is no longer on the site.", back: "Back",
       sizeTitle: "Find your size", sizeText: "Our models come in sizes 38 to 50, in two groups. Wholesale orders are by series (one piece of each size in the group).",
-      sizeNote: "Body measurements are approximate. If you are unsure, ask us on WhatsApp.", bust: "Bust (cm)", waist: "Waist (cm)", hips: "Hips (cm)", ukAfrica: "UK / Africa",
-      shipTitle: "Delivery to your country", shipText: "Choose your country to see the estimated delivery time from Istanbul.", chooseCountry: "Choose your country", estimate: "Estimated delivery",
-      workDays: "working days", otherCountry: "Other country", shipOther: "We ship worldwide — ask us on WhatsApp for your country.",
-      shipNote: "Times are estimates; they depend on the cargo company and customs. We confirm the best option for you on WhatsApp.",
+      sizeNote: "If you are unsure about your size, ask us on WhatsApp.", trEu: "Turkey / EU", ru: "Russia", ukAfrica: "UK / Africa",
+     
+     
+     
       storyTitle: "From the first sketch to the final drape", storyText: "The VOLONTE atelier in Istanbul: designing, draping on the stand, fitting and finishing — the hands behind every model.",
       soon: "Coming soon", storyVideo: "Draping videos", storyAtelier: "The atelier", playFilm: "Play the film", pause: "Pause",
       lookText: "Each collection, told like a film.", film: ["Live your life.", "Made in Istanbul.", "Every drape, by hand.", "For the woman who leads.", "Quality is our foundation.", "Elegance, every day."],
@@ -48,8 +41,8 @@
       starsText: "Our first collaborations are coming.", address: "Showroom", draft: "DRAFT",
     },
     fr: {
-      home: "Accueil", new: "Nouvelle Collection", lookbook: "Lookbook", story: "L'histoire du créateur", sizes: "Guide des tailles", shipping: "Livraison", wishlist: "Ma liste", privacy: "Confidentialité", stars: "Stars in VOLONTE",
-      tap: "Touchez pour entrer", discover: "Découvrir", all: "Tout", cat_dresses: "Robes", cat_sets: "Ensembles", cat_evening: "Soirée",
+      home: "Accueil", new: "Nouvelle Collection", lookbook: "Lookbook", story: "L'histoire du créateur", sizes: "Guide des tailles", wishlist: "Ma liste", privacy: "Confidentialité", stars: "Stars in VOLONTE",
+      tap: "Touchez pour entrer", tapStart: "Touchez pour commencer", skip: "Passer", discover: "Découvrir", all: "Tout", cat_dresses: "Robes", cat_sets: "Ensembles", cat_evening: "Soirée",
       lead: "Mode féminine haut de gamme, fabriquée à Istanbul. Vente en gros aux boutiques du monde entier.",
       quality: "La qualité est notre fondation", qualityText: "Chaque modèle est coupé, drapé et fini dans nos ateliers d'Istanbul. Nous vendons par série aux boutiques et revendeurs du monde entier.",
       newBadge: "Nouveau", models: "modèles", order: "Commander sur WhatsApp", info: "Poser une question", sizesLbl: "Tailles", small: "Petites", large: "Grandes", series: "série de 4 pièces",
@@ -58,10 +51,10 @@
       wishEmpty: "Touchez le cœur d'un modèle pour l'ajouter à votre liste.", sendList: "Envoyer ma liste sur WhatsApp", wishText: "Choisissez des modèles avec le cœur, puis envoyez-nous toute la liste en un seul message.",
       zoomHint: "Pincez ou touchez deux fois pour voir le tissu", soldBy: "Vente en gros · par série", notFound: "Ce modèle n'est plus sur le site.", back: "Retour",
       sizeTitle: "Trouvez votre taille", sizeText: "Nos modèles vont du 38 au 50, en deux groupes. Les commandes en gros se font par série (une pièce de chaque taille du groupe).",
-      sizeNote: "Les mesures sont approximatives. En cas de doute, demandez-nous sur WhatsApp.", bust: "Poitrine (cm)", waist: "Taille (cm)", hips: "Hanches (cm)", ukAfrica: "UK / Afrique",
-      shipTitle: "Livraison dans votre pays", shipText: "Choisissez votre pays pour voir le délai de livraison estimé depuis Istanbul.", chooseCountry: "Choisissez votre pays", estimate: "Livraison estimée",
-      workDays: "jours ouvrables", otherCountry: "Autre pays", shipOther: "Nous livrons dans le monde entier — demandez-nous sur WhatsApp pour votre pays.",
-      shipNote: "Délais estimés ; ils dépendent du transporteur et de la douane. Nous confirmons la meilleure option sur WhatsApp.",
+      sizeNote: "En cas de doute sur votre taille, demandez-nous sur WhatsApp.", trEu: "Turquie / UE", ru: "Russie", ukAfrica: "UK / Afrique",
+     
+     
+     
       storyTitle: "Du premier croquis au drapé final", storyText: "L'atelier VOLONTE à Istanbul : création, drapé sur mannequin, essayages et finitions — les mains derrière chaque modèle.",
       soon: "Bientôt", storyVideo: "Vidéos de drapé", storyAtelier: "L'atelier", playFilm: "Lancer le film", pause: "Pause",
       lookText: "Chaque collection, racontée comme un film.", film: ["Live your life.", "Fabriqué à Istanbul.", "Chaque drapé, à la main.", "Pour la femme qui avance.", "La qualité est notre fondation.", "L'élégance, chaque jour."],
@@ -70,8 +63,8 @@
       starsText: "Nos premières collaborations arrivent.", address: "Showroom", draft: "BROUILLON",
     },
     tr: {
-      home: "Ana Sayfa", new: "Yeni Koleksiyon", lookbook: "Lookbook", story: "Tasarımcının Hikâyesi", sizes: "Beden Rehberi", shipping: "Kargo", wishlist: "İstek Listesi", privacy: "Gizlilik", stars: "Stars in VOLONTE",
-      tap: "Girmek için dokunun", discover: "Keşfet", all: "Tümü", cat_dresses: "Elbiseler", cat_sets: "Takımlar", cat_evening: "Abiye",
+      home: "Ana Sayfa", new: "Yeni Koleksiyon", lookbook: "Lookbook", story: "Tasarımcının Hikâyesi", sizes: "Beden Rehberi", wishlist: "İstek Listesi", privacy: "Gizlilik", stars: "Stars in VOLONTE",
+      tap: "Girmek için dokunun", tapStart: "Başlamak için dokunun", skip: "Atla", discover: "Keşfet", all: "Tümü", cat_dresses: "Elbiseler", cat_sets: "Takımlar", cat_evening: "Abiye",
       lead: "İstanbul'da üretilen kaliteli kadın giyimi. Dünyanın her yerindeki butiklere toptan satış.",
       quality: "Kalite bizim temelimiz", qualityText: "Her model İstanbul'daki atölyelerimizde kesilir, drape edilir ve bitirilir. Dünya genelindeki butik ve satıcılara seri hâlinde satıyoruz.",
       newBadge: "Yeni", models: "model", order: "WhatsApp'tan sipariş ver", info: "Bilgi al", sizesLbl: "Bedenler", small: "Küçük", large: "Büyük", series: "4'lü seri",
@@ -80,10 +73,10 @@
       wishEmpty: "Listeye eklemek için modeldeki kalbe dokunun.", sendList: "Listemi WhatsApp'tan gönder", wishText: "Kalple modelleri seçin, listenin tamamını bize tek mesajla gönderin.",
       zoomHint: "Kumaşı görmek için iki parmakla büyütün ya da çift dokunun", soldBy: "Toptan · seri hâlinde", notFound: "Bu model artık sitede yok.", back: "Geri",
       sizeTitle: "Bedeninizi bulun", sizeText: "Modellerimiz 38'den 50'ye, iki grupta. Toptan sipariş seri hâlindedir (gruptaki her bedenden bir adet).",
-      sizeNote: "Vücut ölçüleri yaklaşıktır. Emin değilseniz WhatsApp'tan sorun.", bust: "Göğüs (cm)", waist: "Bel (cm)", hips: "Kalça (cm)", ukAfrica: "UK / Afrika",
-      shipTitle: "Ülkenize teslimat", shipText: "İstanbul'dan tahmini teslim süresini görmek için ülkenizi seçin.", chooseCountry: "Ülkenizi seçin", estimate: "Tahmini teslimat",
-      workDays: "iş günü", otherCountry: "Diğer ülke", shipOther: "Dünyanın her yerine gönderiyoruz — ülkeniz için WhatsApp'tan sorun.",
-      shipNote: "Süreler tahminidir; kargo firmasına ve gümrüğe göre değişir. En uygun seçeneği WhatsApp'ta teyit ederiz.",
+      sizeNote: "Bedeninizden emin değilseniz WhatsApp'tan sorun.", trEu: "Türkiye / AB", ru: "Rusya", ukAfrica: "UK / Afrika",
+     
+     
+     
       storyTitle: "İlk çizimden son drapeye", storyText: "İstanbul'daki VOLONTE atölyesi: tasarım, mankende drape, prova ve son dokunuşlar — her modelin arkasındaki eller.",
       soon: "Yakında", storyVideo: "Drape videoları", storyAtelier: "Atölye", playFilm: "Filmi oynat", pause: "Durdur",
       lookText: "Her koleksiyon, bir film gibi.", film: ["Live your life.", "İstanbul'da üretildi.", "Her drape, el emeği.", "Öne çıkan kadın için.", "Kalite bizim temelimiz.", "Her gün zarafet."],
@@ -125,6 +118,8 @@
       .map((u) => ({ ...u, yeni: u.eklenme ? new Date(u.eklenme).getTime() > sinir : false }))
       .sort((a, b) => String(b.eklenme || "").localeCompare(String(a.eklenme || "")));
   }
+  // Temiz fotoğraf: üzerinde yazı olan afiş değil (sunucu "temiz" listesini verir; afişler sadece model sayfasında, en sonda)
+  const foto = (u, i = 0) => { const l = u.temiz && u.temiz.length ? u.temiz : u.fotolar; return l[Math.min(i, l.length - 1)]; };
   const modelBul = (kod) => MODELLER.find((u) => String(u.kod) === String(kod));
   const aciklama = (u) => (u.aciklama && (u.aciklama[dil] || u.aciklama.en)) || "";
   const katAdi = (k) => t(`cat_${k}`) || k;
@@ -189,7 +184,7 @@
   }
   function videoEtiketi(u, v, sinif = "", poster = false) {
     const src = videoAdresi(v);
-    return src ? `<video class="${sinif}" muted playsinline loop preload="none" data-src="${esc(src)}"${poster ? ` poster="${esc(img(u.fotolar[0], genislik(window.innerWidth)))}"` : ""}></video>` : "";
+    return src ? `<video class="${sinif}" muted playsinline loop preload="none" data-src="${esc(src)}"${poster ? ` poster="${esc(img(foto(u), genislik(window.innerWidth)))}"` : ""}></video>` : "";
   }
   // Tembel yükleme: ekrana 300 px yaklaşınca iner (yavaş ağda fotoğraflar birbirini beklemesin)
   const tembelGozcu = "IntersectionObserver" in window ? new IntersectionObserver((l) => l.forEach((g) => {
@@ -204,7 +199,7 @@
     const l = [];
     for (const u of MODELLER.slice(0, n)) {
       const v = (u.videolar || [])[0];
-      l.push({ u, foto: u.fotolar[0], video: v && !agZayif() ? v : null });
+      l.push({ u, foto: foto(u), video: v && !agZayif() ? v : null });
     }
     return l;
   }
@@ -254,7 +249,7 @@
     return `<article class="kart">
       <button class="kalp" data-kalp="${esc(u.kod)}" aria-pressed="${istekte(u.kod)}" aria-label="${esc(t("wishlist"))}">${IKON.kalp}</button>
       <a href="#model/${esc(u.kod)}">
-        <div class="kart-foto"><img data-tembel="${esc(img(u.fotolar[0], w))}" alt="${esc(u.baslik)}" decoding="async" onload="this.classList.add('yuklendi')">${u.yeni ? `<span class="kart-yeni">${esc(t("newBadge"))}</span>` : ""}</div>
+        <div class="kart-foto"><img data-tembel="${esc(img(foto(u), w))}" alt="${esc(u.baslik)}" decoding="async" onload="this.classList.add('yuklendi')">${u.yeni ? `<span class="kart-yeni">${esc(t("newBadge"))}</span>` : ""}</div>
         <div class="kart-alt"><span class="kart-kod">${esc(u.kod)}</span></div>
         <h3 class="kart-ad">${esc(u.baslik)}</h3>
         <p class="kart-beden">${esc(g.g.length ? g.g.map((x) => `${x.ad} ${x.aralik}`).join(" / ") : g.duz)}</p>
@@ -267,11 +262,11 @@
       return `<section class="vitrin" id="vitrin" aria-label="${esc(t("new"))}"></section>
         <section class="bolum giris-metin"><p class="baslik-ust">VOLONTE · Istanbul</p><h2 class="baslik">${esc(t("quality"))}</h2><div class="cizgi"></div><p class="aciklama">${esc(t("qualityText"))}</p></section>
         <section class="bolum"><p class="baslik-ust">${esc(t("new"))}</p><h2 class="baslik">${esc(t("new"))}</h2><div class="cizgi"></div>
-          <div class="izgara">${MODELLER.slice(0, 8).map((u) => kart(u)).join("")}</div>
+          <div class="izgara buyuk">${MODELLER.slice(0, 8).map((u) => kart(u, genislik(window.innerWidth >= 760 ? 420 : window.innerWidth))).join("")}</div>
           <p style="margin-top:28px"><a class="dugme" href="#new">${esc(t("discover"))} · ${MODELLER.length} ${esc(t("models"))}</a></p></section>
         <section class="bolum iki-sutun">
-          <a class="koleksiyon" href="#lookbook"><img data-tembel="${esc(img((MODELLER[1] || MODELLER[0] || { fotolar: [""] }).fotolar[0], 720))}" alt="" loading="lazy"><span>${esc(t("lookbook"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("lookText"))}</small></span></a>
-          <a class="koleksiyon" href="#story"><img data-tembel="${esc(img((MODELLER[2] || MODELLER[0] || { fotolar: [""] }).fotolar[0], 720))}" alt="" loading="lazy"><span>${esc(t("story"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("soon"))}</small></span></a>
+          <a class="koleksiyon" href="#lookbook"><img data-tembel="${esc(img(foto(MODELLER[1] || MODELLER[0] || { fotolar: [""] }, 1), 720))}" alt="" loading="lazy"><span>${esc(t("lookbook"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("lookText"))}</small></span></a>
+          <a class="koleksiyon" href="#story"><img data-tembel="${esc(img(foto(MODELLER[2] || MODELLER[0] || { fotolar: [""] }, 1), 720))}" alt="" loading="lazy"><span>${esc(t("story"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("soon"))}</small></span></a>
         </section>`;
     },
     new() {
@@ -284,7 +279,7 @@
       const yeni = MODELLER.slice(0, 12);
       return `<section class="bolum"><p class="baslik-ust">${esc(t("lookbook"))}</p><h1 class="baslik">${esc(t("lookText"))}</h1><div class="cizgi"></div>
         <div class="koleksiyonlar">
-          <a class="koleksiyon" href="#film/new"><img src="${esc(img((yeni[0] || { fotolar: [""] }).fotolar[0], 720))}" alt="" loading="lazy"><span>${esc(t("new"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">▶ ${esc(t("playFilm"))}</small></span></a>
+          <a class="koleksiyon" href="#film/new"><img src="${esc(img(foto(yeni[0] || { fotolar: [""] }), 720))}" alt="" loading="lazy"><span>${esc(t("new"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">▶ ${esc(t("playFilm"))}</small></span></a>
           <div class="koleksiyon yakinda yer-tutucu" style="aspect-ratio:4/5"><div><b>${esc(t("soon"))}</b>Collection II</div></div>
           <div class="koleksiyon yakinda yer-tutucu" style="aspect-ratio:4/5"><div><b>${esc(t("soon"))}</b>Collection III</div></div>
         </div></section>`;
@@ -292,7 +287,7 @@
     film() {
       const satirlar = t("film");
       const kareler = [];
-      MODELLER.slice(0, 12).forEach((u, i) => { kareler.push({ u, f: u.fotolar[0], s: satirlar[i % satirlar.length] }); if (u.fotolar[1] && i % 3 === 1) kareler.push({ u, f: u.fotolar[1], s: "" }); });
+      MODELLER.slice(0, 12).forEach((u, i) => { kareler.push({ u, f: foto(u), s: satirlar[i % satirlar.length] }); if (u.temiz && u.temiz[1] && i % 3 === 1) kareler.push({ u, f: u.temiz[1], s: "" }); });
       return `<div class="film" id="film">${kareler.map((k) => `<a class="kare" href="#model/${esc(k.u.kod)}"><img data-src="${esc(img(k.f, genislik(window.innerWidth)))}" alt="${esc(k.u.baslik)}"><div class="kare-yazi">${k.s ? `<p>${esc(k.s)}</p>` : ""}<small>${esc(k.u.kod)} · ${esc(k.u.baslik)}</small></div></a>`).join("")}</div>
         <button class="dugme dolu film-oynat" id="oynat">▶ ${esc(t("playFilm"))}</button>`;
     },
@@ -301,25 +296,19 @@
         <div class="iki-sutun" style="margin-top:30px"><div class="yer-tutucu"><div><b>${esc(t("storyVideo"))}</b>${esc(t("soon"))}</div></div><div class="yer-tutucu"><div><b>${esc(t("storyAtelier"))}</b>${esc(t("soon"))}</div></div></div></section>`;
     },
     sizes() {
-      const satir = (b) => `<tr><td><b>${b[0]}</b></td><td>${b[1]}</td><td>${b[2]}</td><td>${b[3]}</td><td>${b[4]}</td><td>${b[5]}</td></tr>`;
+      const satir = (b) => `<tr><td><b>${b[0]}</b></td><td>${b[1]}</td><td>${b[2]}</td><td>${b[3]}</td></tr>`;
       return `<section class="bolum"><p class="baslik-ust">${esc(t("sizes"))}</p><h1 class="baslik">${esc(t("sizeTitle"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("sizeText"))}</p>
         <div class="gruplar"><div class="grup"><b>${esc(t("small"))} · 38–44</b>${esc(t("series"))}</div><div class="grup"><b>${esc(t("large"))} · 44–50</b>${esc(t("series"))}</div></div>
-        <div class="tablo-kap"><table><thead><tr><th>EU</th><th>${esc(t("ukAfrica"))}</th><th>US</th><th>${esc(t("bust"))}</th><th>${esc(t("waist"))}</th><th>${esc(t("hips"))}</th></tr></thead><tbody>
-          <tr class="grup-satir"><td colspan="6">${esc(t("small"))} · 38–44</td></tr>${BEDENLER.slice(0, 4).map(satir).join("")}
-          <tr class="grup-satir"><td colspan="6">${esc(t("large"))} · 44–50</td></tr>${BEDENLER.slice(3).map(satir).join("")}
+        <div class="tablo-kap"><table><thead><tr><th>${esc(t("trEu"))}</th><th>${esc(t("ru"))}</th><th>${esc(t("ukAfrica"))}</th><th>US</th></tr></thead><tbody>
+          <tr class="grup-satir"><td colspan="4">${esc(t("small"))} · 38–44</td></tr>${BEDENLER.slice(0, 4).map(satir).join("")}
+          <tr class="grup-satir"><td colspan="4">${esc(t("large"))} · 44–50</td></tr>${BEDENLER.slice(3).map(satir).join("")}
         </tbody></table></div><p class="not">${esc(t("sizeNote"))}</p>
         <p style="margin-top:22px"><a class="dugme" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></p></section>`;
-    },
-    shipping() {
-      const ulke = sakla.al("ulke", window.VOLONTE_ULKE || "");
-      return `<section class="bolum"><p class="baslik-ust">${esc(t("shipping"))}</p><h1 class="baslik">${esc(t("shipTitle"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("shipText"))}</p>
-        <p style="margin-top:22px"><select id="ulke" aria-label="${esc(t("chooseCountry"))}"><option value="">${esc(t("chooseCountry"))}</option>${KARGO.map((k) => `<option value="${k[0]}" ${k[0] === ulke ? "selected" : ""}>${esc(k[1])}</option>`).join("")}<option value="XX">${esc(t("otherCountry"))}</option></select></p>
-        <div id="kargo-sonuc"></div><p class="not">${esc(t("shipNote"))}</p></section>`;
     },
     wishlist() {
       const l = istek.map(modelBul).filter(Boolean);
       return `<section class="bolum"><p class="baslik-ust">${esc(t("wishlist"))}</p><h1 class="baslik">${esc(t("wishlist"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("wishText"))}</p>
-        <div id="liste" style="margin-top:22px">${l.length ? l.map((u) => `<div class="liste-satir"><a href="#model/${esc(u.kod)}"><img src="${esc(img(u.fotolar[0], 160))}" alt="" loading="lazy"></a><a href="#model/${esc(u.kod)}"><span class="kart-kod">${esc(u.kod)}</span><span class="kart-ad" style="display:block">${esc(u.baslik)}</span></a><button class="sil" data-kalp="${esc(u.kod)}" aria-label="×">×</button></div>`).join("") : `<p class="bos">${esc(t("wishEmpty"))}</p>`}</div>
+        <div id="liste" style="margin-top:22px">${l.length ? l.map((u) => `<div class="liste-satir"><a href="#model/${esc(u.kod)}"><img src="${esc(img(foto(u), 160))}" alt="" loading="lazy"></a><a href="#model/${esc(u.kod)}"><span class="kart-kod">${esc(u.kod)}</span><span class="kart-ad" style="display:block">${esc(u.baslik)}</span></a><button class="sil" data-kalp="${esc(u.kod)}" aria-label="×">×</button></div>`).join("") : `<p class="bos">${esc(t("wishEmpty"))}</p>`}</div>
         ${l.length ? `<p style="margin-top:24px"><a class="dugme dolu" target="_blank" rel="noopener" href="${esc(wa(AYAR.siparisNo, t("waList").replace("{l}", l.map((u) => u.kod).join(", "))))}">${IKON.wa} ${esc(t("sendList"))} (${l.length})</a></p>` : ""}</section>`;
     },
     privacy() {
@@ -357,18 +346,6 @@
         $("#izgara").innerHTML = MODELLER.filter((u) => k === "all" || u.kategori === k).map((u) => kart(u)).join("");
         tembelKur($("#izgara"));
       }));
-    },
-    shipping() {
-      const sec = $("#ulke");
-      const yaz = () => {
-        const k = KARGO.find((x) => x[0] === sec.value);
-        if (sec.value) sakla.koy("ulke", sec.value);
-        $("#kargo-sonuc").innerHTML = !sec.value ? "" : k
-          ? `<div class="kargo-sonuc"><span class="baslik-ust">${esc(t("estimate"))} · ${esc(k[1])}</span><b>${esc(k[2])} ${esc(t("workDays"))}</b><a class="dugme" style="margin-top:12px" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></div>`
-          : `<div class="kargo-sonuc"><p>${esc(t("shipOther"))}</p><a class="dugme" style="margin-top:12px" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${IKON.wa} ${esc(t("info"))}</a></div>`;
-      };
-      sec.addEventListener("change", yaz);
-      yaz();
     },
     film() {
       const film = $("#film");
@@ -449,7 +426,7 @@
   }
 
   // ---------- Yönlendirme ----------
-  const MENU = ["home", "new", "lookbook", "story", "sizes", "shipping"];
+  const MENU = ["home", "new", "lookbook", "story", "sizes"];
   function yol() {
     const h = decodeURIComponent(location.hash.replace(/^#\/?/, "")) || "home";
     const [ad, arg] = h.split("/");
@@ -482,7 +459,7 @@
       <main id="sayfa"></main>
       <footer class="alt"><div class="logo">VOLONTE</div><p class="slogan-kucuk">Live your life</p>
         <p><a class="dugme dolu" target="_blank" rel="noopener" href="${esc(wa(AYAR.siparisNo, t("waHello")))}">${IKON.wa} ${esc(t("order"))}</a></p>
-        <div class="alt-linkler"><a target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${esc(t("info"))}</a><a target="_blank" rel="noopener" href="${AYAR.telegram}">Telegram</a><a href="#sizes">${esc(t("sizes"))}</a><a href="#shipping">${esc(t("shipping"))}</a><a href="#privacy">${esc(t("privacy"))}</a></div>
+        <div class="alt-linkler"><a target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waHello")))}">${esc(t("info"))}</a><a target="_blank" rel="noopener" href="${AYAR.telegram}">Telegram</a><a href="#sizes">${esc(t("sizes"))}</a><a href="#privacy">${esc(t("privacy"))}</a></div>
         <p>${esc(t("address"))}: ${esc(AYAR.adres)}</p><p style="margin-top:8px">© ${new Date().getFullYear()} VOLONTE · VOLONTE & BLACK ROSE</p></footer>`;
     $$("[data-dil]").forEach((b) => b.addEventListener("click", () => { dil = b.dataset.dil; sakla.koy("dil", dil); document.documentElement.lang = dil; iskelet(); sayfaGoster(); }));
     const cek = $(".cekmece");
@@ -519,82 +496,177 @@
     });
     document.body.appendChild(b);
   }
+  let susturuldu = false;
   function sesiDurdur() {
+    susturuldu = true;
     try { if (ctx) ctx.suspend(); } catch { /* */ }
     try { speechSynthesis.cancel(); } catch { /* */ }
     if (konusma) { konusma.pause(); konusma = null; }
   }
-  // Kendi müziğimiz: tarayıcıda üretilen kısa, yumuşak akor + çan (hiçbir markanın müziği/jingle'ı değil).
-  function muzik(notalar) {
-    const A = window.AudioContext || window.webkitAudioContext;
-    if (!A) return;
-    ctx = ctx || new A();
-    ctx.resume();
-    const t0 = ctx.currentTime + 0.05;
-    const ana = ctx.createGain(); ana.gain.value = 0.22;
-    const yanki = ctx.createDelay(); yanki.delayTime.value = 0.32;
-    const geri = ctx.createGain(); geri.gain.value = 0.38;
-    yanki.connect(geri); geri.connect(yanki); yanki.connect(ana); ana.connect(ctx.destination);
-    notalar.forEach((f, i) => {
-      for (const [tip, carp, ses] of [["sine", 1, 0.5], ["triangle", 2, 0.12]]) {
-        const o = ctx.createOscillator(); const g = ctx.createGain();
-        o.type = tip; o.frequency.value = f * carp; o.detune.value = (i - 1) * 4;
-        const bas = t0 + i * 0.16;
-        g.gain.setValueAtTime(0, bas); g.gain.linearRampToValueAtTime(ses, bas + 0.5); g.gain.exponentialRampToValueAtTime(0.0008, bas + 4.2);
-        o.connect(g); g.connect(ana); g.connect(yanki); o.start(bas); o.stop(bas + 4.4);
-      }
-    });
-    const can = ctx.createOscillator(); const cg = ctx.createGain();
-    can.type = "sine"; can.frequency.value = notalar[notalar.length - 1] * 4;
-    cg.gain.setValueAtTime(0, t0 + 0.9); cg.gain.linearRampToValueAtTime(0.16, t0 + 0.92); cg.gain.exponentialRampToValueAtTime(0.0005, t0 + 3.4);
-    can.connect(cg); cg.connect(ana); cg.connect(yanki); can.start(t0 + 0.9); can.stop(t0 + 3.6);
-  }
   // Slogan: kendi ses kaydımız (/ses/slogan.mp3). Kayıt gelene kadar taslakta tarayıcının sesiyle okunur.
-  function slogan() {
+  function slogan(gecikme = 1.1) {
     const a = new Audio("/ses/slogan.mp3");
     a.volume = 0.9;
     const yedek = () => {
-      if (!sesAcik || !window.speechSynthesis) return;
+      if (!sesAcik || susturuldu || !window.speechSynthesis) return;
       const u1 = new SpeechSynthesisUtterance("Volonté"); u1.lang = "fr-FR"; u1.rate = 0.82;
       const u2 = new SpeechSynthesisUtterance("Live your life."); u2.lang = "en-GB"; u2.rate = 0.86; u2.pitch = 0.95;
       speechSynthesis.cancel(); speechSynthesis.speak(u1); speechSynthesis.speak(u2);
     };
     a.addEventListener("error", yedek, { once: true });
-    setTimeout(() => { if (sesAcik) a.play().then(() => { konusma = a; }).catch(yedek); }, 1100);
+    susturuldu = false;
+    setTimeout(() => { if (sesAcik && !susturuldu) a.play().then(() => { konusma = a; }).catch(yedek); }, gecikme * 1000);
   }
 
   // ---------- Giriş ----------
+  // ---------- Sinema girişi (Murat'ın yorumu 31 Ekim: reklam filmi gibi açılsın) ----------
+  // Tam giriş (~10-11 sn): ışık çizgisi perde gibi açılır → "VOLONTE presents" → ritme göre model kesitleri (1,1 sn)
+  // → büyük "VOLONTE — LIVE YOUR LIFE" → site. Atla düğmesi hep görünür. İkinci gelişte, doğrudan model linkiyle
+  // gelince ya da yavaş ağda kısa giriş (2-3 sn, kendiliğinden, sessiz). Ses sadece dokununca.
+  const VURUS = 0.55; // sn (109 BPM); bir kesit = 2 vuruş
+  const KESIT_SAYI = 5;
+  const kesitAdaylari = () => (window.VOLONTE_SINEMA || []).filter((k) => k && k.f);
+  const kesitYuklu = new Map();
+  function kesitleriYukle() {
+    if (agZayif()) return; // yavaş ağda giriş kısa: kesit indirilmez
+    const w = genislik(innerWidth);
+    const l = kesitAdaylari().slice(0, KESIT_SAYI + 2);
+    let i = 0;
+    const sonraki = () => {
+      if (i >= l.length) return;
+      const k = l[i++];
+      const im = new Image();
+      im.decoding = "async";
+      im.onload = () => { kesitYuklu.set(k.f, im.src); sonraki(); };
+      im.onerror = sonraki;
+      im.src = img(k.f, w);
+    };
+    sonraki();
+  }
+  // Kendi sentez müziğimiz: ritimli (kick + hat), akor değişimi kesitlerle aynı anda, sonda büyük akor + çan.
+  function sinemaMuzik({ vurusBas, vurusSay, son }) {
+    const A = window.AudioContext || window.webkitAudioContext;
+    if (!A) return;
+    ctx = ctx || window.__ctx || new A();
+    ctx.resume();
+    const t0 = ctx.currentTime + 0.05;
+    const ana = ctx.createGain(); ana.gain.value = 0.32; ana.connect(ctx.destination);
+    const yanki = ctx.createDelay(); yanki.delayTime.value = VURUS * 0.75;
+    const geri = ctx.createGain(); geri.gain.value = 0.3; yanki.connect(geri); geri.connect(yanki); yanki.connect(ana);
+    const ton = (f, bas, sure, ses, tip = "sine", hedef = ana) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = tip; o.frequency.value = f;
+      g.gain.setValueAtTime(0, bas); g.gain.linearRampToValueAtTime(ses, bas + Math.min(0.4, sure / 3)); g.gain.exponentialRampToValueAtTime(0.0006, bas + sure);
+      o.connect(g); g.connect(hedef); g.connect(yanki); o.start(bas); o.stop(bas + sure + 0.1);
+    };
+    const kick = (bas) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.setValueAtTime(150, bas); o.frequency.exponentialRampToValueAtTime(42, bas + 0.2);
+      g.gain.setValueAtTime(0.9, bas); g.gain.exponentialRampToValueAtTime(0.001, bas + 0.32);
+      o.connect(g); g.connect(ana); o.start(bas); o.stop(bas + 0.35);
+    };
+    const gurultu = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
+    gurultu.getChannelData(0).forEach((_, i, d) => { d[i] = Math.random() * 2 - 1; });
+    const hat = (bas) => {
+      const k = ctx.createBufferSource(); k.buffer = gurultu;
+      const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 7000;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.1, bas); g.gain.exponentialRampToValueAtTime(0.001, bas + 0.05);
+      k.connect(f); f.connect(g); g.connect(ana); k.start(bas);
+    };
+    // Açılış: yükselen yumuşak ses
+    ton(110, t0, vurusBas + 0.6, 0.16, "triangle"); ton(220, t0 + 0.3, vurusBas + 0.4, 0.08);
+    const AKOR = [[220, 261.63, 329.63], [174.61, 220, 261.63], [261.63, 329.63, 392], [196, 246.94, 293.66]];
+    for (let i = 0; i < vurusSay; i++) {
+      const b = t0 + vurusBas + i * VURUS;
+      kick(b); hat(b + VURUS / 2);
+      if (i % 2 === 0) AKOR[(i / 2) % AKOR.length].forEach((f, j) => ton(f, b, VURUS * 2.2, 0.07 - j * 0.012, "sawtooth"));
+    }
+    // Final: büyük akor + çan + derin vuruş
+    const sb = t0 + son;
+    kick(sb);
+    [110, 220, 277.18, 329.63, 440].forEach((f, j) => ton(f, sb, 3.6, 0.12 - j * 0.015));
+    ton(1318.5, sb + 0.05, 2.6, 0.08); ton(1760, sb + 0.25, 2.2, 0.05);
+  }
+
   async function basla() {
     document.documentElement.lang = dil;
     if (/[?&]taslak=/.test(location.search) || window.VOLONTE_TASLAK) { const e = document.createElement("div"); e.className = "taslak-etiket"; e.textContent = `${t("draft")} ${(window.TEMA && TEMA.ad) || ""}`; document.body.appendChild(e); }
     sesDugmesi();
     const giris = $("#giris");
-    $(".dokun", giris).textContent = t("tap");
+    $(".dokun", giris).textContent = t("tapStart");
+    const atla = $(".atla", giris);
+    atla.textContent = `${t("skip")} ›`;
     const sahne = window.TEMA && TEMA.sahne ? TEMA.sahne($("canvas", giris)) : null;
     const veri = veriAl();
-    // Giriş oynarken vitrinin ilk fotoğrafı arkada iner (dokununca hazır olsun)
-    veri.then(() => { const u = MODELLER[0]; if (u) new Image().src = img(u.fotolar[0], genislik((window.TEMA && TEMA.vitrin) === "serit" ? innerWidth * 0.8 : innerWidth)); });
-    let girildi = false;
-    const gir = async () => {
-      if (girildi) return; girildi = true;
-      if (sesAcik) { try { muzik((window.TEMA && TEMA.notalar) || [220, 277.18, 329.63, 415.3]); } catch { /* ses yoksa sessiz devam */ } slogan(); }
+    kesitleriYukle();
+    // Vitrinin ilk fotoğrafı da giriş sırasında arkada iner
+    veri.then(() => { const u = MODELLER[0]; if (u) setTimeout(() => { new Image().src = img(foto(u), genislik((window.TEMA && TEMA.vitrin) === "serit" ? innerWidth * 0.8 : innerWidth)); }, 1500); });
+    let gordu = 0;
+    try { gordu = Number(localStorage.getItem("giris") || 0); } catch { /* */ }
+    const dogrudanModel = /^#model\//.test(location.hash);
+    const otomatikKisa = (gordu && Date.now() - gordu < 30 * 86400000) || dogrudanModel;
+    let durum = "bekliyor"; // bekliyor → oynuyor → bitti
+    let atlandi = false;
+    const bekle = (sn) => new Promise((r) => setTimeout(r, sn * 1000));
+    const evre = (ad) => { giris.dataset.evre = ad; };
+    const siteyiAc = async (hizli, kisa) => {
+      if (durum === "bitti") return;
+      durum = "bitti";
+      try { localStorage.setItem("giris", String(Date.now())); } catch { /* */ }
       await veri;
       iskelet(); sayfaGoster();
       $("#site").hidden = false;
       giris.classList.add("kapaniyor");
       if (sahne && sahne.hizlan) sahne.hizlan();
-      await (window.TEMA && TEMA.gecis ? TEMA.gecis(giris, $("#site")) : Promise.resolve());
+      if (hizli || kisa) await giris.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: kisa ? "scale(1.06)" : "none" }], { duration: hizli ? 450 : 650, easing: "ease-in", fill: "forwards" }).finished;
+      else await (window.TEMA && TEMA.gecis ? TEMA.gecis(giris, $("#site")) : giris.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 900, fill: "forwards" }).finished);
       giris.classList.add("bitti");
       if (sahne && sahne.dur) sahne.dur();
       try { if (!sessionStorage.getItem("v")) { sessionStorage.setItem("v", "1"); say("v"); } } catch { say("v"); }
-      // Videolar: sayfa tamamen yüklendikten sonra, sırayla
       const serbest = () => setTimeout(() => { videoSerbest = true; videoIlerle(); }, 4000);
       const ilkFoto = $(".slayt img");
       if (!ilkFoto || ilkFoto.complete) serbest(); else { ilkFoto.addEventListener("load", serbest, { once: true }); ilkFoto.addEventListener("error", serbest, { once: true }); }
     };
-    giris.addEventListener("click", gir);
-    giris.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") gir(); });
-    addEventListener("hashchange", () => { if (girildi) sayfaGoster(); });
+    const kisaGiris = async (sesli) => {
+      durum = "oynuyor"; giris.classList.add("oynuyor", "kisa");
+      if (sesli) { try { sinemaMuzik({ vurusBas: 0.5, vurusSay: 0, son: 0.7 }); } catch { /* */ } slogan(0.9); }
+      evre("perde"); await bekle(0.6); if (atlandi) return;
+      evre("baslik"); await bekle(1.4); if (atlandi) return;
+      siteyiAc(false, true);
+    };
+    const tamGiris = async () => {
+      durum = "oynuyor"; giris.classList.add("oynuyor");
+      const l = kesitAdaylari().filter((k) => kesitYuklu.has(k.f)).slice(0, KESIT_SAYI);
+      if (agZayif() || l.length < 3) return kisaGiris(sesAcik); // yavaş ağ ya da kesitler inmedi → kısa
+      const perde = 1.1, sunar = 1.6, kesit = VURUS * 2;
+      const son = perde + sunar + l.length * kesit;
+      if (sesAcik) { try { sinemaMuzik({ vurusBas: perde + sunar, vurusSay: l.length * 2, son }); } catch { /* */ } slogan(son + 0.35); }
+      const kap = $(".kesitler", giris);
+      kap.innerHTML = l.map((k) => `<div class="kesit kesit-${esc(k.tur || "yuruyus")}"><img src="${esc(kesitYuklu.get(k.f))}" alt=""><span>N° ${esc(k.kod || "")}</span></div>`).join("");
+      evre("perde"); await bekle(perde); if (atlandi) return;
+      evre("sunar"); await bekle(sunar); if (atlandi) return;
+      evre("kesit");
+      const kesitler = $$(".kesit", kap);
+      for (let i = 0; i < kesitler.length; i++) {
+        kesitler.forEach((x, j) => x.classList.toggle("aktif", j === i));
+        if (i && i % 2 === 0) kap.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 160 }); // vuruşta kısa parlama
+        await bekle(kesit); if (atlandi) return;
+      }
+      evre("baslik"); await bekle(1.8); if (atlandi) return;
+      siteyiAc(false);
+    };
+    atla.addEventListener("click", (e) => {
+      e.stopPropagation();
+      atlandi = true; sesiDurdur();
+      siteyiAc(true);
+    });
+    const dokun = () => { if (durum === "bekliyor") tamGiris(); };
+    giris.addEventListener("click", dokun);
+    giris.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") dokun(); });
+    addEventListener("hashchange", () => { if (durum === "bitti") sayfaGoster(); });
+    if (window.__giris && window.__giris.atla) atla.click();
+    else if (otomatikKisa) kisaGiris(false); // tekrar gelen / model linki: dokunmadan kısa giriş, sessiz
+    else if (window.__giris && window.__giris.dokun) dokun(); // sayfa yüklenirken dokunulmuştu
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", basla); else basla();
 })();

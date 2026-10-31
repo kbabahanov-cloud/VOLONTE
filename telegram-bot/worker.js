@@ -48,9 +48,10 @@ export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
 import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir } from "./duzen.js";
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
+import { siteVerisi } from "./depo-oku.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
-import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi } from "./venom.js";
+import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { murat as muratId, sorumlu as hemraId, denemeKaydi, denemeOzeti, DENEME } from "./fabrika.js";
 
 export { StokDO };
@@ -109,6 +110,7 @@ export default {
   // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
+    try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     if (env.KATALOG) {
       const nesne = kemalNesne(env);
@@ -535,7 +537,7 @@ async function paylasOnizle(msg, env) {
   if (!kod) return yaz("Kod yazın. Örnek: /paylas 3403");
   const arsiv = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
   if (arsiv[kod]) return yaz(`${kod} silindi olarak işaretli (${arsiv[kod].kim}); tekrar paylaşılmaz.`);
-  const u = (await siteUrunleriAl()).find((x) => String(x.kod) === kod && !x.gizli);
+  const u = (await siteUrunleriAl(env)).find((x) => String(x.kod) === kod && !x.gizli);
   if (!u) return yaz(`${kod} sitede yok (ya da gizli). Yeni düzende fotoğraf/video siteden alınır; önce Selin siteye eklemeli.`);
   const simdi = Math.floor(Date.now() / 1000);
   await telegram(env, "sendChatAction", { chat_id: sohbet, action: "upload_photo" });
@@ -1299,12 +1301,8 @@ const onizleyenler = (env) => [...new Set([muratId(env), hemraId(env)])];
 const GEC_GUN = 7; // "❌ Geç" denen model bu kadar gün sonra yeniden önerilir
 const HAZIRLIK_PARTI = 3; // bir çalışmada yapay zekâyla hazırlanan model yazısı
 
-async function siteUrunleriAl() {
-  try {
-    const r = await fetch(SITE_VERI, { cf: { cacheTtl: 60 } });
-    return r.ok ? await r.json() : [];
-  } catch { return []; }
-}
+// Ürün listesi: Selin'in iç bağlantısıyla (depo gizli olsa da çalışır); bağlantı yoksa ham adres.
+const siteUrunleriAl = (env) => siteVerisi(env);
 
 // Telegram tarihleri: kanal kayıtları + Sami'nin deposundaki "tg" (ikisinin en yenisi). İlk seferde depoya doldurulur.
 async function telegramTarihleriAl(env) {
@@ -1436,7 +1434,7 @@ async function yeniParcaGonder(env, govde) {
 // Yeni tur: modeller seçilir; yazıları birkaç çalışmada hazırlanır, hepsi hazır olunca önizlemeler gider.
 // gruplar: (deneme) [{ baslik, kodlar }]; yoksa günün 10 modeli.
 export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
-  const site = await siteUrunleriAl();
+  const site = await siteUrunleriAl(env);
   const kuyruk = await kuyrukListesi(env);
   const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
   const haric = [...kuyruk.map((o) => o.kod), ...Object.entries(atlananlar).filter(([, t]) => t > simdi).map(([k]) => k)];
@@ -1472,7 +1470,7 @@ export async function yeniTurAdimi(env, simdi) {
   if (!tur || !tur.yeni || tur.durum !== "hazirlaniyor") return false;
   const eksik = Object.entries(tur.ogeler).filter(([, o]) => !o.paket && !o.hata).map(([k]) => k);
   if (eksik.length) {
-    const site = await siteUrunleriAl();
+    const site = await siteUrunleriAl(env);
     const baglam = await durumBaglami(env, eksik, simdi);
     for (const kod of eksik.slice(0, HAZIRLIK_PARTI)) {
       const u = site.find((x) => String(x.kod) === kod);
@@ -1838,7 +1836,7 @@ export async function fabrikaIsleri(env, simdi) {
 
 // Repete paylaşım paketi: renkler repete bildiriminden (İngilizceye çevrilebiliyorsa), yazı sitedeki kayıttan.
 async function repetePaketi(env, r, simdi) {
-  const u = (await siteUrunleriAl()).find((x) => String(x.kod) === String(r.kod));
+  const u = (await siteUrunleriAl(env)).find((x) => String(x.kod) === String(r.kod));
   const baglam = await durumBaglami(env, [String(r.kod)], simdi);
   const renkler = renkCevir((r.renkler || []).map((x) => x.renk));
   let paket;

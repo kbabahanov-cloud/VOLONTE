@@ -25,6 +25,7 @@ cat > "$META" <<JSON
              {"type":"durable_object_namespace","name":"KATALOG","class_name":"KatalogDO"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO"},
              {"type":"images","name":"IMAGES"},
+             {"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-asistan.volonte.workers.dev"},
              {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},

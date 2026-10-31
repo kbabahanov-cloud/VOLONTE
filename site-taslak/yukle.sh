@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
-# Yeni site taslaklarını DENEME ADRESİNE yükler: https://volonte-taslak.volonte.workers.dev
-# Canlı siteye (GitHub Pages, main) DOKUNMAZ.
+# Siteyi Cloudflare'e yükler.
+#   bash site-taslak/yukle.sh canli   → CANLI SİTE  https://www.volonte.workers.dev  (D · Sinema; veri Selin'in iç bağlantısıyla)
+#   bash site-taslak/yukle.sh taslak  → taslaklar   https://volonte-taslak.volonte.workers.dev
 set -euo pipefail
 cd "$(dirname "$0")"
+MOD=${1:-taslak}
 python3 derle.py
-../telegram-bot/node_modules/.bin/esbuild worker.js --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/worker.bundle.js --log-level=warning
+../telegram-bot/node_modules/.bin/esbuild worker.js --bundle --format=esm --platform=browser --target=es2022 --external:cloudflare:workers --outfile=dist/worker.bundle.js --log-level=warning
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
-API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-taslak
+if [ "$MOD" = "canli" ]; then
+  AD=www
+  EK=',{"type":"plain_text","name":"CANLI","text":"1"},{"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"}'
+else
+  AD=volonte-taslak
+  EK=''
+fi
+API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/$AD
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
 GOC=""
 [ "$ILK" = "evet" ] && GOC='"migrations":{"new_tag":"v1","new_sqlite_classes":["SayimDO"]},'
 META=$(mktemp)
 cat > "$META" <<JSON
 {"main_module":"worker.js","compatibility_date":"2026-10-01","keep_bindings":["secret_text"], $GOC
- "bindings":[{"type":"images","name":"IMAGES"},{"type":"durable_object_namespace","name":"SAYIM","class_name":"SayimDO"}]}
+ "bindings":[{"type":"images","name":"IMAGES"},{"type":"durable_object_namespace","name":"SAYIM","class_name":"SayimDO"}$EK]}
 JSON
 for bekle in 0 4 8 16; do
   sleep $bekle
@@ -23,4 +32,4 @@ for bekle in 0 4 8 16; do
 done
 rm -f "$META"
 [ "$ILK" = "evet" ] && curl -sS -X POST "$API/subdomain" -H 'content-type: application/json' -d '{"enabled":true,"previews_enabled":false}' | python3 -c 'import sys,json;print("adres:",json.load(sys.stdin)["success"])'
-echo "https://volonte-taslak.volonte.workers.dev"
+echo "https://$AD.volonte.workers.dev"

@@ -1,89 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Collection — VOLONTE</title>
-  <meta name="description" content="Browse the VOLONTE wholesale collection by category: dresses, sets, tops, skirts, trousers and evening wear.">
-  <meta name="theme-color" content="#ffffff">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-  <header class="site-header">
-    <nav class="container nav" aria-label="Main">
-      <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
-        <span></span><span></span><span></span>
-      </button>
-      <a class="logo" href="index.html">VOLONTE</a>
-      <ul class="nav-links">
-        <li><a href="index.html">Home</a></li>
-        <li><a href="urunler.html" aria-current="page">Collection</a></li>
-        <li><a href="iletisim.html">Contact</a></li>
-        <li><a href="#" data-wa>WhatsApp</a></li>
-      </ul>
-    </nav>
-  </header>
-
-  <main>
-    <section class="page-hero">
-      <div class="container">
-        <h1>Collection</h1>
-        <p>Wholesale · Sold by series (mixed sizes). Prices in USD. Tap "Order" to order on WhatsApp.</p>
-      </div>
-    </section>
-
-    <div class="filter-bar">
-      <div class="container filter-inner">
-        <div class="chips" id="kategori-filtre" role="group" aria-label="Filter by category"></div>
-        <span class="count" id="urun-sayisi"></span>
-      </div>
-    </div>
-
-    <section class="section" style="padding-top:24px">
-      <div class="container">
-        <div class="product-grid" id="urun-listesi"></div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="container">
-      <div class="footer-grid">
-        <div>
-          <a class="logo" href="index.html">VOLONTE</a>
-          <p>Quality women's clothing for wholesale buyers across Africa and around the world.</p>
-        </div>
-        <div>
-          <h4>Pages</h4>
-          <ul>
-            <li><a href="index.html">Home</a></li>
-            <li><a href="urunler.html">Collection</a></li>
-            <li><a href="iletisim.html">Contact</a></li>
-          </ul>
-        </div>
-        <div>
-          <h4>Follow</h4>
-          <ul>
-            <li><a href="#" data-wa>WhatsApp</a></li>
-            <li><a href="#" data-telegram>Telegram</a></li>
-            <li><a href="#" data-email-btn>E-mail</a></li>
-          </ul>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>© <span data-yil></span> VOLONTE · <span data-resmi-ad></span></p>
-        <p><span data-adres></span> · <a href="#" data-sirket-tel></a></p>
-      </div>
-    </div>
-  </footer>
-
-  <a class="wa-float" href="#" data-wa aria-label="Chat on WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.64.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.04 21.8h-.01a9.8 9.8 0 0 1-5-1.37l-.36-.21-3.72.98 1-3.63-.24-.37a9.8 9.8 0 0 1-1.5-5.23c0-5.42 4.41-9.83 9.84-9.83 2.63 0 5.1 1.03 6.95 2.88a9.77 9.77 0 0 1 2.88 6.96c0 5.42-4.42 9.82-9.84 9.82zm8.37-18.2A11.76 11.76 0 0 0 12.04.13C5.5.13.2 5.43.2 11.95c0 2.09.54 4.12 1.58 5.92L.1 24l6.27-1.64a11.8 11.8 0 0 0 5.66 1.44h.01c6.53 0 11.84-5.3 11.84-11.83 0-3.16-1.23-6.13-3.47-8.37z"/></svg></a>
-
-  <script src="js/ayarlar.js"></script>
-  <script src="js/urunler.js"></script>
-  <script src="js/site.js"></script>
-</body>
-</html>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VOLONTE – Live your life</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://www.volonte.workers.dev/">
+<script>
+/* VOLONTE yeni adresine taşındı: eski linkler (ürün kodu dahil) yeni siteye yönlenir */
+(function () {
+  var yol = location.pathname.replace(/^\/VOLONTE/, "");
+  location.replace("https://www.volonte.workers.dev" + (yol === "/" || yol === "" ? "/" : yol) + location.search + location.hash);
+})();
+</script>
+<noscript><meta http-equiv="refresh" content="0; url=https://www.volonte.workers.dev/"></noscript>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:#ecd9a6;font:16px Georgia,serif;text-align:center}a{color:#ecd9a6}</style>
+</head><body><p>VOLONTE has moved — <a href="https://www.volonte.workers.dev/">www.volonte.workers.dev</a></p></body></html>

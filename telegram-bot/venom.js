@@ -159,3 +159,14 @@ export async function birikimAdimi(env, bot, simdi, tgf) {
     for (let i = 0; i < metin.length; i += 3900) await tgf(env, "sendMessage", { chat_id: k, text: metin.slice(i, i + 3900), disable_web_page_preview: true });
   }
 }
+
+// Tek seferlik deneme (31 Ekim): KV "venom:patronDeneme:<bot>" varsa Patron hesabına "Patron hesabı bağlandı ✅" gider;
+// sonuç "venom:patronDeneme:<bot>:sonuc" (Telegram'ın cevabı). Patron = MURAT_ID'nin ilki (yoksa ALLOWED_IDS'in ilki).
+export async function patronDenemesi(env, bot, tgf) {
+  const k = `venom:patronDeneme:${bot}`;
+  if (!(await env.KAYIT.get(k))) return;
+  await env.KAYIT.delete(k);
+  const id = String(env.MURAT_ID || env.ALLOWED_IDS || "").split(",")[0].trim();
+  const r = await tgf(env, "sendMessage", { chat_id: id, text: `Patron hesabı bağlandı ✅ — ${bot}` }).catch((e) => ({ ok: false, description: String(e.message || e) }));
+  await env.KAYIT.put(`${k}:sonuc`, JSON.stringify({ ok: Boolean(r && r.ok), hata: (r && r.description) || null }), { expirationTtl: 7 * 86400 });
+}

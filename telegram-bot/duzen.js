@@ -9,8 +9,9 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { sinirAsildiMi, harcamaEkle, SINIR_MESAJI } from "./harcama.js";
+import { SITE_ADRESI } from "./depo-oku.js";
 
-export const SITE = "https://kbabahanov-cloud.github.io/VOLONTE/";
+export const SITE = `${SITE_ADRESI}/`; // yeni site (Kemal'in "All models" düğmesi ve fotoğraf adresleri)
 export const SITE_VERI = "https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/main/veri/urunler.json";
 export const VIDEO_SUNUCU = "https://volonte-selin.volonte.workers.dev/v2/";
 export const SIPARIS_WA = "https://wa.me/905362390091";

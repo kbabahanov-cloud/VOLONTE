@@ -29,7 +29,7 @@ cat > "$META" <<JSON
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-selin.volonte.workers.dev"},
              {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},
              {"type":"plain_text","name":"GITHUB_REPO","text":"kbabahanov-cloud/VOLONTE"},
-             {"type":"plain_text","name":"SITE_URL","text":"https://kbabahanov-cloud.github.io/VOLONTE"}$GIZLI]}
+             {"type":"plain_text","name":"SITE_URL","text":"https://www.volonte.workers.dev"}$GIZLI]}
 JSON
 for bekle in 0 4 8 16; do
   sleep $bekle

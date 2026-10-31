@@ -9,7 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
-import { listeDurumu, listeyeIsle, murat, sorumlu } from "./fabrika.js";
+import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
 
 export const BEYIN_MODEL = "claude-haiku-5-5";
 export const AYLIK_SINIR_USD = 10;
@@ -74,7 +74,7 @@ const ARACLAR = [
 
 async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
   if (ad === "stok_bilgisi") {
-    if (indirimliMi(girdi.kod) && String(kim) !== murat(env)) return { kod: girdi.kod, sonuc: "İndirimli mal kodu (gerçek model değil, tekrar alınmaz). Bilgisi sadece Murat'ta." };
+    if (indirimliMi(girdi.kod) && !muratMi(env, kim)) return { kod: girdi.kod, sonuc: "İndirimli mal kodu (gerçek model değil, tekrar alınmaz). Bilgisi sadece Murat'ta." };
     const b = await stokIste(env, "/bilgi", { kod: girdi.kod });
     if (!b.satirlar || !b.satirlar.length) return { kod: b.kod, sonuc: "Vegawin'de kaydı yok (Black Rose ya da pasif kart olabilir)" };
     return { kod: b.kod, toplam: b.toplam, magazalar: b.satirlar.map((s) => ({ magaza: s.magaza, adet: s.adet })), durum: b.karar ? b.karar.durum : b.toplam > 0 ? "stokta" : "bitti" };
@@ -84,7 +84,7 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     const ham = await stokIste(env, "/satislar", { gun });
     // İndirimli mal (2000) model sayılmaz; ayrı bilgi sadece Murat'a (kullanıcı kararı 30 Ekim)
     const l = ham.filter((x) => !indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })).sort((a, b) => b.satilan - a.satilan);
-    const ind = String(kim) === murat(env) ? ham.filter((x) => indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })) : [];
+    const ind = muratMi(env, kim) ? ham.filter((x) => indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })) : [];
     return { gun, model: l.length, toplam: l.reduce((t, x) => t + x.satilan, 0), satislar: l.slice(0, 40), ...(ind.length ? { indirimli_mal: ind } : {}) };
   }
   if (ad === "stoksuz_modeller") {
@@ -100,7 +100,7 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     return l.length ? { kod: girdi.kod, siparisler: l } : { kod: girdi.kod, sonuc: "son 3 haftada sipariş yok" };
   }
   if (ad === "eksik_listesine_isle") {
-    if (![sorumlu(env), murat(env)].includes(String(kim))) return { hata: "Eksik listesine sadece Hemra ve Murat işleyebilir." };
+    if (!(muratMi(env, kim) || String(kim) === sorumlu(env))) return { hata: "Eksik listesine sadece Hemra ve Murat işleyebilir." };
     return listeyeIsle(env, tg, simdi, girdi.kararlar, girdi.hepsini_onceki_gibi);
   }
   return { hata: "bilinmeyen araç" };
@@ -118,7 +118,7 @@ export async function beyinCevapla(env, m, tg, simdi, { cikti = false } = {}) {
   if (!cikti) await tg(env, "sendChatAction", { chat_id: m.chat.id, action: "typing" });
   const kim = String(m.from.id);
   const ad = m.from.first_name || "";
-  const rol = kim === sorumlu(env) ? "Hemra (eksik listesi sorumlusu)" : kim === murat(env) ? "Murat (sahip)" : `${ad} (ekip)`;
+  const rol = kim === sorumlu(env) ? "Hemra (eksik listesi sorumlusu)" : muratMi(env, kim) ? "Murat (sahip)" : `${ad} (ekip)`;
   const gecmisAnahtar = `beyin:sohbet:${kim}`;
   const kayit = await ayarOku(env, gecmisAnahtar, { zaman: 0, l: [] });
   const gecmis = simdi - kayit.zaman < 6 * 3600 ? kayit.l : [];

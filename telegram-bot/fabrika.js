@@ -11,6 +11,7 @@
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
 import { stokIste } from "./stokbot.js";
+import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI } from "./stok.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -38,15 +39,10 @@ const TESLIM_GUNLERI = [1, 2, 3, 5, 7, 10];
 const renkYazi = (renkler) => renkler.map((r) => `${r.renk} ${r.adet}`).join(", ");
 const gunBasi = (g) => Date.UTC(Number(g.slice(0, 4)), Number(g.slice(5, 7)) - 1, Number(g.slice(8, 10))) / 1000 - SAAT_FARKI;
 const pazartesi = (t) => gunAnahtari(t - ((new Date((t + SAAT_FARKI) * 1000).getUTCDay() + 6) % 7) * 86400);
-async function siteListesi(env) {
-  try {
-    const r = await fetch(`https://raw.githubusercontent.com/${env.GITHUB_REPO || "kbabahanov-cloud/VOLONTE"}/main/veri/urunler.json`, { cf: { cacheTtl: 60 } });
-    return r.ok ? await r.json() : [];
-  } catch { return []; }
-}
+const siteListesi = (env) => siteVerisi(env); // Selin'in iç bağlantısıyla (depo gizli olsa da çalışır)
 const sitedenFoto = (env, site, kod) => {
   const u = site.find((x) => String(x.kod) === String(kod));
-  return u && u.fotolar && u.fotolar.length ? `https://raw.githubusercontent.com/${env.GITHUB_REPO || "kbabahanov-cloud/VOLONTE"}/main/${u.fotolar[0]}` : null;
+  return u && u.fotolar && u.fotolar.length ? `${SITE_ADRESI}/${u.fotolar[0]}` : null; // yeni sitenin /galeri adresi (depo gizli olsa da açık)
 };
 // Hemra'ya model mesajı: önce sitedeki fotoğraf; sitede yoksa kanaldaki en yeni paylaşım (yazısı değiştirilerek, yani
 // kanal yazısı/fiyat GİTMEZ); ikisi de yoksa yazı. Dönüş: { r, tur: "foto"|"metin", kaynak: "site"|"kanal"|null }
@@ -78,8 +74,12 @@ async function kuyrukEkle(env, tur, anahtar) {
 }
 
 // Kimlikler ortamdan (yükleme betikleri gizli kayıttan, KV venom:kimlikler, okur); kodda sabit kimlik yok.
+// MURAT_ID listesi (31 Ekim): ilk kimlik = Patron hesabı (Murat'a özel mesajlar oraya gider); hepsi Murat yetkisine sahip
+// (eski hesap şimdilik kalır).
 export const sorumlu = (env) => String(env.FABRIKA_SORUMLU || "");
-export const murat = (env) => String(env.MURAT_ID || "");
+export const muratlar = (env) => String(env.MURAT_ID || "").split(",").map((x) => x.trim()).filter(Boolean);
+export const murat = (env) => muratlar(env)[0] || "";
+export const muratMi = (env, id) => muratlar(env).includes(String(id));
 
 async function ayarOku(env, k, bos) {
   const v = (await stokIste(env, "/ayar-oku", { k })).v;
@@ -505,7 +505,7 @@ async function magazaAdimi(env, simdi, tg, gun, cfg) {
 // /eksik (sadece Murat ve Hemra): o günün satışlarıyla liste hemen Hemra'ya. Aynı gün iki kez gitmez.
 export async function eksikKomutu(env, m, tg, simdi) {
   const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text });
-  if (![murat(env), sorumlu(env)].includes(String(m.from.id))) return yaz("Bu komut sadece Murat ve Hemra'da.");
+  if (!(muratMi(env, m.from.id) || String(m.from.id) === sorumlu(env))) return yaz("Bu komut sadece Murat ve Hemra'da.");
   if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return yaz("Eksik listesi henüz kapalı.");
   const gun = gunAnahtari(simdi);
   const d = await ayarOku(env, `fabrika:${gun}`, null);
@@ -617,7 +617,7 @@ export async function fabrikaDugmesi(env, cq, tg, simdi) {
   const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   if (tur === "fb") {
     const d = await ayarOku(env, `fabrika:${ek}`, null);
-    if (String(cq.from.id) !== kimeOf(env, d) && !(d && d.deneme && String(cq.from.id) === murat(env))) return cevapla(`Bu onay ${cfgOf(d).ad}'da.`);
+    if (String(cq.from.id) !== kimeOf(env, d) && !(d && d.deneme && muratMi(env, cq.from.id))) return cevapla(`Bu onay ${cfgOf(d).ad}'da.`);
     if (!d || d.asama !== "onayda") return cevapla(d && d.asama === "gonderildi" ? "Zaten gönderildi." : "Bu liste artık geçerli değil.");
     const benim = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
     if (islem === "d" && d.deneme) {
@@ -703,7 +703,8 @@ export async function fabrikaDugmesi(env, cq, tg, simdi) {
     return;
   }
   if (tur === "fa") {
-    if (String(cq.from.id) !== murat(env)) return cevapla("Bu onay Murat'ta.");
+    if (!muratMi(env, cq.from.id)) return cevapla("Bu onay Murat'ta.");
+    if (muratMi(env, ek)) { await env.KAYIT.delete(`sami:fabrikaAday:${ek}`); return cevapla("Bu Murat'ın (Patron) hesabı; fabrika kişisi olamaz."); }
     const aday = await env.KAYIT.get(`sami:fabrikaAday:${ek}`, "json");
     if (!aday) return cevapla("Bu istek artık geçerli değil.");
     await env.KAYIT.delete(`sami:fabrikaAday:${ek}`);
@@ -1158,7 +1159,7 @@ export function haftalikMetin(simdi, gecen, onceki = {}) {
 
 // /fabrikadeneme (sadece Murat): uydurma modelle bütün akış
 export async function fabrikaDenemesi(env, m, tg, simdi) {
-  if (String(m.from.id) !== murat(env)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Murat'ta." });
+  if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Murat'ta." });
   const did = `D${simdi.toString(36)}`;
   const liste = [{ kod: "9999", renkler: [{ renk: "siyah", adet: 2 }, { renk: "bej", adet: 1 }] }, { kod: "9998", renkler: [{ renk: "siyah", adet: 1 }] }];
   const gruplar = { 9999: "fabrika", 9998: "celal" };
