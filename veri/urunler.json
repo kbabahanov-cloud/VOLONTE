@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3582",
+  "baslik": "Beaded Neckline Draped Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A fitted evening dress with an asymmetric one-shoulder neckline and a sleek column silhouette. Glossy black beads trace the cut-out at the front, while a draped waist and long flowing side panels add movement; the back features a halter neck with button closure and a centre slit. Made for galas, weddings and formal evenings. Produced in Istanbul with careful workmanship.",
+   "fr": "Une robe de soirée ajustée au décolleté asymétrique à une épaule et à la silhouette colonne épurée. Des perles noires brillantes soulignent la découpe du devant, tandis que la taille drapée et les longs pans latéraux apportent du mouvement ; au dos, un col montant fermé par un bouton et une fente centrale. Idéale pour les galas, mariages et soirées habillées. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido de noite ajustado, com decote assimétrico de um ombro e silhueta coluna elegante. Contas pretas brilhantes contornam o recorte frontal, enquanto a cintura drapeada e os longos painéis laterais dão movimento; nas costas, gola alta com botão e fenda central. Perfeito para galas, casamentos e noites formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3582/1.jpg",
+   "galeri/3582/2.jpg",
+   "galeri/3582/3.jpg",
+   "galeri/3582/4.jpg"
+  ],
+  "videolar": [
+   "selin/3582/1"
+  ],
+  "fiyat": 59,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3615",
   "baslik": "Tiered Ruffle Maxi Gown",
   "kategori": "evening",
@@ -169,27 +192,6 @@
   "fiyat": 55,
   "gizli": false,
   "eklenme": "2026-10-31"
- },
- {
-  "kod": "3582",
-  "baslik": "Beaded Asymmetric Draped Gown",
-  "kategori": "evening",
-  "aciklama": {
-   "en": "A fitted one-shoulder evening dress with a sculpted asymmetric neckline and a high halter collar. Glossy black beads trace the open neckline, while soft draping at the waist and long flowing side panels add movement; a centre back slit keeps it easy to walk in. Made for galas, weddings and formal evenings. Produced in Istanbul with careful craftsmanship.",
-   "fr": "Une robe de soirée ajustée à une épaule, avec un décolleté asymétrique sculpté et un col montant noué à la nuque. Des perles noires brillantes soulignent l'ouverture du décolleté, tandis qu'un drapé à la taille et de longs pans latéraux fluides apportent du mouvement ; une fente au dos facilite la marche. Idéale pour les galas, mariages et soirées habillées. Fabriquée à Istanbul avec un savoir-faire soigné.",
-   "pt": "Um vestido de festa ajustado de um ombro só, com decote assimétrico esculpido e gola alta presa na nuca. Contas pretas brilhantes contornam a abertura do decote, enquanto o drapeado na cintura e os longos painéis laterais fluidos trazem movimento; a fenda nas costas garante conforto ao caminhar. Perfeito para galas, casamentos e noites formais. Produzido em Istambul com acabamento cuidadoso."
-  },
-  "bedenler": "38-40-42-44-46-48-50",
-  "fotolar": [
-   "galeri/3582/1.jpg",
-   "galeri/3582/2.jpg",
-   "galeri/3582/3.jpg",
-   "galeri/3582/4.jpg"
-  ],
-  "videolar": [],
-  "fiyat": 59,
-  "gizli": false,
-  "eklenme": "2026-10-30"
  },
  {
   "kod": "3581",
