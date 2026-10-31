@@ -1,0 +1,15 @@
+/* TASLAK D — Sinema: saf siyah, parlak ve büyük fotoğraflar, geniş boşluklar */
+:root { --siyah: #000; }
+.ust { background: rgba(0, 0, 0, .7); border-bottom-color: rgba(255, 255, 255, .06); }
+.vitrin-solma { height: calc(100svh - var(--ust)); min-height: 480px; max-height: 980px; }
+.vitrin-solma .slayt.gorunur img { animation: dolly 8s ease-out both; }
+@keyframes dolly { from { transform: scale(1.1); } to { transform: scale(1); } }
+.vitrin-solma .slayt-yazi { padding: 60px 24px 34px; background: linear-gradient(transparent, rgba(0, 0, 0, .45)); }
+.vitrin-solma .slayt-kod { letter-spacing: .4em; }
+.vitrin-solma .slayt-ad { font-size: clamp(34px, 9vw, 78px); text-transform: uppercase; letter-spacing: .06em; font-weight: 500; }
+.vitrin-solma::before, .vitrin-solma::after { content: ""; position: absolute; z-index: 2; left: 0; right: 0; height: 4vh; background: #000; pointer-events: none; }
+.vitrin-solma::before { top: 0; } .vitrin-solma::after { bottom: 0; }
+.vitrin-solma .noktalar { bottom: calc(4vh + 14px); }
+.baslik { text-transform: uppercase; letter-spacing: .08em; font-size: clamp(28px, 7vw, 52px); }
+.kart-foto { border-radius: 0; }
+.kart:hover .kart-foto img { transform: scale(1.04); }

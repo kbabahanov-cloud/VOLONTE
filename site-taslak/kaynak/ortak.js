@@ -27,7 +27,7 @@
   const S = {
     en: {
       home: "Home", new: "New Collection", lookbook: "Lookbook", story: "Designer's Story", sizes: "Size Guide", shipping: "Shipping", wishlist: "Wishlist", privacy: "Privacy", stars: "Stars in VOLONTE",
-      tap: "Tap to enter", discover: "Discover", all: "All", cat_dresses: "Dresses", cat_sets: "Sets", cat_evening: "Evening",
+      tap: "Tap to enter", tapStart: "Tap to start", skip: "Skip", discover: "Discover", all: "All", cat_dresses: "Dresses", cat_sets: "Sets", cat_evening: "Evening",
       lead: "Premium women's fashion, made in Istanbul. Wholesale to boutiques all over the world.",
       quality: "Quality is our foundation", qualityText: "Every model is cut, draped and finished in our Istanbul workshops. We sell by series to boutiques and resellers worldwide.",
       newBadge: "New", models: "models", order: "Order on WhatsApp", info: "Ask a question", sizesLbl: "Sizes", small: "Small", large: "Large", series: "series of 4 pieces",
@@ -49,7 +49,7 @@
     },
     fr: {
       home: "Accueil", new: "Nouvelle Collection", lookbook: "Lookbook", story: "L'histoire du créateur", sizes: "Guide des tailles", shipping: "Livraison", wishlist: "Ma liste", privacy: "Confidentialité", stars: "Stars in VOLONTE",
-      tap: "Touchez pour entrer", discover: "Découvrir", all: "Tout", cat_dresses: "Robes", cat_sets: "Ensembles", cat_evening: "Soirée",
+      tap: "Touchez pour entrer", tapStart: "Touchez pour commencer", skip: "Passer", discover: "Découvrir", all: "Tout", cat_dresses: "Robes", cat_sets: "Ensembles", cat_evening: "Soirée",
       lead: "Mode féminine haut de gamme, fabriquée à Istanbul. Vente en gros aux boutiques du monde entier.",
       quality: "La qualité est notre fondation", qualityText: "Chaque modèle est coupé, drapé et fini dans nos ateliers d'Istanbul. Nous vendons par série aux boutiques et revendeurs du monde entier.",
       newBadge: "Nouveau", models: "modèles", order: "Commander sur WhatsApp", info: "Poser une question", sizesLbl: "Tailles", small: "Petites", large: "Grandes", series: "série de 4 pièces",
@@ -71,7 +71,7 @@
     },
     tr: {
       home: "Ana Sayfa", new: "Yeni Koleksiyon", lookbook: "Lookbook", story: "Tasarımcının Hikâyesi", sizes: "Beden Rehberi", shipping: "Kargo", wishlist: "İstek Listesi", privacy: "Gizlilik", stars: "Stars in VOLONTE",
-      tap: "Girmek için dokunun", discover: "Keşfet", all: "Tümü", cat_dresses: "Elbiseler", cat_sets: "Takımlar", cat_evening: "Abiye",
+      tap: "Girmek için dokunun", tapStart: "Başlamak için dokunun", skip: "Atla", discover: "Keşfet", all: "Tümü", cat_dresses: "Elbiseler", cat_sets: "Takımlar", cat_evening: "Abiye",
       lead: "İstanbul'da üretilen kaliteli kadın giyimi. Dünyanın her yerindeki butiklere toptan satış.",
       quality: "Kalite bizim temelimiz", qualityText: "Her model İstanbul'daki atölyelerimizde kesilir, drape edilir ve bitirilir. Dünya genelindeki butik ve satıcılara seri hâlinde satıyoruz.",
       newBadge: "Yeni", models: "model", order: "WhatsApp'tan sipariş ver", info: "Bilgi al", sizesLbl: "Bedenler", small: "Küçük", large: "Büyük", series: "4'lü seri",
@@ -125,6 +125,8 @@
       .map((u) => ({ ...u, yeni: u.eklenme ? new Date(u.eklenme).getTime() > sinir : false }))
       .sort((a, b) => String(b.eklenme || "").localeCompare(String(a.eklenme || "")));
   }
+  // Temiz fotoğraf: üzerinde yazı olan afiş değil (sunucu "temiz" listesini verir; afişler sadece model sayfasında, en sonda)
+  const foto = (u, i = 0) => { const l = u.temiz && u.temiz.length ? u.temiz : u.fotolar; return l[Math.min(i, l.length - 1)]; };
   const modelBul = (kod) => MODELLER.find((u) => String(u.kod) === String(kod));
   const aciklama = (u) => (u.aciklama && (u.aciklama[dil] || u.aciklama.en)) || "";
   const katAdi = (k) => t(`cat_${k}`) || k;
@@ -189,7 +191,7 @@
   }
   function videoEtiketi(u, v, sinif = "", poster = false) {
     const src = videoAdresi(v);
-    return src ? `<video class="${sinif}" muted playsinline loop preload="none" data-src="${esc(src)}"${poster ? ` poster="${esc(img(u.fotolar[0], genislik(window.innerWidth)))}"` : ""}></video>` : "";
+    return src ? `<video class="${sinif}" muted playsinline loop preload="none" data-src="${esc(src)}"${poster ? ` poster="${esc(img(foto(u), genislik(window.innerWidth)))}"` : ""}></video>` : "";
   }
   // Tembel yükleme: ekrana 300 px yaklaşınca iner (yavaş ağda fotoğraflar birbirini beklemesin)
   const tembelGozcu = "IntersectionObserver" in window ? new IntersectionObserver((l) => l.forEach((g) => {
@@ -204,7 +206,7 @@
     const l = [];
     for (const u of MODELLER.slice(0, n)) {
       const v = (u.videolar || [])[0];
-      l.push({ u, foto: u.fotolar[0], video: v && !agZayif() ? v : null });
+      l.push({ u, foto: foto(u), video: v && !agZayif() ? v : null });
     }
     return l;
   }
@@ -254,7 +256,7 @@
     return `<article class="kart">
       <button class="kalp" data-kalp="${esc(u.kod)}" aria-pressed="${istekte(u.kod)}" aria-label="${esc(t("wishlist"))}">${IKON.kalp}</button>
       <a href="#model/${esc(u.kod)}">
-        <div class="kart-foto"><img data-tembel="${esc(img(u.fotolar[0], w))}" alt="${esc(u.baslik)}" decoding="async" onload="this.classList.add('yuklendi')">${u.yeni ? `<span class="kart-yeni">${esc(t("newBadge"))}</span>` : ""}</div>
+        <div class="kart-foto"><img data-tembel="${esc(img(foto(u), w))}" alt="${esc(u.baslik)}" decoding="async" onload="this.classList.add('yuklendi')">${u.yeni ? `<span class="kart-yeni">${esc(t("newBadge"))}</span>` : ""}</div>
         <div class="kart-alt"><span class="kart-kod">${esc(u.kod)}</span></div>
         <h3 class="kart-ad">${esc(u.baslik)}</h3>
         <p class="kart-beden">${esc(g.g.length ? g.g.map((x) => `${x.ad} ${x.aralik}`).join(" / ") : g.duz)}</p>
@@ -267,11 +269,11 @@
       return `<section class="vitrin" id="vitrin" aria-label="${esc(t("new"))}"></section>
         <section class="bolum giris-metin"><p class="baslik-ust">VOLONTE · Istanbul</p><h2 class="baslik">${esc(t("quality"))}</h2><div class="cizgi"></div><p class="aciklama">${esc(t("qualityText"))}</p></section>
         <section class="bolum"><p class="baslik-ust">${esc(t("new"))}</p><h2 class="baslik">${esc(t("new"))}</h2><div class="cizgi"></div>
-          <div class="izgara">${MODELLER.slice(0, 8).map((u) => kart(u)).join("")}</div>
+          <div class="izgara buyuk">${MODELLER.slice(0, 8).map((u) => kart(u, genislik(window.innerWidth >= 760 ? 420 : window.innerWidth))).join("")}</div>
           <p style="margin-top:28px"><a class="dugme" href="#new">${esc(t("discover"))} · ${MODELLER.length} ${esc(t("models"))}</a></p></section>
         <section class="bolum iki-sutun">
-          <a class="koleksiyon" href="#lookbook"><img data-tembel="${esc(img((MODELLER[1] || MODELLER[0] || { fotolar: [""] }).fotolar[0], 720))}" alt="" loading="lazy"><span>${esc(t("lookbook"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("lookText"))}</small></span></a>
-          <a class="koleksiyon" href="#story"><img data-tembel="${esc(img((MODELLER[2] || MODELLER[0] || { fotolar: [""] }).fotolar[0], 720))}" alt="" loading="lazy"><span>${esc(t("story"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("soon"))}</small></span></a>
+          <a class="koleksiyon" href="#lookbook"><img data-tembel="${esc(img(foto(MODELLER[1] || MODELLER[0] || { fotolar: [""] }, 1), 720))}" alt="" loading="lazy"><span>${esc(t("lookbook"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("lookText"))}</small></span></a>
+          <a class="koleksiyon" href="#story"><img data-tembel="${esc(img(foto(MODELLER[2] || MODELLER[0] || { fotolar: [""] }, 1), 720))}" alt="" loading="lazy"><span>${esc(t("story"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">${esc(t("soon"))}</small></span></a>
         </section>`;
     },
     new() {
@@ -284,7 +286,7 @@
       const yeni = MODELLER.slice(0, 12);
       return `<section class="bolum"><p class="baslik-ust">${esc(t("lookbook"))}</p><h1 class="baslik">${esc(t("lookText"))}</h1><div class="cizgi"></div>
         <div class="koleksiyonlar">
-          <a class="koleksiyon" href="#film/new"><img src="${esc(img((yeni[0] || { fotolar: [""] }).fotolar[0], 720))}" alt="" loading="lazy"><span>${esc(t("new"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">▶ ${esc(t("playFilm"))}</small></span></a>
+          <a class="koleksiyon" href="#film/new"><img src="${esc(img(foto(yeni[0] || { fotolar: [""] }), 720))}" alt="" loading="lazy"><span>${esc(t("new"))}<small style="display:block;font:500 10px/1 var(--sans);letter-spacing:.3em;color:var(--altin);margin-top:8px">▶ ${esc(t("playFilm"))}</small></span></a>
           <div class="koleksiyon yakinda yer-tutucu" style="aspect-ratio:4/5"><div><b>${esc(t("soon"))}</b>Collection II</div></div>
           <div class="koleksiyon yakinda yer-tutucu" style="aspect-ratio:4/5"><div><b>${esc(t("soon"))}</b>Collection III</div></div>
         </div></section>`;
@@ -292,7 +294,7 @@
     film() {
       const satirlar = t("film");
       const kareler = [];
-      MODELLER.slice(0, 12).forEach((u, i) => { kareler.push({ u, f: u.fotolar[0], s: satirlar[i % satirlar.length] }); if (u.fotolar[1] && i % 3 === 1) kareler.push({ u, f: u.fotolar[1], s: "" }); });
+      MODELLER.slice(0, 12).forEach((u, i) => { kareler.push({ u, f: foto(u), s: satirlar[i % satirlar.length] }); if (u.temiz && u.temiz[1] && i % 3 === 1) kareler.push({ u, f: u.temiz[1], s: "" }); });
       return `<div class="film" id="film">${kareler.map((k) => `<a class="kare" href="#model/${esc(k.u.kod)}"><img data-src="${esc(img(k.f, genislik(window.innerWidth)))}" alt="${esc(k.u.baslik)}"><div class="kare-yazi">${k.s ? `<p>${esc(k.s)}</p>` : ""}<small>${esc(k.u.kod)} · ${esc(k.u.baslik)}</small></div></a>`).join("")}</div>
         <button class="dugme dolu film-oynat" id="oynat">▶ ${esc(t("playFilm"))}</button>`;
     },
@@ -319,7 +321,7 @@
     wishlist() {
       const l = istek.map(modelBul).filter(Boolean);
       return `<section class="bolum"><p class="baslik-ust">${esc(t("wishlist"))}</p><h1 class="baslik">${esc(t("wishlist"))}</h1><div class="cizgi"></div><p class="aciklama">${esc(t("wishText"))}</p>
-        <div id="liste" style="margin-top:22px">${l.length ? l.map((u) => `<div class="liste-satir"><a href="#model/${esc(u.kod)}"><img src="${esc(img(u.fotolar[0], 160))}" alt="" loading="lazy"></a><a href="#model/${esc(u.kod)}"><span class="kart-kod">${esc(u.kod)}</span><span class="kart-ad" style="display:block">${esc(u.baslik)}</span></a><button class="sil" data-kalp="${esc(u.kod)}" aria-label="×">×</button></div>`).join("") : `<p class="bos">${esc(t("wishEmpty"))}</p>`}</div>
+        <div id="liste" style="margin-top:22px">${l.length ? l.map((u) => `<div class="liste-satir"><a href="#model/${esc(u.kod)}"><img src="${esc(img(foto(u), 160))}" alt="" loading="lazy"></a><a href="#model/${esc(u.kod)}"><span class="kart-kod">${esc(u.kod)}</span><span class="kart-ad" style="display:block">${esc(u.baslik)}</span></a><button class="sil" data-kalp="${esc(u.kod)}" aria-label="×">×</button></div>`).join("") : `<p class="bos">${esc(t("wishEmpty"))}</p>`}</div>
         ${l.length ? `<p style="margin-top:24px"><a class="dugme dolu" target="_blank" rel="noopener" href="${esc(wa(AYAR.siparisNo, t("waList").replace("{l}", l.map((u) => u.kod).join(", "))))}">${IKON.wa} ${esc(t("sendList"))} (${l.length})</a></p>` : ""}</section>`;
     },
     privacy() {
@@ -519,82 +521,177 @@
     });
     document.body.appendChild(b);
   }
+  let susturuldu = false;
   function sesiDurdur() {
+    susturuldu = true;
     try { if (ctx) ctx.suspend(); } catch { /* */ }
     try { speechSynthesis.cancel(); } catch { /* */ }
     if (konusma) { konusma.pause(); konusma = null; }
   }
-  // Kendi müziğimiz: tarayıcıda üretilen kısa, yumuşak akor + çan (hiçbir markanın müziği/jingle'ı değil).
-  function muzik(notalar) {
-    const A = window.AudioContext || window.webkitAudioContext;
-    if (!A) return;
-    ctx = ctx || new A();
-    ctx.resume();
-    const t0 = ctx.currentTime + 0.05;
-    const ana = ctx.createGain(); ana.gain.value = 0.22;
-    const yanki = ctx.createDelay(); yanki.delayTime.value = 0.32;
-    const geri = ctx.createGain(); geri.gain.value = 0.38;
-    yanki.connect(geri); geri.connect(yanki); yanki.connect(ana); ana.connect(ctx.destination);
-    notalar.forEach((f, i) => {
-      for (const [tip, carp, ses] of [["sine", 1, 0.5], ["triangle", 2, 0.12]]) {
-        const o = ctx.createOscillator(); const g = ctx.createGain();
-        o.type = tip; o.frequency.value = f * carp; o.detune.value = (i - 1) * 4;
-        const bas = t0 + i * 0.16;
-        g.gain.setValueAtTime(0, bas); g.gain.linearRampToValueAtTime(ses, bas + 0.5); g.gain.exponentialRampToValueAtTime(0.0008, bas + 4.2);
-        o.connect(g); g.connect(ana); g.connect(yanki); o.start(bas); o.stop(bas + 4.4);
-      }
-    });
-    const can = ctx.createOscillator(); const cg = ctx.createGain();
-    can.type = "sine"; can.frequency.value = notalar[notalar.length - 1] * 4;
-    cg.gain.setValueAtTime(0, t0 + 0.9); cg.gain.linearRampToValueAtTime(0.16, t0 + 0.92); cg.gain.exponentialRampToValueAtTime(0.0005, t0 + 3.4);
-    can.connect(cg); cg.connect(ana); cg.connect(yanki); can.start(t0 + 0.9); can.stop(t0 + 3.6);
-  }
   // Slogan: kendi ses kaydımız (/ses/slogan.mp3). Kayıt gelene kadar taslakta tarayıcının sesiyle okunur.
-  function slogan() {
+  function slogan(gecikme = 1.1) {
     const a = new Audio("/ses/slogan.mp3");
     a.volume = 0.9;
     const yedek = () => {
-      if (!sesAcik || !window.speechSynthesis) return;
+      if (!sesAcik || susturuldu || !window.speechSynthesis) return;
       const u1 = new SpeechSynthesisUtterance("Volonté"); u1.lang = "fr-FR"; u1.rate = 0.82;
       const u2 = new SpeechSynthesisUtterance("Live your life."); u2.lang = "en-GB"; u2.rate = 0.86; u2.pitch = 0.95;
       speechSynthesis.cancel(); speechSynthesis.speak(u1); speechSynthesis.speak(u2);
     };
     a.addEventListener("error", yedek, { once: true });
-    setTimeout(() => { if (sesAcik) a.play().then(() => { konusma = a; }).catch(yedek); }, 1100);
+    susturuldu = false;
+    setTimeout(() => { if (sesAcik && !susturuldu) a.play().then(() => { konusma = a; }).catch(yedek); }, gecikme * 1000);
   }
 
   // ---------- Giriş ----------
+  // ---------- Sinema girişi (Murat'ın yorumu 31 Ekim: reklam filmi gibi açılsın) ----------
+  // Tam giriş (~10-11 sn): ışık çizgisi perde gibi açılır → "VOLONTE presents" → ritme göre model kesitleri (1,1 sn)
+  // → büyük "VOLONTE — LIVE YOUR LIFE" → site. Atla düğmesi hep görünür. İkinci gelişte, doğrudan model linkiyle
+  // gelince ya da yavaş ağda kısa giriş (2-3 sn, kendiliğinden, sessiz). Ses sadece dokununca.
+  const VURUS = 0.55; // sn (109 BPM); bir kesit = 2 vuruş
+  const KESIT_SAYI = 5;
+  const kesitAdaylari = () => (window.VOLONTE_SINEMA || []).filter((k) => k && k.f);
+  const kesitYuklu = new Map();
+  function kesitleriYukle() {
+    if (agZayif()) return; // yavaş ağda giriş kısa: kesit indirilmez
+    const w = genislik(innerWidth);
+    const l = kesitAdaylari().slice(0, KESIT_SAYI + 2);
+    let i = 0;
+    const sonraki = () => {
+      if (i >= l.length) return;
+      const k = l[i++];
+      const im = new Image();
+      im.decoding = "async";
+      im.onload = () => { kesitYuklu.set(k.f, im.src); sonraki(); };
+      im.onerror = sonraki;
+      im.src = img(k.f, w);
+    };
+    sonraki();
+  }
+  // Kendi sentez müziğimiz: ritimli (kick + hat), akor değişimi kesitlerle aynı anda, sonda büyük akor + çan.
+  function sinemaMuzik({ vurusBas, vurusSay, son }) {
+    const A = window.AudioContext || window.webkitAudioContext;
+    if (!A) return;
+    ctx = ctx || window.__ctx || new A();
+    ctx.resume();
+    const t0 = ctx.currentTime + 0.05;
+    const ana = ctx.createGain(); ana.gain.value = 0.32; ana.connect(ctx.destination);
+    const yanki = ctx.createDelay(); yanki.delayTime.value = VURUS * 0.75;
+    const geri = ctx.createGain(); geri.gain.value = 0.3; yanki.connect(geri); geri.connect(yanki); yanki.connect(ana);
+    const ton = (f, bas, sure, ses, tip = "sine", hedef = ana) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = tip; o.frequency.value = f;
+      g.gain.setValueAtTime(0, bas); g.gain.linearRampToValueAtTime(ses, bas + Math.min(0.4, sure / 3)); g.gain.exponentialRampToValueAtTime(0.0006, bas + sure);
+      o.connect(g); g.connect(hedef); g.connect(yanki); o.start(bas); o.stop(bas + sure + 0.1);
+    };
+    const kick = (bas) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.setValueAtTime(150, bas); o.frequency.exponentialRampToValueAtTime(42, bas + 0.2);
+      g.gain.setValueAtTime(0.9, bas); g.gain.exponentialRampToValueAtTime(0.001, bas + 0.32);
+      o.connect(g); g.connect(ana); o.start(bas); o.stop(bas + 0.35);
+    };
+    const gurultu = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
+    gurultu.getChannelData(0).forEach((_, i, d) => { d[i] = Math.random() * 2 - 1; });
+    const hat = (bas) => {
+      const k = ctx.createBufferSource(); k.buffer = gurultu;
+      const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 7000;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.1, bas); g.gain.exponentialRampToValueAtTime(0.001, bas + 0.05);
+      k.connect(f); f.connect(g); g.connect(ana); k.start(bas);
+    };
+    // Açılış: yükselen yumuşak ses
+    ton(110, t0, vurusBas + 0.6, 0.16, "triangle"); ton(220, t0 + 0.3, vurusBas + 0.4, 0.08);
+    const AKOR = [[220, 261.63, 329.63], [174.61, 220, 261.63], [261.63, 329.63, 392], [196, 246.94, 293.66]];
+    for (let i = 0; i < vurusSay; i++) {
+      const b = t0 + vurusBas + i * VURUS;
+      kick(b); hat(b + VURUS / 2);
+      if (i % 2 === 0) AKOR[(i / 2) % AKOR.length].forEach((f, j) => ton(f, b, VURUS * 2.2, 0.07 - j * 0.012, "sawtooth"));
+    }
+    // Final: büyük akor + çan + derin vuruş
+    const sb = t0 + son;
+    kick(sb);
+    [110, 220, 277.18, 329.63, 440].forEach((f, j) => ton(f, sb, 3.6, 0.12 - j * 0.015));
+    ton(1318.5, sb + 0.05, 2.6, 0.08); ton(1760, sb + 0.25, 2.2, 0.05);
+  }
+
   async function basla() {
     document.documentElement.lang = dil;
     if (/[?&]taslak=/.test(location.search) || window.VOLONTE_TASLAK) { const e = document.createElement("div"); e.className = "taslak-etiket"; e.textContent = `${t("draft")} ${(window.TEMA && TEMA.ad) || ""}`; document.body.appendChild(e); }
     sesDugmesi();
     const giris = $("#giris");
-    $(".dokun", giris).textContent = t("tap");
+    $(".dokun", giris).textContent = t("tapStart");
+    const atla = $(".atla", giris);
+    atla.textContent = `${t("skip")} ›`;
     const sahne = window.TEMA && TEMA.sahne ? TEMA.sahne($("canvas", giris)) : null;
     const veri = veriAl();
-    // Giriş oynarken vitrinin ilk fotoğrafı arkada iner (dokununca hazır olsun)
-    veri.then(() => { const u = MODELLER[0]; if (u) new Image().src = img(u.fotolar[0], genislik((window.TEMA && TEMA.vitrin) === "serit" ? innerWidth * 0.8 : innerWidth)); });
-    let girildi = false;
-    const gir = async () => {
-      if (girildi) return; girildi = true;
-      if (sesAcik) { try { muzik((window.TEMA && TEMA.notalar) || [220, 277.18, 329.63, 415.3]); } catch { /* ses yoksa sessiz devam */ } slogan(); }
+    kesitleriYukle();
+    // Vitrinin ilk fotoğrafı da giriş sırasında arkada iner
+    veri.then(() => { const u = MODELLER[0]; if (u) setTimeout(() => { new Image().src = img(foto(u), genislik((window.TEMA && TEMA.vitrin) === "serit" ? innerWidth * 0.8 : innerWidth)); }, 1500); });
+    let gordu = 0;
+    try { gordu = Number(localStorage.getItem("giris") || 0); } catch { /* */ }
+    const dogrudanModel = /^#model\//.test(location.hash);
+    const otomatikKisa = (gordu && Date.now() - gordu < 30 * 86400000) || dogrudanModel;
+    let durum = "bekliyor"; // bekliyor → oynuyor → bitti
+    let atlandi = false;
+    const bekle = (sn) => new Promise((r) => setTimeout(r, sn * 1000));
+    const evre = (ad) => { giris.dataset.evre = ad; };
+    const siteyiAc = async (hizli, kisa) => {
+      if (durum === "bitti") return;
+      durum = "bitti";
+      try { localStorage.setItem("giris", String(Date.now())); } catch { /* */ }
       await veri;
       iskelet(); sayfaGoster();
       $("#site").hidden = false;
       giris.classList.add("kapaniyor");
       if (sahne && sahne.hizlan) sahne.hizlan();
-      await (window.TEMA && TEMA.gecis ? TEMA.gecis(giris, $("#site")) : Promise.resolve());
+      if (hizli || kisa) await giris.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: kisa ? "scale(1.06)" : "none" }], { duration: hizli ? 450 : 650, easing: "ease-in", fill: "forwards" }).finished;
+      else await (window.TEMA && TEMA.gecis ? TEMA.gecis(giris, $("#site")) : giris.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 900, fill: "forwards" }).finished);
       giris.classList.add("bitti");
       if (sahne && sahne.dur) sahne.dur();
       try { if (!sessionStorage.getItem("v")) { sessionStorage.setItem("v", "1"); say("v"); } } catch { say("v"); }
-      // Videolar: sayfa tamamen yüklendikten sonra, sırayla
       const serbest = () => setTimeout(() => { videoSerbest = true; videoIlerle(); }, 4000);
       const ilkFoto = $(".slayt img");
       if (!ilkFoto || ilkFoto.complete) serbest(); else { ilkFoto.addEventListener("load", serbest, { once: true }); ilkFoto.addEventListener("error", serbest, { once: true }); }
     };
-    giris.addEventListener("click", gir);
-    giris.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") gir(); });
-    addEventListener("hashchange", () => { if (girildi) sayfaGoster(); });
+    const kisaGiris = async (sesli) => {
+      durum = "oynuyor"; giris.classList.add("oynuyor", "kisa");
+      if (sesli) { try { sinemaMuzik({ vurusBas: 0.5, vurusSay: 0, son: 0.7 }); } catch { /* */ } slogan(0.9); }
+      evre("perde"); await bekle(0.6); if (atlandi) return;
+      evre("baslik"); await bekle(1.4); if (atlandi) return;
+      siteyiAc(false, true);
+    };
+    const tamGiris = async () => {
+      durum = "oynuyor"; giris.classList.add("oynuyor");
+      const l = kesitAdaylari().filter((k) => kesitYuklu.has(k.f)).slice(0, KESIT_SAYI);
+      if (agZayif() || l.length < 3) return kisaGiris(sesAcik); // yavaş ağ ya da kesitler inmedi → kısa
+      const perde = 1.1, sunar = 1.6, kesit = VURUS * 2;
+      const son = perde + sunar + l.length * kesit;
+      if (sesAcik) { try { sinemaMuzik({ vurusBas: perde + sunar, vurusSay: l.length * 2, son }); } catch { /* */ } slogan(son + 0.35); }
+      const kap = $(".kesitler", giris);
+      kap.innerHTML = l.map((k) => `<div class="kesit kesit-${esc(k.tur || "yuruyus")}"><img src="${esc(kesitYuklu.get(k.f))}" alt=""><span>N° ${esc(k.kod || "")}</span></div>`).join("");
+      evre("perde"); await bekle(perde); if (atlandi) return;
+      evre("sunar"); await bekle(sunar); if (atlandi) return;
+      evre("kesit");
+      const kesitler = $$(".kesit", kap);
+      for (let i = 0; i < kesitler.length; i++) {
+        kesitler.forEach((x, j) => x.classList.toggle("aktif", j === i));
+        if (i && i % 2 === 0) kap.animate([{ opacity: 0.55 }, { opacity: 1 }], { duration: 160 }); // vuruşta kısa parlama
+        await bekle(kesit); if (atlandi) return;
+      }
+      evre("baslik"); await bekle(1.8); if (atlandi) return;
+      siteyiAc(false);
+    };
+    atla.addEventListener("click", (e) => {
+      e.stopPropagation();
+      atlandi = true; sesiDurdur();
+      siteyiAc(true);
+    });
+    const dokun = () => { if (durum === "bekliyor") tamGiris(); };
+    giris.addEventListener("click", dokun);
+    giris.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") dokun(); });
+    addEventListener("hashchange", () => { if (durum === "bitti") sayfaGoster(); });
+    if (window.__giris && window.__giris.atla) atla.click();
+    else if (otomatikKisa) kisaGiris(false); // tekrar gelen / model linki: dokunmadan kısa giriş, sessiz
+    else if (window.__giris && window.__giris.dokun) dokun(); // sayfa yüklenirken dokunulmuştu
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", basla); else basla();
 })();

@@ -5,28 +5,45 @@
 //  /olcum      → gizlilik dostu sayım: ülke (ağdan), dil, bakılan model. IP, çerez, kişisel veri YOK.
 //  /ses/slogan.mp3 → kendi ses kaydımız (depoya konunca); yoksa 404 (taslak tarayıcı sesiyle okur)
 import { SAYFALAR } from "./dist/sayfalar.js";
+import SECIM from "./kaynak/secim.json";
 
 const HAM = "https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/main/";
 const GENISLIK = [120, 160, 320, 480, 720, 960, 1280, 1600];
 const bugun = () => new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
 
+// Afiş = üzerinde yazı olan tanıtım görseli (elle seçildi: kaynak/secim.json). Listede olmayan yeni modelde ilk fotoğraf afiş sayılır.
+const AFIS = new Set(SECIM.afisler);
+const BILINEN = new Set(SECIM.bilinen);
+const fotoAnahtar = (f) => String(f).replace(/^galeri\//, "").replace(/\.\w+$/, "");
+function temizle(kod, fotolar) {
+  let temiz = BILINEN.has(kod) ? fotolar.filter((f) => !AFIS.has(fotoAnahtar(f))) : fotolar.slice(fotolar.length > 1 ? 1 : 0);
+  if (!temiz.length) temiz = fotolar.slice(0, 1);
+  return { temiz, fotolar: [...temiz, ...fotolar.filter((f) => !temiz.includes(f))] }; // model sayfasında afişler en sonda
+}
 async function veri() {
   const r = await fetch(`${HAM}veri/urunler.json`, { cf: { cacheTtl: 60, cacheEverything: true } });
   const l = r.ok ? await r.json() : [];
   return (Array.isArray(l) ? l : []).filter((u) => !u.gizli).map((u) => ({
     kod: String(u.kod), baslik: u.baslik || String(u.kod), kategori: u.kategori || "", bedenler: u.bedenler || "",
     aciklama: { en: (u.aciklama && u.aciklama.en) || "", fr: (u.aciklama && u.aciklama.fr) || "" },
-    fotolar: (u.fotolar || []).filter((f) => /^galeri\//.test(f)), videolar: u.videolar || [], eklenme: u.eklenme || null,
+    ...temizle(String(u.kod), (u.fotolar || []).filter((f) => /^galeri\//.test(f))), videolar: u.videolar || [], eklenme: u.eklenme || null,
   })); // fiyat bilerek yok
+}
+// Sinema girişi kesitleri: elle seçilenler (sitede olanlar), eksikse en yeni modellerin temiz fotoğrafıyla tamamlanır
+function sinema(l) {
+  const var_ = new Map(l.map((u) => [u.kod, u]));
+  const k = SECIM.sinema.map(([f, tur]) => ({ f: `galeri/${f}.jpg`, tur, kod: f.split("/")[0] })).filter((x) => var_.has(x.kod) && var_.get(x.kod).fotolar.includes(x.f));
+  const turler = ["savrulma", "yuruyus", "yakin"];
+  for (const u of l) { if (k.length >= 7) break; if (!k.some((x) => x.kod === u.kod) && u.temiz[0]) k.push({ f: u.temiz[0], tur: turler[k.length % 3], kod: u.kod }); }
+  return k;
 }
 
 async function sayfa(t, istek, ctx) {
   const l = await veri().catch(() => []);
   const ulke = String((istek.cf && istek.cf.country) || "").replace(/[^A-Z]/g, "").slice(0, 2);
-  const gomulu = `window.VOLONTE_VERI=${JSON.stringify(l).replace(/</g, "\\u003c")};window.VOLONTE_ULKE="${ulke}";window.VOLONTE_TASLAK=1;`;
-  const ilk = l[0] && l[0].fotolar[0];
+  const gomulu = `window.VOLONTE_VERI=${JSON.stringify(l).replace(/</g, "\\u003c")};window.VOLONTE_SINEMA=${JSON.stringify(sinema(l)).replace(/</g, "\\u003c")};window.VOLONTE_ULKE="${ulke}";window.VOLONTE_TASLAK=1;`;
   const html = SAYFALAR[t].replace("/*VERI*/", gomulu)
-    .replace("<!--ON_YUKLE-->", ilk ? `<link rel="prefetch" as="image" href="/img/${ilk}?w=720">` : "");
+    .replace("<!--ON_YUKLE-->", ""); // kesitler sayfa açılınca telefonun boyutuna göre sırayla iner
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" } });
 }
 
@@ -81,7 +98,7 @@ async function olcum(istek, env) {
   let g = {};
   try { g = JSON.parse((await istek.text()).slice(0, 300)); } catch { return new Response(null, { status: 204 }); }
   const ulke = String((istek.cf && istek.cf.country) || "XX").replace(/[^A-Z]/g, "").slice(0, 2) || "XX";
-  const taslak = ((istek.headers.get("referer") || "").match(/\/([abc])(\/|$|\?|#)/) || [])[1] || "-";
+  const taslak = ((istek.headers.get("referer") || "").match(/\/([abcd])(\/|$|\?|#)/) || [])[1] || "-";
   const l = [];
   if (g.t === "v") l.push(["ulke", ulke], ["dil", ["en", "fr", "tr"].includes(g.dil) ? g.dil : "?"], ["taslak", taslak]);
   if (g.t === "m" && /^\d{3,6}$/.test(String(g.kod))) l.push(["model", String(g.kod)]);
@@ -94,7 +111,7 @@ export default {
     const url = new URL(istek.url);
     const p = url.pathname;
     if (p === "/" || p === "") return new Response(SAYFALAR.secim, { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" } });
-    const t = (p.match(/^\/([abc])\/?$/) || [])[1];
+    const t = (p.match(/^\/([abcd])\/?$/) || [])[1];
     if (t) return sayfa(t, istek, ctx);
     if (p === "/veri") return Response.json(await veri(), { headers: { "cache-control": "public, max-age=60" } });
     if (p.startsWith("/img/")) return resim(istek, url, ctx, env);
