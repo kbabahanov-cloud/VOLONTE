@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3614",
+  "baslik": "Cape Sleeve Belted Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece set with a high-neck tunic, wide-leg trousers and a detachable belt. The tunic features dramatic wide cape-like sleeves and a front split hem, while the sash belt is finished with a pearl-framed buckle. Wear it belted or loose for events, gatherings and refined daywear. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble trois pièces composé d'une tunique à col montant, d'un pantalon large et d'une ceinture amovible. La tunique se distingue par ses amples manches façon cape et son ourlet fendu devant, la ceinture se ferme par une boucle entourée de perles. À porter ceinturé ou fluide, pour les cérémonies comme au quotidien. Fabriqué à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de três peças com túnica de gola alta, calça pantalona e cinto removível. A túnica tem mangas amplas em estilo capa e barra com abertura frontal, e o cinto traz uma fivela contornada por pérolas. Use com ou sem cinto, em eventos, encontros e no dia a dia elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3614/1.jpg",
+   "galeri/3614/2.jpg",
+   "galeri/3614/3.jpg",
+   "galeri/3614/4.jpg",
+   "galeri/3614/5.jpg",
+   "galeri/3614/6.jpg"
+  ],
+  "videolar": [
+   "selin/3614/0"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-10-31"
+ },
+ {
   "kod": "3582",
   "baslik": "Beaded Neckline Draped Gown",
   "kategori": "evening",
