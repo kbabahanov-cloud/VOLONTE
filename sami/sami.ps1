@@ -626,7 +626,11 @@ switch ($Mod) {
         if (-not $turS -or -not $tarS -or -not $tutS.Count) { Write-Host "  Sütunlar: $($sut -join ', ')"; Write-Host "  (tür/tarih/tutar sütunu bulunamadı, atlandı)"; continue }
         $kullanilan = $tutS
         $topla = ($tutS | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
-        $sec = "SELECT YEAR([$tarS]) AS Y, [$turS] AS T" + $(if ($dovS) { ", [$dovS] AS D" } else { "" }) + ", COUNT(*) AS N$topla FROM [$ad] GROUP BY YEAR([$tarS]), [$turS]" + $(if ($dovS) { ", [$dovS]" } else { "" }) + " ORDER BY YEAR([$tarS]), [$turS]"
+        # İptal edilmiş faturalar ciroya girmez (IPTAL sütunu varsa); kaç tane olduğu ayrıca yazılır
+        $iptalVar = $sut -contains "IPTAL"
+        if ($iptalVar) { try { Write-Host ("  iptal edilmiş fatura: {0} (ciroya katılmadı)" -f (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$ad] WHERE IPTAL = 1").Rows[0].N) } catch { Write-Host "  IPTAL okunamadı: $($_.Exception.Message)" } }
+        $nerede = if ($iptalVar) { " WHERE ISNULL(IPTAL, 0) = 0" } else { "" }
+        $sec = "SELECT YEAR([$tarS]) AS Y, [$turS] AS T" + $(if ($dovS) { ", [$dovS] AS D" } else { "" }) + ", COUNT(*) AS N$topla FROM [$ad]$nerede GROUP BY YEAR([$tarS]), [$turS]" + $(if ($dovS) { ", [$dovS]" } else { "" }) + " ORDER BY YEAR([$tarS]), [$turS]"
         try {
           foreach ($x in (Sorgu $sifre $sec).Rows) {
             $deger = ($tutS | ForEach-Object { "{0} {1:N2}" -f $_, (Num $x[$_]) }) -join " · "
