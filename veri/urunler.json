@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3413",
+  "baslik": "Cross-Neck Bell Sleeve Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A maxi dress with a fitted bodice and a full, flowing A-line skirt, in black with a red rose pattern. The neckline is finished with crossed straps, while dramatic bell sleeves and a defined waistband shape the silhouette. Elegant for celebrations, church and dinners, styled with simple heels. Made in Istanbul with careful craftsmanship.",
+   "fr": "Une robe longue au buste ajusté et à la jupe évasée ample, noire à motif de roses rouges. L'encolure est soulignée de brides croisées, tandis que les manches cloche et la taille marquée dessinent une belle silhouette. Idéale pour les cérémonies, l'église ou un dîner, avec des escarpins sobres. Confectionnée à Istanbul avec un travail soigné.",
+   "pt": "Um vestido longo com corpete ajustado e saia evasê ampla, em preto com padrão de rosas vermelhas. O decote tem alças cruzadas, e as mangas em sino com a cintura marcada valorizam a silhueta. Elegante para celebrações, igreja e jantares, com saltos discretos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3413/1.jpg",
+   "galeri/3413/2.jpg",
+   "galeri/3413/3.jpg",
+   "galeri/3413/4.jpg",
+   "galeri/3413/5.jpg"
+  ],
+  "videolar": [
+   "selin/3413/0"
+  ],
+  "fiyat": 44,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3415",
   "baslik": "Pleated Floral Skirt Set",
   "kategori": "sets",
