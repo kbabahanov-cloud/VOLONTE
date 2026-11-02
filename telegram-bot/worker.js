@@ -1186,6 +1186,33 @@ async function gorselEslesme(env, kod, silinmisler) {
   return sonuc;
 }
 
+// SOLD OUT görseli (Patron kararı 2 Kasım): Telegram botların 48 saatten eski mesajı silmesine izin vermiyor. Böyle bir
+// paylaşım silinemezse görseli VOLONTE tarzı "SOLD OUT" görseliyle değiştirilir ve alt yazısı kaldırılır (orijinali arşivde).
+// Görsel KV "kemal:soldout:b64"te (depoda gorseller/soldout.jpg); bir kez arşiv kanalına yüklenip dosya kimliği saklanır.
+async function soldoutDosyasi(env) {
+  const kayitli = await env.KAYIT.get("kemal:soldout:fileId");
+  if (kayitli) return kayitli;
+  const b64 = await env.KAYIT.get("kemal:soldout:b64");
+  const arsivKanal = await env.KAYIT.get("arsiv", "json");
+  if (!b64 || !arsivKanal) return null;
+  const bayt = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const f = new FormData();
+  f.append("chat_id", String(arsivKanal.id));
+  f.append("caption", "SOLD OUT görseli (Kemal, eski paylaşımları gizlemek için)");
+  f.append("disable_notification", "true");
+  f.append("photo", new Blob([bayt], { type: "image/jpeg" }), "soldout.jpg");
+  const r = await (await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/sendPhoto`, { method: "POST", body: f })).json().catch(() => null);
+  const id = r && r.ok && r.result.photo && r.result.photo.at(-1).file_id;
+  if (id) await env.KAYIT.put("kemal:soldout:fileId", id);
+  return id || null;
+}
+async function soldoutIleGizle(env, kanalId, mesajId) {
+  const dosya = await soldoutDosyasi(env);
+  if (!dosya) return { ok: false, description: "SOLD OUT görseli hazır değil" };
+  return telegram(env, "editMessageMedia", { chat_id: kanalId, message_id: mesajId, media: { type: "photo", media: dosya, caption: "" } });
+}
+const ESKI_MESAJ = /can't be deleted|cannot be deleted|message can't|too old|48/i;
+
 async function silmeAdimi(env, kod) {
   const anahtar = `silinecek:${kod}`;
   const is = await env.KAYIT.get(anahtar, "json");
@@ -1200,14 +1227,19 @@ async function silmeAdimi(env, kod) {
     if (c.ok && Array.isArray(c.result) && c.result.length === parti.length) kopyalar = c.result.map((x) => x.message_id);
   }
   is.kopya = is.kopya || [];
+  is.gizlenen = is.gizlenen || [];
   for (const [i, id] of parti.entries()) {
     if (arsivKanal && !kopyalar) { is.hatali.push(id); is.hata = is.hata || "arşive kopyalanamadı (silinmedi)"; continue; }
     const r = await telegram(env, "deleteMessage", { chat_id: kanal.id, message_id: id });
-    if (r.ok) { is.silinen += 1; if (kopyalar) is.kopya.push({ kanal: id, arsiv: kopyalar[i] }); }
-    else {
-      is.hatali.push(id);
-      is.hata = is.hata || r.description || "bilinmeyen hata";
+    if (r.ok) { is.silinen += 1; if (kopyalar) is.kopya.push({ kanal: id, arsiv: kopyalar[i] }); continue; }
+    // Patron kuralı varsa (2 Kasım): 48 saatten eski → SOLD OUT görseliyle gizle (orijinali arşivde), link Patron'a
+    if (is.patron && kopyalar && ESKI_MESAJ.test(r.description || "")) {
+      const g = await soldoutIleGizle(env, kanal.id, id);
+      if (g.ok) { is.gizlenen.push(id); is.kopya.push({ kanal: id, arsiv: kopyalar[i], gizlendi: true }); continue; }
+      is.hata = is.hata || `${r.description} — SOLD OUT ile de gizlenemedi: ${g.description || "bilinmeyen hata"}`;
     }
+    is.hatali.push(id);
+    is.hata = is.hata || r.description || "bilinmeyen hata";
   }
   is.kalan = is.kalan.slice(parti.length);
   if (is.kalan.length) {
@@ -1224,9 +1256,11 @@ async function silmeAdimi(env, kod) {
     // Patron'a TEK mesaj (2 Kasım kuralı)
     const siteOk = ["kaldirildi", "yoktu"].includes(is.site);
     const tamam = siteOk && !is.hatali.length;
+    const gizlenen = is.gizlenen || [];
     const satirlar = [tamam
-      ? `✅ ${ad} siteden ve kanaldan kaldırıldı (${is.paylasim} paylaşım silindi${is.silinen !== is.paylasim ? `, ${is.silinen} mesaj` : ""}).${is.site === "yoktu" ? " (Sitede zaten yoktu.)" : ""}`
+      ? `✅ ${ad} siteden ve kanaldan kaldırıldı (${is.paylasim} paylaşım${gizlenen.length ? `: ${is.silinen} mesaj silindi, ${gizlenen.length} eski mesaj SOLD OUT ile gizlendi` : ` silindi${is.silinen !== is.paylasim ? `, ${is.silinen} mesaj` : ""}`}).${is.site === "yoktu" ? " (Sitede zaten yoktu.)" : ""}`
       : `⚠️ ${ad}: ${siteOk ? (is.site === "yoktu" ? "sitede zaten yoktu" : "siteden kaldırıldı") : `siteden KALDIRILAMADI (${is.site || "Selin cevap vermedi"})`}; kanaldan ${is.silinen} mesaj silindi${is.hatali.length ? `, ${is.hatali.length} mesaj SİLİNEMEDİ (${is.hata})` : ""}.`];
+    if (gizlenen.length) satirlar.push("Telegram 48 saatten eski mesajları botun silmesine izin vermiyor; bunlar SOLD OUT görseliyle gizlendi, alt yazıları kaldırıldı (orijinalleri arşivde). Tamamen silmek isterseniz elle silin:", ...gizlenen.slice(0, 20).map(link), ...(gizlenen.length > 20 ? [`... ve ${gizlenen.length - 20} mesaj daha.`] : []));
     if (is.hatali.length) {
       if (/can't be deleted|cannot be deleted|too old|48/i.test(is.hata || "")) satirlar.push("Telegram bu eski mesajları botun silmesine izin vermedi; aşağıdakileri kanalda elle silebilirsiniz (kopyaları arşivde):");
       satirlar.push(...is.hatali.slice(0, 15).map(link), ...(is.hatali.length > 15 ? [`... ve ${is.hatali.length - 15} mesaj daha.`] : []));
@@ -1265,10 +1299,12 @@ export async function kanalaGeriKoy(env, kod, kim, site, simdi) {
   for (const [a, v] of Object.entries(arsiv)) if (a === kod || v.ana === kod) delete arsiv[a];
   await env.KAYIT.put("hicgelmeyecek", JSON.stringify(arsiv));
   if (konan && !hata) await env.KAYIT.delete(`silinen:${kod}`);
+  const soldout = ((k && k.kopya) || []).filter((x) => x.gizlendi).map((x) => (kanal.kullanici ? `https://t.me/${kanal.kullanici}/${x.kanal}` : `#${x.kanal}`));
   const siteOk = ["geri kondu", "zaten sitede"].includes(site);
-  const metin = siteOk && !hata && (konan || !(k && k.kopya && k.kopya.length))
+  const metin0 = siteOk && !hata && (konan || !(k && k.kopya && k.kopya.length))
     ? `↩️ ${kodGoster(kod)} geri kondu: site ${site}; kanala ${konan} mesaj geri kondu${konan ? " (yeni tarihle)" : " (arşivde kopya yoktu)"}.`
     : `⚠️ ${kodGoster(kod)} geri koyma: site ${site || "?"}; kanal ${konan} mesaj${hata ? `, hata: ${hata}` : ""}${!k ? " (arşiv kaydı yok)" : ""}.`;
+  const metin = soldout.length ? `${metin0}\nKanalda SOLD OUT görselli ${soldout.length} eski paylaşım duruyor; isterseniz elle silin:\n${soldout.join("\n")}` : metin0;
   await telegram(env, "sendMessage", { chat_id: muratId(env), text: metin, disable_web_page_preview: true });
 }
 
@@ -1928,6 +1964,21 @@ export async function yeniModelIsleri(env, simdi) {
 }
 
 export async function fabrikaIsleri(env, simdi) {
+  // Tek seferlik (2 Kasım): KV "venom:soldoutUygula" = [{kod, kanal, arsiv}] → daha önce silinemeyen eski paylaşımlar SOLD OUT ile gizlenir
+  const uygula = await env.KAYIT.get("venom:soldoutUygula", "json");
+  if (uygula && uygula.length) {
+    await env.KAYIT.delete("venom:soldoutUygula");
+    const kanal = await env.KAYIT.get("kanal", "json");
+    for (const u of uygula) {
+      const g = await soldoutIleGizle(env, kanal.id, u.kanal);
+      const s = (await env.KAYIT.get(`silinen:${u.kod}`, "json")) || { kod: u.kod, kopya: [] };
+      if (g.ok && u.arsiv && !s.kopya.some((x) => x.kanal === u.kanal)) { s.kopya.push({ kanal: u.kanal, arsiv: u.arsiv, gizlendi: true }); await env.KAYIT.put(`silinen:${u.kod}`, JSON.stringify(s)); }
+      const link = kanal.kullanici ? `https://t.me/${kanal.kullanici}/${u.kanal}` : `#${u.kanal}`;
+      await telegram(env, "sendMessage", { chat_id: muratId(env), disable_web_page_preview: true, text: g.ok
+        ? `✅ ${u.kod}: silinemeyen eski paylaşım SOLD OUT görseliyle gizlendi, alt yazısı kaldırıldı (orijinali arşivde). Tamamen silmek isterseniz elle silin:\n${link}`
+        : `⚠️ ${u.kod}: eski paylaşım SOLD OUT ile gizlenemedi (${g.description || "bilinmeyen hata"}). Elle silin:\n${link}` });
+    }
+  }
   // Tek seferlik yetki kontrolü (2 Kasım): KV "venom:yetkiKontrol" → botun VOLONTE kanalındaki yönetici izinleri "venom:yetkiKontrolSonuc"a
   if (await env.KAYIT.get("venom:yetkiKontrol")) {
     await env.KAYIT.delete("venom:yetkiKontrol");

@@ -1793,3 +1793,36 @@ test("SİL kuralı güvenliği: arşive kopyalanamayan mesaj SİLİNMEZ; Telegra
   assert.match(mesajlar.find((m) => m.includes("3200")), /^⚠️ 3200: siteden kaldırıldı; kanaldan 0 mesaj silindi, 1 mesaj SİLİNEMEDİ \(arşive kopyalanamadı \(silinmedi\)\)/);
   assert.match(mesajlar.find((m) => m.includes("3100")), /^⚠️ 3100: siteden KALDIRILAMADI \(hata: GitHub 500\); kanaldan 2 mesaj silindi, 1 mesaj SİLİNEMEDİ[\s\S]*elle silebilirsiniz[\s\S]*t\.me\/Volonteroseoffical\/301/);
 });
+
+test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyle gizlenir, alt yazı kaldırılır, orijinal arşivde; Patron'a link; /geri sonrası SOLD OUT linki hatırlatılır", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kemal:soldout:b64", Buffer.from([0xff, 0xd8, 0xff]).toString("base64"));
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3100", kim: "Patron", zaman: o.simdi, site: "kaldirildi" }]));
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.endsWith("/sendPhoto")) { o.gonderilen.push({ url: adres, govde: { chat_id: istek.body.get("chat_id") } }); return new Response(JSON.stringify({ ok: true, result: { message_id: 5, photo: [{ file_id: "kucuk" }, { file_id: "SOLDOUT" }] } })); }
+    if (adres.endsWith("/deleteMessage") && JSON.parse(istek.body).message_id === 300) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be deleted" }));
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  const duz = cagrilar(o.gonderilen, "editMessageMedia");
+  assert.deepEqual(duz.map((x) => x.govde), [{ chat_id: -100, message_id: 300, media: { type: "photo", media: "SOLDOUT", caption: "" } }]);
+  assert.equal(cagrilar(o.gonderilen, "sendPhoto")[0].govde.chat_id, "-200"); // görsel bir kez arşiv kanalına yüklendi
+  assert.equal(o.depo.get("kemal:soldout:fileId"), "SOLDOUT");
+  const p = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999");
+  assert.equal(p.length, 1);
+  assert.match(p[0].govde.text, /^✅ 3100 siteden ve kanaldan kaldırıldı \(1 paylaşım: 2 mesaj silindi, 1 eski mesaj SOLD OUT ile gizlendi\)\./);
+  assert.match(p[0].govde.text, /SOLD OUT görseliyle gizlendi[\s\S]*t\.me\/Volonteroseoffical\/300/);
+  const k = JSON.parse(o.depo.get("silinen:3100"));
+  assert.deepEqual(k.kopya.filter((x) => x.gizlendi).map((x) => x.kanal), [300]);
+  // /geri: orijinal arşivden geri konur, SOLD OUT paylaşımının linki hatırlatılır
+  o.gonderilen.length = 0;
+  o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Patron", site: "geri kondu" }]));
+  await fabrikaIsleri(o.env, o.simdi + 600);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.message_ids.length, 3);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Kanalda SOLD OUT görselli 1 eski paylaşım duruyor[\s\S]*\/300/);
+});
