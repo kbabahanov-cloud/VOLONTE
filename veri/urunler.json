@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3436",
+  "baslik": "Leopard Chiffon Cape Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted black strapless-look midi dress with a flowing sheer chiffon cape top. The cape falls in wide batwing sleeves and fades into a leopard print hem, with an adjustable side tie that lets you shape the drape. Easy to style for dinners, events and special occasions. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant une robe midi noire ajustée à fines bretelles et un haut cape en mousseline fluide et transparente. La cape tombe en larges manches chauve-souris et se termine par un imprimé léopard, avec un lien coulissant sur le côté pour ajuster le drapé. Idéal pour les dîners, réceptions et occasions spéciales. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um vestido midi preto ajustado de alças finas com uma blusa capa em chiffon leve e transparente. A capa cai em mangas amplas tipo morcego e termina num estampado de leopardo, com um atilho lateral ajustável para moldar o drapeado. Perfeito para jantares, eventos e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3436/1.jpg",
+   "galeri/3436/2.jpg",
+   "galeri/3436/3.jpg",
+   "galeri/3436/4.jpg",
+   "galeri/3436/5.jpg"
+  ],
+  "videolar": [
+   "selin/3436/0"
+  ],
+  "fiyat": 36,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3441",
   "baslik": "Satin Lapel Three-Piece Suit",
   "kategori": "sets",
