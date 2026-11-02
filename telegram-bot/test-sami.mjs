@@ -1403,7 +1403,7 @@ test("Fuat'a iş özeti: VOLONTE defterinden yıllık gelen mal (ödeme hariç, 
   // VOLONTE defteri: mal = alacak (ödemeler borçta). D0003'ün ilk günü D0001 kapanışını taşıyan devir (alacak 1.000)
   const vl = { zaman: 1, hesaplar: [
     { anahtar: "20", donemler: {
-      D0001TBLCARIGENELHAREKET: { n: 5, borc: 4000, alacak: 5000, yillar: { 2023: { n: 3, b: 1000, a: 3000, ob: 1000, oa: 0 }, 2024: { n: 2, b: 3000, a: 2000, ob: 3000, oa: 0 } }, ilkGun: { tarih: "2023-01-02", n: 1, b: 0, a: 1000 } },
+      D0001TBLCARIGENELHAREKET: { n: 5, borc: 4000, alacak: 5000, ilk: "2023-01-02", yillar: { 2023: { n: 3, b: 1000, a: 3000, ob: 1000, oa: 0 }, 2024: { n: 2, b: 3000, a: 2000, ob: 3000, oa: 0 } }, ilkGun: { tarih: "2023-01-02", n: 1, b: 0, a: 1000 } },
       D0003TBLCARIGENELHAREKET: { n: 4, borc: 2000, alacak: 3500, yillar: { 2025: { n: 4, b: 2000, a: 3500, ob: 2000, oa: 0 } }, ilkGun: { tarih: "2025-01-30", n: 1, b: 0, a: 1000 } },
       D0003TBLCARIHAREKETLERI: { n: 4, borc: 2000, alacak: 3500 } } },
     { anahtar: "15", donemler: { D0001TBLCARIGENELHAREKET: { n: 1, borc: 0, alacak: 250.5, yillar: { 2024: { n: 1, b: 0, a: 250.5, ob: 0, oa: 0 } }, ilkGun: { tarih: "2024-03-01", n: 1, b: 0, a: 250.5 } } } },
@@ -1421,6 +1421,12 @@ test("Fuat'a iş özeti: VOLONTE defterinden yıllık gelen mal (ödeme hariç, 
   await isOzetiHazirMi(o.env, 1793600000, tg);
   assert.equal(g.length, 0); // rakam yokken önizleme yok
   await st("/ayar-yaz", { k: "cari:VOLONTE", v: JSON.stringify(vl) });
+  // Black Rose defteri 2022'den başlıyorsa VOLONTE defteri eksik sayılır → önizleme yok
+  const brD = (ilk) => ({ zaman: 1, hesaplar: [{ anahtar: "20", donemler: { D0001TBLCARIGENELHAREKET: { n: 5, borc: 1, alacak: 2, ilk } } }] });
+  await st("/ayar-yaz", { k: "cari:BLACKROSE", v: JSON.stringify(brD("2022-05-01")) });
+  await isOzetiHazirMi(o.env, 1793600000, tg);
+  assert.equal(g.length, 0);
+  await st("/ayar-yaz", { k: "cari:BLACKROSE", v: JSON.stringify(brD("2023-01-02")) });
   await isOzetiHazirMi(o.env, 1793600000, tg);
   await isOzetiHazirMi(o.env, 1793600300, tg);
   assert.ok(g.length === 2 && g.every((x) => x.govde.chat_id === "999")); // bir kez, sadece Patron

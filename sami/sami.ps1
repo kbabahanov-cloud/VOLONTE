@@ -597,47 +597,57 @@ switch ($Mod) {
     Bekle
   }
   "ciro-deneme" {
-    # Yıllık ciro (2 Kasım): satış faturaları (belge tipi 21) − satıştan iade (22), yıl yıl. SADECE SELECT, hiçbir şey gönderilmez.
-    # Alış fiyatı, maliyet, kâr sütunları ASLA okunmaz (aday listesinde yok).
+    # Yıllık ciro (2 Kasım, düzeltme): SADECE satış fatura başlıkları (adında SATFAT + BASLIK geçen tablolar, tüm dönemler).
+    # Alış faturaları (ALF), fatura satırları ve depo hareketleri okunmaz. Alış fiyatı, maliyet, kâr sütunları ASLA okunmaz.
+    # Not: PowerShell'de değişken adları büyük/küçük harf ayırmaz ($tip = $TIP); önceki sürümdeki tanıma hatası buydu.
     Write-Host "=== Sayım Sami ciro denemesi ($($Ayar.magaza)) — sadece okuma, hiçbir şey gönderilmez ===" -ForegroundColor Cyan
     try {
       $g = Gizliler; $sifre = Duz $g.Sifre
-      $TIP = @("BELGETIPI", "FATURATIPI", "FISTIPI", "BELGETURU", "ISLEMTIPI", "TIP")
-      $TUTAR = @("GENELTOPLAM", "NETTOPLAM", "TOPLAM", "ARATOPLAM", "TOPLAMTUTAR", "TUTAR", "NETTUTAR", "FATURATUTARI", "DOVIZGENELTOPLAM", "DOVIZTOPLAM", "DOVIZTUTAR", "SATISTUTARI", "FIYAT", "NETFIYAT", "DOVIZFIYAT", "SATISFIYATI")
-      $DOVIZ = @("DOVIZCINSI", "DOVIZKODU", "DOVIZ", "PARABIRIMI", "DOVIZTIPI", "DOVIZIND")
-      $TARIHLER = @($TARIH_ADAYLARI + @("FATURATARIHI"))
-      $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a OR TABLE_NAME LIKE @b ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBL%FAT%"; b = "$($Ayar.firma)D____TBLDEPOENVANTER" }
-      Write-Host "Aday tablolar: $($tablolar.Rows.Count)"
+      $ADAY_TUR = @("BELGETIPI", "FATURATIPI", "FISTIPI", "BELGETURU", "ISLEMTIPI", "TIP")
+      $ADAY_TUTAR = @("GENELTOPLAM", "NETTOPLAM", "TOPLAM", "ARATOPLAM", "TOPLAMTUTAR", "TUTAR", "NETTUTAR", "FATURATUTARI", "DOVIZGENELTOPLAM", "DOVIZTOPLAM", "DOVIZTUTAR", "SATISTUTARI")
+      $ADAY_DOVIZ = @("DOVIZCINSI", "DOVIZKODU", "DOVIZ", "PARABIRIMI", "DOVIZTIPI", "DOVIZIND")
+      $ADAY_TARIH = @("TARIH", "FATURATARIHI", "BELGETARIHI", "FISTARIHI", "EVRAKTARIHI", "ISLEMTARIHI", "KAYITTARIHI")
+      $bul = { param($liste, $sutunlar) foreach ($a in $liste) { if ($sutunlar -contains $a) { return $a } } return $null }
+      $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFAT%BASLIK%" }
+      Write-Host "Satış fatura başlık tabloları: $($tablolar.Rows.Count) (her dönem ayrı tablo)"
+      $ozet = @{}   # yıl|tür|döviz → { n, tutarlar }
+      $kullanilan = $null
       foreach ($tb in $tablolar.Rows) {
         $ad = [string]$tb.AD
-        $sut = Sutunlar $sifre $ad
+        $sut = @(Sutunlar $sifre $ad | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+        $turS = & $bul $ADAY_TUR $sut
+        $tarS = & $bul $ADAY_TARIH $sut
+        $dovS = & $bul $ADAY_DOVIZ $sut
+        $tutS = @($ADAY_TUTAR | Where-Object { $sut -contains $_ })
         try { $n = (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$ad]").Rows[0].N } catch { $n = "?" }
         Write-Host ""
         Write-Host "■ $ad  ($n satır)" -ForegroundColor Yellow
-        Write-Host "  Sütunlar: $($sut -join ', ')"
-        $tip = $TIP | Where-Object { $sut -contains $_ } | Select-Object -First 1
-        $tar = $TARIHLER | Where-Object { $sut -contains $_ } | Select-Object -First 1
-        $tut = @($TUTAR | Where-Object { $sut -contains $_ })
-        $dov = $DOVIZ | Where-Object { $sut -contains $_ } | Select-Object -First 1
-        if (-not $tip -or -not $tar) { Write-Host "  (tür ya da tarih sütunu yok, atlandı)"; continue }
+        Write-Host "  tür: $turS · tarih: $tarS · döviz: $dovS · tutar sütunları: $($tutS -join ', ')"
+        if (-not $turS -or -not $tarS -or -not $tutS.Count) { Write-Host "  Sütunlar: $($sut -join ', ')"; Write-Host "  (tür/tarih/tutar sütunu bulunamadı, atlandı)"; continue }
+        $kullanilan = $tutS
+        $topla = ($tutS | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
+        $sec = "SELECT YEAR([$tarS]) AS Y, [$turS] AS T" + $(if ($dovS) { ", [$dovS] AS D" } else { "" }) + ", COUNT(*) AS N$topla FROM [$ad] GROUP BY YEAR([$tarS]), [$turS]" + $(if ($dovS) { ", [$dovS]" } else { "" }) + " ORDER BY YEAR([$tarS]), [$turS]"
         try {
-          $dag = Sorgu $sifre "SELECT TOP 12 [$tip] AS T, COUNT(*) AS N FROM [$ad] GROUP BY [$tip] ORDER BY COUNT(*) DESC"
-          Write-Host ("  {0} dağılımı: {1}" -f $tip, (($dag.Rows | ForEach-Object { "$($_.T)=$($_.N)" }) -join ", "))
-        } catch { Write-Host "  $tip okunamadı: $($_.Exception.Message)" }
-        if (-not $tut.Count) { Write-Host "  (tutar sütunu yok)"; continue }
-        $topla = ($tut | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
-        $grup = "YEAR([$tar]), [$tip]" + $(if ($dov) { ", [$dov]" } else { "" })
-        $sec = "SELECT YEAR([$tar]) AS Y, [$tip] AS T" + $(if ($dov) { ", [$dov] AS D" } else { "" }) + ", COUNT(*) AS N$topla FROM [$ad] WHERE [$tip] IN (21, 22) GROUP BY $grup ORDER BY YEAR([$tar])"
-        try {
-          $r = Sorgu $sifre $sec
-          if (-not $r.Rows.Count) { Write-Host "  (21/22 kaydı yok)" }
-          foreach ($x in $r.Rows) {
-            $deger = ($tut | ForEach-Object { "{0} {1:N2}" -f $_, (Num $x[$_]) }) -join " · "
-            Write-Host ("  {0} · tip {1}{2} · {3} kayıt · {4}" -f $x.Y, $x.T, $(if ($dov) { " · döviz $($x.D)" } else { "" }), $x.N, $deger)
+          foreach ($x in (Sorgu $sifre $sec).Rows) {
+            $deger = ($tutS | ForEach-Object { "{0} {1:N2}" -f $_, (Num $x[$_]) }) -join " · "
+            Write-Host ("  {0} · tür {1}{2} · {3} fatura · {4}" -f $x.Y, $x.T, $(if ($dovS) { " · döviz $($x.D)" } else { "" }), $x.N, $deger)
+            $k = "$($x.Y)|$($x.T)|$(if ($dovS) { $x.D } else { '-' })"
+            if (-not $ozet.ContainsKey($k)) { $ozet[$k] = @{ n = 0; t = @{}; donem = @() } }
+            $ozet[$k].n += [int]$x.N; $ozet[$k].donem += $ad.Substring($Ayar.firma.Length, 5)
+            foreach ($s in $tutS) { $ozet[$k].t[$s] = [double]$ozet[$k].t[$s] + [double](Num $x[$s]) }
           }
         } catch { Write-Host "  toplam okunamadı: $($_.Exception.Message)" }
       }
+      # Tüm dönemler birlikte: yıl yıl, tür tür (aynı yıl iki dönemde görünürse işaretlenir → çift sayım kontrolü)
       Write-Host ""
+      Write-Host "=== TÜM DÖNEMLER — yıl · tür · döviz ===" -ForegroundColor Cyan
+      foreach ($k in ($ozet.Keys | Sort-Object)) {
+        $p = $k.Split("|"); $o = $ozet[$k]
+        $iki = if (@($o.donem | Sort-Object -Unique).Count -gt 1) { "  ⚠ iki dönemde: $((@($o.donem | Sort-Object -Unique)) -join '+')" } else { "" }
+        Write-Host ("  {0} · tür {1} · döviz {2} · {3} fatura · {4}{5}" -f $p[0], $p[1], $p[2], $o.n, (($o.t.Keys | Sort-Object | ForEach-Object { "{0} {1:N2}" -f $_, $o.t[$_] }) -join " · "), $iki)
+      }
+      Write-Host ""
+      Write-Host "Tür numaralarını fotoğrafa göre belirleyeceğiz (Vegawin'de alış 20 / alıştan iade 22 ise büyük olasılıkla satış 21, satıştan iade 23)."
       Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi, Vegawin'e hiçbir şey yazılmadı)." -ForegroundColor Green
     } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
     Write-Host ""

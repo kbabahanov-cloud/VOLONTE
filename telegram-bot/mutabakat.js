@@ -558,6 +558,11 @@ const ozKlavye = (id) => ({ inline_keyboard: [[{ text: "👁 Fuat'ın göreceği
 export async function isOzetiOnizleme(env, tg, simdi, kaynak = "elle") {
   const [br, vl] = await Promise.all([ayarOku(env, "cari:BLACKROSE", null), ayarOku(env, "cari:VOLONTE", null)]);
   const v = yillikIs(vl), b = yillikIs(br);
+  const kapsam = kapsamEksik(vl, br);
+  if (kapsam) {
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `Fuat'a iş özeti hazırlanmadı: ${kapsam} Eksik rakam Fuat'a gitmesin diye bekliyorum.` });
+    return null;
+  }
   if (!Object.keys(v.yillar).length) {
     await tg(env, "sendMessage", { chat_id: murat(env), text: `Fuat'a iş özeti henüz hazır değil: VOLONTE defterinden yıl toplamları okunamadı.${v.uyarilar.length ? `\n${v.uyarilar.join("\n")}` : ""}` });
     return null;
@@ -616,11 +621,25 @@ export async function isOzetiDugmesi(env, cq, tg, simdi) {
   return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ İş özeti Fuat'a gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
 }
 
-// Rakamlar hazır olunca (VOLONTE defterinden yıl toplamları ilk kez gelince) önizleme Patron'a bir kez kendiliğinden gider
+// Kapsam: VOLONTE defterindeki yıl toplamları, Black Rose defterinin başladığı yıla kadar gitmeli (eski dönemleri
+// bağlanamadıysa özet eksik kalır → hazırlanmaz). Döner: eksikse açıklama, tamamsa null.
+const ilkYil = (d) => {
+  const l = [];
+  for (const h of (d && d.hesaplar) || []) for (const [k, x] of Object.entries(h.donemler || {})) if (/CARIGENELHAREKET$/.test(k) && x.n > 0 && x.ilk) l.push(x.ilk.slice(0, 4));
+  return l.sort()[0] || null;
+};
+export function kapsamEksik(vl, br) {
+  const v = ilkYil(vl), b = ilkYil(br);
+  if (!v) return "VOLONTE defterinden Black Rose hareketi okunamadı.";
+  if (!b) return "Black Rose defteri henüz okunmadı (karşılaştırma için gerekli).";
+  return v > b ? `VOLONTE defterinde Black Rose hareketleri ancak ${v}'den itibaren bağlanabildi; Black Rose defteri ${b}'den başlıyor (eski dönemler eksik).` : null;
+}
+
+// Rakamlar hazır olunca (VOLONTE defterinden yıl toplamları, tam kapsamla) önizleme Patron'a bir kez kendiliğinden gider
 export async function isOzetiHazirMi(env, simdi, tg) {
   if (await ayarOku(env, "oz:otomatik", null)) return;
-  const vl = await ayarOku(env, "cari:VOLONTE", null);
-  if (!Object.keys(yillikIs(vl).yillar).length) return;
+  const [vl, br] = await Promise.all([ayarOku(env, "cari:VOLONTE", null), ayarOku(env, "cari:BLACKROSE", null)]);
+  if (!Object.keys(yillikIs(vl).yillar).length || kapsamEksik(vl, br)) return;
   await ayarYaz(env, "oz:otomatik", simdi);
   await isOzetiOnizleme(env, tg, simdi, "otomatik");
 }
