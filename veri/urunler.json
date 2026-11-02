@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3471",
+  "baslik": "Pleated Metallic Maxi Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length maxi dress in a shimmering metallic pleated fabric, cut with a relaxed draped bodice and a full, flowing skirt. A wide black waistband defines the waist, while soft dropped sleeves and a clean boat neckline keep the silhouette refined. Made for evening events, celebrations and formal gatherings. Produced in Istanbul with careful workmanship.",
+   "fr": "Une robe longue dans un tissu plissé métallisé aux reflets lumineux, avec un buste drapé souple et une jupe ample et fluide. Une large ceinture noire marque la taille, tandis que les manches tombantes et l'encolure bateau gardent une ligne épurée. Idéale pour les soirées, les cérémonies et les réceptions. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido longo em tecido plissado metalizado com brilho suave, com corpete drapeado e saia ampla e fluida. Uma faixa preta larga marca a cintura, enquanto as mangas caídas e o decote canoa mantêm a linha elegante. Ideal para noites especiais, cerimónias e eventos formais. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3471/1.jpg",
+   "galeri/3471/2.jpg",
+   "galeri/3471/3.jpg",
+   "galeri/3471/4.jpg",
+   "galeri/3471/5.jpg",
+   "galeri/3471/6.jpg"
+  ],
+  "videolar": [
+   "selin/3471/0"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3484",
   "baslik": "Wrap Top Slip Dress Set",
   "kategori": "sets",
