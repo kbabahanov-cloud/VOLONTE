@@ -1928,6 +1928,15 @@ export async function yeniModelIsleri(env, simdi) {
 }
 
 export async function fabrikaIsleri(env, simdi) {
+  // Tek seferlik yetki kontrolü (2 Kasım): KV "venom:yetkiKontrol" → botun VOLONTE kanalındaki yönetici izinleri "venom:yetkiKontrolSonuc"a
+  if (await env.KAYIT.get("venom:yetkiKontrol")) {
+    await env.KAYIT.delete("venom:yetkiKontrol");
+    const kanal = await env.KAYIT.get("kanal", "json");
+    const ben = await telegram(env, "getMe", {});
+    const uye = kanal && ben.ok ? await telegram(env, "getChatMember", { chat_id: kanal.id, user_id: ben.result.id }) : null;
+    const r = uye && uye.ok ? uye.result : {};
+    await env.KAYIT.put("venom:yetkiKontrolSonuc", JSON.stringify({ zaman: simdi, durum: r.status || (uye && uye.description) || null, silme: r.can_delete_messages ?? null, paylasma: r.can_post_messages ?? null, duzenleme: r.can_edit_messages ?? null }), { expirationTtl: 86400 });
+  }
   await yeniModelIsleri(env, simdi);
   const sira = (await env.KAYIT.get("venom:repetePaylas", "json")) || [];
   if (sira.length) {
