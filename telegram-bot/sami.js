@@ -74,7 +74,7 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
-    const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); await cariDokumu(e); };
+    const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); await cariDokumu(e, tg); };
     const paylasilmamis = (e, t) => paylasimTakip(e, t, tg);
     const mutabakat = (e, t) => mutabakatAdimi(e, t, tg);
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };

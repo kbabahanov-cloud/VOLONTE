@@ -2,6 +2,7 @@
 // (VOLONTE + Black Rose + ekler), fabrikaya gidenler, stok sorguları, satışlar ve köprü durumu "sami:gunDokumSonuc"a yazılır.
 // KV "sami:raporTekrar" = "YYYY-AA-GG" → o günün otomatik rapor metinleri Patron'a (MURAT_ID'nin ilki) yeniden gönderilir.
 import { stokIste } from "./stokbot.js";
+import { onizlemeGonder } from "./mutabakat.js";
 
 const ayar = async (env, k) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
 const SAAT_FARKI = 3 * 3600;
@@ -48,12 +49,18 @@ export async function raporTekrar(env, tg) {
 // TEK SEFERLİK CARİ DÖKÜMÜ (2 Kasım, sadece OKUMA): KV "sami:cariDokum" = "1" → köprülerin gönderdiği cari kayıtları
 // (StokDO "cari:BLACKROSE", "cari:VOLONTE") ve seçili kaynak ("cari:yontem") "sami:cariDokumSonuc"a yazılır (1 gün sonra silinir).
 // KV "sami:cariYontem" = JSON → StokDO "cari:yontem" olarak yazılır (bakiye kaynağı kararı).
-export async function cariDokumu(env) {
+// KV "sami:cariOnizleme" = "1" → mutabakat önizlemesi (gerçek rakamlarla) hemen Patron'a gider (/mutabakat ile aynı).
+export async function cariDokumu(env, tg) {
   const y = await env.KAYIT.get("sami:cariYontem");
   if (y) {
     await env.KAYIT.delete("sami:cariYontem");
     const v = JSON.parse(y);
     await stokIste(env, "/ayar-yaz", { k: "cari:yontem", v: JSON.stringify(v) });
+  }
+  if (await env.KAYIT.get("sami:cariOnizleme")) {
+    await env.KAYIT.delete("sami:cariOnizleme");
+    const r = await onizlemeGonder(env, tg, Math.floor(Date.now() / 1000), "elle");
+    await env.KAYIT.put("sami:cariOnizlemeSonuc", JSON.stringify({ id: r.id, gitti: Boolean(r.onizlemeMesaj) }), { expirationTtl: 86400 });
   }
   if (!(await env.KAYIT.get("sami:cariDokum"))) return;
   await env.KAYIT.delete("sami:cariDokum");

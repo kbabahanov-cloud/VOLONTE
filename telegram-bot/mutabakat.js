@@ -61,6 +61,8 @@ export function bakiyeBolumu(br, vl, yontem = { tur: "kart" }) {
     ...satirlar.map((x) => { const f = fark(x.br, x.vl); return `${isaret(f)} Black Rose ${x.a}: Black Rose kaydı ${tutar(x.br)} · VOLONTE kaydı ${tutar(x.vl)} · fark ${f == null ? "—" : dolar(f)}`; }),
     `${isaret(tf)} TOPLAM: Black Rose kaydı ${tutar(tb)} · VOLONTE kaydı ${tutar(tv)} · fark ${tf == null ? "—" : dolar(tf)}`,
     `(kaynak: ${kaynak}; (B) borçlu, (A) alacaklı; fark = tutar farkı)`,
+    ...(!br ? ["(Black Rose köprüsü cari bakiyeyi henüz göndermedi)"] : []),
+    ...(!vl ? ["(VOLONTE köprüsü cari bakiyeyi henüz göndermedi)"] : []),
   ] : ["Bakiyeler henüz okunamıyor (köprüler cari bakiyeyi göndermedi)."];
   const farkVar = satirlar.some((x) => { const f = fark(x.br, x.vl); return f != null && Math.abs(f) >= 0.005; });
   return { fuat, patron, farkVar };
