@@ -729,3 +729,34 @@ test("bir kerelik ek liste: Celal'in modelleri olmadan, bugün istenmemiş 15 mo
   assert.equal(sabah.length, 29); // 6100 ayrı satırda: "👤 Celal'in modelleri (en son)"
   assert.ok(!o.depo.has("venom:selinEkIstek"));
 });
+
+test("fotoğraf isteği: sitede olan model (eski yolla yüklenmiş olsa da) istenmez; bir kerelik onarım kaydı düzeltir ve 'kusura bakmayın' gönderir", async () => {
+  const { istekAdimi } = await import("./selin.js");
+  const o = ortam();
+  o.env.SAHIP_IDS = "777";
+  const stok = { "3618": { toplam: 4, fiyat: 55 }, "3622": { toplam: 3, fiyat: 40 }, "5001": { toplam: 2, fiyat: 10 } };
+  stokBagla(o, stok);
+  const stokFetch = o.env.STOK.get().fetch;
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
+    ? Response.json(Object.entries(stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat, tedarikci: null })))
+    : stokFetch(url, init) }) };
+  // 3618 eski yolla (kanal) sitede; 3622 Merdan'ın özel yüklemesiyle sitede ama kaydı yanlışlıkla "istendi"ye dönmüş
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", fotolar: ["galeri/3618/1.jpg"] }, { kod: "3622", fotolar: ["galeri/3622/1.jpg"] }]));
+  o.depo.set("selin:modeller", JSON.stringify({ 3618: { kaynak: "kanal", durum: "sitede" }, 3622: { kaynak: "ozel", durum: "istendi" } }));
+  // Onarım: dünkü (yanlış) liste 3618, 3622, 5001
+  const gun = ist(10, 5);
+  o.depo.set(`selin:istek:${new Date((gun - 86400 + 3 * 3600) * 1000).toISOString().slice(0, 10)}`, JSON.stringify({ kodlar: ["3618", "3622", "5001"], zaman: gun - 86400 }));
+  o.depo.set("venom:selinIstekDuzelt", "1");
+  await istekAdimi(o.env, gun);
+  const ozur = cagri(o.g, "sendMessage").find((x) => /Kusura bakmayın/.test(x.govde.text));
+  assert.equal(ozur.govde.chat_id, "777");
+  assert.match(ozur.govde.text, /şu 2 model zaten sitede[\s\S]*3618, 3622/);
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3622"].durum, "sitede"); // kayıt düzeldi
+  assert.deepEqual(JSON.parse(o.depo.get("venom:selinIstekDuzeltSonuc")).duzelen, ["3622"]);
+  // Günün isteği: sitede olanlar (3618, 3622) YOK, sadece 5001
+  o.g.length = 0;
+  await istekAdimi(o.env, gun + 60);
+  const istek = cagri(o.g, "sendMessage")[0];
+  assert.equal(istek.govde.text.split("\n")[1], "5001");
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3618"].durum, "sitede"); // sitedeki kayıt bozulmadı
+});

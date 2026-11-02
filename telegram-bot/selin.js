@@ -1194,10 +1194,16 @@ const BEDEN_KELIME = [[/k[üu][çc][üu]k/i, "k"], [/b[üu]y[üu]k/i, "b"], [/ik
 const sahipler = async (env) => [...new Set([...kimlikler(env.SAHIP_IDS), ...kimlikler(await env.KAYIT.get("selin:sahip"))])];
 const ozelMi = (m) => Boolean(m && m.kaynak === "ozel");
 
-export async function istekAdaylari(env, modeller) {
+// Sitede olan modeller (hangi yolla yüklenmiş olursa olsun) fotoğraf isteğine GİRMEZ (2 Kasım düzeltmesi: eski yolla —
+// kanaldan — siteye girenler tekrar isteniyordu ve kayıtları "istendi"ye dönüyordu). Gizli (stoğu bitmiş) olanlar da sitede sayılır.
+async function sitedekiKodlar(env) {
+  const { liste } = await siteVerisi(env);
+  return new Set(liste.map((u) => String(u.kod)));
+}
+export async function istekAdaylari(env, modeller, sitede = new Set()) {
   const stok = await stokIste2(env, "/stoktakiler");
   const kodlar = stok.map((r) => String(r.kod));
-  const uygun = (k) => !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
+  const uygun = (k) => !sitede.has(k) && !(modeller[k] && modeller[k].durum === "sitede") && !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
   const oncelik = ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k));
   const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
   // Celal'in modelleri (Vegawin kodu "CELAL" ile biten; köprü sadece işaret gönderir): listede EN SONA (kullanıcı kararı 30 Ekim).
@@ -1217,6 +1223,7 @@ async function stokIste2(env, yol, govde = {}) {
 
 // 10:00 — günün istek listesi (bir kez). Sahiplere (0091 hesabı + Merdan: SAHIP_IDS) gider; Celal'in modelleri en sonda.
 export async function istekAdimi(env, simdi) {
+  if (await istekDuzeltAdimi(env, simdi)) return;
   const s = saat(simdi);
   if (s < ISTEK_SAATI || s >= GUN_SONU_SAATI) return;
   const gun = gunAnahtari(simdi);
@@ -1225,13 +1232,48 @@ export async function istekAdimi(env, simdi) {
   const kime = await sahipler(env);
   if (!kime.length) return; // sahip (0091) tanımlanmadan istek gitmez
   const modeller = await oku(env, "selin:modeller", {});
-  const { kodlar, celal } = await istekAdaylari(env, modeller);
+  let sitede;
+  try { sitede = await sitedekiKodlar(env); } catch { return; } // site listesi okunamazsa yanlış istek yerine sonraki turda tekrar
+  const { kodlar, celal } = await istekAdaylari(env, modeller, sitede);
   // Günün 30 modeli normal sırayla seçilir; liste içinde Celal'in modelleri en sona konur.
   const ilk = kodlar.slice(0, GUNLUK_ISTEK);
   const secilen = [...ilk.filter((k) => !celal.has(k)), ...ilk.filter((k) => celal.has(k))];
   await yazKV(env, `selin:istek:${gun}`, { kodlar: secilen, zaman: simdi }, 30 * 86400);
   if (!secilen.length) return;
   return istekGonder(env, kime, modeller, secilen, celal, simdi, `🌸 Günaydın! Bugün ${secilen.length} model istiyorum (Vegawin'de stokta):`);
+}
+
+// Bir kerelik onarım (2 Kasım; KV "venom:selinIstekDuzelt"): son 4 günün isteklerinde sitede zaten olan modeller bulunur,
+// kayıtları "istendi"den "sitede"ye döner (fotoğrafları yeniden gelmişse dokunulmaz, sonuçta listelenir), liste sahiplerine
+// "kusura bakmayın" mesajı gider. Sonuç "venom:selinIstekDuzeltSonuc".
+async function istekDuzeltAdimi(env, simdi) {
+  if (!(await env.KAYIT.get("venom:selinIstekDuzelt"))) return false;
+  await env.KAYIT.delete("venom:selinIstekDuzelt");
+  const sitede = await sitedekiKodlar(env);
+  const modeller = await oku(env, "selin:modeller", {});
+  const sonuc = { zaman: simdi, gunler: {}, duzelen: [], dokunulmayan: {} };
+  for (let i = 0; i < 4; i++) {
+    const g = gunAnahtari(simdi - i * 86400);
+    const ist = await oku(env, `selin:istek:${g}`, null);
+    if (!ist) continue;
+    const yanlis = (ist.kodlar || []).filter((k) => sitede.has(k));
+    sonuc.gunler[g] = { istenen: ist.kodlar || [], yanlis };
+    for (const k of yanlis) {
+      const m = modeller[k];
+      if (m && m.durum === "istendi") { modeller[k] = { ...m, durum: "sitede", duzeltme: simdi }; sonuc.duzelen.push(k); }
+      else if (m && m.durum !== "sitede") sonuc.dokunulmayan[k] = m.durum;
+    }
+  }
+  if (sonuc.duzelen.length) await yazKV(env, "selin:modeller", modeller);
+  const tum = [...new Set(Object.values(sonuc.gunler).flatMap((x) => x.yanlis))];
+  sonuc.mesaj = tum;
+  if (tum.length) {
+    for (const kisi of await sahipler(env)) {
+      await tg(env, "sendMessage", { chat_id: kisi, text: `🙏 Kusura bakmayın: şu ${tum.length} model zaten sitede, fotoğraf göndermenize gerek yok:\n${tum.join(", ")}\nBundan sonra sitede olan modeller listeye girmeyecek.` });
+    }
+  }
+  await env.KAYIT.put("venom:selinIstekDuzeltSonuc", JSON.stringify(sonuc), { expirationTtl: 7 * 86400 });
+  return true;
 }
 
 // Bir kerelik ek liste (kullanıcı kararı 30 Ekim): Celal'in modelleri olmadan, istenmemiş/sitede olmayan EK_ISTEK model hemen.
@@ -1241,7 +1283,9 @@ async function ekIstekAdimi(env, gun, simdi) {
   const kime = await sahipler(env);
   if (!kime.length) return true;
   const modeller = await oku(env, "selin:modeller", {});
-  const { kodlar, celal } = await istekAdaylari(env, modeller);
+  let sitede;
+  try { sitede = await sitedekiKodlar(env); } catch { return true; }
+  const { kodlar, celal } = await istekAdaylari(env, modeller, sitede);
   const secilen = kodlar.filter((k) => !celal.has(k)).slice(0, EK_ISTEK);
   const onceki = await oku(env, `selin:istek:${gun}`, { kodlar: [], zaman: simdi });
   await yazKV(env, `selin:istek:${gun}`, { ...onceki, kodlar: [...onceki.kodlar, ...secilen], ek: secilen }, 30 * 86400);
