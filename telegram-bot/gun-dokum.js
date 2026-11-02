@@ -2,7 +2,7 @@
 // (VOLONTE + Black Rose + ekler), fabrikaya gidenler, stok sorguları, satışlar ve köprü durumu "sami:gunDokumSonuc"a yazılır.
 // KV "sami:raporTekrar" = "YYYY-AA-GG" → o günün otomatik rapor metinleri Patron'a (MURAT_ID'nin ilki) yeniden gönderilir.
 import { stokIste } from "./stokbot.js";
-import { onizlemeGonder } from "./mutabakat.js";
+import { onizlemeGonder, geceYedegi } from "./mutabakat.js";
 
 const ayar = async (env, k) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
 const SAAT_FARKI = 3 * 3600;
@@ -61,6 +61,12 @@ export async function cariDokumu(env, tg) {
     await env.KAYIT.delete("sami:cariOnizleme");
     const r = await onizlemeGonder(env, tg, Math.floor(Date.now() / 1000), "elle");
     await env.KAYIT.put("sami:cariOnizlemeSonuc", JSON.stringify({ id: r.id, gitti: Boolean(r.onizlemeMesaj) }), { expirationTtl: 86400 });
+  }
+  // KV "sami:mtYedek" = "1" → mutabakat arşivi gece yedeği hemen denenir (sonuç "sami:mtYedekSonuc")
+  if (await env.KAYIT.get("sami:mtYedek")) {
+    await env.KAYIT.delete("sami:mtYedek");
+    let s; try { s = { ok: true, kayit: await geceYedegi(env) }; } catch (e) { s = { ok: false, hata: String(e && e.message).slice(0, 300) }; }
+    await env.KAYIT.put("sami:mtYedekSonuc", JSON.stringify(s), { expirationTtl: 86400 });
   }
   if (!(await env.KAYIT.get("sami:cariDokum"))) return;
   await env.KAYIT.delete("sami:cariDokum");

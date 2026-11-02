@@ -68,3 +68,13 @@ export async function sayfayaYaz(env, id, ad, satirlar) {
   await sheets(env, `${id}/values/${encodeURIComponent(ad)}:clear`, { method: "POST", body: "{}" });
   await sheets(env, `${id}/values/${encodeURIComponent(`${ad}!A1`)}?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ values: satirlar }) });
 }
+
+// Adı verilen sekme yoksa ekler (ilk sekmeye dokunmaz) — 2 Kasım, mutabakat gece yedeği.
+export async function sekmeHazirla(env, id, ad, sabitSatir = 1) {
+  const t = await sheets(env, `${id}?fields=sheets.properties`);
+  if (t.sheets.some((s) => s.properties.title === ad)) return ad;
+  await sheets(env, `${id}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests: [
+    { addSheet: { properties: { title: ad, gridProperties: { frozenRowCount: sabitSatir } } } },
+  ] }) });
+  return ad;
+}
