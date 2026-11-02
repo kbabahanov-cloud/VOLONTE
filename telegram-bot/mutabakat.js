@@ -23,7 +23,9 @@ export const fuat = (env) => String(env.FUAT_ID || "");
 const HESAPLAR = ["15", "20", "25", "00"];
 const para = (x) => Number(x).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Vegawin işareti: borç − alacak; artı = (B) borçlu, eksi = (A) alacaklı
-const tutar = (x) => (x == null ? "—" : `${para(Math.abs(x))}${Math.abs(x) < 0.005 ? "" : x > 0 ? " (B)" : " (A)"}`);
+// Black Rose cari hesapları dolar tutuluyor (kullanıcı, 2 Kasım) → her bakiyenin yanında $
+const dolar = (x) => `${para(x)} $`;
+const tutar = (x) => (x == null ? "—" : `${dolar(Math.abs(x))}${Math.abs(x) < 0.005 ? "" : x > 0 ? " (B)" : " (A)"}`);
 // Bakiye kaynağı (ayar "cari:yontem"): { tur: "kart" } = cari kartındaki BAKIYE (varsayılan) ya da
 // { tur: "donem", tablolar: ["D0005TBLCARIGENELHAREKET", …] } = seçilen dönem tablolarındaki borç − alacak toplamı
 export function bakiyeDegeri(h, yontem = { tur: "kart" }) {
@@ -44,8 +46,8 @@ export function bakiyeBolumu(br, vl, yontem = { tur: "kart" }) {
   const fuat = br ? [...satirlar.map((x) => `Black Rose ${x.a}: ${tutar(x.br)}`), `TOPLAM: ${tutar(top("br"))}`] : ["Bakiyeler henüz okunamıyor."];
   const tb = top("br"), tv = top("vl"), tf = fark(tb, tv);
   const patron = br || vl ? [
-    ...satirlar.map((x) => { const f = fark(x.br, x.vl); return `${isaret(f)} Black Rose ${x.a}: Black Rose kaydı ${tutar(x.br)} · VOLONTE kaydı ${tutar(x.vl)} · fark ${f == null ? "—" : para(f)}`; }),
-    `${isaret(tf)} TOPLAM: Black Rose kaydı ${tutar(tb)} · VOLONTE kaydı ${tutar(tv)} · fark ${tf == null ? "—" : para(tf)}`,
+    ...satirlar.map((x) => { const f = fark(x.br, x.vl); return `${isaret(f)} Black Rose ${x.a}: Black Rose kaydı ${tutar(x.br)} · VOLONTE kaydı ${tutar(x.vl)} · fark ${f == null ? "—" : dolar(f)}`; }),
+    `${isaret(tf)} TOPLAM: Black Rose kaydı ${tutar(tb)} · VOLONTE kaydı ${tutar(tv)} · fark ${tf == null ? "—" : dolar(tf)}`,
     `(kaynak: ${kaynak}; (B) borçlu, (A) alacaklı; fark = tutar farkı)`,
   ] : ["Bakiyeler henüz okunamıyor (köprüler cari bakiyeyi göndermedi)."];
   const farkVar = satirlar.some((x) => { const f = fark(x.br, x.vl); return f != null && Math.abs(f) >= 0.005; });
