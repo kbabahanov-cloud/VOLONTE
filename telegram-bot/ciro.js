@@ -12,17 +12,17 @@ const birim = (d) => (!d || d === "$" || /^usd$/i.test(d) ? "$" : d);
 export function ciroBolumu(ad, c) {
   if (!c || !(c.satirlar || []).length) return [`🏬 ${ad}`, "Köprü ciro verisini henüz göndermedi."];
   const yillar = {};
-  const diger = [];
+  let digerBelge = 0;
   for (const s of c.satirlar) {
     const k = `${s.yil}|${birim(s.doviz)}`;
     const y = (yillar[k] = yillar[k] || { yil: s.yil, birim: birim(s.doviz), satis: 0, iade: 0, fatura: 0, iadeAdet: 0 });
     if (s.kaynak === "iade") { y.iade += Number(s.tutar) || 0; y.iadeAdet += s.n || 0; }
     else if (String(s.tur) === "21") { y.satis += Number(s.tutar) || 0; y.fatura += s.n || 0; }
-    else diger.push(`${s.yil} · tür ${s.tur} · ${s.n} belge · ${para(Number(s.tutar) || 0)} ${birim(s.doviz)} (ciroya katılmadı)`);
+    else digerBelge += s.n || 0; // satış dışı belge (ör. tür 23 alıştan iade): alış tarafı → tutarı GÖSTERİLMEZ
   }
   const satirlar = Object.values(yillar).sort((a, b) => a.yil - b.yil || a.birim.localeCompare(b.birim))
     .map((y) => `${y.yil}: satış ${para(y.satis)} ${y.birim} · iade ${para(y.iade)} ${y.birim} · NET ${para(y.satis - y.iade)} ${y.birim} (${y.fatura} fatura${y.iadeAdet ? `, ${y.iadeAdet} iade` : ""})`);
-  return [`🏬 ${ad} (son okuma ${tarihSaat(c.zaman)})`, ...satirlar, ...diger];
+  return [`🏬 ${ad} (son okuma ${tarihSaat(c.zaman)})`, ...satirlar, ...(digerBelge ? [`(satış dışı ${digerBelge} belge ciroya katılmadı)`] : [])];
 }
 export async function ciroKomutu(env, m, tg) {
   if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu rapor sadece Patron'da." });

@@ -1554,6 +1554,7 @@ test("/ciro: sadece Patron; her mağaza ayrı bölüm, toplam yok; satış (21) 
   const t = cagri(o.g, "sendMessage").at(-1).govde.text;
   assert.match(t, /🏬 VOLONTE\nKöprü ciro verisini henüz göndermedi\.\n\n🏬 BLACK ROSE \(son okuma/);
   assert.match(t, /2025: satış 740\.959,00 \$ · iade 12\.836,00 \$ · NET 728\.123,00 \$ \(2384 fatura, 33 iade\)/);
-  assert.match(t, /tür 23 · 2 belge · 10,00 \$ \(ciroya katılmadı\)/);
+  assert.match(t, /\(satış dışı 2 belge ciroya katılmadı\)/);
+  assert.ok(!/10,00 \$/.test(t)); // satış dışı (alış tarafı) tutar gösterilmez
   assert.ok(!/TOPLAM|toplam ciro|fark/i.test(t.replace("iptal edilen", "")));
 });

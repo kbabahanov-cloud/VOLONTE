@@ -321,7 +321,8 @@ function CiroOku([string]$sifre) {
     if (-not $ctTutar.Count) { continue }
     $ctDoviz = if ($ctSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
     $ctTopla = ($ctTutar | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
-    $ctNerede = if ($ctSut -contains "IPTAL") { " WHERE ISNULL(IPTAL, 0) = 0" } else { "" }
+    # Sadece satış faturası (21); satış tablosundaki diğer türler (ör. 23 alıştan iade) alış tarafıdır → okunmaz
+    $ctNerede = " WHERE BELGETIPI = 21" + $(if ($ctSut -contains "IPTAL") { " AND ISNULL(IPTAL, 0) = 0" } else { "" })
     $ctSorgu = "SELECT YEAR(TARIH) AS Y, BELGETIPI AS T" + $(if ($ctDoviz) { ", [$ctDoviz] AS D" } else { "" }) + ", COUNT(*) AS N$ctTopla FROM [$ctAd]$ctNerede GROUP BY YEAR(TARIH), BELGETIPI" + $(if ($ctDoviz) { ", [$ctDoviz]" } else { "" })
     foreach ($cx in (Sorgu $sifre $ctSorgu).Rows) {
       $ciroSatir += @{ tablo = $ctAd.Substring($Ayar.firma.Length); yil = [int]$cx.Y; tur = [string]$cx.T; doviz = $(if ($ctDoviz) { ([string]$cx.D).Trim() } else { "" }); n = [int]$cx.N
