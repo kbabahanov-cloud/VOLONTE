@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3468",
+  "baslik": "Polka Dot High-Low Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A black and white polka dot dress with a fitted bodice and a full, high-low skirt that falls into a soft, dramatic hem. A round neckline, short sleeves finished with black contrast cuffs, and a black waist belt with a jewelled flower brooch define the look. Wear it to daytime events, ceremonies or elegant gatherings. Produced in Istanbul with careful workmanship.",
+   "fr": "Une robe à pois noir et blanc, au buste ajusté et à la jupe ample asymétrique, plus longue à l'arrière. L'encolure ronde, les manches courtes terminées par des revers noirs contrastés et la ceinture noire ornée d'une broche fleur bijou lui donnent tout son caractère. Idéale pour les cérémonies, les événements de journée ou les réceptions élégantes. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Um vestido de bolinhas preto e branco, com corpete ajustado e saia ampla assimétrica, mais comprida atrás. O decote redondo, as mangas curtas com punhos pretos em contraste e o cinto preto com broche de flor em pedraria marcam o visual. Perfeito para cerimónias, eventos diurnos ou encontros elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3468/1.jpg",
+   "galeri/3468/2.jpg",
+   "galeri/3468/3.jpg"
+  ],
+  "videolar": [
+   "selin/3468/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3469",
   "baslik": "Puff Sleeve Bolero Dress",
   "kategori": "evening",
