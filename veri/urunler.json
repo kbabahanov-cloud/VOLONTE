@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3490",
+  "baslik": "Abstract Print Blazer Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece suit pairing a tailored single-button blazer with high-waist wide-leg trousers, both in a bold black and ivory abstract print. The blazer features a black notch lapel and contrast black flap pockets, while the trousers fall in a long, fluid line. Wear it to the office, to evening events or for confident daytime dressing. Made in Istanbul with careful tailoring.",
+   "fr": "Un ensemble deux pièces qui associe un blazer ajusté à un bouton et un pantalon large taille haute, dans un imprimé abstrait noir et ivoire affirmé. Le blazer se distingue par son revers cranté noir et ses poches à rabat contrastées, tandis que le pantalon tombe en une ligne longue et fluide. Idéal au bureau, en soirée ou pour un style de jour assuré. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um blazer acinturado de um botão com calça pantalona de cintura alta, ambos num marcante estampado abstrato preto e marfim. O blazer tem lapela preta entalhada e bolsos com pala em preto contrastante, enquanto a calça cai numa linha longa e fluida. Ideal para o escritório, eventos noturnos ou um visual diurno confiante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3490/1.jpg",
+   "galeri/3490/2.jpg",
+   "galeri/3490/3.jpg",
+   "galeri/3490/4.jpg",
+   "galeri/3490/5.jpg",
+   "galeri/3490/6.jpg"
+  ],
+  "videolar": [
+   "selin/3490/0"
+  ],
+  "fiyat": 49,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3494",
   "baslik": "Organza Cape Lapel Set",
   "kategori": "sets",
