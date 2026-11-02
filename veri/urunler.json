@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3484",
+  "baslik": "Wrap Top Slip Dress Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sleeveless slip dress with a relaxed wrap top. The top features a soft draped collar, balloon sleeves with elastic cuffs and a self-tie waist sash, while the dress falls into a flowing layered hem. Wear together for weddings and special occasions, or style the slip dress alone. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant une robe nuisette sans manches à un haut cache-cœur ample. Le haut se distingue par un col drapé, des manches ballon resserrées aux poignets et une ceinture à nouer, tandis que la robe s'achève sur un ourlet fluide à volants superposés. À porter ensemble pour les mariages et cérémonies, ou la robe seule. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um vestido de alças com uma blusa transpassada solta. A blusa tem gola drapeada, mangas balão com punhos elásticos e faixa para amarrar na cintura, enquanto o vestido termina numa barra fluida em camadas. Use o conjunto em casamentos e ocasiões especiais, ou o vestido sozinho. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3484/1.jpg",
+   "galeri/3484/2.jpg",
+   "galeri/3484/3.jpg",
+   "galeri/3484/4.jpg",
+   "galeri/3484/5.jpg",
+   "galeri/3484/6.jpg",
+   "galeri/3484/7.jpg",
+   "galeri/3484/8.jpg"
+  ],
+  "videolar": [
+   "selin/3484/0"
+  ],
+  "fiyat": 62,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3490",
   "baslik": "Abstract Print Blazer Suit",
   "kategori": "sets",
