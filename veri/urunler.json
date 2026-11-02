@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3576",
+  "baslik": "Double-Breasted Collared Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A tailored double-breasted maxi dress with a fitted bodice and a long, softly flared skirt that opens into a natural front slit. A crisp white pleated collar with a fine tie and wide white cuffs give it a polished contrast. Wear it to the office, formal meetings or Sunday occasions. Made in Istanbul with careful workmanship, shown in plum and navy.",
+   "fr": "Une robe longue croisée au buste ajusté, dont la jupe légèrement évasée s'ouvre sur une fente naturelle à l'avant. Le col blanc plissé, noué d'un fin lien, et les larges poignets blancs apportent un contraste net et raffiné. Idéale pour le bureau, les rendez-vous officiels ou les cérémonies du dimanche. Confectionnée à Istanbul avec soin, en prune et bleu marine.",
+   "pt": "Um vestido longo trespassado, com corpete ajustado e saia levemente evasê que se abre numa racha natural à frente. A gola branca plissada com laço fino e os punhos brancos largos criam um contraste elegante. Perfeito para o escritório, reuniões formais ou ocasiões de domingo. Produzido em Istambul com acabamento cuidado, nas cores ameixa e azul-marinho."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3576/1.jpg",
+   "galeri/3576/2.jpg",
+   "galeri/3576/3.jpg",
+   "galeri/3576/4.jpg",
+   "galeri/3576/5.jpg",
+   "galeri/3576/6.jpg",
+   "galeri/3576/7.jpg"
+  ],
+  "videolar": [
+   "selin/3576/0",
+   "selin/3576/1"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3635",
   "baslik": "Printed Kaftan Trouser Set",
   "kategori": "sets",
