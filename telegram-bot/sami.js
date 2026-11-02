@@ -28,6 +28,7 @@ import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, sto
 import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi, adetKomutu, adetDugmesi, nuriStokKomutu } from "./mutabakat.js";
 import { borcLimitKomutu } from "./cari-takip.js";
 import { patronMu, geriKuyrugu } from "./sil.js";
+import { ciroKomutu } from "./ciro.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -147,6 +148,7 @@ export async function guncelleme(u, env) {
   if (komut === "/tablo") return tabloKomutu(m, env);
   if (komut === "/stokyetki") return stokYetkiKomutu(env, m, tg);
   if (komut === "/mutabakat") return mutabakatKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/ciro") return ciroKomutu(env, m, tg);
   if (komut === "/geri") return geriKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/nuristok") return nuriStokKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/adet") return adetKomutu(env, m, tg, Math.floor(Date.now() / 1000));

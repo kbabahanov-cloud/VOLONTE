@@ -1536,3 +1536,24 @@ test("/nuristok: sadece Patron; Nuri'ye Black Rose kodlu stok listesi (iki mağa
   const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
   assert.deepEqual((await st("/arsiv-liste")).map((x) => x.tur), ["nuristok-onizleme", "nuristok-gonderim"]);
 });
+
+test("/ciro: sadece Patron; her mağaza ayrı bölüm, toplam yok; satış (21) − iade (22) = net; başka tür ciroya katılmaz", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999", ALLOWED_IDS: "111,222,999" });
+  const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
+  await st("/ayar-yaz", { k: "ciro:BLACKROSE", v: JSON.stringify({ zaman: 1793635203, satirlar: [
+    { tablo: "D0001TBLSATFATBASLIK", yil: 2025, tur: "21", doviz: "$", n: 140, tutar: 48844, kaynak: "satis" },
+    { tablo: "D0003TBLSATFATBASLIK", yil: 2025, tur: "21", doviz: "$", n: 2244, tutar: 692115, kaynak: "satis" },
+    { tablo: "D0003TBLALFATBASLIK", yil: 2025, tur: "22", doviz: "$", n: 33, tutar: 12836, kaynak: "iade" },
+    { tablo: "D0003TBLSATFATBASLIK", yil: 2025, tur: "23", doviz: "$", n: 2, tutar: 10, kaynak: "satis" },
+  ] }) });
+  await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/ciro" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /sadece Patron/);
+  await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/ciro" } }, o.env);
+  const t = cagri(o.g, "sendMessage").at(-1).govde.text;
+  assert.match(t, /🏬 VOLONTE\nKöprü ciro verisini henüz göndermedi\.\n\n🏬 BLACK ROSE \(son okuma/);
+  assert.match(t, /2025: satış 740\.959,00 \$ · iade 12\.836,00 \$ · NET 728\.123,00 \$ \(2384 fatura, 33 iade\)/);
+  assert.match(t, /tür 23 · 2 belge · 10,00 \$ \(ciroya katılmadı\)/);
+  assert.ok(!/TOPLAM|toplam ciro|fark/i.test(t.replace("iptal edilen", "")));
+});

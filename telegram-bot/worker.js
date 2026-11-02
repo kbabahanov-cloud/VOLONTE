@@ -2141,7 +2141,7 @@ async function kopruCiro(request, env) {
   if (!g || !Array.isArray(g.satirlar)) return new Response("geçersiz", { status: 400 });
   const sayi = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
   const satirlar = g.satirlar.slice(0, 2000).filter((x) => Number(x.yil) >= 2000 && Number(x.yil) <= 2100).map((x) => ({
-    tablo: String(x.tablo || "").slice(0, 60), yil: Number(x.yil), tur: String(x.tur ?? "").slice(0, 10), doviz: String(x.doviz || "").slice(0, 10), n: Number(x.n) || 0, tutar: sayi(x.tutar), aratoplam: sayi(x.aratoplam),
+    tablo: String(x.tablo || "").slice(0, 60), yil: Number(x.yil), tur: String(x.tur ?? "").slice(0, 10), doviz: String(x.doviz || "").slice(0, 10), n: Number(x.n) || 0, tutar: sayi(x.tutar), aratoplam: sayi(x.aratoplam), kaynak: x.kaynak === "iade" ? "iade" : "satis",
   }));
   await stokIste(env, "/ayar-yaz", { k: `ciro:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), satirlar }) });
   return Response.json({ ok: true, satir: satirlar.length });

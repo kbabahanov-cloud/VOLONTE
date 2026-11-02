@@ -44,7 +44,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026110302"
+$SURUM = "2026110303"
 
 function Gunluge([string]$m) {
   try {
@@ -326,6 +326,20 @@ function CiroOku([string]$sifre) {
     foreach ($cx in (Sorgu $sifre $ctSorgu).Rows) {
       $ciroSatir += @{ tablo = $ctAd.Substring($Ayar.firma.Length); yil = [int]$cx.Y; tur = [string]$cx.T; doviz = $(if ($ctDoviz) { ([string]$cx.D).Trim() } else { "" }); n = [int]$cx.N
         tutar = $(if ($ctTutar -contains "TUTAR") { Num $cx.TUTAR } else { $null }); aratoplam = $(if ($ctTutar -contains "ARATOPLAM") { Num $cx.ARATOPLAM } else { $null }) }
+    }
+  }
+  # Satıştan iade (2 Kasım): Vega iadeyi alış fatura tablosunda BELGETIPI 22 olarak tutar. SADECE 22 okunur;
+  # alış faturaları (20), alış fiyatı ve maliyet ASLA okunmaz.
+  $iadeTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLALFAT%BASLIK%" }
+  foreach ($it in $iadeTablolar.Rows) {
+    $itAd = [string]$it.AD
+    $itSut = @(Sutunlar $sifre $itAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($itSut -notcontains "TARIH") -or ($itSut -notcontains "BELGETIPI") -or ($itSut -notcontains "TUTAR")) { continue }
+    $itDoviz = if ($itSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $itIptal = if ($itSut -contains "IPTAL") { " AND ISNULL(IPTAL, 0) = 0" } else { "" }
+    $itSorgu = "SELECT YEAR(TARIH) AS Y" + $(if ($itDoviz) { ", [$itDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(TUTAR AS FLOAT)) AS TUTAR FROM [$itAd] WHERE BELGETIPI = 22$itIptal GROUP BY YEAR(TARIH)" + $(if ($itDoviz) { ", [$itDoviz]" } else { "" })
+    foreach ($ix in (Sorgu $sifre $itSorgu).Rows) {
+      $ciroSatir += @{ tablo = $itAd.Substring($Ayar.firma.Length); yil = [int]$ix.Y; tur = "22"; kaynak = "iade"; doviz = $(if ($itDoviz) { ([string]$ix.D).Trim() } else { "" }); n = [int]$ix.N; tutar = (Num $ix.TUTAR); aratoplam = $null }
     }
   }
   return $ciroSatir
