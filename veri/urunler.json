@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3427",
+  "baslik": "Satin Print Kaftan Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A flowing kaftan dress in a relaxed, one-piece silhouette with a soft V-neckline and wide batwing sleeves. Its glossy satin-look surface carries a bold abstract print, offered in yellow with black and in green with black and gold. Easy to wear for gatherings, celebrations and elegant everyday occasions. Made in Istanbul with careful workmanship.",
+   "fr": "Une robe caftan fluide à la silhouette ample, avec un décolleté en V et de larges manches chauve-souris. Son tissu à l'aspect satiné et brillant porte un imprimé abstrait affirmé, proposé en jaune et noir ou en vert, noir et doré. Idéale pour les réceptions, les fêtes et les journées élégantes. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido kaftan fluido de silhueta ampla, com decote em V e mangas largas tipo morcego. O tecido de toque acetinado e brilhante traz um estampado abstrato marcante, disponível em amarelo e preto ou verde, preto e dourado. Perfeito para encontros, celebrações e o dia a dia elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3427/1.jpg",
+   "galeri/3427/2.jpg",
+   "galeri/3427/3.jpg",
+   "galeri/3427/4.jpg",
+   "galeri/3427/5.jpg",
+   "galeri/3427/6.jpg"
+  ],
+  "videolar": [
+   "selin/3427/0"
+  ],
+  "fiyat": 75,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3435",
   "baslik": "Floral Satin Kaftan Set",
   "kategori": "sets",
