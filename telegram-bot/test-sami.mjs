@@ -1508,3 +1508,31 @@ test("iki mutabakat Fuat'a gittiyse sadece sonuncusu geçerli (eskinin düğmele
   const turler = (await st("/arsiv-liste")).map((x) => x.tur);
   assert.ok(turler.includes("gecersiz") && turler.includes("bilgi-onizleme") && turler.includes("bilgi-gonderim"));
 });
+
+test("/nuristok: sadece Patron; Nuri'ye Black Rose kodlu stok listesi (iki mağaza ayrı, bakiye/fiyat yok); önizleme → 'Emin misiniz?' → Nuri; Fuat'a gitmez", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999", FUAT_ID: "501", NURI_ID: "502", ALLOWED_IDS: "111,222,999" });
+  await o.yaz("BLACKROSE", [{ kod: "3557", adet: 200, fiyat: 40, brAdet: 200 }, { kod: "3601", adet: 7, fiyat: 40, brAdet: 7 }], ist(8));
+  await o.yaz("VOLONTE", [{ kod: "3557", adet: 9, fiyat: 40, brAdet: 4 }, { kod: "3194", adet: 7, fiyat: 60 }], ist(8));
+  await g2({ message: { chat: { id: 502, type: "private" }, from: { id: 502 }, text: "/nuristok" } }, o.env);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => /ÖNİZLEME/.test(x.govde.text || "")));
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/nuristok" } }, o.env);
+  const m = cagri(o.g, "sendMessage");
+  assert.match(m[0].govde.text, /ÖNİZLEME — Nuri'ye stok listesi/);
+  assert.equal(m[1].govde.text, "📊 BLACK ROSE – Sami\nNuri Bey,\n📦 BLACK ROSE MAĞAZASI – 2 model · 207 adet\n<pre>3557 · 200 adet   3601 ·   7 adet</pre>");
+  assert.equal(m[2].govde.text, "📊 VOLONTE – Sami\nNuri Bey,\n📦 VOLONTE MAĞAZASI – 1 model · 4 adet\n<pre>3557 · 4 adet</pre>\n\nİyi çalışmalar.\n– Sami");
+  assert.ok(!/\$|bakiye|3194|fiyat|ödeme|ciro/i.test(m[1].govde.text + m[2].govde.text));
+  assert.deepEqual(m[2].govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Nuri'ye gönder", "❌ İptal"]);
+  const id = m[2].govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `ad:g:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Emin misiniz\?<\/b> Stok listesi şimdi Nuri'ye gidecek/);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => ["501", "502"].includes(String(x.govde.chat_id))).length, 0);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `ad:G:${id}`, message: { chat: { id: 999 }, message_id: 2 } } }, o.env);
+  assert.deepEqual(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "502").map((x) => x.govde.text), [m[1].govde.text, m[2].govde.text]);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 0); // Fuat'a gitmez
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /✅ Stok listesi Nuri'ye gönderildi/);
+  const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
+  assert.deepEqual((await st("/arsiv-liste")).map((x) => x.tur), ["nuristok-onizleme", "nuristok-gonderim"]);
+});

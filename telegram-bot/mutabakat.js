@@ -175,11 +175,11 @@ export function mesajKur(ust, listeBaslik, liste, alt, sinir = 3800) {
 // Fuat'a ve Patron önizlemesine AYNI mesajlar gider (Patron'a ayrıca sadece kendisinin gördüğü üst bilgi).
 // TOPLU KARAR (Patron, 2 Kasım): Cuma mutabakatında Fuat'a SADECE bakiyeler (BLACK ROSE mesajı + VOLONTE mesajı + kapanış);
 // model/adet listeleri GİTMEZ. Adet listeleri Patron'un önizlemesinde görünür; Fuat'a sadece Patron "/adet" ile gönderir.
-export function adetMesajlari(s) {
+export function adetMesajlari(s, hitap = "Fuat Bey,") {
   const toplam = (l) => l.reduce((t, [, a]) => t + a, 0);
   return [
-    ...mesajKur("📊 BLACK ROSE – Sami\nFuat Bey,", `📦 BLACK ROSE MAĞAZASI – ${s.BLACKROSE.length} model · ${sayi(toplam(s.BLACKROSE))} adet`, ucSutun(s.BLACKROSE), []),
-    ...mesajKur("📊 VOLONTE – Sami\nFuat Bey,", `📦 VOLONTE MAĞAZASI – ${s.VOLONTE.length} model · ${sayi(toplam(s.VOLONTE))} adet`, ucSutun(s.VOLONTE), ["", "İyi çalışmalar.", "– Sami"]),
+    ...mesajKur(`📊 BLACK ROSE – Sami\n${hitap}`, `📦 BLACK ROSE MAĞAZASI – ${s.BLACKROSE.length} model · ${sayi(toplam(s.BLACKROSE))} adet`, ucSutun(s.BLACKROSE), []),
+    ...mesajKur(`📊 VOLONTE – Sami\n${hitap}`, `📦 VOLONTE MAĞAZASI – ${s.VOLONTE.length} model · ${sayi(toplam(s.VOLONTE))} adet`, ucSutun(s.VOLONTE), ["", "İyi çalışmalar.", "– Sami"]),
   ];
 }
 export async function mutabakatMetni(env, gun) {
@@ -692,6 +692,9 @@ export async function adetKomutu(env, m, tg, simdi) {
   await gonder(env, tg, m.chat.id, mesajlar, { inline_keyboard: [[{ text: "✅ Fuat'a gönder", callback_data: `ad:g:${id}` }, { text: "❌ İptal", callback_data: `ad:x:${id}` }]] });
   await arsiv(env, "adet-onizleme", id, { mesaj: mesajlar.map(duzYazi).join("\n\n") }, simdi);
 }
+// Patron onaylı gönderimlerin alıcısı: Fuat (varsayılan) ya da Nuri (/nuristok). Nuri'ye SADECE stok listesi gider.
+const TUR_AD = { adet: "Adet listesi", bilgi: "Bilgilendirme mesajı", nuristok: "Stok listesi" };
+const aliciOf = (env, r) => (r.alici === "nuri" ? [String(env.NURI_ID || ""), "Nuri'nin"] : [fuat(env), "Fuat'ın"]);
 export async function adetDugmesi(env, cq, tg, simdi) {
   const [, islem, id] = String(cq.data).split(":");
   const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
@@ -704,19 +707,20 @@ export async function adetDugmesi(env, cq, tg, simdi) {
   if (islem === "v") { r.gecmis.push([simdi, "vazgeçti"]); await ayarYaz(env, `ad:${id}`, r); await cevapla("Gönderilmedi"); return dugmeYaz("Gönderilmedi"); }
   if (islem === "g") {
     await cevapla("Emin misiniz?");
-    return gonder(env, tg, cq.message.chat.id, [`⚠️ <b>Emin misiniz?</b> ${(r.tur || "adet") === "adet" ? "Adet listesi" : "Bilgilendirme mesajı"} şimdi Fuat'a gidecek.`], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `ad:G:${id}` }, { text: "Vazgeç", callback_data: `ad:v:${id}` }]] });
+    return gonder(env, tg, cq.message.chat.id, [`⚠️ <b>Emin misiniz?</b> ${TUR_AD[r.tur || "adet"] || "Mesaj"} şimdi ${r.alici === "nuri" ? "Nuri'ye" : "Fuat'a"} gidecek.`], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `ad:G:${id}` }, { text: "Vazgeç", callback_data: `ad:v:${id}` }]] });
   }
   if (islem !== "G") return cevapla("?");
   const tur = r.tur || "adet";
+  const [kime, ad] = aliciOf(env, r);
   const yasak = fuatSuzgec(r.mesajlar.map(duzYazi).join("\n"));
-  if (yasak || !fuat(env)) { await cevapla("Gönderilmedi"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⛔ Gönderilmedi: ${yasak ? `mesajda Fuat'ın görmemesi gereken bilgi var (${yasak.join(", ")})` : "Fuat'ın kimliği kayıtlı değil"}.` }); }
-  const gitti = await gonder(env, tg, fuat(env), r.mesajlar, null);
-  if (!gitti) return cevapla("Fuat'a gönderilemedi (Sami'ye /start yazmamış olabilir).");
-  Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(cq.from.id) }); r.gecmis.push([simdi, "Patron onayladı → Fuat'a gönderildi"]);
+  if (yasak || !kime) { await cevapla("Gönderilmedi"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⛔ Gönderilmedi: ${yasak ? `mesajda ${ad} görmemesi gereken bilgi var (${yasak.join(", ")})` : `${ad} kimliği kayıtlı değil`}.` }); }
+  const gitti = await gonder(env, tg, kime, r.mesajlar, null);
+  if (!gitti) return cevapla(`${ad} gönderilemedi (Sami'ye /start yazmamış olabilir).`);
+  Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(cq.from.id) }); r.gecmis.push([simdi, `Patron onayladı → ${r.alici || "fuat"} gönderildi`]);
   await ayarYaz(env, `ad:${id}`, r);
   const k = await arsiv(env, `${tur}-gonderim`, id, { onaylayan: String(cq.from.id), tarihSaat: tarihSaat(simdi), fuatMesaji: r.mesajlar.map(duzYazi).join("\n\n") }, simdi);
-  await cevapla("Fuat'a gönderildi"); await dugmeYaz("✅ Fuat'a gönderildi");
-  return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ ${tur === "adet" ? "Adet listesi" : "Bilgilendirme mesajı"} Fuat'a gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
+  await cevapla(`${ad === "Fuat'ın" ? "Fuat'a" : "Nuri'ye"} gönderildi`); await dugmeYaz(`✅ ${ad === "Fuat'ın" ? "Fuat'a" : "Nuri'ye"} gönderildi`);
+  return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ ${TUR_AD[tur] || "Mesaj"} ${ad === "Fuat'ın" ? "Fuat'a" : "Nuri'ye"} gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
 }
 
 // Fuat'a Sami adına BİLGİLENDİRME (2 Kasım): Patron'a önizleme → [✅ Fuat'a gönder] → "Emin misiniz?" → Fuat (arşiv bilgi-*).
@@ -729,4 +733,18 @@ export async function bilgiOnizleme(env, tg, metin, simdi) {
   await gonder(env, tg, murat(env), mesajlar, { inline_keyboard: [[{ text: "✅ Fuat'a gönder", callback_data: `ad:g:${id}` }, { text: "❌ İptal", callback_data: `ad:x:${id}` }]] });
   await arsiv(env, "bilgi-onizleme", id, { mesaj: String(metin).trim() }, simdi);
   return id;
+}
+
+// ==== /nuristok (Patron, 2 Kasım): Nuri'ye (Eraslan) Black Rose kodlu malların stok listesi ====
+// Black Rose mağazası + VOLONTE mağazası ayrı mesajlar, "3557 · 200 adet", 3 sütun, kod sade. Bakiye/ödeme/fiyat/satış/ciro YOK
+// (süzgeç Nuri mesajında da çalışır). Otomatik gitmez: sadece Patron "/nuristok" yazınca önizleme → [✅ Nuri'ye gönder] → Emin misiniz?
+export async function nuriStokKomutu(env, m, tg, simdi) {
+  if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Patron'da." });
+  if (!env.NURI_ID) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Nuri'nin kimliği kayıtlı değil (venom:kimlikler NURI_ID)." });
+  const mesajlar = adetMesajlari(await stokIste(env, "/br-stoklar"), "Nuri Bey,");
+  const id = `nr-${simdi.toString(36)}`;
+  await ayarYaz(env, `ad:${id}`, { id, tur: "nuristok", alici: "nuri", olusturma: simdi, mesajlar, durum: "onizleme", gecmis: [[simdi, "önizleme (/nuristok)"]] });
+  await gonder(env, tg, m.chat.id, ["👁 <b>ÖNİZLEME — Nuri'ye stok listesi</b> (sadece siz görüyorsunuz). Aşağıdaki mesajlar Nuri'ye BİREBİR böyle gider; siz onaylamadan gitmez."], null);
+  await gonder(env, tg, m.chat.id, mesajlar, { inline_keyboard: [[{ text: "✅ Nuri'ye gönder", callback_data: `ad:g:${id}` }, { text: "❌ İptal", callback_data: `ad:x:${id}` }]] });
+  await arsiv(env, "nuristok-onizleme", id, { mesaj: mesajlar.map(duzYazi).join("\n\n") }, simdi);
 }
