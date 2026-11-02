@@ -1973,7 +1973,13 @@ async function kopruCari(request, env) {
   const ozel = (Array.isArray(g.ozel) ? g.ozel : []).slice(0, 50).map((o) => ({ tablo: String(o.tablo || "").slice(0, 60), kod: String(o.kod || "").slice(0, 60), cari: String(o.cari || "").slice(0, 60), n: Number(o.n) || 0, borc: sayi(o.borc), alacak: sayi(o.alacak) }));
   // 2 Kasım: köprü hangi sütunla bağladığını (baglar) da gönderir; para birimi dolar
   const baglar = (Array.isArray(g.baglar) ? g.baglar : []).slice(0, 20).map((b) => ({ tablo: String(b.tablo || "").slice(0, 60), hareket: String(b.hareket || "").slice(0, 30), kart: String(b.kart || "").slice(0, 30), n: Number(b.n) || 0, farkli: Number(b.farkli) || 0 }));
-  await stokIste(env, "/ayar-yaz", { k: `cari:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), kartBakiye: g.kartBakiye !== false, birim: "USD", hesaplar, ozel, baglar }) });
+  // 2 Kasım: son 60 günün tek tek hareketleri (ödemeler, gelen mal, defter farkı sebebi; sadece Patron'a)
+  const kisa = (x, n) => (x == null || x === "" ? null : String(x).slice(0, n));
+  const hareketler = (Array.isArray(g.hareketler) ? g.hareketler : []).slice(0, 2500).filter((x) => /^\d{2}$/.test(String(x.hesap)) && /^\d{4}-\d{2}-\d{2}$/.test(String(x.tarih))).map((x) => ({
+    hesap: String(x.hesap), tablo: kisa(x.tablo, 60), ind: kisa(x.ind, 20), tarih: String(x.tarih), borc: sayi(x.borc), alacak: sayi(x.alacak),
+    ozelkod: kisa(x.ozelkod, 80), aciklama: kisa(x.aciklama, 120), evrak: kisa(x.evrakno || x.belgeno, 40), belge: kisa(x.belgeind || x.belgetipi, 20), islem: kisa(x.islemind || x.islemtipi, 20),
+  }));
+  await stokIste(env, "/ayar-yaz", { k: `cari:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), kartBakiye: g.kartBakiye !== false, birim: "USD", hesaplar, ozel, baglar, hareketler }) });
   return Response.json({ ok: true, hesap: hesaplar.length });
 }
 

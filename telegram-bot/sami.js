@@ -25,7 +25,8 @@ import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, pa
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu, brSayKomutu } from "./stoksorgu.js";
-import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji } from "./mutabakat.js";
+import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu } from "./mutabakat.js";
+import { borcLimitKomutu } from "./cari-takip.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -143,6 +144,8 @@ export async function guncelleme(u, env) {
   if (komut === "/tablo") return tabloKomutu(m, env);
   if (komut === "/stokyetki") return stokYetkiKomutu(env, m, tg);
   if (komut === "/mutabakat") return mutabakatKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/bakiye") return bakiyeKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/borclimit") return borcLimitKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/brsay") return brSayKomutu(env, m, tg);
   if (komut === "/sorgular") return sorgularKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/eksik") return eksikKomutu(env, m, tg, Math.floor(Date.now() / 1000));
