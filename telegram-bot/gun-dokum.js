@@ -2,7 +2,7 @@
 // (VOLONTE + Black Rose + ekler), fabrikaya gidenler, stok sorguları, satışlar ve köprü durumu "sami:gunDokumSonuc"a yazılır.
 // KV "sami:raporTekrar" = "YYYY-AA-GG" → o günün otomatik rapor metinleri Patron'a (MURAT_ID'nin ilki) yeniden gönderilir.
 import { stokIste } from "./stokbot.js";
-import { onizlemeGonder, geceYedegi } from "./mutabakat.js";
+import { onizlemeGonder, geceYedegi, bilgiOnizleme, eskileriGecersizKil } from "./mutabakat.js";
 import { siteVerisi } from "./depo-oku.js";
 
 const ayar = async (env, k) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
@@ -79,6 +79,20 @@ export async function cariDokumu(env, tg) {
     const hg = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
     const sonuc = kararlar.map((k) => ({ ...k, sitede: site ? site.includes(String(k.kod)) : null, kanalMesaj: [...new Set((kodlar[k.kod] || []).flatMap((g) => g.ids))].length, kanaldanSilindi: Boolean(hg[k.kod]) }));
     await env.KAYIT.put("sami:silDokumSonuc", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), sonuc }), { expirationTtl: 86400 });
+  }
+  // KV "sami:fuatBilgi" = metin → Fuat'a bilgilendirme önizlemesi Patron'a (onaysız gitmez)
+  const bilgi = await env.KAYIT.get("sami:fuatBilgi");
+  if (bilgi) { await env.KAYIT.delete("sami:fuatBilgi"); const id = await bilgiOnizleme(env, tg, bilgi, Math.floor(Date.now() / 1000)); await env.KAYIT.put("sami:fuatBilgiSonuc", JSON.stringify({ id }), { expirationTtl: 86400 }); }
+  // KV "sami:mtGecersiz" = "<geçerli mt id>" → Fuat'a gitmiş diğer açık mutabakatlar geçersiz (düğmeler kalkar)
+  const gecerli = await env.KAYIT.get("sami:mtGecersiz");
+  if (gecerli) { await env.KAYIT.delete("sami:mtGecersiz"); const k = await eskileriGecersizKil(env, tg, gecerli, Math.floor(Date.now() / 1000)); await env.KAYIT.put("sami:mtGecersizSonuc", JSON.stringify({ gecerli, kapanan: k }), { expirationTtl: 86400 }); }
+  // KV "sami:mtListe" = "1" → son mutabakat kayıtlarının özeti (id, durum, gönderim) "sami:mtListeSonuc"a
+  if (await env.KAYIT.get("sami:mtListe")) {
+    await env.KAYIT.delete("sami:mtListe");
+    const ids = ((await stokIste(env, "/ayar-oku", { k: "mt:liste" })).v ? JSON.parse((await stokIste(env, "/ayar-oku", { k: "mt:liste" })).v) : []).slice(-10);
+    const l = [];
+    for (const id of ids) { const r = await ayar(env, `mt:${id}`); if (r) l.push({ id, durum: r.durum, olusturma: r.olusturma, gonderim: r.gonderim || null, fuatMesaj: r.fuatMesaj || null }); }
+    await env.KAYIT.put("sami:mtListeSonuc", JSON.stringify(l), { expirationTtl: 86400 });
   }
   if (!(await env.KAYIT.get("sami:cariDokum"))) return;
   await env.KAYIT.delete("sami:cariDokum");

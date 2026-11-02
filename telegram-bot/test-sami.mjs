@@ -1474,3 +1474,37 @@ test("/adet: adet listesi sadece Patron isteyince; önizleme Patron'a; 'Emin mis
   const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
   assert.deepEqual((await st("/arsiv-liste")).map((x) => x.tur), ["adet-onizleme", "adet-gonderim"]);
 });
+
+test("iki mutabakat Fuat'a gittiyse sadece sonuncusu geçerli (eskinin düğmeleri kalkar); Fuat'a bilgilendirme Patron onayı + 'Emin misiniz?' ile gider", async () => {
+  const { onizlemeGonder, bilgiOnizleme } = await import("./mutabakat.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999", FUAT_ID: "501" });
+  const tg = async () => ({ ok: true, result: { message_id: 1 } });
+  const r1 = await onizlemeGonder(o.env, tg, Date.UTC(2026, 10, 2, 14, 10) / 1000, "elle");
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:G:${r1.id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  const r2 = await onizlemeGonder(o.env, tg, Date.UTC(2026, 10, 2, 14, 15) / 1000, "elle");
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:G:${r2.id}`, message: { chat: { id: 999 }, message_id: 2 } } }, o.env);
+  assert.ok(cagri(o.g, "editMessageReplyMarkup").some((x) => x.govde.chat_id === "501")); // eski mesajın düğmeleri kaldırıldı
+  await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:m:${r1.id}`, message: { chat: { id: 501 }, message_id: 3 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /geçersiz; lütfen en son gelen mutabakat/);
+  await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:m:${r2.id}`, message: { chat: { id: 501 }, message_id: 4 } } }, o.env);
+  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "999" && /bakiyeyi onayladı/.test(x.govde.text)));
+  // bilgilendirme
+  const metin = "📊 VOLONTE – Sami\n\nFuat Bey,\n\nBugün size iki mutabakat mesajı ulaştı.\n\nİyi çalışmalar.\n– Sami";
+  const g = [];
+  const tg2 = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 7 } }; };
+  const id = await bilgiOnizleme(o.env, tg2, metin, Date.UTC(2026, 10, 2, 15) / 1000);
+  assert.ok(g.every((x) => x.govde.chat_id === "999"));
+  assert.equal(g.at(-1).govde.text, metin);
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `ad:g:${id}`, message: { chat: { id: 999 }, message_id: 8 } } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Emin misiniz\?<\/b> Bilgilendirme mesajı/);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 0);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `ad:G:${id}`, message: { chat: { id: 999 }, message_id: 9 } } }, o.env);
+  assert.deepEqual(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").map((x) => x.govde.text), [metin]);
+  const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
+  const turler = (await st("/arsiv-liste")).map((x) => x.tur);
+  assert.ok(turler.includes("gecersiz") && turler.includes("bilgi-onizleme") && turler.includes("bilgi-gonderim"));
+});

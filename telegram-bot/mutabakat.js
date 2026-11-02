@@ -303,11 +303,28 @@ async function fuataGonder(env, tg, r, kim, simdi) {
   }
   r.fuatMesaj = await gonder(env, tg, fuat(env), mesajlar, fuatKlavye(r.id), html);
   if (!r.fuatMesaj) return null;
+  await eskileriGecersizKil(env, tg, r.id, simdi); // 2 Kasım: Fuat sadece en son mutabakat mesajına cevap verebilir
   Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(kim) }); r.gecmis.push([simdi, "Patron onayladı → Fuat'a gönderildi"]);
   await kayitYaz(env, r);
   await arsiv(env, "gonderim", r.id, { onaylayan: String(kim), zaman: tarihSaat(simdi), fuatMesaji: r.duzFuat || mesajlar.join("\n") }, simdi);
   try { await pdfArsivle(env, r, "Fuat'a gönderilen", simdi); } catch (e) { await arsiv(env, "pdf-hata", r.id, String(e && e.message), simdi); }
   return true;
+}
+
+// Fuat'a gitmiş ama cevaplanmamış eski mutabakatlar geçersiz olur (düğmeleri kaldırılır, arşive yazılır); dışarıda tutulan hariç.
+export async function eskileriGecersizKil(env, tg, haric, simdi) {
+  const kapanan = [];
+  for (const id of (await ayarOku(env, "mt:liste", [])).slice(-20)) {
+    if (id === haric) continue;
+    const e = await ayarOku(env, `mt:${id}`, null);
+    if (!e || !["gonderildi", "sonra"].includes(e.durum)) continue;
+    e.durum = "gecersiz"; e.gecmis.push([simdi, `geçersiz: yerine ${haric || "yeni mutabakat"} geçerli`]);
+    await kayitYaz(env, e);
+    if (e.fuatMesaj) await tg(env, "editMessageReplyMarkup", { chat_id: fuat(env), message_id: e.fuatMesaj, reply_markup: { inline_keyboard: [] } }).catch(() => null);
+    await arsiv(env, "gecersiz", id, { yerine: haric, tarihSaat: tarihSaat(simdi), gonderim: e.gonderim ? tarihSaat(e.gonderim) : null }, simdi);
+    kapanan.push({ id, gonderim: e.gonderim });
+  }
+  return kapanan;
 }
 
 export async function mutabakatDugmesi(env, cq, tg, simdi) {
@@ -353,6 +370,7 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
   }
   // Fuat'ın düğmeleri
   if (kim !== fuat(env)) return cevapla("Bu düğme Fuat'ta.");
+  if (r.durum === "gecersiz") return cevapla("Bu mesaj geçersiz; lütfen en son gelen mutabakat mesajına cevap verin.");
   if (!["gonderildi", "sonra", "fark"].includes(r.durum)) return cevapla("Bu mutabakat kapandı.");
   const kapat = () => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
   if (islem === "m") {
@@ -686,16 +704,29 @@ export async function adetDugmesi(env, cq, tg, simdi) {
   if (islem === "v") { r.gecmis.push([simdi, "vazgeçti"]); await ayarYaz(env, `ad:${id}`, r); await cevapla("Gönderilmedi"); return dugmeYaz("Gönderilmedi"); }
   if (islem === "g") {
     await cevapla("Emin misiniz?");
-    return gonder(env, tg, cq.message.chat.id, ["⚠️ <b>Emin misiniz?</b> Adet listesi şimdi Fuat'a gidecek."], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `ad:G:${id}` }, { text: "Vazgeç", callback_data: `ad:v:${id}` }]] });
+    return gonder(env, tg, cq.message.chat.id, [`⚠️ <b>Emin misiniz?</b> ${(r.tur || "adet") === "adet" ? "Adet listesi" : "Bilgilendirme mesajı"} şimdi Fuat'a gidecek.`], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `ad:G:${id}` }, { text: "Vazgeç", callback_data: `ad:v:${id}` }]] });
   }
   if (islem !== "G") return cevapla("?");
+  const tur = r.tur || "adet";
   const yasak = fuatSuzgec(r.mesajlar.map(duzYazi).join("\n"));
   if (yasak || !fuat(env)) { await cevapla("Gönderilmedi"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⛔ Gönderilmedi: ${yasak ? `mesajda Fuat'ın görmemesi gereken bilgi var (${yasak.join(", ")})` : "Fuat'ın kimliği kayıtlı değil"}.` }); }
   const gitti = await gonder(env, tg, fuat(env), r.mesajlar, null);
   if (!gitti) return cevapla("Fuat'a gönderilemedi (Sami'ye /start yazmamış olabilir).");
   Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(cq.from.id) }); r.gecmis.push([simdi, "Patron onayladı → Fuat'a gönderildi"]);
   await ayarYaz(env, `ad:${id}`, r);
-  const k = await arsiv(env, "adet-gonderim", id, { onaylayan: String(cq.from.id), tarihSaat: tarihSaat(simdi), fuatMesaji: r.mesajlar.map(duzYazi).join("\n\n") }, simdi);
+  const k = await arsiv(env, `${tur}-gonderim`, id, { onaylayan: String(cq.from.id), tarihSaat: tarihSaat(simdi), fuatMesaji: r.mesajlar.map(duzYazi).join("\n\n") }, simdi);
   await cevapla("Fuat'a gönderildi"); await dugmeYaz("✅ Fuat'a gönderildi");
-  return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ Adet listesi Fuat'a gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
+  return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ ${tur === "adet" ? "Adet listesi" : "Bilgilendirme mesajı"} Fuat'a gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
+}
+
+// Fuat'a Sami adına BİLGİLENDİRME (2 Kasım): Patron'a önizleme → [✅ Fuat'a gönder] → "Emin misiniz?" → Fuat (arşiv bilgi-*).
+// Metin birebir (düz yazı). /adet ile aynı onay akışı ("ad:" kayıtları, tur "bilgi").
+export async function bilgiOnizleme(env, tg, metin, simdi) {
+  const id = `bl-${simdi.toString(36)}`;
+  const mesajlar = [kacis(String(metin).trim())];
+  await ayarYaz(env, `ad:${id}`, { id, tur: "bilgi", olusturma: simdi, mesajlar, durum: "onizleme", gecmis: [[simdi, "önizleme (bilgilendirme)"]] });
+  await gonder(env, tg, murat(env), ["👁 <b>ÖNİZLEME — Fuat'a bilgilendirme</b> (sadece siz görüyorsunuz). Aşağıdaki mesaj Fuat'a BİREBİR böyle gider; siz onaylamadan gitmez."], null);
+  await gonder(env, tg, murat(env), mesajlar, { inline_keyboard: [[{ text: "✅ Fuat'a gönder", callback_data: `ad:g:${id}` }, { text: "❌ İptal", callback_data: `ad:x:${id}` }]] });
+  await arsiv(env, "bilgi-onizleme", id, { mesaj: String(metin).trim() }, simdi);
+  return id;
 }
