@@ -24,11 +24,12 @@ export async function sorguYetkilisi(env, id) {
   return Boolean(k && kisiGrubu(k) === "fabrika" && (await yetkililer(env)).includes(String(id)));
 }
 
-const stokYazi = (stok) => (stok == null ? "— (Black Rose kartı yok)" : String(Math.max(0, stok)));
-// İki mağazadaki Black Rose kodlarının dağılımı (kullanıcı kararı 31 Ekim): "Black Rose mağazası 20 · VOLONTE mağazası 4"
+// KALICI KURAL (Patron, 2 Kasım): VOLONTE ve BLACK ROSE iki ayrı mağaza — stok her mağaza için AYRI rakamla, ayrı satırda;
+// iki mağaza toplanmaz, karşılaştırılmaz. (31 Ekim'deki "toplam + dağılım" yazımı bu kuralla kaldırıldı.)
 const MAGAZA_AD = { BLACKROSE: "Black Rose mağazası", VOLONTE: "VOLONTE mağazası" };
-export const dagilimYazi = (d) => (d && Object.keys(d).length > 1 ? ` (${["BLACKROSE", "VOLONTE"].filter((m) => m in d).map((m) => `${MAGAZA_AD[m]} ${Math.max(0, d[m])}`).join(" · ")})` : "");
-const soruMetni = (r) => `🔎 ${r.ad} ${r.kod} stoğunu soruyor · stok: ${stokYazi(r.stok)}${r.stok == null ? "" : dagilimYazi(r.detay)}`;
+export const magazaSatirlari = (d) => ["BLACKROSE", "VOLONTE"].filter((m) => d && m in d).map((m) => `${MAGAZA_AD[m]}: ${Math.max(0, d[m])} adet`);
+const stokYazi = (r) => (r.stok == null ? ["stok: — (Black Rose kartı yok)"] : magazaSatirlari(r.detay).length ? magazaSatirlari(r.detay) : ["Black Rose mağazası: 0 adet"]);
+const soruMetni = (r) => [`🔎 ${r.ad} ${r.kod} stoğunu soruyor`, ...stokYazi(r)].join("\n");
 const klavye = (id) => ({ inline_keyboard: [[{ text: "✅ Göster", callback_data: `sq:g:${id}` }, { text: "❌ Gösterme", callback_data: `sq:x:${id}` }]] });
 
 // Fabrika kişisinin "/stok …" mesajı. Yetkisi yoksa false (normal fabrika cevabı verilir).
@@ -63,9 +64,9 @@ export async function stokSorguDugmesi(env, cq, tg, simdi) {
   const r = s.kayit;
   await cevapla(islem === "g" ? "Gösterildi" : "Gösterilmedi");
   await tg(env, "sendMessage", { chat_id: r.kisi, text: islem === "g"
-    ? (r.stok == null ? `📦 ${r.kod}: Black Rose'da bu model yok.` : `📦 ${r.kod} · Black Rose stok: ${Math.max(0, r.stok)} adet${dagilimYazi(r.detay)}`)
+    ? (r.stok == null ? `📦 ${r.kod}: Black Rose'da bu model yok.` : [`📦 ${r.kod}`, ...(magazaSatirlari(r.detay).length ? magazaSatirlari(r.detay) : ["Black Rose mağazası: 0 adet"])].join("\n"))
     : `${r.kod}: stok bilgisi şu an paylaşılamıyor.` });
-  const ek = islem === "g" ? `✅ ${kim} gösterdi${r.stok == null ? "" : ` (${Math.max(0, r.stok)} adet)`}` : `❌ ${kim}: gösterilmedi`;
+  const ek = islem === "g" ? `✅ ${kim} gösterdi` : `❌ ${kim}: gösterilmedi`;
   for (const [chat, mesaj] of r.mesajlar) await tg(env, "editMessageText", { chat_id: chat, message_id: mesaj, text: `${soruMetni(r)}\n\n${ek}`, reply_markup: { inline_keyboard: [] } });
 }
 

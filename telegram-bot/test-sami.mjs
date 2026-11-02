@@ -943,14 +943,14 @@ test("Black Rose stok sorgusu: Fuat /stok → Hemra onayı; sade kod, sadece B s
   Date.now = () => ist(14) * 1000;
   await mesaj(501, "/stok 3900");
   const soru = son(333);
-  assert.equal(soru.govde.text, "🔎 Fuat 3900 stoğunu soruyor · stok: 24");
+  assert.equal(soru.govde.text, "🔎 Fuat 3900 stoğunu soruyor\nBlack Rose mağazası: 24 adet");
   assert.deepEqual(soru.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Göster", "❌ Gösterme"]);
   assert.match(son(501).govde.text, /iletildi/);
   assert.ok(!son(501).govde.text.includes("24"));
   const id = soru.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   // Hemra gösterir → Fuat'a sade kod + sadece Black Rose stoğu
   await g2({ callback_query: { id: "c", from: { id: 333 }, data: `sq:g:${id}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
-  assert.equal(son(501).govde.text, "📦 3900 · Black Rose stok: 24 adet");
+  assert.equal(son(501).govde.text, "📦 3900\nBlack Rose mağazası: 24 adet");
   assert.ok(!/B20|3900B|VOLONTE|\$|fiyat|satı/i.test(son(501).govde.text));
   await g2({ callback_query: { id: "c", from: { id: 111 }, data: `sq:x:${id}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Hemra zaten karar verdi/);
@@ -963,7 +963,7 @@ test("Black Rose stok sorgusu: Fuat /stok → Hemra onayı; sade kod, sadece B s
   assert.ok(!son(111));
   const tgc = async (e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 7 } }; };
   await stokSorguTakip(o.env, ist(15, 1), tgc);
-  assert.match(son(111).govde.text, /🔎 Fuat 907 stoğunu soruyor · stok: 5\n\(Hemra 1 saattir cevap vermedi\)/);
+  assert.match(son(111).govde.text, /🔎 Fuat 907 stoğunu soruyor\n[^\n]*mağazası: 5 adet\n\(Hemra 1 saattir cevap vermedi\)/);
   await stokSorguTakip(o.env, ist(15, 10), tgc);
   assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "111").length, 1); // bir kez
   await g2({ callback_query: { id: "c", from: { id: 111 }, data: `sq:x:${id2}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
@@ -1119,7 +1119,7 @@ test("Black Rose kodları iki mağazadan: B kartları + /brsay listesi; Fuat sor
   o.depo.set("sami:stokSorguIds", JSON.stringify(["501"]));
   o.g.length = 0;
   await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "/stok 3634" } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /Fuat 3634 stoğunu soruyor · stok: 24 \(Black Rose mağazası 20 · VOLONTE mağazası 4\)/);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /Fuat 3634 stoğunu soruyor\nBlack Rose mağazası: 20 adet\nVOLONTE mağazası: 4 adet$/); // iki mağaza ayrı satır, toplam yok
 });
 
 test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron onaylamadan Fuat'a hiçbir şey gitmez; gönder → Fuat (süzgeç) + PDF Patron'a; Uyuşmuyor → açıklama; Sonra → hatırlatma; değiştirilemez arşiv", async () => {
