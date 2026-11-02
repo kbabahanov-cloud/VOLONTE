@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pelin'i (volonte-pelin) Cloudflare'e yükler. Gizli anahtarlar (BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY, WEBHOOK_SECRET)
+# Pelin'i (volonte-pelin) Cloudflare'e yükler. Gizli anahtarlar (BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, WEBHOOK_SECRET)
 # korunur; ilk kurulumda WEBHOOK_SECRET rastgele üretilir, adres açılır ve 2 dakikalık görev kurulur.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,6 +23,7 @@ cat > "$META" <<JSON
  "placement":{"region":"aws:us-east-1"}, $GOC
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"PELIN","class_name":"PelinDO"},
+             {"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-pelin.volonte.workers.dev"},
              {"type":"plain_text","name":"KEMAL_URL","text":"https://volonte-asistan.volonte.workers.dev"}$GIZLI]}

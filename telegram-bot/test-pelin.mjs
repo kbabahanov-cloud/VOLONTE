@@ -189,3 +189,115 @@ test("sohbet: komutsuz Claude (Sonnet), /beyin opus sadece Murat; yabancıya cev
   await yazi(o, 999, "selam");
   assert.equal(o.g.length, n);
 });
+
+// ---------- Üretim akışı (2 Kasım) ----------
+const claudeJsonCevap = (obj) => ({ id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(obj) }], usage: { input_tokens: 100, output_tokens: 50 } });
+function uretimOrtami() {
+  const o = ortam();
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => {
+    if (String(url).endsWith("/sendMediaGroup")) { const gv = JSON.parse(istek.body); o.g.push({ metod: "sendMediaGroup", govde: gv }); return Response.json({ ok: true, result: gv.media.map((_, i) => ({ message_id: 500 + i, photo: [{ file_id: `kucuk${i}` }, { file_id: `YUZ${i}` }] })) }); }
+    return asil(url, istek);
+  };
+  o.falSonuc["fal-ai/veo3.1/lite/image-to-video"] = (n) => ({ video: { url: `https://vid/${n}.mp4` } });
+  return o;
+}
+const GECTI = { renk_ayni: true, desen_ayni: true, kesim_ayni: true, sorunlar: [] };
+const GECMEDI = { renk_ayni: false, desen_ayni: true, kesim_ayni: true, sorunlar: ["renk tonu koyulaşmış"] };
+const secimKur = (o) => o.depo.set("pelin:secim", JSON.stringify({ yuz: { manken: "siyahi", fileId: "YUZ", anahtar: "a".repeat(32) }, ortamlar: [{ id: "1", ad: "Siyah-altın", sahne: "black and gold studio", hareket: "slow turn" }], arac: "veo" }));
+const cronlar = async (o, n) => { for (let i = 0; i < n; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000)); };
+
+test("kurulum: /kurulum maliyet onayı → 3 yüz + 3 ortam önerisi → Patron yüz ve ortam seçer → kalıcı seçim; başkası seçemez", async () => {
+  const o = uretimOrtami();
+  await yazi(o, HEMRA, "/kurulum");
+  assert.match(o.g.at(-1).govde.text, /sadece Patron/);
+  await yazi(o, MURAT, "/kurulum");
+  assert.match(o.g.at(-1).govde.text, /3 manken yüzü \(3 × 0,15 \$ = 0,45 \$\)/);
+  assert.equal(o.falIstek.length, 0); // onaysız harcama yok
+  o.claude.cevaplar = [claudeJsonCevap({ ortamlar: [{ ad: "Retro 80'ler", aciklama: "neon", sahne: "80s neon", hareket: "dance" }, { ad: "Siyah-altın", aciklama: "lüks", sahne: "black gold", hareket: "turn" }, { ad: "Live your life", aciklama: "şehir", sahne: "city street", hareket: "walk" }] })];
+  await bas(o, MURAT, "pk:o");
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro").length, 3);
+  assert.match(o.g.find((x) => /Ortam önerileri/.test(x.govde.text || "")).govde.text, /1\) Retro 80'ler — neon/);
+  await bas(o, MURAT, "pk:t:2");
+  await cronlar(o, 1);
+  assert.equal(o.g.filter((x) => x.metod === "sendMediaGroup").length, 1);
+  await bas(o, HEMRA, "pk:y:siyahi");
+  assert.ok(!o.depo.has("pelin:secim"));
+  await bas(o, MURAT, "pk:y:siyahi");
+  const s = JSON.parse(o.depo.get("pelin:secim"));
+  assert.equal(s.yuz.manken, "siyahi");
+  assert.equal(s.yuz.fileId, "YUZ1");
+  assert.deepEqual(s.ortamlar.map((x) => x.ad), ["Siyah-altın"]);
+  assert.match(o.g.at(-1).govde.text, /Kalıcı seçim kaydedildi/);
+});
+
+test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden üretir; geçince video + kare kontrolü → Patron önizlemesi [Onayla/Yeniden/İptal]; onay → teslim kuyruğu; fiyat/stok yok", async () => {
+  const o = uretimOrtami();
+  secimKur(o);
+  o.depo.set("pelin:urunfoto:3557", JSON.stringify(["b".repeat(32)]));
+  await yazi(o, MURAT, "/uret 3557");
+  const kart = o.g.at(-1).govde;
+  assert.match(kart.text, /Üretim — 1 model: 3557/);
+  assert.equal(o.falIstek.length, 0);
+  const id = kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await bas(o, MURAT, `pu:o:${id}`);
+  o.claude.cevaplar = [claudeJsonCevap(GECMEDI), claudeJsonCevap(GECTI), claudeJsonCevap(GECTI)];
+  await cronlar(o, 9);
+  const foto = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
+  assert.equal(foto.length, 2); // ilk deneme renk farkı → otomatik yeniden
+  assert.deepEqual(foto[0].govde.image_urls, ["https://pelin.test/dosya/" + "a".repeat(32), "https://pelin.test/dosya/" + "b".repeat(32)]);
+  assert.match(foto[0].govde.prompt, /black and gold studio/);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video").length, 1);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame").length, 3);
+  const on = o.g.find((x) => /ÖNİZLEME — 3557/.test(x.govde.text || ""));
+  assert.ok(on, "önizleme gelmeli");
+  assert.deepEqual(on.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Onayla", "🔄 Yeniden üret", "❌ İptal"]);
+  assert.ok(o.g.some((x) => x.metod === "sendVideo" && x.govde.chat_id === String(MURAT)));
+  assert.ok(!o.g.some((x) => /\$|fiyat|stok/i.test(String(x.govde.caption || ""))));
+  const isId = on.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await bas(o, HEMRA, `pu:a:${isId}`);
+  assert.ok(!o.depo.has("venom:pelinTeslim"));
+  await bas(o, MURAT, `pu:a:${isId}`);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:pelinTeslim")).map((x) => x.kod), ["3557"]);
+});
+
+test("üretim: 2 denemede kontrolden geçmezse Patron'a ⚠️ (sorunlarla); maliyet testi bitince model başı maliyet raporu", async () => {
+  const o = uretimOrtami();
+  secimKur(o);
+  o.depo.set("pelin:urunfoto:3557", JSON.stringify(["b".repeat(32)]));
+  await yazi(o, MURAT, "/maliyettesti 3557");
+  assert.match(o.g.at(-1).govde.text, /MALİYET TESTİ — 1 model/);
+  const id = o.g.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await bas(o, MURAT, `pu:o:${id}`);
+  o.claude.cevaplar = [claudeJsonCevap(GECMEDI), claudeJsonCevap(GECMEDI)];
+  await cronlar(o, 6);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit").length, 2);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video").length, 0); // geçmeyen fotoğraftan video yapılmaz
+  const uyari = o.g.find((x) => /⚠️ 3557 · .*2\. deneme|Sorunlar:/.test(x.govde.text || ""));
+  assert.ok(uyari);
+  assert.match(uyari.govde.text, /renk tonu koyulaşmış/);
+  assert.match(o.g.find((x) => /Maliyet testi bitti/.test(x.govde.text || "")).govde.text, /3557: 0,3\d \$ — foto 2, video 0 deneme — ⚠️ kontrolden geçmedi/);
+});
+
+test("örnek video: Patron video + 'bunun gibi yap, 3557' → kareler → tarif (yüz/logo/müzik yok) → şablon kaydı; link indirilemezse dosya istenir", async () => {
+  const o = uretimOrtami();
+  secimKur(o);
+  await guncelleme({ message: { message_id: 1, date: 1, chat: { id: MURAT, type: "private" }, from: { id: MURAT, first_name: "Murat" }, caption: "bunun gibi yap, 3557", video: { file_id: "VID", mime_type: "video/mp4", file_size: 1000 } } }, o.env);
+  const kare = o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame");
+  assert.equal(kare.length, 3);
+  assert.match(kare[0].govde.video_url, /^https:\/\/pelin\.test\/dosya\/[a-f0-9]{32}$/); // Telegram anahtarı dışarı verilmez
+  o.claude.cevaplar = [claudeJsonCevap({ ad: "neon", kamera: "slow dolly in", isik: "warm neon", hiz: "slow motion", poz: "turns and smiles", ortam_havasi: "80s club", ozet: "Ağır çekim neon hava." })];
+  await cronlar(o, 1);
+  const t = o.g.find((x) => /Tarif çıkarıldı — "neon"/.test(x.govde.text || ""));
+  assert.ok(t);
+  assert.deepEqual(t.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["💾 Şablon olarak kaydet", "▶️ 3557 için üret"]);
+  assert.match(o.claude[0].messages[0].content.at(-1).text, /yüzünü, kimliğini, logoları, yazıları, markaları ve müziği TARİFE KOYMA/);
+  const oid = t.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await bas(o, MURAT, `ps:k:${oid}`);
+  assert.equal(JSON.parse(o.depo.get("pelin:sablonlar")).neon.kamera, "slow dolly in");
+  // indirilemeyen link
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).startsWith("https://instagram") ? new Response("<html>", { headers: { "content-type": "text/html" } }) : asil(url, istek));
+  await yazi(o, MURAT, "bunun gibi yap https://instagram.com/reel/x");
+  assert.match(o.g.at(-1).govde.text, /videoyu dosya olarak atın/);
+});
