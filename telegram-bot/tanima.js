@@ -144,3 +144,18 @@ export async function dosyaBaytIndir(env, tg, fileId) {
   if (!r.ok) throw new Error(`indirme: ${r.status}`);
   return new Uint8Array(await r.arrayBuffer());
 }
+
+// İki fotoğraf aynı model mi? (2 Kasım, "Sil" kuralı: kodsuz kanal paylaşımlarını görsel olarak bulmak için)
+// ayni: aynı model (renk farkı olsa da aynı kesim/desen) · guven: yuksek | orta | dusuk. Kemal SADECE "ayni + yuksek" ise siler.
+export async function ayniModelMi(env, referansB64, adayB64, model) {
+  return jsonIste(env, {
+    content: [
+      { type: "text", text: "Referans (silinecek model):" }, gorsel(referansB64),
+      { type: "text", text: "Kanal paylaşımı:" }, gorsel(adayB64),
+      { type: "text", text: "Kanal paylaşımındaki kıyafet referanstaki modelle AYNI model mi (aynı kesim, yaka, kol, desen, dikiş detayları; sadece renk farkı varsa da aynı say)? Benzer ama farklı model ise ayni=false. guven: yuksek (neredeyse kesin), orta, dusuk. aciklama: en fazla 1 kısa Türkçe cümle." },
+    ],
+    schema: { type: "object", properties: { ayni: { type: "boolean" }, guven: { type: "string", enum: ["yuksek", "orta", "dusuk"] }, aciklama: { type: "string" } }, required: ["ayni", "guven", "aciklama"], additionalProperties: false },
+    maxTokens: 300,
+    model,
+  });
+}

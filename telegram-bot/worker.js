@@ -39,7 +39,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
-import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir } from "./tanima.js";
+import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir, ayniModelMi } from "./tanima.js";
 import { markaBas } from "./marka.js";
 import { musteriIsle, dilSec } from "./musteri.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } from "./ortak.js";
@@ -68,6 +68,7 @@ const ALTYAZI_GUNLUK = 30; // fatura güvenliği: günde en fazla öneri
 const KATALOG_PARTI = 8; // bir çalışmada tarif edilen görsel
 const KATALOG_GUNLUK_CAGRI = 150; // fatura güvenliği: günde en fazla katalog çağrısı
 const TANIMA_ADAY = 5;
+const GORSEL_ADAY = 8; // "Sil": fotoğrafa bakarak karşılaştırılan en fazla kodsuz paylaşım
 
 // Günlük yeniden paylaşım ayarları
 const SABAH_SAATI = 8; // paylaşım bu saatte başlar (ilk tur / hatırlatma da)
@@ -1137,21 +1138,52 @@ export function modelMesajlari(kod, kodlar, kodsuz) {
   return [...new Set((kodlar[kod] || []).flatMap((g) => g.ids))].filter((id) => id > 0).sort((a, b) => a - b);
 }
 
-export async function hicGelmeyecek(env, kod, kim, simdi) {
+// "SİL" (2 Kasım, Patron kuralı): modelin VOLONTE kanalındaki BÜTÜN paylaşımları (kodlu + gorsel:true ise fotoğrafa bakarak
+// bulunan kodsuz paylaşımlar) önce gizli "Kemal arşiv" kanalına kopyalanır (fotoğraf/video + alt yazı; tarih kayıtta), sonra
+// silinir. Kopyaların yeri KV "silinen:<kod>" → "/geri <kod>" ile kanala geri konur. Görsel eşleşmede emin olunmayan paylaşım
+// SİLİNMEZ, Patron'a ayrıca bildirilir. ek.patron: sonuç sadece Patron'a tek mesaj; ek.site: Selin'in site sonucu.
+export async function hicGelmeyecek(env, kod, kim, simdi, ek = {}) {
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
-  const ids = modelMesajlari(kod, kodlar, kodsuz);
-  // Paylaşım tarihleri botun kendi kaydında kalır (kodlar / kodsuz silinmez).
   const arsiv = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
-  const tarihler = kodsuzMu(kod)
-    ? [kodsuz[kod]?.tarih].filter(Boolean)
-    : (kodlar[kod] || []).map((g) => g.tarih);
-  arsiv[kod] = { kim, zaman: simdi, tarihler, mesajSayisi: ids.length };
+  let ids = modelMesajlari(kod, kodlar, kodsuz);
+  const tarihler = kodsuzMu(kod) ? [kodsuz[kod]?.tarih].filter(Boolean) : (kodlar[kod] || []).map((g) => g.tarih);
+  let gorsel = { eslesen: [], supheli: [], not: null };
+  if (ek.gorsel && !kodsuzMu(kod)) {
+    try { gorsel = await gorselEslesme(env, kod, arsiv); } catch (e) { gorsel.not = `görsel arama yapılamadı (${String(e && e.message).slice(0, 120)})`; }
+    for (const k of gorsel.eslesen) { ids = [...ids, ...modelMesajlari(k, kodlar, kodsuz)]; tarihler.push(kodsuz[k]?.tarih); arsiv[k] = { kim, zaman: simdi, tarihler: [kodsuz[k]?.tarih].filter(Boolean), mesajSayisi: modelMesajlari(k, kodlar, kodsuz).length, ana: kod }; }
+    ids = [...new Set(ids)].sort((a, b) => a - b);
+  }
+  const paylasim = (kodsuzMu(kod) ? 1 : (kodlar[kod] || []).length) + gorsel.eslesen.length;
+  arsiv[kod] = { kim, zaman: simdi, tarihler: tarihler.filter(Boolean), mesajSayisi: ids.length };
   await env.KAYIT.put("hicgelmeyecek", JSON.stringify(arsiv));
   await atla(env, kod, null, simdi);
   await env.KAYIT.delete(`kuyruk:${kod}`);
-  await env.KAYIT.put(`silinecek:${kod}`, JSON.stringify({ kod, kim, kalan: ids, silinen: 0, hatali: [], hata: null }));
+  await env.KAYIT.put(`silinecek:${kod}`, JSON.stringify({ kod, kim, kalan: ids, silinen: 0, hatali: [], hata: null, kopya: [], paylasim, site: ek.site || null, patron: Boolean(ek.patron), supheli: gorsel.supheli, gorselNot: gorsel.not, tarihler: tarihler.filter(Boolean) }));
   await silmeAdimi(env, kod);
+}
+
+// Kodsuz kanal paylaşımları arasında bu modeli fotoğrafa bakarak bulur: katalog tariflerinden adaylar seçilir, her aday
+// referans fotoğrafla (modelin katalog görseli) ikili karşılaştırılır. Silinecek: "aynı + yüksek güven"; şüpheli: aynı ama
+// orta/düşük güven (silinmez, Patron'a bildirilir).
+async function gorselEslesme(env, kod, silinmisler) {
+  const sonuc = { eslesen: [], supheli: [], not: null };
+  if (!env.ANTHROPIC_API_KEY) { sonuc.not = "görsel arama kapalı (yapay zekâ bağlı değil)"; return sonuc; }
+  const tarifler = (await env.KAYIT.get("tarifler", "json")) || {};
+  if (!tarifler[kod] || !tarifler[kod].f) { sonuc.not = "görsel arama yapılamadı: modelin katalog fotoğrafı yok (sadece kodlu paylaşımlar silindi)"; return sonuc; }
+  const katalog = Object.entries(tarifler).filter(([k, v]) => kodsuzMu(k) && !silinmisler[k] && v.t && !/kıyafet yok/i.test(v.t));
+  if (!katalog.length) return sonuc;
+  const tg = (metod, govde) => telegram(env, metod, govde);
+  const ref = await dosyaIndir(env, tg, tarifler[kod].f);
+  const adaylar = (await adaySec(env, ref, katalog.map(([k, v]) => `${k} | ${v.t}`), `silinecek model ${kod}`)).filter((k) => tarifler[k]).slice(0, GORSEL_ADAY);
+  for (const k of adaylar) {
+    try {
+      const r = await ayniModelMi(env, ref, await dosyaIndir(env, tg, tarifler[k].f));
+      if (r.ayni && r.guven === "yuksek") sonuc.eslesen.push(k);
+      else if (r.ayni) sonuc.supheli.push({ k, guven: r.guven, aciklama: r.aciklama });
+    } catch { /* indirilemeyen/karşılaştırılamayan aday atlanır */ }
+  }
+  return sonuc;
 }
 
 async function silmeAdimi(env, kod) {
@@ -1159,10 +1191,19 @@ async function silmeAdimi(env, kod) {
   const is = await env.KAYIT.get(anahtar, "json");
   if (!is) return;
   const kanal = await env.KAYIT.get("kanal", "json");
+  const arsivKanal = await env.KAYIT.get("arsiv", "json");
   const parti = is.kalan.slice(0, SILME_ADIM);
-  for (const id of parti) {
+  // Önce kopya: arşiv kanalına (album düzeni korunur). Kopyalanamayan mesaj SİLİNMEZ (geri konamaz).
+  let kopyalar = null;
+  if (arsivKanal && parti.length) {
+    const c = await telegram(env, "copyMessages", { chat_id: arsivKanal.id, from_chat_id: kanal.id, message_ids: parti, disable_notification: true });
+    if (c.ok && Array.isArray(c.result) && c.result.length === parti.length) kopyalar = c.result.map((x) => x.message_id);
+  }
+  is.kopya = is.kopya || [];
+  for (const [i, id] of parti.entries()) {
+    if (arsivKanal && !kopyalar) { is.hatali.push(id); is.hata = is.hata || "arşive kopyalanamadı (silinmedi)"; continue; }
     const r = await telegram(env, "deleteMessage", { chat_id: kanal.id, message_id: id });
-    if (r.ok) is.silinen += 1;
+    if (r.ok) { is.silinen += 1; if (kopyalar) is.kopya.push({ kanal: id, arsiv: kopyalar[i] }); }
     else {
       is.hatali.push(id);
       is.hata = is.hata || r.description || "bilinmeyen hata";
@@ -1174,17 +1215,61 @@ async function silmeAdimi(env, kod) {
     return;
   }
   await env.KAYIT.delete(anahtar);
+  // Geri koyma kaydı (silinmez): arşivdeki kopyalar, sırasıyla
+  const eski = (await env.KAYIT.get(`silinen:${kod}`, "json")) || { kopya: [] };
+  await env.KAYIT.put(`silinen:${kod}`, JSON.stringify({ kod, kim: is.kim, zaman: Math.floor(Date.now() / 1000), tarihler: is.tarihler || [], kopya: [...(eski.kopya || []), ...is.kopya], arsivKanal: arsivKanal ? arsivKanal.id : null }));
   const ad = kodGoster(kod);
+  const link = (id) => (kanal.kullanici ? `https://t.me/${kanal.kullanici}/${id}` : `#${id}`);
+  if (is.patron) {
+    // Patron'a TEK mesaj (2 Kasım kuralı)
+    const siteOk = ["kaldirildi", "yoktu"].includes(is.site);
+    const tamam = siteOk && !is.hatali.length;
+    const satirlar = [tamam
+      ? `✅ ${ad} siteden ve kanaldan kaldırıldı (${is.paylasim} paylaşım silindi${is.silinen !== is.paylasim ? `, ${is.silinen} mesaj` : ""}).${is.site === "yoktu" ? " (Sitede zaten yoktu.)" : ""}`
+      : `⚠️ ${ad}: ${siteOk ? (is.site === "yoktu" ? "sitede zaten yoktu" : "siteden kaldırıldı") : `siteden KALDIRILAMADI (${is.site || "Selin cevap vermedi"})`}; kanaldan ${is.silinen} mesaj silindi${is.hatali.length ? `, ${is.hatali.length} mesaj SİLİNEMEDİ (${is.hata})` : ""}.`];
+    if (is.hatali.length) {
+      if (/can't be deleted|cannot be deleted|too old|48/i.test(is.hata || "")) satirlar.push("Telegram bu eski mesajları botun silmesine izin vermedi; aşağıdakileri kanalda elle silebilirsiniz (kopyaları arşivde):");
+      satirlar.push(...is.hatali.slice(0, 15).map(link), ...(is.hatali.length > 15 ? [`... ve ${is.hatali.length - 15} mesaj daha.`] : []));
+    }
+    if ((is.supheli || []).length) satirlar.push(`🔎 Fotoğrafa göre benzeyen ama emin olmadığım ${is.supheli.length} paylaşım SİLİNMEDİ — bakıp karar verin:`, ...is.supheli.slice(0, 10).map((s) => `• ${link(String(s.k).replace("~", ""))} (${s.guven}: ${s.aciklama})`));
+    if (is.gorselNot) satirlar.push(`ℹ️ ${is.gorselNot}`);
+    satirlar.push(`Yanlışsa: Sami'ye /geri ${kod}`);
+    await telegram(env, "sendMessage", { chat_id: muratId(env), text: satirlar.join("\n"), disable_web_page_preview: true });
+    return;
+  }
   let metin = `🗑️ ${ad} (${is.kim}): ${is.silinen} mesaj kanaldan silindi. Bu model bir daha önerilmeyecek; paylaşım tarihleri botun kaydında duruyor.`;
   if (is.hatali.length) {
-    const eski = /can't be deleted|cannot be deleted|not enough rights|rights/i.test(is.hata || "");
+    const eskiMi = /can't be deleted|cannot be deleted|not enough rights|rights/i.test(is.hata || "");
     metin += `\n⚠️ ${is.hatali.length} mesaj silinemedi (${is.hata}).`;
-    if (eski) metin += `\nTelegram botların eski mesajları silmesine izin vermiyor olabilir ya da botun "Başkalarının mesajlarını sil" yetkisi kapalı. Bunları elle silebilirsiniz:`;
-    const links = is.hatali.slice(0, 15).map((id) => (kanal.kullanici ? `https://t.me/${kanal.kullanici}/${id}` : `#${id}`));
-    metin += "\n" + links.join("\n");
+    if (eskiMi) metin += `\nTelegram botların eski mesajları silmesine izin vermiyor olabilir ya da botun "Başkalarının mesajlarını sil" yetkisi kapalı. Bunları elle silebilirsiniz:`;
+    metin += "\n" + is.hatali.slice(0, 15).map(link).join("\n");
     if (is.hatali.length > 15) metin += `\n... ve ${is.hatali.length - 15} mesaj daha.`;
   }
   for (const kisi of kisilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: metin, disable_web_page_preview: true });
+}
+
+// "/geri <kod>" (Selin siteye geri koyduktan sonra "venom:kanalGeri"): arşivdeki kopyalar VOLONTE kanalına geri konur
+// (Telegram eski tarihi koruyamaz; yeni paylaşım olarak görünür). Model yeniden önerilebilir hale gelir.
+export async function kanalaGeriKoy(env, kod, kim, site, simdi) {
+  const k = await env.KAYIT.get(`silinen:${kod}`, "json");
+  const kanal = await env.KAYIT.get("kanal", "json");
+  let konan = 0, hata = null;
+  if (k && k.kopya && k.kopya.length && k.arsivKanal) {
+    const ids = k.kopya.map((x) => x.arsiv).sort((a, b) => a - b);
+    for (let i = 0; i < ids.length; i += 100) {
+      const r = await telegram(env, "copyMessages", { chat_id: kanal.id, from_chat_id: k.arsivKanal, message_ids: ids.slice(i, i + 100) });
+      if (r.ok) konan += (r.result || []).length; else hata = hata || r.description || "bilinmeyen hata";
+    }
+  }
+  const arsiv = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+  for (const [a, v] of Object.entries(arsiv)) if (a === kod || v.ana === kod) delete arsiv[a];
+  await env.KAYIT.put("hicgelmeyecek", JSON.stringify(arsiv));
+  if (konan && !hata) await env.KAYIT.delete(`silinen:${kod}`);
+  const siteOk = ["geri kondu", "zaten sitede"].includes(site);
+  const metin = siteOk && !hata && (konan || !(k && k.kopya && k.kopya.length))
+    ? `↩️ ${kodGoster(kod)} geri kondu: site ${site}; kanala ${konan} mesaj geri kondu${konan ? " (yeni tarihle)" : " (arşivde kopya yoktu)"}.`
+    : `⚠️ ${kodGoster(kod)} geri koyma: site ${site || "?"}; kanal ${konan} mesaj${hata ? `, hata: ${hata}` : ""}${!k ? " (arşiv kaydı yok)" : ""}.`;
+  await telegram(env, "sendMessage", { chat_id: muratId(env), text: metin, disable_web_page_preview: true });
 }
 
 async function silmeDevam(env) {
@@ -1877,7 +1962,13 @@ export async function fabrikaIsleri(env, simdi) {
   const silinecek = (await env.KAYIT.get("venom:kanalSil", "json")) || [];
   if (silinecek.length) {
     await env.KAYIT.put("venom:kanalSil", "[]");
-    for (const s of silinecek) await hicGelmeyecek(env, s.kod, `${s.kim} (fabrika bitti)`, simdi);
+    // 2 Kasım: Selin'den gelir (önce site); Patron'a tek sonuç mesajı; kodsuz paylaşımlar fotoğrafa bakarak da aranır
+    for (const s of silinecek) await hicGelmeyecek(env, s.kod, s.kim, simdi, { gorsel: true, patron: true, site: s.site || null });
+  }
+  const geri = (await env.KAYIT.get("venom:kanalGeri", "json")) || [];
+  if (geri.length) {
+    await env.KAYIT.put("venom:kanalGeri", "[]");
+    for (const s of geri) await kanalaGeriKoy(env, s.kod, s.kim, s.site, simdi);
   }
 }
 

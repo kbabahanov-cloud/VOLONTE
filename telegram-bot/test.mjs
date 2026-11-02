@@ -1726,3 +1726,70 @@ test("köprü kendini güncelleme: /kopru/surum ve /kopru/dosya sadece anahtarla
   assert.equal((await iste("/kopru/dosya", { ad: "ayar.json" })).status, 404); // listede olmayan dosya verilmez
   assert.equal((await iste("/kopru/dosya", { ad: "sami.ps1" }, "yanlis")).status, 401);
 });
+
+test("SİL kuralı (Kemal): Selin'den gelen iş → kodlu + fotoğrafla emin eşleşen kodsuz paylaşımlar arşive kopyalanır ve silinir; emin olunmayan silinmez; Patron'a tek mesaj; /geri arşivden kanala geri koyar", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  Object.assign(o.env, { ANTHROPIC_API_KEY: "test-anahtar", MURAT_ID: "999,111" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kodsuz", JSON.stringify({ "~200": { ids: [200, 201], tarih: o.simdi - 120 * GUN, album: null }, "~600": { ids: [600], tarih: o.simdi - 300 * GUN, album: null }, "~700": { ids: [700], tarih: o.simdi - 30 * GUN, album: null } }));
+  o.depo.set("tarifler", JSON.stringify({ "3100": { t: "siyah saten takım", f: "F3100" }, "~200": { t: "siyah saten takım", f: "F200" }, "~600": { t: "siyah takım", f: "F600" }, "~700": { t: "kırmızı elbise", f: "F700" } }));
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3100", kim: "Murat", zaman: o.simdi, site: "kaldirildi" }]));
+  const cevaplar = [
+    { adaylar: ["~200", "~600"] },
+    { ayni: true, guven: "yuksek", aciklama: "aynı model" },
+    { ayni: true, guven: "orta", aciklama: "benziyor ama emin değilim" },
+  ];
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.startsWith("https://api.anthropic.com")) return new Response(JSON.stringify({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(cevaplar.shift()) }], usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (adres.includes("/file/bot")) return new Response(new Uint8Array([1, 2, 3]));
+    if (adres.endsWith("/getFile")) return new Response(JSON.stringify({ ok: true, result: { file_path: "p.jpg" } }));
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  // önce arşive kopya (kodlu 300-302 + emin eşleşen kodsuz 200-201), sonra silme; ~600 (orta) ve ~700 dokunulmaz
+  const kopya = cagrilar(o.gonderilen, "copyMessages");
+  assert.deepEqual(kopya[0].govde, { chat_id: -200, from_chat_id: -100, message_ids: [200, 201, 300, 301, 302], disable_notification: true });
+  assert.deepEqual(cagrilar(o.gonderilen, "deleteMessage").map((x) => x.govde.message_id), [200, 201, 300, 301, 302]);
+  const patron = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999");
+  assert.equal(patron.length, 1); // tek mesaj, sadece Patron
+  assert.match(patron[0].govde.text, /^✅ 3100 siteden ve kanaldan kaldırıldı \(2 paylaşım silindi, 5 mesaj\)\./);
+  assert.match(patron[0].govde.text, /emin olmadığım 1 paylaşım SİLİNMEDİ[\s\S]*t\.me\/Volonteroseoffical\/600 \(orta: benziyor ama emin değilim\)/);
+  assert.match(patron[0].govde.text, /\/geri 3100/);
+  const kayit = JSON.parse(o.depo.get("silinen:3100"));
+  assert.deepEqual(kayit.kopya.map((x) => x.kanal), [200, 201, 300, 301, 302]);
+  assert.ok(JSON.parse(o.depo.get("hicgelmeyecek"))["~200"]);
+  assert.ok(!JSON.parse(o.depo.get("hicgelmeyecek"))["~600"]);
+  // /geri: Selin siteye koyduktan sonra Kemal arşivden kanala geri koyar
+  o.gonderilen.length = 0;
+  o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Murat", site: "geri kondu" }]));
+  await fabrikaIsleri(o.env, o.simdi + 600);
+  const geri = cagrilar(o.gonderilen, "copyMessages");
+  assert.deepEqual(geri[0].govde, { chat_id: -100, from_chat_id: -200, message_ids: kayit.kopya.map((x) => x.arsiv) });
+  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /^↩️ 3100 geri kondu: site geri kondu; kanala 5 mesaj geri kondu \(yeni tarihle\)\./);
+  assert.ok(!JSON.parse(o.depo.get("hicgelmeyecek"))["3100"] && !JSON.parse(o.depo.get("hicgelmeyecek"))["~200"]);
+});
+
+test("SİL kuralı güvenliği: arşive kopyalanamayan mesaj SİLİNMEZ; Telegram eski mesajı silmezse ⚠️ ve elle silme linkleri", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3200", kim: "Murat", zaman: o.simdi, site: "kaldirildi" }, { kod: "3100", kim: "Murat", zaman: o.simdi, site: "hata: GitHub 500" }]));
+  const tg = globalThis.fetch;
+  let kopyaHatasi = true;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.endsWith("/copyMessages") && kopyaHatasi) { kopyaHatasi = false; return new Response(JSON.stringify({ ok: false, description: "Bad Request" })); }
+    if (adres.endsWith("/deleteMessage") && JSON.parse(istek.body).message_id === 301) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be deleted" }));
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  const silinen = cagrilar(o.gonderilen, "deleteMessage").map((x) => x.govde.message_id);
+  assert.ok(!silinen.includes(400)); // 3200: kopyalanamadı → silinmedi
+  const mesajlar = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999").map((x) => x.govde.text);
+  assert.match(mesajlar.find((m) => m.includes("3200")), /^⚠️ 3200: siteden kaldırıldı; kanaldan 0 mesaj silindi, 1 mesaj SİLİNEMEDİ \(arşive kopyalanamadı \(silinmedi\)\)/);
+  assert.match(mesajlar.find((m) => m.includes("3100")), /^⚠️ 3100: siteden KALDIRILAMADI \(hata: GitHub 500\); kanaldan 2 mesaj silindi, 1 mesaj SİLİNEMEDİ[\s\S]*elle silebilirsiniz[\s\S]*t\.me\/Volonteroseoffical\/301/);
+});

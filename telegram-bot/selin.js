@@ -848,7 +848,9 @@ async function sitedenKaldir(env, kod, kim, simdi) {
   const { liste } = await siteVerisi(env);
   const urun = liste.find((u) => u.kod === kod);
   if (!urun) return false;
-  await siteyeYaz(env, urun.fotolar.map((yol) => ({ yol, b64: null })), liste.filter((u) => u.kod !== kod), `Selin: ${kod} siteden kaldırıldı (${kim})`);
+  // 2 Kasım ("Sil" kuralı): kayıt saklanır ve fotoğraf dosyaları depoda kalır → "/geri <kod>" ile siteye aynen geri konabilir
+  await yazKV(env, `selin:silinen:${kod}`, { urun, kim, zaman: simdi });
+  await siteyeYaz(env, [], liste.filter((u) => u.kod !== kod), `Selin: ${kod} siteden kaldırıldı (${kim})`);
   const modeller = await oku(env, "selin:modeller", {});
   modeller[kod] = { ...(modeller[kod] || {}), durum: "kaldirildi", zaman: simdi };
   await yazKV(env, "selin:modeller", modeller);
@@ -1523,14 +1525,45 @@ export async function videoKurtarAdimi(env, simdi) {
   }
 }
 
-// Fabrika "Bitti" + Murat/Hemra "Sil" (ikinci onaylı, Sami'den "venom:siteSil"): model siteden kaldırılır.
+// "Sil" (Sami'den "venom:siteSil"; Patron tek onay, 2 Kasım): önce siteden kaldırılır, hemen ardından iş Kemal'e
+// ("venom:kanalSil") geçer; Patron'a tek sonuç mesajını Kemal gönderir (site sonucu da onda). "/geri" ("venom:siteGeri"):
+// saklanan kayıt siteye aynen geri konur, sonra Kemal arşivdeki kopyaları kanala geri koyar ("venom:kanalGeri").
+async function kemaleDevret(env, anahtar, kayit) {
+  const l = (await env.KAYIT.get(anahtar, "json")) || [];
+  l.push(kayit);
+  await env.KAYIT.put(anahtar, JSON.stringify(l.slice(-50)));
+}
 export async function siteSilAdimi(env, simdi) {
   const l = (await env.KAYIT.get("venom:siteSil", "json")) || [];
-  if (!l.length) return;
-  await env.KAYIT.put("venom:siteSil", "[]");
-  for (const x of l) {
-    const ok = await sitedenKaldir(env, x.kod, `${x.kim} (fabrika bitti)`, simdi);
-    if (ok) for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: `🗑️ ${x.kod} siteden kaldırıldı (fabrika bitti, karar: ${x.kim}).` });
+  if (l.length) {
+    await env.KAYIT.put("venom:siteSil", "[]");
+    for (const x of l) {
+      let site;
+      try { site = (await sitedenKaldir(env, String(x.kod), x.kim, simdi)) ? "kaldirildi" : "yoktu"; } catch (e) { site = `hata: ${String(e && e.message).slice(0, 150)}`; }
+      if (x.kanal === false) continue;
+      await kemaleDevret(env, "venom:kanalSil", { kod: String(x.kod), kim: x.kim, zaman: x.zaman || simdi, site });
+    }
+  }
+  const g = (await env.KAYIT.get("venom:siteGeri", "json")) || [];
+  if (g.length) {
+    await env.KAYIT.put("venom:siteGeri", "[]");
+    for (const x of g) {
+      let site;
+      try {
+        const k = await oku(env, `selin:silinen:${x.kod}`, null);
+        const { liste } = await siteVerisi(env);
+        if (liste.some((u) => u.kod === String(x.kod))) site = "zaten sitede";
+        else if (!k || !k.urun) site = "kayıt yok (eski kural öncesi silinmiş olabilir)";
+        else {
+          await siteyeYaz(env, [], [...liste, k.urun], `Selin: ${x.kod} siteye geri kondu (${x.kim})`);
+          const modeller = await oku(env, "selin:modeller", {});
+          modeller[x.kod] = { ...(modeller[x.kod] || {}), durum: "sitede", zaman: simdi };
+          await yazKV(env, "selin:modeller", modeller);
+          site = "geri kondu";
+        }
+      } catch (e) { site = `hata: ${String(e && e.message).slice(0, 150)}`; }
+      await kemaleDevret(env, "venom:kanalGeri", { kod: String(x.kod), kim: x.kim, zaman: simdi, site });
+    }
   }
 }
 

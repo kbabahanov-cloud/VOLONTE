@@ -404,6 +404,7 @@ export class StokDO {
     if (yol === "/soru-gonderildi") return cevap(d.soruGonderildi(g.kod, g.mesajlar) || { ok: true });
     if (yol === "/karar") return cevap(d.karar(g.kod, g.islem, g.kim, g.simdi));
     if (yol === "/gizliler") return cevap(d.gizliler());
+    if (yol === "/karar-liste") return cevap(d.hepsi("SELECT kod, durum, kim, zaman FROM karar WHERE durum = ? AND zaman >= ? ORDER BY zaman", String(g.durum || "gizli"), Number(g.basla) || 0));
     if (yol === "/stoktakiler") return cevap(d.stoktakiler());
     if (yol === "/olaylar") return cevap(d.olaylar(g.basla, g.bitis));
     if (yol === "/paylasim-kaydet") return cevap(d.paylasimKaydet(g.mesaj, g.kod, g.zaman) || { ok: true });

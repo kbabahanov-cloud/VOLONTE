@@ -471,12 +471,11 @@ test("fabrika siparişi: model başına mesaj (kanal fotoğrafı + ⚠️ düğm
   const karar = cagri(o.g, "sendMessage").filter((x) => /fabrika bitti dedi\. Ne yapalım\?/.test(x.govde.text));
   assert.equal(karar.length, 2);
   o.g.length = 0;
-  await bas(111, `fk:s:${id2}`, 5);
-  assert.match(cagri(o.g, "editMessageText")[0].govde.text, /kanalda 1 paylaşım silinecek[\s\S]*Emin misiniz/);
-  assert.ok(!o.depo.has("venom:kanalSil")); // henüz silinmedi
-  await bas(111, `fk:S:${id2}`, 5);
-  assert.deepEqual(JSON.parse(o.depo.get("venom:kanalSil")).map((x) => x.kod), ["3100"]);
-  assert.deepEqual(JSON.parse(o.depo.get("venom:siteSil")).map((x) => x.kod), ["3100"]);
+  await bas(111, `fk:s:${id2}`, 5); // Patron: TEK onay (2 Kasım) — "Emin misiniz?" sorulmaz
+  assert.ok(!cagri(o.g, "editMessageText").some((x) => /Emin misiniz/.test(x.govde.text)));
+  assert.match(cagri(o.g, "editMessageText").at(-1).govde.text, /Önce siteden \(Selin\), hemen ardından VOLONTE kanalındaki bütün paylaşımlar \(Kemal\)[\s\S]*\/geri 3100/);
+  assert.ok(!o.depo.has("venom:kanalSil")); // sıra: önce Selin (site), Kemal'e Selin devreder
+  assert.deepEqual(JSON.parse(o.depo.get("venom:siteSil")).map((x) => [x.kod, x.kanal]), [["3100", true]]);
   const tum = await (await o.env.STOK.get().fetch("https://stok/tum", { method: "POST", body: "{}" })).json();
   assert.equal(tum["3100"] ? tum["3100"].gizli : true, true);
   await bas(333, `fk:r:${id2}`);

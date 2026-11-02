@@ -13,6 +13,7 @@
 import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI } from "./stok.js";
+import { patronMu, silKuyrugu } from "./sil.js";
 
 const SAAT_FARKI = 3 * 3600;
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
@@ -1052,6 +1053,7 @@ export async function kararDugmesi(env, cq, tg, simdi) {
   const benim = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
   const hepsiniYaz = async (metin) => { for (const [chat, mesaj] of rec.kararMesajlari || []) await tg(env, "editMessageText", { chat_id: chat, message_id: mesaj, text: `${rec.deneme ? DENEME : ""}${metin}` }); };
   if (islem === "v") { await cevapla("Vazgeçildi"); return tg(env, "editMessageText", { ...benim, text: `${rec.deneme ? DENEME : ""}${rec.kod} – fabrika bitti dedi. Ne yapalım?`, reply_markup: kararKlavye(rec.id) }); }
+  if (islem === "s" && patronMu(env, cq.from.id)) return kararDugmesi(env, { ...cq, data: `fk:S:${id}` }, tg, simdi); // Patron: tek onay (2 Kasım)
   if (islem === "s") {
     const ids = [...new Set((((await env.KAYIT.get("kodlar", "json")) || {})[rec.kod] || []).flatMap((g) => g.ids))].filter((x) => x > 0);
     await cevapla("Emin misiniz?");
@@ -1081,12 +1083,8 @@ export async function kararDugmesi(env, cq, tg, simdi) {
   await cevapla(rec.deneme ? "Deneme: silinmedi" : "Siliniyor");
   if (rec.deneme) return hepsiniYaz(`🗑️ ${rec.kod}: ${kim} "Sil" dedi — DENEME olduğu için siteden ve kanaldan hiçbir şey silinmedi.`);
   await stokIste(env, "/gizle", { kod: rec.kod, kim, simdi });
-  for (const anahtar of ["venom:kanalSil", "venom:siteSil"]) {
-    const l = (await env.KAYIT.get(anahtar, "json")) || [];
-    l.push({ kod: rec.kod, kim, zaman: simdi });
-    await env.KAYIT.put(anahtar, JSON.stringify(l.slice(-50)));
-  }
-  return hepsiniYaz(`🗑️ ${rec.kod}: ${kim} "Sil" dedi. Siteden (Selin) ve Telegram kanalından (Kemal) kaldırılıyor; Kemal turlarında artık önerilmeyecek.`);
+  await silKuyrugu(env, rec.kod, kim, simdi); // önce Selin (site), sonra Kemal (kanal) — Patron'a tek sonuç mesajı
+  return hepsiniYaz(`🗑️ ${rec.kod}: ${kim} "Sil" dedi. Önce siteden (Selin), hemen ardından VOLONTE kanalındaki bütün paylaşımlar (Kemal) kaldırılıyor; Kemal turlarında artık önerilmeyecek. Yanlışsa Patron: /geri ${rec.kod}`);
 }
 
 // Yazıyla repete bildirimi: "3394 geldi" / "3394 repete geldi siyah 10 bej 6" (fabrika kişileri + ekip)

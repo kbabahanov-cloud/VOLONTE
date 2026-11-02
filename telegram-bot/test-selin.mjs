@@ -313,7 +313,8 @@ test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazd
   assert.equal(cagri(o.g, "editMessageReplyMarkup")[0].govde.reply_markup.inline_keyboard[0][0].callback_data, "se:3100");
   await bas(o.env, 222, "se:3100");
   assert.equal(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).length, 0);
-  assert.equal(o.github.dosyalar.get("galeri/3100/1.jpg"), undefined);
+  assert.ok(o.github.dosyalar.get("galeri/3100/1.jpg")); // 2 Kasım: fotoğraflar depoda kalır (/geri için)
+  assert.equal(JSON.parse(o.depo.get("selin:silinen:3100")).urun.kod, "3100"); // kayıt saklandı
 });
 
 test("Selin izinsiz kişiye cevap vermez; düğmeleri çalışmaz", async () => {

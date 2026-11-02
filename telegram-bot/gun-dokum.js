@@ -3,6 +3,7 @@
 // KV "sami:raporTekrar" = "YYYY-AA-GG" → o günün otomatik rapor metinleri Patron'a (MURAT_ID'nin ilki) yeniden gönderilir.
 import { stokIste } from "./stokbot.js";
 import { onizlemeGonder, geceYedegi } from "./mutabakat.js";
+import { siteVerisi } from "./depo-oku.js";
 
 const ayar = async (env, k) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
 const SAAT_FARKI = 3 * 3600;
@@ -67,6 +68,17 @@ export async function cariDokumu(env, tg) {
     await env.KAYIT.delete("sami:mtYedek");
     let s; try { s = { ok: true, kayit: await geceYedegi(env) }; } catch (e) { s = { ok: false, hata: String(e && e.message).slice(0, 300) }; }
     await env.KAYIT.put("sami:mtYedekSonuc", JSON.stringify(s), { expirationTtl: 86400 });
+  }
+  // KV "sami:silDokum" = "<unix başlangıç>" → o andan beri "Sil" (gizli) kararı verilen modeller + sitede/kanalda hâlâ var mı
+  const silBas = await env.KAYIT.get("sami:silDokum");
+  if (silBas) {
+    await env.KAYIT.delete("sami:silDokum");
+    const kararlar = await stokIste(env, "/karar-liste", { durum: "gizli", basla: Number(silBas) || 0 });
+    let site = []; try { site = (await siteVerisi(env)).liste.map((u) => String(u.kod)); } catch { site = null; }
+    const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+    const hg = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+    const sonuc = kararlar.map((k) => ({ ...k, sitede: site ? site.includes(String(k.kod)) : null, kanalMesaj: [...new Set((kodlar[k.kod] || []).flatMap((g) => g.ids))].length, kanaldanSilindi: Boolean(hg[k.kod]) }));
+    await env.KAYIT.put("sami:silDokumSonuc", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), sonuc }), { expirationTtl: 86400 });
   }
   if (!(await env.KAYIT.get("sami:cariDokum"))) return;
   await env.KAYIT.delete("sami:cariDokum");
