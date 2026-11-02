@@ -261,6 +261,21 @@ function CariBakiyeleri([string]$sifre) {
       if ($sut -contains "BAKIYE" -and $sira.Count -and $don.n -gt 0) {
         try { $don.sonBakiye = Num (Sorgu $sifre "SELECT TOP 1 BAKIYE AS K FROM [$ad] WHERE [$($bag.hareket)] = @i ORDER BY $($sira -join ', ')" @{ i = $d }).Rows[0].K } catch { }
       }
+      # Yıl yıl toplamlar (2 Kasım, Fuat'a "yapılan işin özeti"): sadece GENEL tablo; ödeme (özel kod/açıklama "BORC VERD")
+      # ayrı toplanır; hesabın bu tablodaki ilk günü (devir kaydı) ayrıca gönderilir ki yıl toplamından düşülebilsin.
+      if ($ad -like "*TBLCARIGENELHAREKET" -and $tarih -and $don.n -gt 0) {
+        $kosul = @(); foreach ($s in @("OZELKOD", "ACIKLAMA")) { if ($sut -contains $s) { $kosul += "[$s] LIKE @o" } }
+        $odeme = if ($kosul.Count) { $kosul -join " OR " } else { "1 = 0" }
+        $yq = "SELECT YEAR([$tarih]) AS Y, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A, SUM(CASE WHEN $odeme THEN BORC ELSE 0 END) AS OB, SUM(CASE WHEN $odeme THEN ALACAK ELSE 0 END) AS OA FROM [$ad] WHERE [$($bag.hareket)] = @i GROUP BY YEAR([$tarih])"
+        $don.yillar = @{}
+        foreach ($y in (Sorgu $sifre $yq @{ i = $d; o = "%BOR_ VERD%" }).Rows) { $don.yillar[[string]$y.Y] = @{ n = [int]$y.N; b = (Num $y.B); a = (Num $y.A); ob = (Num $y.OB); oa = (Num $y.OA) } }
+        $ilkG = (Sorgu $sifre "SELECT MIN([$tarih]) AS T FROM [$ad] WHERE [$($bag.hareket)] = @i" @{ i = $d }).Rows[0].T
+        if ($ilkG -isnot [DBNull]) {
+          $g0 = ([datetime]$ilkG).Date
+          $ig = (Sorgu $sifre "SELECT COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$ad] WHERE [$($bag.hareket)] = @i AND [$tarih] >= @t1 AND [$tarih] < @t2" @{ i = $d; t1 = $g0; t2 = $g0.AddDays(1) }).Rows[0]
+          $don.ilkGun = @{ tarih = $g0.ToString("yyyy-MM-dd"); n = [int]$ig.N; b = (Num $ig.B); a = (Num $ig.A) }
+        }
+      }
       $h.donemler[$etiket] = $don
     }
     # Son 60 günün tek tek hareketleri (2 Kasım): ödemeleri, gelen malı ve iki defter farkının sebebini Sami kendisi bulsun.
@@ -560,6 +575,8 @@ switch ($Mod) {
           $x = $h.donemler[$d]
           if ($x.n -eq 0) { continue }
           Write-Host ("  {0}: {1} hareket · borç {2:N2} $ · alacak {3:N2} $ · borç−alacak {4:N2} $ · {5} → {6}{7}" -f $d, $x.n, $x.borc, $x.alacak, ([double]$x.borc - [double]$x.alacak), $x.ilk, $x.son, $(if ($null -ne $x.sonBakiye) { " · son satır BAKIYE {0:N2} $" -f $x.sonBakiye } else { "" }))
+          if ($x.yillar) { foreach ($yy in ($x.yillar.Keys | Sort-Object)) { $v = $x.yillar[$yy]; Write-Host ("      {0}: borç {1:N2} $ · alacak {2:N2} $ · ödeme borç {3:N2} $ / alacak {4:N2} $ · {5} kayıt" -f $yy, $v.b, $v.a, $v.ob, $v.oa, $v.n) } }
+          if ($x.ilkGun) { Write-Host ("      ilk gün {0}: borç {1:N2} $ · alacak {2:N2} $ ({3} kayıt; devir olabilir)" -f $x.ilkGun.tarih, $x.ilkGun.b, $x.ilkGun.a, $x.ilkGun.n) }
         }
       }
       if ($c.ozel.Count) {

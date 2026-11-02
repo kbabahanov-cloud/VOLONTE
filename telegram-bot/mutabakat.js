@@ -462,7 +462,7 @@ export async function geceYedegi(env) {
 // "sonra" diyene her gün 12:00 (pazar hariç) hatırlatma; 3 gün cevapsız → Patron
 export async function mutabakatAdimi(env, simdi, tg) {
   // Kendiliğinden takip (Patron'a): Vegawin ödemeleri, borç sınırı, pazartesi 09:30 haftalık özet
-  for (const is of [() => odemeTakip(env, simdi, tg), () => borcLimitKontrol(env, simdi, tg, bakiyeOku), () => haftalikOzet(env, simdi, tg, bakiyeOku)]) {
+  for (const is of [() => odemeTakip(env, simdi, tg), () => borcLimitKontrol(env, simdi, tg, bakiyeOku), () => haftalikOzet(env, simdi, tg, bakiyeOku), () => isOzetiHazirMi(env, simdi, tg)]) {
     try { await is(); } catch (e) { await arsiv(env, "takip-hata", null, String(e && e.message).slice(0, 300), simdi).catch(() => {}); }
   }
   if (!fuat(env)) return;
@@ -501,4 +501,126 @@ export async function mutabakatAdimi(env, simdi, tg) {
     }
     await kayitYaz(env, r);
   }
+}
+
+// ==== FUAT'A İŞ ÖZETİ (2 Kasım, kullanıcı kararı "a"): SADECE VOLONTE ile Black Rose arasındaki iş = Black Rose
+// hesaplarından yıllık gelen mal tutarı (VOLONTE defteri; ödemeler hariç, dönem başı devir kaydı düşülür).
+// Patron önizlemesi: [👁 Fuat'ın göreceği] [✅ Fuat'a gönder] [❌ İptal]. Patron onaylamadan ASLA gitmez.
+// Gönderim değiştirilemez arşive; PDF kopyası sadece Patron'a.
+export function yillikIs(defter) {
+  const sonuc = { yillar: {}, uyarilar: [], taraf: null };
+  if (!defter) return sonuc;
+  let ob = 0, oa = 0;
+  const genel = [];
+  for (const h of defter.hesaplar || []) {
+    const donemler = Object.entries(h.donemler || {}).map(([d, x]) => ({ d, x, m: /^D(\d{4})TBL(.+)$/.exec(d) })).filter((o) => o.m && o.m[2] === "CARIGENELHAREKET" && o.x.n > 0).sort((a, b) => a.m[1].localeCompare(b.m[1]));
+    donemler.forEach((o, i) => { genel.push({ h, o, onceki: donemler[i - 1] || null }); for (const v of Object.values(o.x.yillar || {})) { ob += v.ob || 0; oa += v.oa || 0; } });
+  }
+  if (!genel.some((g) => g.o.x.yillar)) { sonuc.uyarilar.push("Köprü yıl toplamlarını henüz göndermedi."); return sonuc; }
+  if (ob + oa < 0.005) { sonuc.uyarilar.push("Bu defterde ödeme kaydı (BORC VERDIM) görülmedi; gelen mal tarafı belirlenemedi."); return sonuc; }
+  const taraf = ob >= oa ? "a" : "b"; // ödemeler borçtaysa gelen mal alacak tarafıdır (ya da tersi)
+  sonuc.taraf = taraf === "a" ? "alacak" : "borç";
+  for (const { h, o, onceki } of genel) {
+    for (const [y, v] of Object.entries(o.x.yillar || {})) {
+      const mal = (v[taraf] || 0) - (v[`o${taraf}`] || 0);
+      sonuc.yillar[y] = (sonuc.yillar[y] || 0) + mal;
+    }
+    // Dönem başı devir: hesabın bu dönemdeki ilk günü, önceki dönemin kapanışına eşitse o gün mal sayılmaz
+    const ig = o.x.ilkGun;
+    if (onceki && ig) {
+      const kapanis = Math.abs((Number(onceki.x.borc) || 0) - (Number(onceki.x.alacak) || 0));
+      const net = Math.abs((ig.b || 0) - (ig.a || 0));
+      if (Math.abs(kapanis - net) < 0.01) { const y = ig.tarih.slice(0, 4); sonuc.yillar[y] = (sonuc.yillar[y] || 0) - (ig[taraf] || 0); }
+      else if (ig.n > 0) sonuc.uyarilar.push(`Black Rose ${h.anahtar}: ${tarihYaz(ig.tarih)} dönem başı devri ayrılamadı (o gün başka kayıt da var); bu yılın tutarı biraz fazla olabilir.`);
+    }
+    // İlk dönemin ilk günü: Vegawin'e geçişteki açılış bakiyesi olabilir → Patron'a (sadece önizlemede) gösterilir
+    if (!onceki && ig && (ig[taraf] || 0) >= 0.005) sonuc.uyarilar.push(`Black Rose ${h.anahtar}: ilk kayıt ${tarihYaz(ig.tarih)} · ${dolar(ig[taraf])} gelen mal sayıldı; bu bir açılış bakiyesiyse ${ig.tarih.slice(0, 4)} tutarından düşülmeli (Claude'a söyleyin).`);
+  }
+  for (const y of Object.keys(sonuc.yillar)) sonuc.yillar[y] = Math.round(sonuc.yillar[y] * 100) / 100;
+  return sonuc;
+}
+
+export function isOzetiMetni(yillar) {
+  const yl = Object.keys(yillar).sort().filter((y) => Math.abs(yillar[y]) >= 0.005);
+  const toplam = yl.reduce((t, y) => t + yillar[y], 0);
+  return [
+    "📊 VOLONTE – Sami", "", "Fuat Bey,", "",
+    `${yl[0] || new Date().getUTCFullYear()}'ten bugüne yapılan işin özeti:`,
+    ...yl.map((y) => `${y}: ${dolar(yillar[y])}`),
+    `Toplam: ${dolar(toplam)}`, "",
+    "Bundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.", "",
+    "İyi çalışmalar.", "", "– Sami",
+  ].join("\n");
+}
+
+const ozKlavye = (id) => ({ inline_keyboard: [[{ text: "👁 Fuat'ın göreceği", callback_data: `oz:f:${id}` }, { text: "✅ Fuat'a gönder", callback_data: `oz:g:${id}` }], [{ text: "❌ İptal", callback_data: `oz:x:${id}` }]] });
+
+export async function isOzetiOnizleme(env, tg, simdi, kaynak = "elle") {
+  const [br, vl] = await Promise.all([ayarOku(env, "cari:BLACKROSE", null), ayarOku(env, "cari:VOLONTE", null)]);
+  const v = yillikIs(vl), b = yillikIs(br);
+  if (!Object.keys(v.yillar).length) {
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `Fuat'a iş özeti henüz hazır değil: VOLONTE defterinden yıl toplamları okunamadı.${v.uyarilar.length ? `\n${v.uyarilar.join("\n")}` : ""}` });
+    return null;
+  }
+  const metin = isOzetiMetni(v.yillar);
+  const id = `oz-${simdi.toString(36)}`;
+  const kontrol = Object.keys({ ...v.yillar, ...b.yillar }).sort().map((y) => `${y}: VOLONTE defteri ${v.yillar[y] == null ? "—" : dolar(v.yillar[y])} · Black Rose defteri ${b.yillar[y] == null ? "—" : dolar(b.yillar[y])}`);
+  const ust = [
+    "👁 <b>ÖNİZLEME — Fuat'a iş özeti</b> (sadece siz görüyorsunuz; siz onaylamadan gitmez)",
+    `Kaynak: VOLONTE defterindeki Black Rose hesapları — gelen mal (${v.taraf} tarafı), ödemeler hariç, dönem başı devirleri düşüldü.`,
+    "Kontrol için iki defter (Fuat görmez):", ...kontrol.map(kacis),
+    ...[...v.uyarilar, ...b.uyarilar.map((x) => `Black Rose defteri: ${x}`)].map((x) => `⚠️ ${kacis(x)}`),
+  ].join("\n");
+  await gonder(env, tg, murat(env), [ust], null);
+  const r = { id, olusturma: simdi, kaynak, metin, yillar: v.yillar, durum: "onizleme", gecmis: [[simdi, `önizleme (${kaynak})`]] };
+  r.onizlemeMesaj = await gonder(env, tg, murat(env), [metin], ozKlavye(id), false);
+  await ayarYaz(env, `oz:${id}`, r);
+  await arsiv(env, "is-ozeti-onizleme", id, { metin, kontrol, uyarilar: v.uyarilar }, simdi);
+  return r;
+}
+
+export async function isOzetiKomutu(env, m, tg, simdi) {
+  if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Patron'da." });
+  return isOzetiOnizleme(env, tg, simdi, "elle");
+}
+
+export async function isOzetiDugmesi(env, cq, tg, simdi) {
+  const [, islem, id] = String(cq.data).split(":");
+  const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!muratMi(env, cq.from.id)) return cevapla("Bu düğme Patron'da.");
+  const r = await ayarOku(env, `oz:${id}`, null);
+  if (!r) return cevapla("Bu önizleme bulunamadı.");
+  const dugmeYaz = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "oz:-" }]] } });
+  if (islem === "f") { await cevapla("Fuat'ın göreceği"); return gonder(env, tg, cq.message.chat.id, [r.metin], null, false); }
+  if (r.durum !== "onizleme") return cevapla("Bu önizleme artık geçerli değil.");
+  if (islem === "x") {
+    r.durum = "iptal"; r.gecmis.push([simdi, "iptal (Patron)"]);
+    await ayarYaz(env, `oz:${id}`, r); await arsiv(env, "is-ozeti-iptal", id, { kim: String(cq.from.id) }, simdi);
+    await cevapla("İptal edildi"); return dugmeYaz("❌ İptal edildi");
+  }
+  if (islem !== "g") return cevapla("?");
+  const yasak = fuatSuzgec(r.metin);
+  if (yasak || !fuat(env)) { await cevapla("Gönderilmedi"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⛔ Gönderilmedi: ${yasak ? `metinde Fuat'ın görmemesi gereken bilgi var (${yasak.join(", ")})` : "Fuat'ın kimliği kayıtlı değil"}.` }); }
+  const s = await tg(env, "sendMessage", { chat_id: fuat(env), text: r.metin });
+  if (!s || !s.ok) return cevapla("Fuat'a gönderilemedi (Sami'ye /start yazmamış olabilir).");
+  Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(cq.from.id) }); r.gecmis.push([simdi, "Patron onayladı → Fuat'a gönderildi"]);
+  await ayarYaz(env, `oz:${id}`, r);
+  const k = await arsiv(env, "is-ozeti-gonderim", id, { onaylayan: String(cq.from.id), tarihSaat: tarihSaat(simdi), fuatMesaji: r.metin, yillar: r.yillar }, simdi);
+  await cevapla("Fuat'a gönderildi"); await dugmeYaz("✅ Fuat'a gönderildi");
+  try {
+    const pdf = await pdfOlustur(["VOLONTE – Fuat'a iş özeti", `Gönderim: ${tarihSaat(simdi)} (İstanbul saati) · kayıt ${id}`, "", "=== FUAT'A GİDEN MESAJ (birebir) ===", ...r.metin.split("\n"), "", "=== GEÇMİŞ ===", ...r.gecmis.map(([t, n]) => `${tarihSaat(t)} · ${n}`), "", `Arşiv kaydı #${k && k.sira} · mühür ${k && k.muhur}`], { baslik: "Fuat'a iş özeti" });
+    const d = await stokIste(env, "/arsiv-dosya-ekle", { mt: id, tur: "pdf:is-ozeti", veri: b64(pdf), zaman: simdi });
+    await arsiv(env, "pdf", id, { tur: "is-ozeti", sha256: d.muhur, boyut: pdf.length }, simdi);
+    await belgeGonder(env, murat(env), pdf, `fuat-is-ozeti-${gunAnahtari(simdi)}.pdf`, "📄 Fuat'a giden iş özeti (arşiv kopyası, sadece sizde)");
+  } catch (e) { await arsiv(env, "pdf-hata", id, String(e && e.message), simdi); }
+  return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ İş özeti Fuat'a gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
+}
+
+// Rakamlar hazır olunca (VOLONTE defterinden yıl toplamları ilk kez gelince) önizleme Patron'a bir kez kendiliğinden gider
+export async function isOzetiHazirMi(env, simdi, tg) {
+  if (await ayarOku(env, "oz:otomatik", null)) return;
+  const vl = await ayarOku(env, "cari:VOLONTE", null);
+  if (!Object.keys(yillikIs(vl).yillar).length) return;
+  await ayarYaz(env, "oz:otomatik", simdi);
+  await isOzetiOnizleme(env, tg, simdi, "otomatik");
 }

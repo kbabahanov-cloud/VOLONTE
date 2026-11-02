@@ -1396,3 +1396,50 @@ test("cari takip: Vegawin ödemesi kendiliğinden Patron'a; Black Rose defterind
   assert.match(oz, /📦 Gelen mal: 3\.000,00 \$ \(1 kayıt\)\n💵 Ödemeler: 0,00 \$ \(0 kayıt\)/);
   assert.match(oz, /geçen hafta 3\.000,00 \$ arttı/);
 });
+
+test("Fuat'a iş özeti: VOLONTE defterinden yıllık gelen mal (ödeme hariç, devir düşülür); metin birebir; önizleme sadece Patron'a; onaysız gitmez; gönderim arşiv + PDF Patron'a", async () => {
+  const { yillikIs, isOzetiMetni, isOzetiHazirMi } = await import("./mutabakat.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  // VOLONTE defteri: mal = alacak (ödemeler borçta). D0003'ün ilk günü D0001 kapanışını taşıyan devir (alacak 1.000)
+  const vl = { zaman: 1, hesaplar: [
+    { anahtar: "20", donemler: {
+      D0001TBLCARIGENELHAREKET: { n: 5, borc: 4000, alacak: 5000, yillar: { 2023: { n: 3, b: 1000, a: 3000, ob: 1000, oa: 0 }, 2024: { n: 2, b: 3000, a: 2000, ob: 3000, oa: 0 } }, ilkGun: { tarih: "2023-01-02", n: 1, b: 0, a: 1000 } },
+      D0003TBLCARIGENELHAREKET: { n: 4, borc: 2000, alacak: 3500, yillar: { 2025: { n: 4, b: 2000, a: 3500, ob: 2000, oa: 0 } }, ilkGun: { tarih: "2025-01-30", n: 1, b: 0, a: 1000 } },
+      D0003TBLCARIHAREKETLERI: { n: 4, borc: 2000, alacak: 3500 } } },
+    { anahtar: "15", donemler: { D0001TBLCARIGENELHAREKET: { n: 1, borc: 0, alacak: 250.5, yillar: { 2024: { n: 1, b: 0, a: 250.5, ob: 0, oa: 0 } }, ilkGun: { tarih: "2024-03-01", n: 1, b: 0, a: 250.5 } } } },
+  ] };
+  const y = yillikIs(vl);
+  assert.equal(y.taraf, "alacak");
+  assert.deepEqual(y.yillar, { 2023: 3000, 2024: 2250.5, 2025: 2500 }); // 2025: 3.500 − devir 1.000
+  const metin = isOzetiMetni(y.yillar);
+  assert.equal(metin, "📊 VOLONTE – Sami\n\nFuat Bey,\n\n2023'ten bugüne yapılan işin özeti:\n2023: 3.000,00 $\n2024: 2.250,50 $\n2025: 2.500,00 $\nToplam: 7.750,50 $\n\nBundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.\n\nİyi çalışmalar.\n\n– Sami");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999", FUAT_ID: "501", ALLOWED_IDS: "111,222,999" });
+  const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
+  await isOzetiHazirMi(o.env, 1793600000, tg);
+  assert.equal(g.length, 0); // rakam yokken önizleme yok
+  await st("/ayar-yaz", { k: "cari:VOLONTE", v: JSON.stringify(vl) });
+  await isOzetiHazirMi(o.env, 1793600000, tg);
+  await isOzetiHazirMi(o.env, 1793600300, tg);
+  assert.ok(g.length === 2 && g.every((x) => x.govde.chat_id === "999")); // bir kez, sadece Patron
+  assert.match(g[0].govde.text, /Kontrol için iki defter \(Fuat görmez\)/);
+  assert.equal(g[1].govde.text, metin);
+  const dugmeler = g[1].govde.reply_markup.inline_keyboard.flat();
+  assert.deepEqual(dugmeler.map((d) => d.text), ["👁 Fuat'ın göreceği", "✅ Fuat'a gönder", "❌ İptal"]);
+  const id = dugmeler[1].callback_data.split(":")[2];
+  // Fuat ve ekip basamaz
+  await g2({ callback_query: { id: "c", from: { id: 501 }, data: `oz:g:${id}`, message: { chat: { id: 501 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => String(x.govde.chat_id) === "501"));
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `oz:g:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  const fm = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "501");
+  assert.equal(fm.govde.text, metin);
+  assert.equal(cagri(o.g, "sendDocument")[0].govde.chat_id, "999");
+  const ars = await st("/arsiv-liste");
+  assert.deepEqual(ars.map((x) => x.tur), ["is-ozeti-onizleme", "is-ozeti-gonderim", "pdf"]);
+  assert.equal(JSON.parse(ars[1].icerik).fuatMesaji, metin);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `oz:g:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 1); // ikinci kez gitmez
+});

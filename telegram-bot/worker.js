@@ -1968,7 +1968,9 @@ async function kopruCari(request, env) {
   const sayi = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
   const hesaplar = g.hesaplar.filter((h) => /^\d{2}$/.test(String(h.anahtar))).map((h) => ({
     anahtar: String(h.anahtar), ad: String(h.ad || "").slice(0, 60), kart: sayi(h.kart),
-    donemler: Object.fromEntries(Object.entries(h.donemler || {}).slice(0, 20).map(([d, x]) => [String(d).slice(0, 60), { n: Number(x.n) || 0, borc: sayi(x.borc), alacak: sayi(x.alacak), ilk: x.ilk || null, son: x.son || null, sonBakiye: sayi(x.sonBakiye) }])),
+    donemler: Object.fromEntries(Object.entries(h.donemler || {}).slice(0, 20).map(([d, x]) => [String(d).slice(0, 60), { n: Number(x.n) || 0, borc: sayi(x.borc), alacak: sayi(x.alacak), ilk: x.ilk || null, son: x.son || null, sonBakiye: sayi(x.sonBakiye),
+      ...(x.yillar && typeof x.yillar === "object" ? { yillar: Object.fromEntries(Object.entries(x.yillar).filter(([y]) => /^\d{4}$/.test(y)).slice(0, 30).map(([y, v]) => [y, { n: Number(v.n) || 0, b: sayi(v.b), a: sayi(v.a), ob: sayi(v.ob), oa: sayi(v.oa) }])) } : {}),
+      ...(x.ilkGun && /^\d{4}-\d{2}-\d{2}$/.test(String(x.ilkGun.tarih)) ? { ilkGun: { tarih: String(x.ilkGun.tarih), n: Number(x.ilkGun.n) || 0, b: sayi(x.ilkGun.b), a: sayi(x.ilkGun.a) } } : {}) }])),
   }));
   const ozel = (Array.isArray(g.ozel) ? g.ozel : []).slice(0, 50).map((o) => ({ tablo: String(o.tablo || "").slice(0, 60), kod: String(o.kod || "").slice(0, 60), cari: String(o.cari || "").slice(0, 60), n: Number(o.n) || 0, borc: sayi(o.borc), alacak: sayi(o.alacak) }));
   // 2 Kasım: köprü hangi sütunla bağladığını (baglar) da gönderir; para birimi dolar
