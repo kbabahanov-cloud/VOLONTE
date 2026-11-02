@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3408",
+  "baslik": "Tile Print Puff Sleeve Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A midi dress with a fitted bodice and a full, pleated skirt, printed in a blue and white ornamental tile motif. Voluminous puff sleeves, a sweetheart-shaped neckline and a tiled border along the hem give it a distinctive look. It suits daytime events, celebrations and elegant city outings. Made in Istanbul with careful workmanship.",
+   "fr": "Une robe midi au buste ajusté et à la jupe ample plissée, ornée d'un imprimé carreaux bleu et blanc. Les manches bouffantes, le décolleté en cœur et la bordure en carreaux sur l'ourlet lui donnent un caractère affirmé. Elle convient aux événements de journée, aux fêtes et aux sorties chic en ville. Confectionnée à Istanbul avec un travail soigné.",
+   "pt": "Um vestido midi com corpete ajustado e saia ampla com pregas, estampado com motivo de azulejos azul e branco. As mangas bufantes, o decote em coração e a barra em azulejos dão-lhe um visual marcante. Ideal para eventos de dia, celebrações e passeios elegantes pela cidade. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3408/1.jpg",
+   "galeri/3408/2.jpg",
+   "galeri/3408/3.jpg",
+   "galeri/3408/4.jpg"
+  ],
+  "videolar": [
+   "selin/3408/0"
+  ],
+  "fiyat": 44,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3413",
   "baslik": "Cross-Neck Bell Sleeve Maxi Dress",
   "kategori": "dresses",
