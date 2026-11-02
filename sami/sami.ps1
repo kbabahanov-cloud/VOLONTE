@@ -163,11 +163,15 @@ function SatisGonder([string]$anahtar, [hashtable]$satis, [datetime]$gun) {
     -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
 }
 
-# ---- Cari hesap bakiyeleri (cuma mutabakatı, 31 Ekim) — SADECE SELECT ----
+# ---- Cari hesap bakiyeleri (cuma mutabakatı, 31 Ekim; bağ düzeltmesi 2 Kasım) — SADECE SELECT ----
 # Black Rose hesapları (adında BLACK ROSE / BLACKROSE geçen cari kartlar): kart BAKIYE sütunu + her dönemin cari hareket
 # tablolarındaki BORC/ALACAK toplamları ayrı ayrı okunur; hangisinin doğru kaynak olduğu karşılaştırılarak seçilir.
 # Hesap eşleştirme anahtarı: sondaki sayı (000 → 00, 15, 20, 25). Özel kodunda BLACK geçen hareketler (ör. ödemeler) ayrıca.
-$CARI_BAG = @("CARIIND", "CARINO", "CARIID", "CARI_IND", "CARIKARTIND", "CARIKARTNO", "CARIKART", "CARI")
+# 2 Kasım: Black Rose Vegawin'de kart BAKIYE hep 0 ve hareket tablolarında CARIIND yok (FIRMANO var). Bağ artık
+# denenerek bulunur: hareket sütunu (FIRMANO …) × kart sütunu (IND, FIRMAKODU …) çiftlerinden Black Rose hesaplarına en çok
+# hareket eşleşen seçilir; tek değerli sütun (ör. firma numarası) bağ sayılmaz. Para birimi dolar.
+$CARI_BAG = @("CARIIND", "CARINO", "CARIID", "CARI_IND", "CARIKARTIND", "CARIKARTNO", "CARIKART", "CARI", "FIRMAIND", "FIRMANO", "FIRMAID", "FIRMA_IND", "HESAPIND", "HESAPNO")
+$KART_ANAHTAR = @("IND", "FIRMANO", "FIRMAKODU", "CARIKODU", "CARINO", "KOD", "HESAPKODU")
 function HesapAnahtari([string]$ad) {
   $a = $ad.ToUpperInvariant() -replace '\s', ''
   if ($a -notmatch 'BLACKROSE') { return $null }
@@ -175,6 +179,24 @@ function HesapAnahtari([string]$ad) {
   return $null
 }
 function TarihYaz($v) { if ($null -eq $v -or $v -is [DBNull]) { return $null } return ([datetime]$v).ToString("yyyy-MM-dd") }
+function Deger($v) { if ($null -eq $v -or $v -is [DBNull]) { return $null } $s = ([string]$v).Trim(); if ($s) { return $s } return $null }
+# Hareket tablosunu cari karta bağlayan sütun çifti: { hareket = "FIRMANO"; kart = "IND"; n = eşleşen hareket; farkli = farklı değer }
+function CariBagBul([string]$sifre, [string]$tablo, [string[]]$sut, $hesaplar) {
+  $en = $null
+  foreach ($a in $CARI_BAG) {
+    if ($sut -notcontains $a) { continue }
+    try { $farkli = [int]((Sorgu $sifre "SELECT COUNT(DISTINCT [$a]) AS D FROM [$tablo]").Rows[0].D) } catch { continue }
+    if ($farkli -lt 2) { continue }
+    foreach ($ks in $KART_ANAHTAR) {
+      $degerler = @($hesaplar | ForEach-Object { $_.anahtarlar[$ks] } | Where-Object { $_ })
+      if (-not $degerler.Count) { continue }
+      $n = 0
+      foreach ($d in $degerler) { try { $n += [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$tablo] WHERE [$a] = @i" @{ i = $d }).Rows[0].N) } catch { } }
+      if ($n -gt 0 -and ($null -eq $en -or $n -gt $en.n)) { $en = @{ hareket = $a; kart = $ks; n = $n; farkli = $farkli } }
+    }
+  }
+  return $en
+}
 function CariBakiyeleri([string]$sifre) {
   $T_CARI = "$($Ayar.firma)TBLCARI"
   $kartSutun = Sutunlar $sifre $T_CARI
@@ -188,40 +210,70 @@ function CariBakiyeleri([string]$sifre) {
   }
   if (-not $adSutun) { throw "$T_CARI tablosunda BLACK ROSE adlı hesap bulunamadı." }
   $bakiyeVar = $kartSutun -contains "BAKIYE"
-  $sec = "SELECT IND, [$adSutun] AS AD" + $(if ($bakiyeVar) { ", BAKIYE" } else { "" }) + " FROM [$T_CARI] WHERE REPLACE([$adSutun], ' ', '') LIKE @b"
+  $kartAnahtar = @($KART_ANAHTAR | Where-Object { $kartSutun -contains $_ })
+  $ekler = ($kartAnahtar | ForEach-Object { ", [$_] AS [K_$_]" }) -join ""
+  $sec = "SELECT [$adSutun] AS AD$ekler" + $(if ($bakiyeVar) { ", BAKIYE" } else { "" }) + " FROM [$T_CARI] WHERE REPLACE([$adSutun], ' ', '') LIKE @b"
   $sonuc = @{}
   foreach ($k in (Sorgu $sifre $sec @{ b = "%BLACKROSE%" }).Rows) {
     $an = HesapAnahtari ([string]$k.AD)
     if (-not $an) { continue }
-    $sonuc[$an] = @{ anahtar = $an; ad = ([string]$k.AD).Trim(); ind = [string]$k.IND; kart = $(if ($bakiyeVar) { Num $k.BAKIYE } else { $null }); donemler = @{} }
+    $anahtarlar = @{}
+    foreach ($s in $kartAnahtar) { $v = Deger $k["K_$s"]; if ($v) { $anahtarlar[$s] = $v } }
+    $sonuc[$an] = @{ anahtar = $an; ad = ([string]$k.AD).Trim(); ind = $anahtarlar["IND"]; anahtarlar = $anahtarlar; kart = $(if ($bakiyeVar) { Num $k.BAKIYE } else { $null }); donemler = @{} }
   }
   $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLCARI%HAREKET%" }
   $notlar = @()
+  $baglar = @()
   $ozel = @()
   foreach ($t in $tablolar.Rows) {
     $ad = [string]$t.AD
     $sut = Sutunlar $sifre $ad
-    $bag = $null; foreach ($a in $CARI_BAG) { if ($sut -contains $a) { $bag = $a; break } }
-    $tarih = $null; foreach ($a in $TARIH_ADAYLARI) { if ($sut -contains $a) { $tarih = $a; break } }
-    if (-not $bag -or ($sut -notcontains "BORC") -or ($sut -notcontains "ALACAK")) { $notlar += "${ad}: uygun değil (sütunlar: $($sut -join ', '))"; continue }
+    if (($sut -notcontains "BORC") -or ($sut -notcontains "ALACAK")) { $notlar += "${ad}: BORC/ALACAK sütunu yok (sütunlar: $($sut -join ', '))"; continue }
+    $bag = CariBagBul $sifre $ad $sut @($sonuc.Values)
+    if (-not $bag) {
+      # Teşhis (sadece ekrana): aday sütunların kaç farklı değeri var, örnekler neler
+      $ipucu = @()
+      foreach ($a in $CARI_BAG) {
+        if ($sut -notcontains $a) { continue }
+        try {
+          $farkli = [int]((Sorgu $sifre "SELECT COUNT(DISTINCT [$a]) AS D FROM [$ad]").Rows[0].D)
+          $ornek = ((Sorgu $sifre "SELECT DISTINCT TOP 5 [$a] AS V FROM [$ad]").Rows | ForEach-Object { ([string]$_.V).Trim() }) -join ", "
+          $ipucu += "$a $farkli farklı değer (örnek: $ornek)"
+        } catch { $ipucu += "$a okunamadı" }
+      }
+      $notlar += "${ad}: Black Rose hesaplarına bağlanan hareket yok. $($ipucu -join '; ') · sütunlar: $($sut -join ', ')"
+      continue
+    }
     $etiket = $ad.Substring($Ayar.firma.Length)   # ör. D0005TBLCARIGENELHAREKET
+    $baglar += @{ tablo = $etiket; hareket = $bag.hareket; kart = $bag.kart; n = $bag.n; farkli = $bag.farkli }
+    $tarih = $null; foreach ($a in $TARIH_ADAYLARI) { if ($sut -contains $a) { $tarih = $a; break } }
+    $sira = @(); if ($tarih) { $sira += "[$tarih] DESC" }; if ($sut -contains "IND") { $sira += "IND DESC" }
     foreach ($h in $sonuc.Values) {
-      $q = "SELECT COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A" + $(if ($tarih) { ", MIN([$tarih]) AS ILK, MAX([$tarih]) AS SON" } else { "" }) + " FROM [$ad] WHERE [$bag] = @i"
-      $r = (Sorgu $sifre $q @{ i = $h.ind }).Rows[0]
-      $h.donemler[$etiket] = @{ n = [int]$r.N; borc = (Num $r.B); alacak = (Num $r.A); ilk = $(if ($tarih) { TarihYaz $r.ILK } else { $null }); son = $(if ($tarih) { TarihYaz $r.SON } else { $null }) }
+      $d = $h.anahtarlar[$bag.kart]
+      if (-not $d) { continue }
+      $q = "SELECT COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A" + $(if ($tarih) { ", MIN([$tarih]) AS ILK, MAX([$tarih]) AS SON" } else { "" }) + " FROM [$ad] WHERE [$($bag.hareket)] = @i"
+      $r = (Sorgu $sifre $q @{ i = $d }).Rows[0]
+      $don = @{ n = [int]$r.N; borc = (Num $r.B); alacak = (Num $r.A); ilk = $(if ($tarih) { TarihYaz $r.ILK } else { $null }); son = $(if ($tarih) { TarihYaz $r.SON } else { $null }) }
+      # Hareket satırında yürüyen BAKIYE varsa son satırınki (karşılaştırma için)
+      if ($sut -contains "BAKIYE" -and $sira.Count -and $don.n -gt 0) {
+        try { $don.sonBakiye = Num (Sorgu $sifre "SELECT TOP 1 BAKIYE AS K FROM [$ad] WHERE [$($bag.hareket)] = @i ORDER BY $($sira -join ', ')" @{ i = $d }).Rows[0].K } catch { }
+      }
+      $h.donemler[$etiket] = $don
     }
     if ($sut -contains "OZELKOD") {
-      foreach ($x in (Sorgu $sifre "SELECT OZELKOD AS K, [$bag] AS C, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$ad] WHERE OZELKOD LIKE @b GROUP BY OZELKOD, [$bag]" @{ b = "%BLACK%" }).Rows) {
+      foreach ($x in (Sorgu $sifre "SELECT OZELKOD AS K, [$($bag.hareket)] AS C, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$ad] WHERE OZELKOD LIKE @b GROUP BY OZELKOD, [$($bag.hareket)]" @{ b = "%BLACK%" }).Rows) {
         $cariAd = ""
-        try { $cariAd = ([string](Sorgu $sifre "SELECT [$adSutun] AS AD FROM [$T_CARI] WHERE IND = @i" @{ i = [string]$x.C }).Rows[0].AD).Trim() } catch { }
+        try { $cariAd = ([string](Sorgu $sifre "SELECT [$adSutun] AS AD FROM [$T_CARI] WHERE [$($bag.kart)] = @i" @{ i = [string]$x.C }).Rows[0].AD).Trim() } catch { }
         $ozel += @{ tablo = $etiket; kod = ([string]$x.K).Trim(); cari = $cariAd; n = [int]$x.N; borc = (Num $x.B); alacak = (Num $x.A) }
       }
     }
   }
-  return @{ hesaplar = @($sonuc.Values | Sort-Object { $_.anahtar }); ozel = $ozel; notlar = $notlar; adSutun = $adSutun; kartBakiye = $bakiyeVar }
+  $liste = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { @{ anahtar = $_.anahtar; ad = $_.ad; ind = $_.ind; kart = $_.kart; donemler = $_.donemler } })
+  $kartlar = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { $x = $_; "$($x.ad): " + (($x.anahtarlar.Keys | Sort-Object | ForEach-Object { "$_=$($x.anahtarlar[$_])" }) -join " ") })
+  return @{ hesaplar = $liste; ozel = $ozel; notlar = $notlar; baglar = $baglar; kartlar = $kartlar; adSutun = $adSutun; kartBakiye = $bakiyeVar }
 }
 function CariGonder([string]$anahtar, $c) {
-  $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; kartBakiye = $c.kartBakiye } | ConvertTo-Json -Depth 8 -Compress
+  $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; baglar = [object[]]$c.baglar; kartBakiye = $c.kartBakiye; birim = "USD" } | ConvertTo-Json -Depth 8 -Compress
   Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/cari" -TimeoutSec 60 `
     -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
     -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
@@ -480,21 +532,25 @@ switch ($Mod) {
     try {
       $g = Gizliler
       $c = CariBakiyeleri (Duz $g.Sifre)
-      Write-Host "Hesap adı sütunu: $($c.adSutun) · kartta BAKIYE sütunu: $(if ($c.kartBakiye) { 'var' } else { 'yok' })"
+      Write-Host "Hesap adı sütunu: $($c.adSutun) · kartta BAKIYE sütunu: $(if ($c.kartBakiye) { 'var' } else { 'yok' }) · para birimi: dolar"
+      foreach ($b in $c.baglar) { Write-Host ("  bağ: {0} → hareket.{1} = kart.{2}  ({3} Black Rose hareketi, sütunda {4} farklı hesap)" -f $b.tablo, $b.hareket, $b.kart, $b.n, $b.farkli) -ForegroundColor Green }
       foreach ($h in $c.hesaplar) {
         Write-Host ""
-        Write-Host ("■ {0}  (anahtar {1})   KART BAKIYE: {2:N2}" -f $h.ad, $h.anahtar, $h.kart) -ForegroundColor Yellow
+        Write-Host ("■ {0}  (anahtar {1})   KART BAKIYE: {2:N2} $" -f $h.ad, $h.anahtar, $h.kart) -ForegroundColor Yellow
+        if (-not @($h.donemler.Values | Where-Object { $_.n -gt 0 }).Count) { Write-Host "  (hiçbir hareket tablosunda bu hesaba bağlı hareket bulunamadı)" }
         foreach ($d in ($h.donemler.Keys | Sort-Object)) {
           $x = $h.donemler[$d]
-          Write-Host ("  {0}: {1} hareket · borç {2:N2} · alacak {3:N2} · borç−alacak {4:N2} · {5} → {6}" -f $d, $x.n, $x.borc, $x.alacak, ([double]$x.borc - [double]$x.alacak), $x.ilk, $x.son)
+          if ($x.n -eq 0) { continue }
+          Write-Host ("  {0}: {1} hareket · borç {2:N2} $ · alacak {3:N2} $ · borç−alacak {4:N2} $ · {5} → {6}{7}" -f $d, $x.n, $x.borc, $x.alacak, ([double]$x.borc - [double]$x.alacak), $x.ilk, $x.son, $(if ($null -ne $x.sonBakiye) { " · son satır BAKIYE {0:N2} $" -f $x.sonBakiye } else { "" }))
         }
       }
       if ($c.ozel.Count) {
         Write-Host ""
         Write-Host "Özel kodunda BLACK geçen hareketler:" -ForegroundColor Yellow
-        foreach ($o in $c.ozel) { Write-Host ("  {0} · '{1}' · hesap: {2} · {3} hareket · borç {4:N2} · alacak {5:N2}" -f $o.tablo, $o.kod, $o.cari, $o.n, $o.borc, $o.alacak) }
+        foreach ($o in $c.ozel) { Write-Host ("  {0} · '{1}' · hesap: {2} · {3} hareket · borç {4:N2} $ · alacak {5:N2} $" -f $o.tablo, $o.kod, $o.cari, $o.n, $o.borc, $o.alacak) }
       }
       foreach ($n in $c.notlar) { Write-Host "  not: $n" }
+      if (-not $c.baglar.Count) { Write-Host ""; Write-Host "Hesap kartları (bağ bulunamadı, karşılaştırma için):"; foreach ($k in $c.kartlar) { Write-Host "  $k" } }
       Write-Host ""
       Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi, Vegawin'e hiçbir şey yazılmadı)." -ForegroundColor Green
     } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
