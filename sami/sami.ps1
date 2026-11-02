@@ -584,6 +584,28 @@ switch ($Mod) {
         Write-Host "Özel kodunda BLACK geçen hareketler:" -ForegroundColor Yellow
         foreach ($o in $c.ozel) { Write-Host ("  {0} · '{1}' · hesap: {2} · {3} hareket · borç {4:N2} $ · alacak {5:N2} $" -f $o.tablo, $o.kod, $o.cari, $o.n, $o.borc, $o.alacak) }
       }
+      # Teşhis (2 Kasım): ödeme ↔ mal ↔ iade ayrımı için hareket türünü gösteren sütunu bul. Son dönemin GENEL tablosunda,
+      # Black Rose hesaplarının hareketlerinde az sayıda farklı değeri olan her sütunun dağılımı (borç/alacak toplamıyla). Sadece ekrana.
+      try {
+        $son = @($c.baglar | Where-Object { $_.tablo -like "*TBLCARIGENELHAREKET" } | Sort-Object { $_.tablo } | Select-Object -Last 1)[0]
+        if ($son -and $son.kart -eq "IND") {
+          $tab = "$($Ayar.firma)$($son.tablo)"
+          $kimlik = @($c.hesaplar | ForEach-Object { $_.ind } | Where-Object { $_ } | ForEach-Object { [int]$_ })
+          $liste = ($kimlik -join ", ")
+          $hs = @(Sutunlar (Duz $g.Sifre) $tab)
+          Write-Host ""
+          Write-Host "Hareket tablosu ($($son.tablo)) sütunları: $($hs -join ', ')" -ForegroundColor Yellow
+          foreach ($s in $hs) {
+            if (@("IND", "TARIH", "VADE", "BORC", "ALACAK", "BAKIYE", "EVRAKNO", "BELGEIND", "ISLEMIND", $son.hareket) -contains $s) { continue }
+            try {
+              $dg = Sorgu (Duz $g.Sifre) "SELECT TOP 25 [$s] AS V, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$tab] WHERE [$($son.hareket)] IN ($liste) GROUP BY [$s] ORDER BY COUNT(*) DESC"
+              if ($dg.Rows.Count -ge 2 -and $dg.Rows.Count -le 20) {
+                Write-Host ("  {0}: {1}" -f $s, (($dg.Rows | ForEach-Object { "{0}={1} (borç {2:N0} / alacak {3:N0})" -f ([string]$_.V).Trim(), $_.N, (Num $_.B), (Num $_.A) }) -join " · "))
+              }
+            } catch { }
+          }
+        }
+      } catch { Write-Host "  (tür teşhisi yapılamadı: $($_.Exception.Message))" }
       Write-Host ""
       Write-Host "Son 60 günün hareketleri: $($c.hareketler.Count) (son 8 tanesi):" -ForegroundColor Yellow
       foreach ($x in @($c.hareketler | Sort-Object { $_.tarih } | Select-Object -Last 8)) { Write-Host ("  {0} · Black Rose {1} · borç {2:N2} $ · alacak {3:N2} $ · {4} {5}" -f $x.tarih, $x.hesap, $x.borc, $x.alacak, $x.ozelkod, $x.aciklama) }
