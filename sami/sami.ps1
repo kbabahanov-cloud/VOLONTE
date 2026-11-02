@@ -43,6 +43,8 @@ $T_DEPO = "$($Ayar.firma)$($Ayar.donem)TBLDEPOENVANTER"
 $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
+# Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
+$SURUM = "2026110301"
 
 function Gunluge([string]$m) {
   try {
@@ -310,6 +312,40 @@ function CariGonder([string]$anahtar, $c) {
   Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/cari" -TimeoutSec 60 `
     -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
     -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
+}
+
+# ---- Kendini güncelleme (2 Kasım, Patron: "bir daha zip açılmasın") ----
+# Saatte bir Venom'a (Cloudflare) "yeni sürüm var mı" diye sorar (köprü anahtarıyla, HTTPS). Varsa listedeki dosyaları indirir;
+# her dosyanın SHA-256 özeti listedekiyle tutmazsa, dosya adı beklenmedikse ya da yeni sami.ps1'de yazım hatası varsa HİÇBİR
+# şeyi değiştirmez. Kurulumda eski dosya ".eski" olarak saklanır. ayar.json ve şifre kaydına asla dokunmaz.
+function KendiniGuncelle([string]$anahtar) {
+  $basliklar = @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" }
+  $govde = [Text.Encoding]::UTF8.GetBytes((@{ surum = $SURUM } | ConvertTo-Json -Compress))
+  $liste = Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/surum" -TimeoutSec 30 -Headers $basliklar -ContentType "application/json; charset=utf-8" -Body $govde
+  if (-not $liste -or -not $liste.surum -or [string]$liste.surum -le $SURUM) { return $null }
+  $indirilen = @{}
+  foreach ($dosya in $liste.dosyalar.PSObject.Properties) {
+    $dad = [string]$dosya.Name
+    if ($dad -notmatch '^[A-Za-z0-9._-]+\.(ps1|bat|vbs)$' -or $dad -like "ayar*") { throw "beklenmeyen dosya adı: $dad" }
+    $istek = [Text.Encoding]::UTF8.GetBytes((@{ ad = $dad } | ConvertTo-Json -Compress))
+    $cevap = Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/dosya" -TimeoutSec 60 -Headers $basliklar -ContentType "application/json; charset=utf-8" -Body $istek
+    $bayt = [Convert]::FromBase64String([string]$cevap.b64)
+    $ozet = -join ((New-Object Security.Cryptography.SHA256Managed).ComputeHash($bayt) | ForEach-Object { $_.ToString("x2") })
+    if ($ozet -ne [string]$dosya.Value) { throw "özet tutmadı: $dad" }
+    $indirilen[$dad] = $bayt
+  }
+  if ($indirilen.ContainsKey("sami.ps1")) {
+    $yeniMetin = [Text.Encoding]::UTF8.GetString($indirilen["sami.ps1"]); $yHata = $null; $yParca = $null
+    [void][System.Management.Automation.Language.Parser]::ParseInput($yeniMetin, [ref]$yParca, [ref]$yHata)
+    if ($yHata.Count) { throw "yeni sami.ps1 yazım hatası içeriyor, kurulmadı" }
+  }
+  foreach ($dad in $indirilen.Keys) {
+    $hedef = Join-Path $Klasor $dad
+    if (Test-Path $hedef) { Copy-Item $hedef "$hedef.eski" -Force }
+    [IO.File]::WriteAllBytes("$hedef.yeni", $indirilen[$dad])
+    Move-Item "$hedef.yeni" $hedef -Force
+  }
+  return [string]$liste.surum
 }
 
 # Vegawin kodundaki ek (ör. "3194B20" → "3194") iç bilgidir, dışarı gitmez.
@@ -712,7 +748,7 @@ switch ($Mod) {
     Bekle
   }
   "durum" {
-    Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
+    Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) · sürüm $SURUM ===" -ForegroundColor Cyan
     try {
       $gorev = Get-ScheduledTask -TaskName $GorevAdi -ErrorAction Stop
       $bilgi = Get-ScheduledTaskInfo -TaskName $GorevAdi
@@ -730,6 +766,16 @@ switch ($Mod) {
     # Aynı anda iki kopya çalışmasın; hata olursa sessizce günlüğe yazılır (bilgisayar kapalı/ağ yok vb.).
     $kilit = New-Object System.Threading.Mutex($false, "Local\SamiKopru-$($Ayar.magaza)")
     if (-not $kilit.WaitOne(0)) { exit 0 }
+    # Saatte bir yeni sürüm kontrolü (hata olursa stok/satış/cari etkilenmez; bir sonraki saatte tekrar dener)
+    try {
+      $gDosya = Join-Path $VeriKlasoru "guncelleme-son-$($Ayar.magaza).txt"
+      $gSon = if (Test-Path $gDosya) { [datetime]::Parse((Get-Content $gDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
+      if (((Get-Date) - $gSon).TotalMinutes -ge 60) {
+        (Get-Date).ToString("o") | Set-Content $gDosya
+        $yeniSurum = KendiniGuncelle (Duz (Gizliler).Anahtar)
+        if ($yeniSurum) { Gunluge "kendini güncelledi: $SURUM → $yeniSurum (bir sonraki çalışmada yeni sürüm)" }
+      }
+    } catch { Gunluge "güncelleme denenemedi: $($_.Exception.Message)" }
     try { $r = Esitle; if ($r -ne "saat dışı") { Gunluge $r } }
     catch { Gunluge "HATA: $($_.Exception.Message)" }
     finally { $kilit.ReleaseMutex() }

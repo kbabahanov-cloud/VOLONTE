@@ -1146,16 +1146,20 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   assert.match(g[0].govde.text, /ÖNİZLEME.*sadece siz görüyorsunuz\. Siz onaylamadan Fuat'a hiçbir şey gitmez/);
   const on = g.at(-1).govde;
   assert.equal(on.parse_mode, "HTML");
-  const BEKLENEN1 = "📊 BLACK ROSE – Sami\nFuat Bey,\n📦 BLACK ROSE MAĞAZASI – 4 model · 239 adet\n<pre>3557 · 200 adet   3601 ·   7 adet   3602 ·  12 adet\n3634 ·  20 adet</pre>\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $";
-  const BEKLENEN = "📊 VOLONTE – Sami\nFuat Bey,\n📦 VOLONTE MAĞAZASI – 1 model · 4 adet\n<pre>3634 · 4 adet</pre>\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $\n\nBundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.\nİyi çalışmalar.\n– Sami";
+  const BEKLENEN1 = "📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $";
+  const BEKLENEN = "📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $\n\nBundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.\nİyi çalışmalar.\n– Sami";
+  // Patron önizlemesinde adetler görünür (sadece Patron); Fuat'ın mesajlarında adet listesi YOK
+  const patronMetni = g.map((x) => x.govde.text).join("\n");
+  assert.match(patronMetni, /📦 Adetler — SADECE SİZ görüyorsunuz[\s\S]*📦 BLACK ROSE MAĞAZASI – 4 model · 239 adet\n<pre>3557 · 200 adet   3601 ·   7 adet   3602 ·  12 adet\n3634 ·  20 adet<\/pre>/);
+  assert.match(patronMetni, /📦 VOLONTE MAĞAZASI – 1 model · 4 adet\n<pre>3634 · 4 adet<\/pre>/);
   assert.equal(g.at(-2).govde.text, BEKLENEN1); // MESAJ 1: BLACK ROSE (birebir)
   assert.equal(on.text, BEKLENEN); // MESAJ 2: VOLONTE (birebir) — iki ayrı mesaj, düğme sonda
   assert.ok(!g.at(-2).govde.reply_markup);
-  assert.match(g[0].govde.text, /Aşağıdaki iki mesaj \(1: BLACK ROSE, 2: VOLONTE\) Fuat'a BİREBİR böyle gidecek/);
+  assert.match(g[0].govde.text, /Fuat'a SADECE en alttaki iki bakiye mesajı \(1: BLACK ROSE, 2: VOLONTE\) BİREBİR böyle gider; adet listeleri gitmez/);
   assert.match(g[0].govde.text, /💵 Son ödemeler \(sadece siz\):\n.*5\.000,00 \$ · Black Rose 20 · elle · nakit · 📎 dekont/);
   assert.deepEqual(on.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Fuat'a gönder"]); // tek düğme
   assert.ok(!/fark|FARK|karşılaştır|ödeme|ÖDEME/.test(on.text)); // karşılaştırma ve ödeme yok
-  assert.ok(!/3194|fiyat/i.test(on.text)); // VOLONTE modeli ve fiyat yok
+  assert.ok(!/3194|fiyat|📦|adet/i.test(on.text + g.at(-2).govde.text)); // Fuat mesajlarında adet/model yok
   const id = on.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   await mutabakatAdimi(o.env, cuma + 600, tg);
   assert.equal(g.filter((x) => /ÖNİZLEME/.test(x.govde.text)).length, 1); // cuma günü bir kez
@@ -1172,6 +1176,11 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   await g2({ callback_query: { id: "c", from: { id: 333 }, data: `mt:g:${id}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
   await g2({ callback_query: { id: "c", from: { id: 111 }, data: `mt:g:${id}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "501")); // ilk basışta gitmez
+  const emin = cagri(o.g, "sendMessage").at(-1).govde;
+  assert.match(emin.text, /Emin misiniz\?/);
+  assert.deepEqual(emin.reply_markup.inline_keyboard[0].map((d) => [d.text, d.callback_data]), [["✅ Evet, gönder", `mt:G:${id}`], ["Vazgeç", `mt:v:${id}`]]);
+  await g2({ callback_query: { id: "c", from: { id: 111 }, data: `mt:G:${id}`, message: { chat: { id: 111 }, message_id: 2 } } }, o.env);
   const fuatlar = cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501");
   assert.deepEqual(fuatlar.map((x) => x.govde.text), [BEKLENEN1, BEKLENEN]); // iki ayrı mesaj, birebir
   const fuatMsj = fuatlar[1];
@@ -1214,7 +1223,7 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((r) => r.json());
   const ars = await st("/arsiv-liste");
   assert.deepEqual(ars.map((x) => x.tur), ["onizleme", "gonderim", "pdf", "sonra", "hatirlatma", "haftalik-ozet", "hatirlatma", "hatirlatma", "uyusmuyor", "fark-aciklama", "pdf"]);
-  assert.match(JSON.parse(ars[1].icerik).fuatMesaji, /📊 BLACK ROSE – Sami[\s\S]*💰 Bakiyeler:\nBlack Rose 00: 50,00 \$\nBlack Rose 15: 100,00 \$[\s\S]*📊 VOLONTE – Sami/);
+  assert.match(JSON.parse(ars[1].icerik).fuatMesaji, /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 \$\nBlack Rose 15: 100,00 \$[\s\S]*📊 VOLONTE – Sami/);
   assert.equal((await st("/arsiv-dogrula")).tamam, true);
   assert.equal((await st("/arsiv-dosyalar", { mt: id })).length, 2);
 });
@@ -1232,12 +1241,16 @@ test("mutabakat güvenliği: iki mağaza ayrı bakiye, tek düğme; Mutabıkım 
   const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
   const r = await onizlemeGonder(o.env, tg, Date.UTC(2026, 10, 6, 14, 1) / 1000, "elle");
   assert.ok(!/FARK|fark/.test(g.map((x) => x.govde.text).join("\n")));
-  assert.match(g.at(-2).govde.text, /^📊 BLACK ROSE – Sami[\s\S]*💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 250,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 350,00 \$$/);
-  assert.match(g.at(-1).govde.text, /^📊 VOLONTE – Sami[\s\S]*💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 200,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 300,00 \$\n\nBundan sonra/);
+  assert.match(g.at(-2).govde.text, /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 250,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 350,00 \$$/);
+  assert.match(g.at(-1).govde.text, /^📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 200,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 300,00 \$\n\nBundan sonra/);
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:g:${r.id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 0); // "Emin misiniz?" önce
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:v:${r.id}`, message: { chat: { id: 999 }, message_id: 2 } } }, o.env);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 0); // Vazgeç → gitmez
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:G:${r.id}`, message: { chat: { id: 999 }, message_id: 3 } } }, o.env);
   const fuata = cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501");
-  assert.equal(fuata.length, 2); // tek basışla iki ayrı mesaj gider
+  assert.equal(fuata.length, 2); // onayla iki ayrı mesaj gider
   assert.deepEqual(fuata.map((x) => x.govde.text), [g.at(-2).govde.text, g.at(-1).govde.text]); // Fuat'a önizlemedekinin birebir aynısı
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:m:${r.id}`, message: { chat: { id: 501 }, message_id: 3 } } }, o.env);
@@ -1298,8 +1311,8 @@ test("mutabakat bakiyeleri: iki mağaza AYRI (karşılaştırma yok); Black Rose
   const m = await mutabakatMetni(o.env, "2026-11-06");
   const metin = m.fuat.join("\n");
   assert.equal(m.fuat.length, 2); // iki ayrı mesaj
-  assert.match(m.fuat[0], /^📊 BLACK ROSE – Sami\nFuat Bey,\n📦 BLACK ROSE MAĞAZASI – 0 model · 0 adet\n<pre>—<\/pre>\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 1\.000,00 \$\nBlack Rose 20: 2\.500,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 3\.800,00 \$$/);
-  assert.match(m.fuat[1], /^📊 VOLONTE – Sami\nFuat Bey,\n📦 VOLONTE MAĞAZASI – 0 model · 0 adet\n<pre>—<\/pre>\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 61,85 \$ \(B\)\nBlack Rose 20: 2\.400,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 2\.638,15 \$\n\nBundan sonra/);
+  assert.match(m.fuat[0], /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 1\.000,00 \$\nBlack Rose 20: 2\.500,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 3\.800,00 \$$/);
+  assert.match(m.fuat[1], /^📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 61,85 \$ \(B\)\nBlack Rose 20: 2\.400,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 2\.638,15 \$\n\nBundan sonra/);
   assert.deepEqual(m.patron, m.fuat); // Patron önizlemesi = Fuat'ın göreceği
   assert.ok(!/fark|FARK|uyarı|⚠️|✅|GENEL TOPLAM/.test(metin));
   assert.deepEqual(bakiyeSatirlari(null, { tur: "kart" }), ["(bakiye henüz okunamadı)"]);
@@ -1424,12 +1437,41 @@ test("Fuat'a iş özeti: VOLONTE defterinden yıllık gelen mal (ödeme hariç, 
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
   assert.ok(!cagri(o.g, "sendMessage").some((x) => String(x.govde.chat_id) === "501"));
   await g2({ callback_query: { id: "c", from: { id: 999 }, data: `oz:g:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Emin misiniz\?/);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `oz:G:${id}`, message: { chat: { id: 999 }, message_id: 2 } } }, o.env);
   const fm = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "501");
   assert.equal(fm.govde.text, metin);
   assert.equal(cagri(o.g, "sendDocument")[0].govde.chat_id, "999");
   const ars = await st("/arsiv-liste");
   assert.deepEqual(ars.map((x) => x.tur), ["is-ozeti-onizleme", "is-ozeti-gonderim", "pdf"]);
   assert.equal(JSON.parse(ars[1].icerik).fuatMesaji, metin);
-  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `oz:g:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `oz:G:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
   assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 1); // ikinci kez gitmez
+});
+
+test("/adet: adet listesi sadece Patron isteyince; önizleme Patron'a; 'Emin misiniz?' onayıyla Fuat'a; başkası basamaz; arşiv", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "999", FUAT_ID: "501", ALLOWED_IDS: "111,222,999" });
+  await o.yaz("BLACKROSE", [{ kod: "3557", adet: 200, fiyat: 40, brAdet: 200 }], ist(8));
+  await o.yaz("VOLONTE", [{ kod: "3557", adet: 9, fiyat: 40, brAdet: 4 }, { kod: "3194", adet: 7, fiyat: 60 }], ist(8));
+  await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "/adet" } }, o.env);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => /ÖNİZLEME/.test(x.govde.text || "")));
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/adet" } }, o.env);
+  const m = cagri(o.g, "sendMessage");
+  assert.match(m[0].govde.text, /ÖNİZLEME — adet listesi/);
+  assert.equal(m[1].govde.text, "📊 BLACK ROSE – Sami\nFuat Bey,\n📦 BLACK ROSE MAĞAZASI – 1 model · 200 adet\n<pre>3557 · 200 adet</pre>");
+  assert.equal(m[2].govde.text, "📊 VOLONTE – Sami\nFuat Bey,\n📦 VOLONTE MAĞAZASI – 1 model · 4 adet\n<pre>3557 · 4 adet</pre>\n\nİyi çalışmalar.\n– Sami");
+  assert.ok(!/3194|fiyat|\$/.test(m[1].govde.text + m[2].govde.text));
+  const id = m[2].govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  await g2({ callback_query: { id: "c", from: { id: 501 }, data: `ad:G:${id}`, message: { chat: { id: 501 }, message_id: 1 } } }, o.env);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `ad:g:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 0);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Emin misiniz\?/);
+  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `ad:G:${id}`, message: { chat: { id: 999 }, message_id: 2 } } }, o.env);
+  assert.deepEqual(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").map((x) => x.govde.text), [m[1].govde.text, m[2].govde.text]);
+  const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((x) => x.json());
+  assert.deepEqual((await st("/arsiv-liste")).map((x) => x.tur), ["adet-onizleme", "adet-gonderim"]);
 });

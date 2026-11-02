@@ -30,3 +30,7 @@ hiçbir şey göndermez. Ekran fotoğrafını Claude'a gönderin. Köprü 20:55'
 
 DURDURMAK: durdur.bat
 GÜNLÜK (sorun olursa): Windows'ta  %LOCALAPPDATA%\Sami  klasörü
+
+KENDİNİ GÜNCELLER (3 Kasım 2026 sürümünden itibaren): Köprü saatte bir Venom'a yeni sürüm var mı diye bakar;
+varsa kendisi indirip kurar (dosya özetleri kontrol edilir, eski sürüm .eski olarak saklanır, ayar.json'a dokunulmaz).
+Bundan sonra yeni zip açmanız gerekmez. Sürümü görmek için: durum.bat

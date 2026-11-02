@@ -1708,3 +1708,21 @@ test("yeni model: Selin siteye ekleyince Kemal önizlemeyi SADECE Patron'a (🆕
   const { stokIste } = await import("./stokbot.js");
   assert.equal((await stokIste(o.env, "/tg-hepsi"))["3403"], ist(10));
 });
+
+test("köprü kendini güncelleme: /kopru/surum ve /kopru/dosya sadece anahtarla; sadece listedeki dosyalar; köprünün sürümü kaydedilir", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  o.env.KOPRU_VOLONTE = "kopru-anahtari-123";
+  const iste = (yol, govde, anahtar = "kopru-anahtari-123") => worker.fetch(new Request(`https://x${yol}`, { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: `Bearer ${anahtar}` }, body: JSON.stringify(govde) }), o.env);
+  assert.equal((await iste("/kopru/surum", {}, "yanlis")).status, 401);
+  assert.deepEqual(await (await iste("/kopru/surum", { surum: "2026110301" })).json(), { surum: "0", dosyalar: {} }); // yayın yoksa "0"
+  await o.env.KAYIT.put("kopru:surum", JSON.stringify({ surum: "2026110302", dosyalar: { "sami.ps1": "abc" } }));
+  await o.env.KAYIT.put("kopru:dosya:sami.ps1", "QUJD");
+  await o.env.KAYIT.put("kopru:dosya:ayar.json", "GIZLI");
+  assert.equal((await (await iste("/kopru/surum", { surum: "2026110301" })).json()).surum, "2026110302");
+  const kayit = JSON.parse(await o.env.KAYIT.get("venom:kopruSurum:VOLONTE"));
+  assert.equal(kayit.surum, "2026110301");
+  assert.deepEqual(await (await iste("/kopru/dosya", { ad: "sami.ps1" })).json(), { ad: "sami.ps1", b64: "QUJD" });
+  assert.equal((await iste("/kopru/dosya", { ad: "ayar.json" })).status, 404); // listede olmayan dosya verilmez
+  assert.equal((await iste("/kopru/dosya", { ad: "sami.ps1" }, "yanlis")).status, 401);
+});

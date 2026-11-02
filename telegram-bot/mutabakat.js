@@ -173,23 +173,34 @@ export function mesajKur(ust, listeBaslik, liste, alt, sinir = 3800) {
 }
 // SON DÜZEN (Patron, 2 Kasım): İKİ AYRI MESAJ — 1) BLACK ROSE, 2) VOLONTE. Karşılaştırma/fark/genel toplam/uyarı YOK.
 // Fuat'a ve Patron önizlemesine AYNI mesajlar gider (Patron'a ayrıca sadece kendisinin gördüğü üst bilgi).
+// TOPLU KARAR (Patron, 2 Kasım): Cuma mutabakatında Fuat'a SADECE bakiyeler (BLACK ROSE mesajı + VOLONTE mesajı + kapanış);
+// model/adet listeleri GİTMEZ. Adet listeleri Patron'un önizlemesinde görünür; Fuat'a sadece Patron "/adet" ile gönderir.
+export function adetMesajlari(s) {
+  const toplam = (l) => l.reduce((t, [, a]) => t + a, 0);
+  return [
+    ...mesajKur("📊 BLACK ROSE – Sami\nFuat Bey,", `📦 BLACK ROSE MAĞAZASI – ${s.BLACKROSE.length} model · ${sayi(toplam(s.BLACKROSE))} adet`, ucSutun(s.BLACKROSE), []),
+    ...mesajKur("📊 VOLONTE – Sami\nFuat Bey,", `📦 VOLONTE MAĞAZASI – ${s.VOLONTE.length} model · ${sayi(toplam(s.VOLONTE))} adet`, ucSutun(s.VOLONTE), ["", "İyi çalışmalar.", "– Sami"]),
+  ];
+}
 export async function mutabakatMetni(env, gun) {
   const s = await stokIste(env, "/br-stoklar");
   const [b, odemeler, yontem] = await Promise.all([bakiyeOku(env), ayarOku(env, "odeme:liste", []), ayarOku(env, "cari:yontem", { tur: "kart" })]);
-  const toplam = (l) => l.reduce((t, [, a]) => t + a, 0);
-  const m1 = mesajKur("📊 BLACK ROSE – Sami\nFuat Bey,", `📦 BLACK ROSE MAĞAZASI – ${s.BLACKROSE.length} model · ${sayi(toplam(s.BLACKROSE))} adet`, ucSutun(s.BLACKROSE),
-    ["💰 Bakiyeler:", ...bakiyeSatirlari(b.br, yontem)]);
-  const m2 = mesajKur("📊 VOLONTE – Sami\nFuat Bey,", `📦 VOLONTE MAĞAZASI – ${s.VOLONTE.length} model · ${sayi(toplam(s.VOLONTE))} adet`, ucSutun(s.VOLONTE),
-    ["💰 Bakiyeler:", ...bakiyeSatirlari(b.vl, yontem), "", "Bundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.", "İyi çalışmalar.", "– Sami"]);
-  const mesaj = [...m1, ...m2];
-  // Patron'a özel üst bilgi (Fuat görmez): okuma saatleri + son ödemeler (Patron'un /odeme kayıtları; Vegawin ödemesi teşhis bekliyor)
+  const m1 = ["📊 BLACK ROSE – Sami", "Fuat Bey,", "💰 Bakiyeler:", ...bakiyeSatirlari(b.br, yontem)].map(kacis).join("\n");
+  const m2 = ["📊 VOLONTE – Sami", "Fuat Bey,", "💰 Bakiyeler:", ...bakiyeSatirlari(b.vl, yontem), "", "Bundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.", "İyi çalışmalar.", "– Sami"].map(kacis).join("\n");
+  const mesaj = [m1, m2];
+  // Patron'a özel (Fuat görmez): okuma saatleri, son /odeme kayıtları ve adet listeleri
   const okuma = (c, ad) => `${ad}: ${c && c.zaman ? `son okuma ${tarihSaat(c.zaman)}` : "köprü bakiyeyi henüz göndermedi"}`;
   const veg = vegawinOdemeleri(b.vl).map((h) => ({ zaman: Date.UTC(+h.tarih.slice(0, 4), +h.tarih.slice(5, 7) - 1, +h.tarih.slice(8, 10), 9) / 1000, tutar: tutarOf(h), hesap: h.hesap, not: "Vegawin" }));
   const sonOdeme = [...veg, ...odemeler.map((o) => ({ ...o, not: o.not ? `elle · ${o.not}` : "elle" }))].sort((x, y) => y.zaman - x.zaman).slice(0, 5);
   const patronBilgi = [okuma(b.br, "Black Rose Vegawin"), okuma(b.vl, "VOLONTE Vegawin"), ...(sonOdeme.length ? ["💵 Son ödemeler (sadece siz):", ...sonOdeme.map(odemeYazi)] : [])];
+  const toplam = (l) => l.reduce((t, [, a]) => t + a, 0);
+  const patronAdet = [
+    ...mesajKur("📦 Adetler — SADECE SİZ görüyorsunuz (Fuat'a gitmez; göndermek için /adet)", `📦 BLACK ROSE MAĞAZASI – ${s.BLACKROSE.length} model · ${sayi(toplam(s.BLACKROSE))} adet`, ucSutun(s.BLACKROSE), []),
+    ...mesajKur("📦 Adetler (devam) — sadece siz", `📦 VOLONTE MAĞAZASI – ${s.VOLONTE.length} model · ${sayi(toplam(s.VOLONTE))} adet`, ucSutun(s.VOLONTE), []),
+  ];
   return {
-    fuat: mesaj, patron: mesaj, patronBilgi,
-    duzFuat: mesaj.map(duzYazi).join("\n\n— — —\n\n"), duzPatronBakiye: patronBilgi.join("\n"),
+    fuat: mesaj, patron: mesaj, patronBilgi, patronAdet,
+    duzFuat: mesaj.map(duzYazi).join("\n\n— — —\n\n"), duzPatronBakiye: [...patronBilgi, "", ...patronAdet.map(duzYazi)].join("\n"),
     brToplam: b.brToplam, brToplamYazi: b.brToplamYazi,
   };
 }
@@ -254,7 +265,7 @@ async function gonder(env, tg, chat, mesajlar, klavye, html = true) {
 const fuatMesajlari = (r) => (r.fuatMesajlar ? [r.fuatMesajlar, true] : [[r.metin], false]);
 
 const onizlemeUst = (m, ek = "") => [`👁 <b>ÖNİZLEME${ek ? ` (${ek})` : ""}</b> — sadece siz görüyorsunuz. Siz onaylamadan Fuat'a hiçbir şey gitmez.`,
-  "Aşağıdaki iki mesaj (1: BLACK ROSE, 2: VOLONTE) Fuat'a BİREBİR böyle gidecek; tek onayla ikisi birlikte gider.", ...(m.patronBilgi || []).map(kacis)].join("\n");
+  "Fuat'a SADECE en alttaki iki bakiye mesajı (1: BLACK ROSE, 2: VOLONTE) BİREBİR böyle gider; adet listeleri gitmez.", ...(m.patronBilgi || []).map(kacis)].join("\n");
 
 const icerikAl = (m) => ({ fuatMesajlar: m.fuat, patronMesajlar: m.patron, duzFuat: m.duzFuat, duzPatronBakiye: m.duzPatronBakiye, brToplam: m.brToplam, brToplamYazi: m.brToplamYazi });
 
@@ -268,7 +279,7 @@ export async function onizlemeGonder(env, tg, simdi, kaynak = "cuma") {
     if (e && e.durum === "onizleme") { e.durum = "eskidi"; e.gecmis.push([simdi, "yeni önizleme geldi, geçersiz"]); await kayitYaz(env, e); }
   }
   const r = { id, gun, kaynak, olusturma: simdi, ...icerikAl(m), durum: "onizleme", gecmis: [[simdi, `önizleme (${kaynak})`]] };
-  await gonder(env, tg, murat(env), [onizlemeUst(m)], null);
+  await gonder(env, tg, murat(env), [onizlemeUst(m), ...(m.patronAdet || [])], null);
   r.onizlemeMesaj = await gonder(env, tg, murat(env), m.patron, onizlemeKlavye(id));
   await kayitYaz(env, r);
   await arsiv(env, "onizleme", id, { kaynak, fuat: m.duzFuat, patron: m.duzPatronBakiye }, simdi);
@@ -315,7 +326,7 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
       return gonder(env, tg, cq.message.chat.id, mesajlar, null, html);
     }
     if (r.durum !== "onizleme") return cevapla("Bu önizleme artık geçerli değil.");
-    if (islem === "v") { r.gecmis.push([simdi, "Patron: fark uyarısında vazgeçti"]); await kayitYaz(env, r); await cevapla("Gönderilmedi"); return dugmeYaz("Gönderilmedi"); }
+    if (islem === "v") { r.gecmis.push([simdi, "Patron: Emin misiniz? → vazgeçti"]); await kayitYaz(env, r); await cevapla("Gönderilmedi"); return dugmeYaz("Gönderilmedi"); }
     if (islem === "x") {
       Object.assign(r, { durum: "iptal" }); r.gecmis.push([simdi, "iptal (Patron)"]);
       await kayitYaz(env, r); await arsiv(env, "iptal", id, { kim }, simdi); await cevapla("İptal edildi");
@@ -326,10 +337,14 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
       Object.assign(r, icerikAl(m)); r.gecmis.push([simdi, "yenilendi"]);
       await kayitYaz(env, r); await arsiv(env, "yenile", id, { fuat: m.duzFuat, patron: m.duzPatronBakiye }, simdi);
       await cevapla("Yenilendi");
-      await gonder(env, tg, cq.message.chat.id, [onizlemeUst(m, "yenilendi")], null);
+      await gonder(env, tg, cq.message.chat.id, [onizlemeUst(m, "yenilendi"), ...(m.patronAdet || [])], null);
       return gonder(env, tg, cq.message.chat.id, m.patron, onizlemeKlavye(id));
     }
-    // g (ve eski önizlemelerdeki G): Fuat'a gönder
+    // g: önce "Emin misiniz?" (Patron 2 Kasım: yanlışlıkla gönderim olmasın); G: onaylandı → gönder
+    if (islem === "g") {
+      await cevapla("Emin misiniz?");
+      return gonder(env, tg, cq.message.chat.id, ["⚠️ <b>Emin misiniz?</b> Bakiye mesajları şimdi Fuat'a gidecek."], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `mt:G:${id}` }, { text: "Vazgeç", callback_data: `mt:v:${id}` }]] });
+    }
     const sonuc = await fuataGonder(env, tg, r, kim, simdi);
     if (sonuc === null) return cevapla("Fuat'a gönderilemedi (Sami'ye /start yazmamış olabilir).");
     if (sonuc === false) return cevapla("Gönderilmedi (güvenlik).");
@@ -606,7 +621,12 @@ export async function isOzetiDugmesi(env, cq, tg, simdi) {
     await ayarYaz(env, `oz:${id}`, r); await arsiv(env, "is-ozeti-iptal", id, { kim: String(cq.from.id) }, simdi);
     await cevapla("İptal edildi"); return dugmeYaz("❌ İptal edildi");
   }
-  if (islem !== "g") return cevapla("?");
+  if (islem === "v") { r.gecmis.push([simdi, "Patron: vazgeçti"]); await ayarYaz(env, `oz:${id}`, r); await cevapla("Gönderilmedi"); return dugmeYaz("Gönderilmedi"); }
+  if (islem === "g") {
+    await cevapla("Emin misiniz?");
+    return gonder(env, tg, cq.message.chat.id, ["⚠️ <b>Emin misiniz?</b> İş özeti şimdi Fuat'a gidecek."], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `oz:G:${id}` }, { text: "Vazgeç", callback_data: `oz:v:${id}` }]] });
+  }
+  if (islem !== "G") return cevapla("?");
   const yasak = fuatSuzgec(r.metin);
   if (yasak || !fuat(env)) { await cevapla("Gönderilmedi"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⛔ Gönderilmedi: ${yasak ? `metinde Fuat'ın görmemesi gereken bilgi var (${yasak.join(", ")})` : "Fuat'ın kimliği kayıtlı değil"}.` }); }
   const s = await tg(env, "sendMessage", { chat_id: fuat(env), text: r.metin });
@@ -641,4 +661,41 @@ export async function isOzetiHazirMi(env, simdi, tg) {
   if (!Object.keys(yillikIs(vl).yillar).length || kapsamEksik(vl)) return;
   await ayarYaz(env, "oz:otomatik", simdi);
   await isOzetiOnizleme(env, tg, simdi, "otomatik");
+}
+
+// ==== /adet (Patron, 2 Kasım): Black Rose kodlarının adet listesi Fuat'a SADECE Patron isteyince gider ====
+// Önizleme Patron'a → [✅ Fuat'a gönder] → "Emin misiniz?" [Evet, gönder] [Vazgeç] → Fuat'a (arşive kayıt).
+export async function adetKomutu(env, m, tg, simdi) {
+  if (!muratMi(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Patron'da." });
+  const mesajlar = adetMesajlari(await stokIste(env, "/br-stoklar"));
+  const id = `ad-${simdi.toString(36)}`;
+  await ayarYaz(env, `ad:${id}`, { id, olusturma: simdi, mesajlar, durum: "onizleme", gecmis: [[simdi, "önizleme (/adet)"]] });
+  await gonder(env, tg, m.chat.id, ["👁 <b>ÖNİZLEME — adet listesi</b> (sadece siz görüyorsunuz). Aşağıdaki mesajlar Fuat'a BİREBİR böyle gider; siz onaylamadan gitmez."], null);
+  await gonder(env, tg, m.chat.id, mesajlar, { inline_keyboard: [[{ text: "✅ Fuat'a gönder", callback_data: `ad:g:${id}` }, { text: "❌ İptal", callback_data: `ad:x:${id}` }]] });
+  await arsiv(env, "adet-onizleme", id, { mesaj: mesajlar.map(duzYazi).join("\n\n") }, simdi);
+}
+export async function adetDugmesi(env, cq, tg, simdi) {
+  const [, islem, id] = String(cq.data).split(":");
+  const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!muratMi(env, cq.from.id)) return cevapla("Bu düğme Patron'da.");
+  const r = await ayarOku(env, `ad:${id}`, null);
+  if (!r) return cevapla("Bu önizleme bulunamadı.");
+  if (r.durum !== "onizleme") return cevapla("Bu önizleme artık geçerli değil.");
+  const dugmeYaz = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "ad:-" }]] } });
+  if (islem === "x") { r.durum = "iptal"; r.gecmis.push([simdi, "iptal"]); await ayarYaz(env, `ad:${id}`, r); await cevapla("İptal edildi"); return dugmeYaz("❌ İptal edildi"); }
+  if (islem === "v") { r.gecmis.push([simdi, "vazgeçti"]); await ayarYaz(env, `ad:${id}`, r); await cevapla("Gönderilmedi"); return dugmeYaz("Gönderilmedi"); }
+  if (islem === "g") {
+    await cevapla("Emin misiniz?");
+    return gonder(env, tg, cq.message.chat.id, ["⚠️ <b>Emin misiniz?</b> Adet listesi şimdi Fuat'a gidecek."], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `ad:G:${id}` }, { text: "Vazgeç", callback_data: `ad:v:${id}` }]] });
+  }
+  if (islem !== "G") return cevapla("?");
+  const yasak = fuatSuzgec(r.mesajlar.map(duzYazi).join("\n"));
+  if (yasak || !fuat(env)) { await cevapla("Gönderilmedi"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⛔ Gönderilmedi: ${yasak ? `mesajda Fuat'ın görmemesi gereken bilgi var (${yasak.join(", ")})` : "Fuat'ın kimliği kayıtlı değil"}.` }); }
+  const gitti = await gonder(env, tg, fuat(env), r.mesajlar, null);
+  if (!gitti) return cevapla("Fuat'a gönderilemedi (Sami'ye /start yazmamış olabilir).");
+  Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(cq.from.id) }); r.gecmis.push([simdi, "Patron onayladı → Fuat'a gönderildi"]);
+  await ayarYaz(env, `ad:${id}`, r);
+  const k = await arsiv(env, "adet-gonderim", id, { onaylayan: String(cq.from.id), tarihSaat: tarihSaat(simdi), fuatMesaji: r.mesajlar.map(duzYazi).join("\n\n") }, simdi);
+  await cevapla("Fuat'a gönderildi"); await dugmeYaz("✅ Fuat'a gönderildi");
+  return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✅ Adet listesi Fuat'a gönderildi (${tarihSaat(simdi)}). Arşiv kaydı #${k && k.sira}.` });
 }

@@ -25,7 +25,7 @@ import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, pa
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu, brSayKomutu } from "./stoksorgu.js";
-import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi } from "./mutabakat.js";
+import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi, adetKomutu, adetDugmesi } from "./mutabakat.js";
 import { borcLimitKomutu } from "./cari-takip.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
@@ -121,6 +121,7 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
     if (String(cq.data || "").startsWith("oz:")) return isOzetiDugmesi(env, cq, tg, simdiD); // Fuat'a iş özeti (sadece Patron)
+    if (String(cq.data || "").startsWith("ad:")) return adetDugmesi(env, cq, tg, simdiD); // Fuat'a adet listesi (sadece Patron)
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
     if (String(cq.data || "").startsWith("sq:")) return stokSorguDugmesi(env, cq, tg, simdiD);
@@ -145,6 +146,7 @@ export async function guncelleme(u, env) {
   if (komut === "/tablo") return tabloKomutu(m, env);
   if (komut === "/stokyetki") return stokYetkiKomutu(env, m, tg);
   if (komut === "/mutabakat") return mutabakatKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/adet") return adetKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/isozeti") return isOzetiKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/bakiye") return bakiyeKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/borclimit") return borcLimitKomutu(env, m, tg, Math.floor(Date.now() / 1000));

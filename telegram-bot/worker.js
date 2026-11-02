@@ -102,6 +102,7 @@ export default {
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/cari") return kopruCari(request, env);
+    if (request.method === "POST" && (url.pathname === "/kopru/surum" || url.pathname === "/kopru/dosya")) return kopruGuncelleme(request, env, url.pathname);
     // Pelin'in kör testi: modelin gerçek mankenli kanal videosu (tek seferlik anahtar Pelin'den, ortak kayıtta).
     if (request.method === "GET" && /^\/kanal-video\/[a-f0-9]{32}$/.test(url.pathname)) return kanalVideo(env, url.pathname.split("/")[2], request.headers.get("Range"));
 
@@ -1959,6 +1960,25 @@ async function kopruSatis(request, env) {
 
 // Cari bakiyeler (cuma mutabakatı, 31 Ekim; köprü sadece okur): Black Rose hesaplarının kart bakiyesi ve dönem hareket
 // toplamları. Sami'nin deposunda "cari:<MAĞAZA>" — SADECE Patron ve Fuat'a giden mutabakatta kullanılır.
+// Köprünün kendini güncellemesi (2 Kasım): /kopru/surum → yayındaki sürüm ve dosya özetleri (KV "kopru:surum");
+// /kopru/dosya {ad} → o dosya (base64, KV "kopru:dosya:<ad>"). Sadece köprü anahtarıyla; sadece listedeki dosyalar.
+// Köprünün bildirdiği kendi sürümü KV "venom:kopruSurum:<MAĞAZA>"ya yazılır (kurulum doğrulaması için).
+async function kopruGuncelleme(request, env, yol) {
+  const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
+  const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
+  const g = await request.json().catch(() => ({}));
+  const liste = (await env.KAYIT.get("kopru:surum", "json")) || { surum: "0", dosyalar: {} };
+  if (yol === "/kopru/surum") {
+    if (g && /^\d{6,12}$/.test(String(g.surum || ""))) await env.KAYIT.put(`venom:kopruSurum:${magaza}`, JSON.stringify({ surum: String(g.surum), zaman: Math.floor(Date.now() / 1000), yayinda: liste.surum }));
+    return Response.json(liste);
+  }
+  const ad = String((g && g.ad) || "");
+  if (!Object.prototype.hasOwnProperty.call(liste.dosyalar || {}, ad)) return new Response("yok", { status: 404 });
+  const b64 = await env.KAYIT.get(`kopru:dosya:${ad}`);
+  return b64 ? Response.json({ ad, b64 }) : new Response("yok", { status: 404 });
+}
+
 async function kopruCari(request, env) {
   const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
   const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
