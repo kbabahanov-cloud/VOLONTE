@@ -1146,11 +1146,15 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   assert.match(g[0].govde.text, /ÖNİZLEME.*sadece siz görüyorsunuz\. Siz onaylamadan Fuat'a hiçbir şey gitmez/);
   const on = g.at(-1).govde;
   assert.equal(on.parse_mode, "HTML");
-  assert.match(on.text, /^📋 <b>Mutabakat – 06\.11\.2026<\/b>\n\n📦 <b>BLACK ROSE MAĞAZASI – 4 model · 239 adet<\/b>\n<pre>3557 · 200 adet   3601 ·   7 adet   3602 ·  12 adet\n3634 ·  20 adet<\/pre>/);
-  assert.match(on.text, /📦 <b>VOLONTE MAĞAZASI – 1 model · 4 adet<\/b>\n<pre>3634 · 4 adet<\/pre>\n\n📊 <b>GENEL TOPLAM – 4 model · 243 adet<\/b>/);
-  assert.ok(!/Cuma mutabakatı/.test(on.text));
-  assert.match(on.text, /💵 <b>SON ÖDEMELER<\/b> \(sadece siz\)\n.*5\.000,00 \$ · Black Rose 20 · elle · nakit · 📎 dekont/);
-  assert.deepEqual(on.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Gönder"]); // fark yok → tek düğme
+  const BEKLENEN1 = "📊 BLACK ROSE – Sami\nFuat Bey,\n📦 BLACK ROSE MAĞAZASI – 4 model · 239 adet\n<pre>3557 · 200 adet   3601 ·   7 adet   3602 ·  12 adet\n3634 ·  20 adet</pre>\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $";
+  const BEKLENEN = "📊 VOLONTE – Sami\nFuat Bey,\n📦 VOLONTE MAĞAZASI – 1 model · 4 adet\n<pre>3634 · 4 adet</pre>\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $\n\nBundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.\nİyi çalışmalar.\n– Sami";
+  assert.equal(g.at(-2).govde.text, BEKLENEN1); // MESAJ 1: BLACK ROSE (birebir)
+  assert.equal(on.text, BEKLENEN); // MESAJ 2: VOLONTE (birebir) — iki ayrı mesaj, düğme sonda
+  assert.ok(!g.at(-2).govde.reply_markup);
+  assert.match(g[0].govde.text, /Aşağıdaki iki mesaj \(1: BLACK ROSE, 2: VOLONTE\) Fuat'a BİREBİR böyle gidecek/);
+  assert.match(g[0].govde.text, /💵 Son ödemeler \(sadece siz\):\n.*5\.000,00 \$ · Black Rose 20 · elle · nakit · 📎 dekont/);
+  assert.deepEqual(on.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Fuat'a gönder"]); // tek düğme
+  assert.ok(!/fark|FARK|karşılaştır|ödeme|ÖDEME/.test(on.text)); // karşılaştırma ve ödeme yok
   assert.ok(!/3194|fiyat/i.test(on.text)); // VOLONTE modeli ve fiyat yok
   const id = on.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   await mutabakatAdimi(o.env, cuma + 600, tg);
@@ -1160,15 +1164,17 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:f:${id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
   const fGor = cagri(o.g, "sendMessage").at(-1).govde;
   assert.equal(fGor.chat_id, 999);
-  assert.match(fGor.text, /💰 <b>BAKİYELER<\/b>\n<pre>Black Rose 15  100,00 \$ \(A\)\nBlack Rose 20  200,00 \$ \(A\)\nBlack Rose 25    0,00 \$\nBlack Rose 00   50,00 \$ \(A\)\nTOPLAM         350,00 \$ \(A\)<\/pre>$/);
+  assert.equal(fGor.text, BEKLENEN);
+  assert.equal(cagri(o.g, "sendMessage").at(-2).govde.text, BEKLENEN1);
   assert.ok(!/VOLONTE kaydı|fark|ödeme|ÖDEME|5\.000/i.test(fGor.text)); // Fuat'a VOLONTE defteri, fark, ödeme yok
   assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "501")); // hâlâ Fuat'a hiçbir şey yok
   // Hemra basamaz; Patron gönderir (eski hesap da yetkili)
   await g2({ callback_query: { id: "c", from: { id: 333 }, data: `mt:g:${id}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
   await g2({ callback_query: { id: "c", from: { id: 111 }, data: `mt:g:${id}`, message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
-  const fuatMsj = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "501");
-  assert.match(fuatMsj.govde.text, /^📋 <b>Mutabakat – 06\.11\.2026<\/b>/);
+  const fuatlar = cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501");
+  assert.deepEqual(fuatlar.map((x) => x.govde.text), [BEKLENEN1, BEKLENEN]); // iki ayrı mesaj, birebir
+  const fuatMsj = fuatlar[1];
   assert.ok(!/VOLONTE kaydı|ödeme|fark/i.test(fuatMsj.govde.text));
   assert.deepEqual(fuatMsj.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Mutabıkım", "❌ Uyuşmuyor", "⏳ Sonra kontrol edeceğim"]);
   const pdf = cagri(o.g, "sendDocument");
@@ -1208,12 +1214,12 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((r) => r.json());
   const ars = await st("/arsiv-liste");
   assert.deepEqual(ars.map((x) => x.tur), ["onizleme", "gonderim", "pdf", "sonra", "hatirlatma", "haftalik-ozet", "hatirlatma", "hatirlatma", "uyusmuyor", "fark-aciklama", "pdf"]);
-  assert.match(JSON.parse(ars[1].icerik).fuatMesaji, /Black Rose 15  100,00 \$ \(A\)/);
+  assert.match(JSON.parse(ars[1].icerik).fuatMesaji, /📊 BLACK ROSE – Sami[\s\S]*💰 Bakiyeler:\nBlack Rose 00: 50,00 \$\nBlack Rose 15: 100,00 \$[\s\S]*📊 VOLONTE – Sami/);
   assert.equal((await st("/arsiv-dogrula")).tamam, true);
   assert.equal((await st("/arsiv-dosyalar", { mt: id })).length, 2);
 });
 
-test("mutabakat güvenliği: fark varsa ikinci onay; Mutabıkım → tarih/saat/toplam/tam mesaj kayda + Patron'a 'Fuat X $ bakiyeyi onayladı'; arşiv değiştirilemez; süzgeç", async () => {
+test("mutabakat güvenliği: iki mağaza ayrı bakiye, tek düğme; Mutabıkım → tarih/saat/toplam/tam mesaj kayda + Patron'a 'Fuat X $ bakiyeyi onayladı'; yeni önizleme eskisini geçersiz kılar; süzgeç", async () => {
   const { onizlemeGonder, fuatSuzgec } = await import("./mutabakat.js");
   const { guncelleme: g2 } = await import("./sami.js");
   const o = ortam();
@@ -1225,16 +1231,14 @@ test("mutabakat güvenliği: fark varsa ikinci onay; Mutabıkım → tarih/saat/
   const g = [];
   const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
   const r = await onizlemeGonder(o.env, tg, Date.UTC(2026, 10, 6, 14, 1) / 1000, "elle");
-  assert.match(g[0].govde.text, /BAKİYELERDE FARK VAR/);
-  assert.match(g.at(-1).govde.text, /⚠️ Black Rose 20: Black Rose kaydı 250,00 \$ \(A\) · VOLONTE kaydı 200,00 \$ \(B\) · fark 50,00 \$/);
+  assert.ok(!/FARK|fark/.test(g.map((x) => x.govde.text).join("\n")));
+  assert.match(g.at(-2).govde.text, /^📊 BLACK ROSE – Sami[\s\S]*💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 250,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 350,00 \$$/);
+  assert.match(g.at(-1).govde.text, /^📊 VOLONTE – Sami[\s\S]*💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 200,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 300,00 \$\n\nBundan sonra/);
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:g:${r.id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
-  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "501")); // ilk basışta gitmez
-  const soru = cagri(o.g, "sendMessage").at(-1).govde;
-  assert.match(soru.text, /Yine de Fuat'a gönderilsin mi\?/);
-  assert.deepEqual(soru.reply_markup.inline_keyboard[0].map((d) => d.callback_data), [`mt:G:${r.id}`, `mt:v:${r.id}`]);
-  await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:G:${r.id}`, message: { chat: { id: 999 }, message_id: 2 } } }, o.env);
-  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "501"));
+  const fuata = cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501");
+  assert.equal(fuata.length, 2); // tek basışla iki ayrı mesaj gider
+  assert.deepEqual(fuata.map((x) => x.govde.text), [g.at(-2).govde.text, g.at(-1).govde.text]); // Fuat'a önizlemedekinin birebir aynısı
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:m:${r.id}`, message: { chat: { id: 501 }, message_id: 3 } } }, o.env);
   const p = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text;
@@ -1245,7 +1249,7 @@ test("mutabakat güvenliği: fark varsa ikinci onay; Mutabıkım → tarih/saat/
   assert.equal(ic.toplamBakiye, -350);
   assert.equal(ic.toplamBakiyeYazi, "350,00 $ (A)");
   assert.match(ic.tarihSaat, /^\d\d\.\d\d\.2026 \d\d:\d\d$/);
-  assert.match(ic.mesaj, /Mutabakat – 06\.11\.2026[\s\S]*TOPLAM         350,00 \$ \(A\)/);
+  assert.match(ic.mesaj, /📊 BLACK ROSE – Sami[\s\S]*Toplam: 350,00 \$[\s\S]*📊 VOLONTE – Sami/);
   assert.ok(cagri(o.g, "sendDocument").some((x) => x.govde.chat_id === "999"));
   // Yeni önizleme eskisini geçersiz kılar
   const r2 = await onizlemeGonder(o.env, tg, Date.UTC(2026, 10, 7, 9, 0) / 1000, "elle");
@@ -1261,8 +1265,8 @@ test("mutabakat güvenliği: fark varsa ikinci onay; Mutabıkım → tarih/saat/
   assert.ok(fuatSuzgec("SON ÖDEMELER 5.000 $"));
 });
 
-test("ödeme kanıtı (/odeme): sadece Patron; tutar/hesap/not çözülür; dekont fotoğrafı eklenir; arşive girer; haftalık karşılaştırma farkı Patron'a", async () => {
-  const { odemeCoz, defterKarsilastir } = await import("./mutabakat.js");
+test("ödeme kanıtı (/odeme): sadece Patron; tutar/hesap/not çözülür; dekont fotoğrafı eklenir; arşive girer", async () => {
+  const { odemeCoz } = await import("./mutabakat.js");
   const { guncelleme: g2 } = await import("./sami.js");
   assert.deepEqual(odemeCoz("/odeme 5000$"), { tutar: 5000, hesap: null, not: null });
   assert.deepEqual(odemeCoz("/odeme 5.000,50 $ 20 nakit elden"), { tutar: 5000.5, hesap: "20", not: "nakit elden" });
@@ -1281,41 +1285,31 @@ test("ödeme kanıtı (/odeme): sadece Patron; tutar/hesap/not çözülür; deko
   const odemeler = JSON.parse((await st("/ayar-oku", { k: "odeme:liste" })).v);
   assert.equal(odemeler[0].foto, "BUYUK");
   assert.deepEqual((await st("/arsiv-liste")).map((x) => x.tur), ["odeme", "odeme-dekont"]);
-  // haftalık karşılaştırma
-  const ayar = (k, v) => st("/ayar-yaz", { k, v: JSON.stringify(v) });
-  const h = (anahtar, kart) => ({ anahtar, ad: `BLACK ROSE ${anahtar}`, kart, donemler: {} });
-  await ayar("cari:BLACKROSE", { zaman: 1, hesaplar: [h("15", -100), h("20", -250), h("25", 0), h("00", 0)] });
-  await ayar("cari:VOLONTE", { zaman: 1, hesaplar: [h("15", 100), h("20", 200), h("25", 0), h("00", 0)] });
-  const g = [];
-  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
-  const b = await defterKarsilastir(o.env, tg, Date.UTC(2026, 10, 5, 8, 1) / 1000);
-  assert.ok(b.farkVar);
-  assert.equal(g[0].govde.chat_id, "999");
-  assert.match(g[0].govde.text, /İKİ DEFTERDE FARK VAR.*haftalık karşılaştırma 05\.11\.2026 11:01\n.*⚠️ Black Rose 20/s);
-  assert.equal((await st("/arsiv-liste")).at(-1).tur, "karsilastirma");
 });
 
 
-test("mutabakat bakiyeleri: Patron'a iki taraf yan yana + fark (⚠️), Fuat'a sadece Black Rose tarafı ve toplam; kaynak seçilebilir", async () => {
-  const { mutabakatMetni, bakiyeBolumu } = await import("./mutabakat.js");
+test("mutabakat bakiyeleri: iki mağaza AYRI (karşılaştırma yok); Black Rose ve VOLONTE'deki Black Rose hesapları ayrı bölümde; ters yönlü hesap işaretli; kaynak seçilebilir", async () => {
+  const { mutabakatMetni, bakiyeBolumu, bakiyeSatirlari } = await import("./mutabakat.js");
   const o = ortam();
   const ayar = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k, v: JSON.stringify(v) }) });
-  const h = (anahtar, kart, d5) => ({ anahtar, ad: `BLACK ROSE ${anahtar}`, kart, donemler: { D0005TBLCARIGENELHAREKET: { n: 3, borc: d5[0], alacak: d5[1] } } });
+  const h = (anahtar, kart, d5, ad) => ({ anahtar, ad: ad || `BLACK ROSE ${anahtar}`, kart, donemler: { D0005TBLCARIGENELHAREKET: { n: 3, borc: d5[0], alacak: d5[1] } } });
   await ayar("cari:BLACKROSE", { hesaplar: [h("15", 1000, [1500, 500]), h("20", 2500, [2500, 0]), h("25", 0, [0, 0]), h("00", 300, [300, 0])] });
-  await ayar("cari:VOLONTE", { hesaplar: [h("15", -1000, [0, 1000]), h("20", -2400, [0, 2400]), h("25", 0, [0, 0]), h("00", -300, [0, 300])] });
-  const m0 = await mutabakatMetni(o.env, "2026-11-06");
-  const m = { farkVar: m0.farkVar, patron: m0.patron.join("\n"), fuat: m0.fuat.join("\n") };
-  assert.ok(m.farkVar);
-  assert.match(m.patron, /✅ Black Rose 15: Black Rose kaydı 1\.000,00 \$ \(B\) · VOLONTE kaydı 1\.000,00 \$ \(A\) · fark 0,00 \$/);
-  assert.match(m.patron, /⚠️ Black Rose 20: Black Rose kaydı 2\.500,00 \$ \(B\) · VOLONTE kaydı 2\.400,00 \$ \(A\) · fark 100,00 \$/);
-  assert.match(m.patron, /⚠️ TOPLAM: Black Rose kaydı 3\.800,00 \$ \(B\) · VOLONTE kaydı 3\.700,00 \$ \(A\) · fark 100,00 \$/);
-  assert.match(m.fuat, /💰 <b>BAKİYELER<\/b>\n<pre>Black Rose 15  1\.000,00 \$ \(B\)\nBlack Rose 20  2\.500,00 \$ \(B\)\nBlack Rose 25      0,00 \$\nBlack Rose 00    300,00 \$ \(B\)\nTOPLAM         3\.800,00 \$ \(B\)<\/pre>$/);
-  assert.ok(!/VOLONTE kaydı|fark/.test(m.fuat)); // Fuat VOLONTE tarafını ve farkı görmez
+  await ayar("cari:VOLONTE", { hesaplar: [h("15", 61.85, [0, 1000], "BLACKROSE 15"), h("20", -2400, [0, 2400], "BLACKROSE 20"), h("00", -300, [0, 300], "BLACK ROSE 000")] });
+  const m = await mutabakatMetni(o.env, "2026-11-06");
+  const metin = m.fuat.join("\n");
+  assert.equal(m.fuat.length, 2); // iki ayrı mesaj
+  assert.match(m.fuat[0], /^📊 BLACK ROSE – Sami\nFuat Bey,\n📦 BLACK ROSE MAĞAZASI – 0 model · 0 adet\n<pre>—<\/pre>\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 1\.000,00 \$\nBlack Rose 20: 2\.500,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 3\.800,00 \$$/);
+  assert.match(m.fuat[1], /^📊 VOLONTE – Sami\nFuat Bey,\n📦 VOLONTE MAĞAZASI – 0 model · 0 adet\n<pre>—<\/pre>\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 61,85 \$ \(B\)\nBlack Rose 20: 2\.400,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 2\.638,15 \$\n\nBundan sonra/);
+  assert.deepEqual(m.patron, m.fuat); // Patron önizlemesi = Fuat'ın göreceği
+  assert.ok(!/fark|FARK|uyarı|⚠️|✅|GENEL TOPLAM/.test(metin));
+  assert.deepEqual(bakiyeSatirlari(null, { tur: "kart" }), ["(bakiye henüz okunamadı)"]);
   // kaynak: dönem tablosu toplamı
   const d = bakiyeBolumu({ hesaplar: [h("15", 1000, [1500, 400])] }, { hesaplar: [h("15", -1000, [0, 1100])] }, { tur: "donem", tablolar: ["D0005TBLCARIGENELHAREKET"] });
-  assert.match(d.patron[0], /✅ Black Rose 15: Black Rose kaydı 1\.100,00 \$ \(B\) · VOLONTE kaydı 1\.100,00 \$ \(A\)/);
+  assert.match(d.fuat[0], /Black Rose 15  1\.100,00 \$ \(B\)/);
   assert.match(d.patron.join("\n"), /kaynak: dönem toplamı \(D0005TBLCARIGENELHAREKET\)/);
 });
+
+
 
 test("mutabakat bakiyesi 'sondonem': her hesapta en son dönem (devir dahil), dönemler toplanmaz; ikinci tablo türü karışmaz", async () => {
   const { bakiyeBolumu, bakiyeDegeri } = await import("./mutabakat.js");
@@ -1331,12 +1325,12 @@ test("mutabakat bakiyesi 'sondonem': her hesapta en son dönem (devir dahil), d�
   // tablo türü seçimi: CARIHAREKETLERI
   assert.equal(bakiyeDegeri({ donemler: { D0003TBLCARIHAREKETLERI: d(1, 50, 0), D0005TBLCARIGENELHAREKET: d(1, 999, 0) } }, { tur: "sondonem", tablo: "CARIHAREKETLERI" }), 50);
   const b = bakiyeBolumu({ hesaplar: [br25] }, { hesaplar: [{ anahtar: "25", donemler: { D0005TBLCARIGENELHAREKET: d(3, 1920.5, 0) } }] }, y);
-  assert.match(b.patron.join("\n"), /✅ Black Rose 25: Black Rose kaydı 1\.920,50 \$ \(A\) · VOLONTE kaydı 1\.920,50 \$ \(B\) · fark 0,00 \$/);
+  assert.match(b.fuat.join("\n"), /Black Rose 25  1\.920,50 \$ \(A\)/);
   assert.match(b.patron.join("\n"), /kaynak: son dönem hareketleri, devir dahil/);
 });
 
-test("cari takip: Vegawin ödemesi kendiliğinden Patron'a; Black Rose defterinde 2 günde yoksa uyarı; fark sebebi (devir hariç); /bakiye; /borclimit; haftalık özet", async () => {
-  const { odemeTakip, farkNedenleri, devirMi, haftalikOzetMetni, borcLimitKontrol } = await import("./cari-takip.js");
+test("cari takip (iki mağaza ayrı): özel kodlu Vegawin ödemesi Patron'a (ilk çalışmada sessiz); özel kodsuz kayıt ödeme sayılmaz; /bakiye ayrı ayrı; /borclimit her mağaza ayrı; haftalık özet iki mağaza", async () => {
+  const { odemeTakip, devirMi, haftalikOzetMetni, borcLimitKontrol } = await import("./cari-takip.js");
   const { bakiyeOku } = await import("./mutabakat.js");
   const { guncelleme: g2 } = await import("./sami.js");
   const o = ortam();
@@ -1346,14 +1340,11 @@ test("cari takip: Vegawin ödemesi kendiliğinden Patron'a; Black Rose defterind
   const T = "D0005TBLCARIGENELHAREKET";
   const hr = (ind, hesap, tarih, borc, alacak, ozelkod) => ({ hesap, tablo: T, ind, tarih, borc, alacak, ...(ozelkod ? { ozelkod } : {}) });
   const don = (borc, alacak, ilk) => ({ [T]: { n: 3, borc, alacak, ilk }, D0003TBLCARIGENELHAREKET: { n: 9, borc: 0, alacak: 1000 } });
-  // VOLONTE: devir + mal + ödeme; Black Rose: devir + mal (ödeme henüz yok)
-  const vl = { zaman: Date.UTC(2026, 10, 2, 9) / 1000, hesaplar: [{ anahtar: "20", kart: 0, donemler: don(1000, 3000, "2026-10-17") }], hareketler: [
-    hr("1", "20", "2026-10-17", 1000, 0), hr("2", "20", "2026-10-20", 0, 3000), hr("3", "20", "2026-10-26", 1000, 0, "BLACK ROSE BORC VERDIM")] };
-  const br = { zaman: Date.UTC(2026, 10, 2, 9) / 1000, hesaplar: [{ anahtar: "20", kart: 0, donemler: don(3000, 1000, "2026-10-17") }], hareketler: [
-    hr("7", "20", "2026-10-17", 0, 1000), hr("8", "20", "2026-10-21", 3000, 0)] };
+  const vl = { zaman: Date.UTC(2026, 10, 2, 9) / 1000, hesaplar: [{ anahtar: "20", ad: "BLACKROSE 20", kart: 0, donemler: don(1000, 3000, "2026-10-17") }], hareketler: [
+    hr("1", "20", "2026-10-17", 1000, 0), hr("2", "20", "2026-10-20", 0, 3000), hr("3", "20", "2026-10-26", 1000, 0, "BLACK ROSE BORC VERDIM"), hr("5", "20", "2026-10-27", 900, 0)] };
+  const br = { zaman: Date.UTC(2026, 10, 2, 9) / 1000, hesaplar: [{ anahtar: "20", kart: 0, donemler: { [T]: { n: 1, borc: 0, alacak: 5000 } } }], hareketler: [] };
   assert.equal(devirMi(vl.hareketler[0], vl), true);
   assert.equal(devirMi(vl.hareketler[1], vl), false);
-  assert.deepEqual(farkNedenleri(br, vl), ["• Black Rose 20: 26.10.2026 · 1.000,00 $ (BLACK ROSE BORC VERDIM) — VOLONTE defterinde var, Black Rose defterinde yok"]);
   await ayar("cari:VOLONTE", vl);
   await ayar("cari:BLACKROSE", br);
   const g = [];
@@ -1361,41 +1352,35 @@ test("cari takip: Vegawin ödemesi kendiliğinden Patron'a; Black Rose defterind
   const simdi = Date.UTC(2026, 10, 2, 10) / 1000;
   await odemeTakip(o.env, simdi, tg); // ilk çalışma: eski ödemeler "görüldü", mesaj yok
   assert.equal(g.length, 0);
-  vl.hareketler.push(hr("4", "20", "2026-11-02", 2500, 0, "BLACK ROSE BORC VERDIM"));
+  vl.hareketler.push(hr("4", "20", "2026-11-02", 2500, 0, "BLACK ROSE BORC VERDIM"), hr("6", "20", "2026-11-02", 7000, 0));
   await ayar("cari:VOLONTE", vl);
   await odemeTakip(o.env, simdi + 300, tg);
-  assert.deepEqual(g.map((x) => [x.govde.chat_id, x.govde.text]), [["999", "💵 Black Rose 20'a 2.500,00 $ ödeme kaydedildi (VOLONTE defteri, 02.11.2026 · BLACK ROSE BORC VERDIM)."]]);
-  await odemeTakip(o.env, simdi + 600, tg);
-  assert.equal(g.length, 1); // bir kez
-  // 2 gün sonra Black Rose defterinde yok → uyarı (Black Rose defteri o tarihten sonra okunmuş)
-  br.zaman = simdi + 2 * 86400;
-  await ayar("cari:BLACKROSE", br);
-  await odemeTakip(o.env, simdi + 2 * 86400, tg);
-  assert.match(g.at(-1).govde.text, /^⚠️ Black Rose 20'a 02\.11\.2026 tarihli 2\.500,00 \$ ödeme VOLONTE defterinde var ama Black Rose defterinde 2 gündür görünmüyor/);
-  await odemeTakip(o.env, simdi + 2 * 86400 + 300, tg);
-  assert.equal(g.filter((x) => /görünmüyor/.test(x.govde.text)).length, 1);
-  // /bakiye (Patron) — Fuat yazamaz
+  assert.deepEqual(g.map((x) => [x.govde.chat_id, x.govde.text]), [["999", "💵 Black Rose 20'a 2.500,00 $ ödeme kaydedildi (VOLONTE defteri, 02.11.2026 · BLACK ROSE BORC VERDIM)."]]); // özel kodsuz 7.000 sayılmaz
+  await odemeTakip(o.env, simdi + 3 * 86400, tg);
+  assert.equal(g.length, 1); // tekrar yok, Black Rose defterinde karşılık aranmaz
+  // /bakiye (Patron) — iki mağaza ayrı, fark yok; Fuat yazamaz
   await ayar("cari:yontem", { tur: "sondonem", tablo: "CARIGENELHAREKET" });
   o.g.length = 0;
   await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "/bakiye" } }, o.env);
   assert.ok(!cagri(o.g, "sendMessage").some((x) => /Güncel bakiye/.test(x.govde.text)));
   await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/bakiye" } }, o.env);
   const bk = cagri(o.g, "sendMessage").at(-1).govde.text;
-  assert.match(bk, /💰 <b>Güncel bakiye<\/b>/);
-  assert.match(bk, /⚠️ Black Rose 20: Black Rose kaydı 2\.000,00 \$ \(B\) · VOLONTE kaydı 2\.000,00 \$ \(A\)|✅ Black Rose 20/);
-  // borç sınırı
-  await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/borclimit 1.500" } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Borç sınırı 1\.500,00 \$/);
+  assert.match(bk, /💰 <b>BLACK ROSE bakiyesi<\/b>[\s\S]*Black Rose 20  5\.000,00 \$ \(A\)[\s\S]*💰 <b>VOLONTE bakiyesi<\/b>[\s\S]*BLACKROSE 20  2\.000,00 \$ \(A\)/);
+  assert.ok(!/fark|FARK|⚠️/.test(bk));
+  // borç sınırı: her mağaza ayrı
+  await g2({ message: { chat: { id: 999, type: "private" }, from: { id: 999 }, text: "/borclimit 3.000" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Borç sınırı 3\.000,00 \$/);
   g.length = 0;
   await borcLimitKontrol(o.env, simdi, tg, bakiyeOku);
-  assert.match(g[0].govde.text, /^🚨 Borç sınırı aşıldı: toplam 2\.000,00 \$ > sınır 1\.500,00 \$/);
+  assert.equal(g[0].govde.text, "🚨 Borç sınırı aşıldı (sınır 3.000,00 $): BLACK ROSE bakiyesi 5.000,00 $ (A).");
   await borcLimitKontrol(o.env, simdi + 300, tg, bakiyeOku);
   assert.equal(g.length, 1); // bir kez
-  // haftalık özet: mal (ödemenin karşı tarafı), ödeme, bakiye değişimi
-  const oz = haftalikOzetMetni(vl, "VOLONTE", -2000 + 2500, "2026-10-19", "2026-10-25");
-  assert.match(oz, /📦 Gelen mal: 3\.000,00 \$ \(1 kayıt\)\n💵 Ödemeler: 0,00 \$ \(0 kayıt\)/);
-  assert.match(oz, /geçen hafta 3\.000,00 \$ arttı/);
+  // haftalık özet metni: tek mağaza bloğu; ödeme kaydı yoksa mal/ödeme ayrılamaz
+  const oz = haftalikOzetMetni(vl, "VOLONTE", -2000, "2026-10-19", "2026-10-25");
+  assert.match(oz, /^🏬 VOLONTE\n📦 Gelen mal: 3\.000,00 \$ \(1 kayıt\)\n💵 Ödemeler: 0,00 \$ \(0 kayıt\)/);
+  assert.match(haftalikOzetMetni({ hesaplar: [], hareketler: [hr("9", "20", "2026-10-20", 0, 100)] }, "BLACK ROSE", -100, "2026-10-19", "2026-10-25"), /ayrılamıyor \(hareket türü teşhisi bekleniyor\)/);
 });
+
 
 test("Fuat'a iş özeti: VOLONTE defterinden yıllık gelen mal (ödeme hariç, devir düşülür); metin birebir; önizleme sadece Patron'a; onaysız gitmez; gönderim arşiv + PDF Patron'a", async () => {
   const { yillikIs, isOzetiMetni, isOzetiHazirMi } = await import("./mutabakat.js");
@@ -1421,16 +1406,15 @@ test("Fuat'a iş özeti: VOLONTE defterinden yıllık gelen mal (ödeme hariç, 
   await isOzetiHazirMi(o.env, 1793600000, tg);
   assert.equal(g.length, 0); // rakam yokken önizleme yok
   await st("/ayar-yaz", { k: "cari:VOLONTE", v: JSON.stringify(vl) });
-  // Black Rose defteri 2022'den başlıyorsa VOLONTE defteri eksik sayılır → önizleme yok
-  const brD = (ilk) => ({ zaman: 1, hesaplar: [{ anahtar: "20", donemler: { D0001TBLCARIGENELHAREKET: { n: 5, borc: 1, alacak: 2, ilk } } }] });
-  await st("/ayar-yaz", { k: "cari:BLACKROSE", v: JSON.stringify(brD("2022-05-01")) });
+  // Bir dönemin yıl toplamı eksikse (köprü eski) özet hazırlanmaz
+  const eksik = JSON.parse(JSON.stringify(vl)); delete eksik.hesaplar[0].donemler.D0003TBLCARIGENELHAREKET.yillar;
+  await st("/ayar-yaz", { k: "cari:VOLONTE", v: JSON.stringify(eksik) });
   await isOzetiHazirMi(o.env, 1793600000, tg);
   assert.equal(g.length, 0);
-  await st("/ayar-yaz", { k: "cari:BLACKROSE", v: JSON.stringify(brD("2023-01-02")) });
+  await st("/ayar-yaz", { k: "cari:VOLONTE", v: JSON.stringify(vl) });
   await isOzetiHazirMi(o.env, 1793600000, tg);
   await isOzetiHazirMi(o.env, 1793600300, tg);
   assert.ok(g.length === 2 && g.every((x) => x.govde.chat_id === "999")); // bir kez, sadece Patron
-  assert.match(g[0].govde.text, /Kontrol için iki defter \(Fuat görmez\)/);
   assert.equal(g[1].govde.text, metin);
   const dugmeler = g[1].govde.reply_markup.inline_keyboard.flat();
   assert.deepEqual(dugmeler.map((d) => d.text), ["👁 Fuat'ın göreceği", "✅ Fuat'a gönder", "❌ İptal"]);

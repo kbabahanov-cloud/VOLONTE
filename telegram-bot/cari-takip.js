@@ -1,9 +1,9 @@
 // CARİ TAKİP (2 Kasım, "Patron hiçbir şey göndermek zorunda kalmasın"): köprülerin gönderdiği son 60 günün hareketlerinden
 //  • Ödemeler: VOLONTE defterinde özel kodu/açıklaması "BORC VERDIM" olan Black Rose hareketleri → Patron'a
-//    "💵 Black Rose 20'a 5.000,00 $ ödeme kaydedildi". Black Rose defterinde 2 gün içinde karşılığı (aynı hesap, aynı tutar)
-//    görünmezse Patron'a ⚠️. İlk çalışmada eski ödemeler sadece "görüldü" sayılır (geçmiş için mesaj yağmuru olmaz).
-//  • Defter farkının olası sebebi: bir defterde olup diğerinde olmayan hareketler (aynı hesap, aynı tutar, ±3 gün; devir hariç).
-//  • /bakiye (Patron): iki defter + fark + olası sebep. /borclimit 130000: toplam borç sınırı aşılınca Patron'a uyarı.
+//    "💵 Black Rose 20'a 5.000,00 $ ödeme kaydedildi". İlk çalışmada eski ödemeler sadece "görüldü" sayılır.
+//    2 Kasım (Patron): VOLONTE ve BLACK ROSE iki ayrı mağaza → iki defter KARŞILAŞTIRILMAZ (karşılık arama, fark sebebi yok).
+//    Hareket türü teşhisi gelene kadar ödemeler tahminle ayrılmaz (özel kodsuz kayıt ödeme sayılmaz).
+//  • /bakiye (Patron): iki mağazanın bakiyesi ayrı ayrı. /borclimit 130000: bir mağazanın bakiyesi sınırı aşınca uyarı.
 //  • Pazartesi 09:30 haftalık özet (sadece Patron): gelen mal, ödemeler, bakiye arttı/azaldı.
 // Hepsi SADECE Patron'a (MURAT_ID ilki); Fuat ve ekip görmez. Kayıtlar değiştirilemez arşive de girer.
 import { stokIste } from "./stokbot.js";
@@ -42,36 +42,12 @@ export function devirMi(h, defter) {
   return Math.abs(Math.abs((Number(onceki.x.borc) || 0) - (Number(onceki.x.alacak) || 0)) - tutarOf(h)) < 0.01;
 }
 
-// İki defterin hareketlerini eşleştirir: aynı hesap, aynı tutar (±0,01), tarih farkı ≤ gun. Döner: eşleşmeyenler.
-export function eslestir(a, b, gun = 3) {
-  const kalanB = [...b];
-  const yalnizA = [];
-  for (const x of a) {
-    const i = kalanB.findIndex((y) => y.hesap === x.hesap && Math.abs(tutarOf(y) - tutarOf(x)) < 0.01 && Math.abs(gunSayi(y.tarih) - gunSayi(x.tarih)) <= gun);
-    if (i >= 0) kalanB.splice(i, 1); else yalnizA.push(x);
-  }
-  return { yalnizA, yalnizB: kalanB };
-}
-
-// Defter farkının olası sebebi: iki defterin de kapsadığı tarihlerdeki, devir dışı, tutarı olan hareketler karşılaştırılır
-export function farkNedenleri(br, vl, enFazla = 6) {
-  if (!br || !vl || !(br.hareketler || []).length || !(vl.hareketler || []).length) return [];
-  const ilk = (d) => d.hareketler.reduce((m, h) => (h.tarih < m ? h.tarih : m), "9999");
-  const bas = [ilk(br), ilk(vl)].sort().at(-1);
-  const sec = (d) => d.hareketler.filter((h) => h.tarih >= bas && tutarOf(h) >= 0.005 && !devirMi(h, d));
-  const { yalnizA, yalnizB } = eslestir(sec(vl), sec(br));
-  const satir = (h, var_, yok) => `• Black Rose ${h.hesap}: ${tarihYaz(h.tarih)} · ${dolar(tutarOf(h))}${etiket(h) ? ` (${etiket(h)})` : ""} — ${var_} defterinde var, ${yok} defterinde yok`;
-  const l = [...yalnizA.map((h) => satir(h, "VOLONTE", "Black Rose")), ...yalnizB.map((h) => satir(h, "Black Rose", "VOLONTE"))]
-    .sort((x, y) => y.localeCompare(x));
-  return l.length > enFazla ? [...l.slice(0, enFazla), `… ve ${l.length - enFazla} kayıt daha`] : l;
-}
-
 // ---- Ödemeler (VOLONTE defteri) ----
 export function odemeler(vl) { return ((vl && vl.hareketler) || []).filter((h) => odemeMi(h) && tutarOf(h) >= 0.005); }
 const odemeAnahtari = (h) => `${h.tablo}:${h.ind}`;
 
 export async function odemeTakip(env, simdi, tg) {
-  const [br, vl] = await Promise.all([ayarOku(env, "cari:BLACKROSE", null), ayarOku(env, "cari:VOLONTE", null)]);
+  const vl = await ayarOku(env, "cari:VOLONTE", null);
   if (!vl || !vl.hareketler) return;
   const gorulen = await ayarOku(env, "cari:odemeGorulen", null);
   const ilk = gorulen == null;
@@ -87,20 +63,9 @@ export async function odemeTakip(env, simdi, tg) {
     await tg(env, "sendMessage", { chat_id: patron, text: `💵 Black Rose ${h.hesap}'a ${dolar(tutarOf(h))} ödeme kaydedildi (VOLONTE defteri, ${tarihYaz(h.tarih)}${etiket(h) ? ` · ${etiket(h)}` : ""}).` });
     await arsiv(env, "odeme-vegawin", `odeme:${k}`, { ...g[k], defter: "VOLONTE" }, simdi);
   }
-  // 2 gün içinde Black Rose defterinde karşılığı yoksa uyarı (Black Rose defteri o tarihten sonra okunmuş olmalı)
+  // (Black Rose defterinde karşılık arama 2 Kasım'da kaldırıldı: iki mağaza ayrı, hesaplar birbirinin karşılığı değil.)
   const bugun = gunSayi(gunAnahtari(simdi));
-  for (const [k, o] of Object.entries(g)) {
-    if (o.eslesti || o.uyarildi) continue;
-    if (bugun - gunSayi(o.tarih) > 60) { delete g[k]; degisti = true; continue; }
-    if (!br || !br.hareketler) continue;
-    const brVar = br.hareketler.some((h) => h.hesap === o.hesap && Math.abs(tutarOf(h) - o.tutar) < 0.01 && gunSayi(h.tarih) >= gunSayi(o.tarih) - 3);
-    if (brVar) { o.eslesti = true; degisti = true; continue; }
-    if (bugun - gunSayi(o.tarih) < 2 || !br.zaman || gunSayi(gunAnahtari(br.zaman)) < gunSayi(o.tarih) + 2) continue;
-    if (ilk) { o.uyarildi = true; continue; }
-    o.uyarildi = true; degisti = true;
-    await tg(env, "sendMessage", { chat_id: patron, text: `⚠️ Black Rose ${o.hesap}'a ${tarihYaz(o.tarih)} tarihli ${dolar(o.tutar)} ödeme VOLONTE defterinde var ama Black Rose defterinde 2 gündür görünmüyor. Fuat'la kontrol edin.` });
-    await arsiv(env, "odeme-eslesmedi", `odeme:${k}`, o, simdi);
-  }
+  for (const [k, o] of Object.entries(g)) if (bugun - gunSayi(o.tarih) > 60) { delete g[k]; degisti = true; }
   if (degisti) await ayarYaz(env, "cari:odemeGorulen", g);
 }
 
@@ -109,13 +74,14 @@ export async function borcLimitKontrol(env, simdi, tg, bakiyeOku) {
   const limit = await ayarOku(env, "cari:limit", null);
   if (!limit || !limit.tutar) return;
   const b = await bakiyeOku(env);
-  const toplam = Math.max(Math.abs(b.brToplam || 0), Math.abs(b.vlToplam || 0));
-  if (toplam > limit.tutar && !limit.asildi) {
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `🚨 Borç sınırı aşıldı: toplam ${dolar(toplam)} > sınır ${dolar(limit.tutar)} (Black Rose defteri ${isaretli(b.brToplam)} · VOLONTE defteri ${isaretli(b.vlToplam)}).` });
-    await arsiv(env, "borc-limit", null, { toplam, limit: limit.tutar }, simdi);
+  // İki mağaza ayrı (2 Kasım): sınır her mağazanın kendi toplamına ayrı uygulanır
+  const asan = [["BLACK ROSE", b.brToplam], ["VOLONTE", b.vlToplam]].filter(([, v]) => v != null && Math.abs(v) > limit.tutar);
+  if (asan.length && !limit.asildi) {
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `🚨 Borç sınırı aşıldı (sınır ${dolar(limit.tutar)}): ${asan.map(([ad, v]) => `${ad} bakiyesi ${isaretli(v)}`).join(" · ")}.` });
+    await arsiv(env, "borc-limit", null, { asan: asan.map(([ad, v]) => ({ ad, v })), limit: limit.tutar }, simdi);
     await ayarYaz(env, "cari:limit", { ...limit, asildi: simdi });
-  } else if (toplam <= limit.tutar && limit.asildi) {
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `✅ Borç yeniden sınırın altında: ${dolar(toplam)} ≤ ${dolar(limit.tutar)}.` });
+  } else if (!asan.length && limit.asildi) {
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `✅ Bakiyeler yeniden borç sınırının (${dolar(limit.tutar)}) altında.` });
     await ayarYaz(env, "cari:limit", { tutar: limit.tutar, kim: limit.kim, zaman: limit.zaman });
   }
 }
@@ -133,7 +99,7 @@ export async function borcLimitKomutu(env, m, tg, simdi) {
   await arsiv(env, "borc-limit-ayar", null, { tutar: t, kim: String(m.from.id) }, simdi);
   if (t === 0) { await stokIste(env, "/ayar-yaz", { k: "cari:limit", v: "null" }); return yaz("Borç sınırı kapatıldı."); }
   await ayarYaz(env, "cari:limit", { tutar: t, kim: String(m.from.id), zaman: simdi });
-  return yaz(`✅ Borç sınırı ${dolar(t)}. Toplam borç bunu aşınca size haber veririm (iki defterden büyük olanı esas alınır).`);
+  return yaz(`✅ Borç sınırı ${dolar(t)}. Bir mağazanın toplam bakiyesi bunu aşınca size haber veririm (VOLONTE ve BLACK ROSE ayrı ayrı).`);
 }
 
 // ---- Haftalık özet (pazartesi 09:30, sadece Patron) ----
@@ -141,24 +107,22 @@ export function haftalikOzetMetni(defter, adi, bakiye, bas, son) {
   const l = (defter && defter.hareketler) || [];
   const hafta = l.filter((h) => h.tarih >= bas && h.tarih <= son && !devirMi(h, defter));
   const od = hafta.filter(odemeMi);
-  // Ödemelerin yazıldığı taraf (borç/alacak) bulunur; gelen mal karşı taraftaki (ödeme olmayan) kayıtlardır
+  // Gelen mal: ödemelerin yazıldığı tarafın karşısındaki (ödeme olmayan) kayıtlar — ödeme kaydı yoksa belirlenemez
   const tumOdeme = l.filter(odemeMi);
   const odemeBorc = tumOdeme.filter((h) => (Number(h.borc) || 0) > 0).length, odemeAlacak = tumOdeme.length - odemeBorc;
   const malTaraf = !tumOdeme.length ? null : odemeBorc >= odemeAlacak ? "alacak" : "borc";
   const mal = malTaraf ? hafta.filter((h) => !odemeMi(h) && (Number(h[malTaraf]) || 0) > 0) : [];
   const topla = (x) => x.reduce((t, h) => t + tutarOf(h), 0);
-  // Bakiye değişimi: haftanın hareketleri (işaretli) — hafta sonu bakiyesi = bugünkü − haftadan sonraki hareketler
   const net = (x) => x.reduce((t, h) => t + (Number(h.borc) || 0) - (Number(h.alacak) || 0), 0);
   const sonra = l.filter((h) => h.tarih > son && !devirMi(h, defter));
   const haftaSonu = bakiye == null ? null : bakiye - net(sonra);
   const haftaBasi = haftaSonu == null ? null : haftaSonu - net(hafta);
   const degisim = haftaSonu == null ? null : Math.abs(haftaSonu) - Math.abs(haftaBasi);
   return [
-    `📊 Haftalık özet — Black Rose (${tarihYaz(bas)}–${tarihYaz(son)})`,
-    malTaraf ? `📦 Gelen mal: ${dolar(topla(mal))} (${mal.length} kayıt)` : "📦 Gelen mal: belirlenemedi (defterde henüz ödeme kaydı görülmedi)",
-    `💵 Ödemeler: ${dolar(topla(od))} (${od.length} kayıt)`,
+    `🏬 ${adi}`,
+    malTaraf ? `📦 Gelen mal: ${dolar(topla(mal))} (${mal.length} kayıt)` : "📦 Gelen mal / 💵 ödemeler: ayrılamıyor (hareket türü teşhisi bekleniyor)",
+    ...(malTaraf ? [`💵 Ödemeler: ${dolar(topla(od))} (${od.length} kayıt)`] : []),
     haftaSonu == null ? "💰 Bakiye: okunamadı" : `💰 Bakiye: ${isaretli(haftaSonu)} — geçen hafta ${Math.abs(degisim) < 0.005 ? "değişmedi" : `${dolar(Math.abs(degisim))} ${degisim > 0 ? "arttı" : "azaldı"}`} (${isaretli(haftaBasi)} → ${isaretli(haftaSonu)})`,
-    `(${adi} defterine göre; sadece siz görüyorsunuz)`,
   ].join("\n");
 }
 export async function haftalikOzet(env, simdi, tg, bakiyeOku) {
@@ -166,12 +130,12 @@ export async function haftalikOzet(env, simdi, tg, bakiyeOku) {
   const gun = gunAnahtari(simdi);
   if (await ayarOku(env, `cari:ozet:${gun}`, null)) return;
   await ayarYaz(env, `cari:ozet:${gun}`, 1);
-  const [br, vl] = await Promise.all([ayarOku(env, "cari:BLACKROSE", null), ayarOku(env, "cari:VOLONTE", null)]);
   const b = await bakiyeOku(env);
   const son = gunAnahtari(simdi - GUN), bas = gunAnahtari(simdi - 7 * GUN);
-  const [defter, adi, bakiye] = vl && vl.hareketler ? [vl, "VOLONTE", b.vlToplam] : [br, "Black Rose", b.brToplam];
-  if (!defter) return;
-  const metin = haftalikOzetMetni(defter, adi, bakiye, bas, son);
+  // İki mağaza ayrı (2 Kasım): her biri kendi defterinden; karşılaştırma yok
+  const parcalar = [[b.br, "BLACK ROSE", b.brToplam], [b.vl, "VOLONTE", b.vlToplam]].filter(([d]) => d).map(([d, ad, bk]) => haftalikOzetMetni(d, ad, bk, bas, son));
+  if (!parcalar.length) return;
+  const metin = [`📊 Haftalık özet (${tarihYaz(bas)}–${tarihYaz(son)}) — sadece siz görüyorsunuz`, ...parcalar].join("\n\n");
   await tg(env, "sendMessage", { chat_id: murat(env), text: metin });
   await arsiv(env, "haftalik-ozet", null, metin, simdi);
 }
