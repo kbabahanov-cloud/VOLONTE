@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3513",
+  "baslik": "Belted Draped Panel Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece suit with a tailored jacket, matching wide belt and straight wide-leg trousers. The jacket features a soft lapel and a draped panel that falls from the shoulder beneath the collar, cinched at the waist by a wide belt with a round metal buckle. Wear it to the office, events or city meetings. Made in Istanbul with careful tailoring.",
+   "fr": "Un ensemble trois pièces composé d'une veste ajustée, d'une large ceinture assortie et d'un pantalon large et droit. La veste se distingue par un revers souple et un pan drapé qui descend de l'épaule sous le col, marqué à la taille par une ceinture à boucle ronde en métal. Idéal pour le bureau, les événements et les rendez-vous en ville. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de três peças com casaco acinturado, cinto largo a combinar e calça reta de pernas largas. O casaco tem lapela suave e um painel drapeado que cai do ombro por baixo da gola, marcado na cintura por um cinto com fivela redonda de metal. Perfeito para o escritório, eventos e encontros na cidade. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3513/1.jpg",
+   "galeri/3513/2.jpg",
+   "galeri/3513/3.jpg",
+   "galeri/3513/4.jpg",
+   "galeri/3513/5.jpg",
+   "galeri/3513/6.jpg",
+   "galeri/3513/7.jpg",
+   "galeri/3513/8.jpg",
+   "galeri/3513/9.jpg",
+   "galeri/3513/10.jpg"
+  ],
+  "videolar": [
+   "selin/3513/0",
+   "selin/3513/1"
+  ],
+  "fiyat": 56,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3576",
   "baslik": "Double-Breasted Collared Maxi Dress",
   "kategori": "dresses",
