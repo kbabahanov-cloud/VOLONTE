@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3499",
+  "baslik": "Satin Peplum Tulle Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A midi-length dress pairing a structured satin peplum bodice with a full, softly pleated tulle skirt. A sheer illusion neckline, ruched sweetheart bust with covered buttons and sculpted puff sleeves give it a refined vintage feel. Made for weddings, engagements and formal celebrations. Produced in Istanbul with careful finishing.",
+   "fr": "Une robe mi-longue qui associe un haut péplum en satin structuré à une jupe ample en tulle finement plissé. L'encolure en tulle transparent, le buste drapé en cœur orné de boutons recouverts et les manches bouffantes lui donnent une élégance d'inspiration vintage. Idéale pour les mariages, fiançailles et cérémonies. Confectionnée à Istanbul avec soin.",
+   "pt": "Um vestido midi que combina um corpete peplum estruturado em cetim com uma saia ampla de tule suavemente plissado. O decote em tule transparente, o busto franzido em coração com botões forrados e as mangas bufantes trazem um charme vintage e sofisticado. Perfeito para casamentos, noivados e celebrações formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3499/1.jpg",
+   "galeri/3499/2.jpg",
+   "galeri/3499/3.jpg",
+   "galeri/3499/4.jpg",
+   "galeri/3499/5.jpg",
+   "galeri/3499/6.jpg",
+   "galeri/3499/7.jpg",
+   "galeri/3499/8.jpg"
+  ],
+  "videolar": [
+   "selin/3499/0"
+  ],
+  "fiyat": 74,
+  "gizli": false,
+  "eklenme": "2026-11-02"
+ },
+ {
   "kod": "3503",
   "baslik": "Forest Print Cape Tunic Set",
   "kategori": "sets",
