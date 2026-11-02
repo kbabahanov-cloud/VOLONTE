@@ -44,3 +44,19 @@ export async function raporTekrar(env, tg) {
   for (const m of mesajlar) { const r = await tg(env, "sendMessage", { chat_id: patron, text: m.slice(0, 4000), disable_web_page_preview: true }); sonuc.push(Boolean(r && r.ok)); }
   await env.KAYIT.put("sami:raporTekrarSonuc", JSON.stringify({ gun: g, sonuc }), { expirationTtl: 7 * 86400 });
 }
+
+// TEK SEFERLİK CARİ DÖKÜMÜ (2 Kasım, sadece OKUMA): KV "sami:cariDokum" = "1" → köprülerin gönderdiği cari kayıtları
+// (StokDO "cari:BLACKROSE", "cari:VOLONTE") ve seçili kaynak ("cari:yontem") "sami:cariDokumSonuc"a yazılır (1 gün sonra silinir).
+// KV "sami:cariYontem" = JSON → StokDO "cari:yontem" olarak yazılır (bakiye kaynağı kararı).
+export async function cariDokumu(env) {
+  const y = await env.KAYIT.get("sami:cariYontem");
+  if (y) {
+    await env.KAYIT.delete("sami:cariYontem");
+    const v = JSON.parse(y);
+    await stokIste(env, "/ayar-yaz", { k: "cari:yontem", v: JSON.stringify(v) });
+  }
+  if (!(await env.KAYIT.get("sami:cariDokum"))) return;
+  await env.KAYIT.delete("sami:cariDokum");
+  const sonuc = { zaman: Math.floor(Date.now() / 1000), BLACKROSE: await ayar(env, "cari:BLACKROSE"), VOLONTE: await ayar(env, "cari:VOLONTE"), yontem: await ayar(env, "cari:yontem") };
+  await env.KAYIT.put("sami:cariDokumSonuc", JSON.stringify(sonuc), { expirationTtl: 86400 });
+}

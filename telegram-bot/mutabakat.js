@@ -28,8 +28,20 @@ const dolar = (x) => `${para(x)} $`;
 const tutar = (x) => (x == null ? "—" : `${dolar(Math.abs(x))}${Math.abs(x) < 0.005 ? "" : x > 0 ? " (B)" : " (A)"}`);
 // Bakiye kaynağı (ayar "cari:yontem"): { tur: "kart" } = cari kartındaki BAKIYE (varsayılan) ya da
 // { tur: "donem", tablolar: ["D0005TBLCARIGENELHAREKET", …] } = seçilen dönem tablolarındaki borç − alacak toplamı
+// { tur: "sondonem", tablo: "CARIGENELHAREKET" } (2 Kasım) = her hesapta, o türden hareketi olan EN SON dönem tablosunun
+// borç − alacak toplamı. Yeni dönem önceki dönemin bakiyesini devir kaydıyla taşıdığı için dönemler toplanmaz (çift sayılır).
+export function sonDonem(h, tablo) {
+  const l = Object.entries((h && h.donemler) || {}).map(([d, x]) => ({ d, x, m: /^D(\d{4})TBL(.+)$/.exec(d) })).filter((o) => o.m && o.m[2] === tablo);
+  if (!l.length) return null;
+  const dolu = l.filter((o) => o.x && o.x.n > 0).sort((a, b) => b.m[1].localeCompare(a.m[1]));
+  return dolu.length ? dolu[0] : { d: null, x: { borc: 0, alacak: 0 } };
+}
 export function bakiyeDegeri(h, yontem = { tur: "kart" }) {
   if (!h) return null;
+  if (yontem.tur === "sondonem") {
+    const s = sonDonem(h, yontem.tablo || "CARIGENELHAREKET");
+    return s ? (Number(s.x.borc) || 0) - (Number(s.x.alacak) || 0) : null;
+  }
   if (yontem.tur === "donem") {
     const l = (yontem.tablolar || []).map((t) => h.donemler && h.donemler[t]).filter(Boolean);
     return l.length ? l.reduce((s, x) => s + (Number(x.borc) || 0) - (Number(x.alacak) || 0), 0) : null;
@@ -42,7 +54,7 @@ export function bakiyeBolumu(br, vl, yontem = { tur: "kart" }) {
   const top = (k) => (satirlar.some((x) => x[k] != null) ? satirlar.reduce((s, x) => s + (x[k] || 0), 0) : null);
   const fark = (x, y) => (x == null || y == null ? null : Math.abs(x) - Math.abs(y));
   const isaret = (f) => (f == null ? "❔" : Math.abs(f) < 0.005 ? "✅" : "⚠️");
-  const kaynak = yontem.tur === "kart" ? "cari kart bakiyesi" : `dönem toplamı (${(yontem.tablolar || []).join(", ")})`;
+  const kaynak = yontem.tur === "kart" ? "cari kart bakiyesi" : yontem.tur === "sondonem" ? "son dönem hareketleri, devir dahil" : `dönem toplamı (${(yontem.tablolar || []).join(", ")})`;
   const fuat = br ? [...satirlar.map((x) => `Black Rose ${x.a}: ${tutar(x.br)}`), `TOPLAM: ${tutar(top("br"))}`] : ["Bakiyeler henüz okunamıyor."];
   const tb = top("br"), tv = top("vl"), tf = fark(tb, tv);
   const patron = br || vl ? [

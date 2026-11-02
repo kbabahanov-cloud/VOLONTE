@@ -1197,3 +1197,21 @@ test("mutabakat bakiyeleri: Patron'a iki taraf yan yana + fark (⚠️), Fuat'a 
   assert.match(d.patron[0], /✅ Black Rose 15: Black Rose kaydı 1\.100,00 \$ \(B\) · VOLONTE kaydı 1\.100,00 \$ \(A\)/);
   assert.match(d.patron.at(-1), /kaynak: dönem toplamı \(D0005TBLCARIGENELHAREKET\)/);
 });
+
+test("mutabakat bakiyesi 'sondonem': her hesapta en son dönem (devir dahil), dönemler toplanmaz; ikinci tablo türü karışmaz", async () => {
+  const { bakiyeBolumu, bakiyeDegeri } = await import("./mutabakat.js");
+  const y = { tur: "sondonem", tablo: "CARIGENELHAREKET" };
+  const d = (n, borc, alacak) => ({ n, borc, alacak });
+  // BR 25: D0003 kapanış −1.920,50; D0005 başında devir −1.920,50, yeni hareket yok → −1.920,50 (toplasaydık −3.841)
+  const br25 = { anahtar: "25", kart: 0, donemler: { D0001TBLCARIGENELHAREKET: d(4, 500, 100), D0003TBLCARIGENELHAREKET: d(9, 1000, 2920.5), D0005TBLCARIGENELHAREKET: d(1, 0, 1920.5), D0005TBLCARIHAREKETLERI: d(1, 0, 1920.5), D0004TBLCARIGENELHAREKET: d(0, null, null) } };
+  assert.equal(bakiyeDegeri(br25, y), -1920.5);
+  // son dönemde hareketi olmayan hesap → hareketi olan en son dönem; hiç hareketi yoksa 0
+  assert.equal(bakiyeDegeri({ donemler: { D0001TBLCARIGENELHAREKET: d(2, 300, 0), D0005TBLCARIGENELHAREKET: d(0, null, null) } }, y), 300);
+  assert.equal(bakiyeDegeri({ donemler: { D0005TBLCARIGENELHAREKET: d(0, null, null) } }, y), 0);
+  assert.equal(bakiyeDegeri({ donemler: {} }, y), null);
+  // tablo türü seçimi: CARIHAREKETLERI
+  assert.equal(bakiyeDegeri({ donemler: { D0003TBLCARIHAREKETLERI: d(1, 50, 0), D0005TBLCARIGENELHAREKET: d(1, 999, 0) } }, { tur: "sondonem", tablo: "CARIHAREKETLERI" }), 50);
+  const b = bakiyeBolumu({ hesaplar: [br25] }, { hesaplar: [{ anahtar: "25", donemler: { D0005TBLCARIGENELHAREKET: d(3, 1920.5, 0) } }] }, y);
+  assert.match(b.patron.join("\n"), /✅ Black Rose 25: Black Rose kaydı 1\.920,50 \$ \(A\) · VOLONTE kaydı 1\.920,50 \$ \(B\) · fark 0,00 \$/);
+  assert.match(b.patron.at(-1), /kaynak: son dönem hareketleri, devir dahil/);
+});
