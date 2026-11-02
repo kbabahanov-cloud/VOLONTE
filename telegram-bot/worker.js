@@ -103,6 +103,7 @@ export default {
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/cari") return kopruCari(request, env);
+    if (request.method === "POST" && url.pathname === "/kopru/ciro") return kopruCiro(request, env);
     if (request.method === "POST" && (url.pathname === "/kopru/surum" || url.pathname === "/kopru/dosya")) return kopruGuncelleme(request, env, url.pathname);
     // Pelin'in kör testi: modelin gerçek mankenli kanal videosu (tek seferlik anahtar Pelin'den, ortak kayıtta).
     if (request.method === "GET" && /^\/kanal-video\/[a-f0-9]{32}$/.test(url.pathname)) return kanalVideo(env, url.pathname.split("/")[2], request.headers.get("Range"));
@@ -2128,6 +2129,22 @@ async function kopruGuncelleme(request, env, yol) {
   if (!Object.prototype.hasOwnProperty.call(liste.dosyalar || {}, ad)) return new Response("yok", { status: 404 });
   const b64 = await env.KAYIT.get(`kopru:dosya:${ad}`);
   return b64 ? Response.json({ ad, b64 }) : new Response("yok", { status: 404 });
+}
+
+// Yıllık ciro (2 Kasım): köprü satış faturası başlıklarından yıl × tür × para birimi toplamlarını gönderir → Sami'nin deposu
+// "ciro:<MAĞAZA>". SADECE Patron'un /ciro raporu için; her mağaza ayrı tutulur (toplanmaz, karşılaştırılmaz).
+async function kopruCiro(request, env) {
+  const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
+  const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !env.STOK || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
+  const g = await request.json().catch(() => null);
+  if (!g || !Array.isArray(g.satirlar)) return new Response("geçersiz", { status: 400 });
+  const sayi = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
+  const satirlar = g.satirlar.slice(0, 2000).filter((x) => Number(x.yil) >= 2000 && Number(x.yil) <= 2100).map((x) => ({
+    tablo: String(x.tablo || "").slice(0, 60), yil: Number(x.yil), tur: String(x.tur ?? "").slice(0, 10), doviz: String(x.doviz || "").slice(0, 10), n: Number(x.n) || 0, tutar: sayi(x.tutar), aratoplam: sayi(x.aratoplam),
+  }));
+  await stokIste(env, "/ayar-yaz", { k: `ciro:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), satirlar }) });
+  return Response.json({ ok: true, satir: satirlar.length });
 }
 
 async function kopruCari(request, env) {

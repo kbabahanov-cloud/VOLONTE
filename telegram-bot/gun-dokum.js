@@ -98,6 +98,6 @@ export async function cariDokumu(env, tg) {
   await env.KAYIT.delete("sami:cariDokum");
   const oto = await ayar(env, "oz:otomatik");
   const sonuc = { zaman: Math.floor(Date.now() / 1000), BLACKROSE: await ayar(env, "cari:BLACKROSE"), VOLONTE: await ayar(env, "cari:VOLONTE"), yontem: await ayar(env, "cari:yontem"),
-    ozOtomatik: oto, oz: oto ? await ayar(env, `oz:oz-${Number(oto).toString(36)}`) : null, odemeGorulen: await ayar(env, "cari:odemeGorulen") };
+    ciroBLACKROSE: await ayar(env, "ciro:BLACKROSE"), ciroVOLONTE: await ayar(env, "ciro:VOLONTE"), ozOtomatik: oto, oz: oto ? await ayar(env, `oz:oz-${Number(oto).toString(36)}`) : null, odemeGorulen: await ayar(env, "cari:odemeGorulen") };
   await env.KAYIT.put("sami:cariDokumSonuc", JSON.stringify(sonuc), { expirationTtl: 86400 });
 }

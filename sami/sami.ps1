@@ -44,7 +44,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026110301"
+$SURUM = "2026110302"
 
 function Gunluge([string]$m) {
   try {
@@ -307,6 +307,36 @@ function CariBakiyeleri([string]$sifre) {
   $kartlar = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { $x = $_; "$($x.ad): " + (($x.anahtarlar.Keys | Sort-Object | ForEach-Object { "$_=$($x.anahtarlar[$_])" }) -join " ") })
   return @{ hesaplar = $liste; ozel = $ozel; notlar = $notlar; baglar = $baglar; kartlar = $kartlar; adSutun = $adSutun; kartBakiye = $bakiyeVar; hareketler = $hareketler }
 }
+# ---- Yıllık ciro (2 Kasım; Patron: her mağaza AYRI, toplam yok, sadece Patron görür) — SADECE SELECT ----
+# Satış fatura başlıkları (adında SATFAT + BASLIK, tüm dönemler), iptaller hariç: yıl × belge türü × para birimi → adet, TUTAR,
+# ARATOPLAM. Alış (ALF), fatura satırları, maliyet/alış fiyatı/kâr ASLA okunmaz. Türlerin anlamı (satış/iade) Venom'da belirlenir.
+function CiroOku([string]$sifre) {
+  $ciroTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFAT%BASLIK%" }
+  $ciroSatir = @()
+  foreach ($ct in $ciroTablolar.Rows) {
+    $ctAd = [string]$ct.AD
+    $ctSut = @(Sutunlar $sifre $ctAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($ctSut -notcontains "TARIH") -or ($ctSut -notcontains "BELGETIPI")) { continue }
+    $ctTutar = @(@("TUTAR", "ARATOPLAM") | Where-Object { $ctSut -contains $_ })
+    if (-not $ctTutar.Count) { continue }
+    $ctDoviz = if ($ctSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $ctTopla = ($ctTutar | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
+    $ctNerede = if ($ctSut -contains "IPTAL") { " WHERE ISNULL(IPTAL, 0) = 0" } else { "" }
+    $ctSorgu = "SELECT YEAR(TARIH) AS Y, BELGETIPI AS T" + $(if ($ctDoviz) { ", [$ctDoviz] AS D" } else { "" }) + ", COUNT(*) AS N$ctTopla FROM [$ctAd]$ctNerede GROUP BY YEAR(TARIH), BELGETIPI" + $(if ($ctDoviz) { ", [$ctDoviz]" } else { "" })
+    foreach ($cx in (Sorgu $sifre $ctSorgu).Rows) {
+      $ciroSatir += @{ tablo = $ctAd.Substring($Ayar.firma.Length); yil = [int]$cx.Y; tur = [string]$cx.T; doviz = $(if ($ctDoviz) { ([string]$cx.D).Trim() } else { "" }); n = [int]$cx.N
+        tutar = $(if ($ctTutar -contains "TUTAR") { Num $cx.TUTAR } else { $null }); aratoplam = $(if ($ctTutar -contains "ARATOPLAM") { Num $cx.ARATOPLAM } else { $null }) }
+    }
+  }
+  return $ciroSatir
+}
+function CiroGonder([string]$anahtar, $satirlar) {
+  $ciroGovde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); satirlar = [object[]]$satirlar } | ConvertTo-Json -Depth 5 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/ciro" -TimeoutSec 60 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($ciroGovde)) | Out-Null
+}
+
 function CariGonder([string]$anahtar, $c) {
   $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; baglar = [object[]]$c.baglar; hareketler = [object[]]$c.hareketler; kartBakiye = $c.kartBakiye; birim = "USD" } | ConvertTo-Json -Depth 8 -Compress
   Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/cari" -TimeoutSec 60 `
@@ -444,6 +474,13 @@ function Esitle([switch]$Zorla) {
   if ($Zorla -or ((Get-Date) - $cariSon).TotalMinutes -ge 60) {
     try { CariGonder (Duz $g.Anahtar) (CariBakiyeleri (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $cariDosya; $satisNot += ", cari bakiyeler gönderildi" }
     catch { $satisNot += ", cari okunamadı: $($_.Exception.Message)" }
+  }
+  # Yıllık ciro: 6 saatte bir (sadece Patron'un raporu için); hata olursa diğer işler etkilenmez
+  $ciroDosya = Join-Path $VeriKlasoru "ciro-son-$($Ayar.magaza).txt"
+  $ciroSon = if (Test-Path $ciroDosya) { [datetime]::Parse((Get-Content $ciroDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
+  if ($Zorla -or ((Get-Date) - $ciroSon).TotalMinutes -ge 360) {
+    try { CiroGonder (Duz $g.Anahtar) @(CiroOku (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $ciroDosya; $satisNot += ", ciro gönderildi" }
+    catch { $satisNot += ", ciro okunamadı: $($_.Exception.Message)" }
   }
   return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi$satisNot"
 }
