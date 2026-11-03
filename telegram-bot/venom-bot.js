@@ -101,7 +101,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (!kodlar.length) return "Geçerli model kodu yok.";
     const secim = await oku(env, "pelin:secim", null);
     if (!secim) return "Pelin'de kurulum yapılmamış (yüz + ortam seçimi). Patron önce Pelin'e /kurulum yazmalı.";
-    const mm = uretimMaliyeti(secim.arac || "veo");
+    const mm = uretimMaliyeti(secim.arac || "veo", secim);
     const toplam = mm.toplam * kodlar.length, harcanan = await buAyHarcanan(env, simdi);
     await kartAc(env, { tur: "pelin", kodlar, test: Boolean(g.test) }, [
       `🎬 Pelin ${g.test ? "MALİYET TESTİ" : "üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}`,
