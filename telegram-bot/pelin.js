@@ -208,8 +208,27 @@ async function falSor(env) {
   await env.KAYIT.put("venom:pelinFalSonuc", JSON.stringify(c), { expirationTtl: 3 * 86400 });
 }
 
+// Tek seferlik belge okuma (Claude Code araştırması; KV "venom:pelinDokuman" = [adres]): sadece GET, sadece izinli belge alanları
+const DOKUMAN_ALANI = /^https:\/\/(docs\.|www\.|open\.|platform\.|cloud\.)?higgsfield\.ai\//;
+async function dokumanOku(env) {
+  const l = await env.KAYIT.get("venom:pelinDokuman", "json");
+  if (!Array.isArray(l) || !l.length) return;
+  await env.KAYIT.delete("venom:pelinDokuman");
+  const c = { zaman: Math.floor(Date.now() / 1000), sonuc: {} };
+  for (const u of l.filter((x) => DOKUMAN_ALANI.test(String(x))).slice(0, 8)) {
+    try {
+      const r = await fetch(u, { headers: { "user-agent": "Mozilla/5.0 (VOLONTE Pelin belge okuma)", accept: "text/html,application/json,text/plain" }, redirect: "follow" });
+      const t = await r.text();
+      const duz = t.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+      c.sonuc[u] = { durum: r.status, adres: r.url, metin: duz.slice(0, 30000) };
+    } catch (e) { c.sonuc[u] = { hata: String(e.message) }; }
+  }
+  await env.KAYIT.put("venom:pelinDokumanSonuc", JSON.stringify(c), { expirationTtl: 2 * 86400 });
+}
+
 export async function pelinCron(env, simdi) {
   await webhookKur(env);
+  try { await dokumanOku(env); } catch (e) { await env.KAYIT.put("venom:pelinDokumanSonuc", JSON.stringify({ hata: String(e && e.message) })); }
   if (env.FAL_KEY) { try { await falSor(env); } catch (e) { await env.KAYIT.put("venom:pelinFalSonuc", JSON.stringify({ hata: String(e && e.message) })); } }
   try { const sc = await env.KAYIT.get("pelin:secim"); if (sc && sc !== (await env.KAYIT.get("pelin:secimAyna"))) { await env.KAYIT.put("venom:pelinSecim", sc); await env.KAYIT.put("pelin:secimAyna", sc); } } catch { /* sonra */ }
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinIsKomut" = { isId, islem: "katalogdan", muzik: { url, ad }, deneme } →
