@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3364",
+  "baslik": "Jacquard Puff Sleeve Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A maxi dress in floral jacquard with a fitted bodice and a full, pleated A-line skirt. The notched round neckline, puffed short sleeves and matching tie belt give it a refined, defined shape. Wear it to weddings, ceremonies and special gatherings. Produced in Istanbul with careful attention to finishing.",
+   "fr": "Une robe longue en jacquard fleuri, au buste ajusté et à la jupe évasée plissée. L'encolure ronde fendue, les manches courtes bouffantes et la ceinture à nouer assortie dessinent une silhouette élégante et marquée. Idéale pour les mariages, cérémonies et grandes occasions. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Um vestido longo em jacquard floral, com corpete ajustado e saia evasê ampla com pregas. O decote redondo com abertura, as mangas curtas bufantes e o cinto de amarrar a condizer criam uma silhueta elegante e bem definida. Ideal para casamentos, cerimónias e ocasiões especiais. Produzido em Istambul com acabamentos cuidados."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3364/1.jpg",
+   "galeri/3364/2.jpg",
+   "galeri/3364/3.jpg",
+   "galeri/3364/4.jpg",
+   "galeri/3364/5.jpg",
+   "galeri/3364/6.jpg",
+   "galeri/3364/7.jpg"
+  ],
+  "videolar": [],
+  "fiyat": 46,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3366",
   "baslik": "Lace Flared-Sleeve Maxi Dress",
   "kategori": "evening",
