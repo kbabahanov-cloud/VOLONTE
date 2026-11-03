@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3327",
+  "baslik": "Denim Panel Blazer Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece suit pairing a single-button tailored blazer with high-waisted wide-leg trousers. Washed denim panels with frayed edges frame the front and back of the blazer, echoed by a denim waistband on the trousers, while front pleats and pressed creases keep the line clean. Wear it to the office, events or polished daytime plans. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une veste ajustée à un bouton et un pantalon large taille haute. Des empiècements en denim délavé aux bords effilochés habillent le devant et le dos de la veste, rappelés par la ceinture en denim du pantalon, tandis que les plis et les pinces gardent une ligne nette. À porter au bureau, en événement ou en journée. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que une um blazer de alfaiataria com um botão e calças largas de cintura alta. Painéis de ganga lavada com bordas desfiadas marcam a frente e as costas do blazer, repetidos no cós de ganga das calças, enquanto as pregas e os vincos mantêm uma linha limpa. Ideal para o escritório, eventos ou o dia a dia elegante. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3327/1.jpg",
+   "galeri/3327/2.jpg",
+   "galeri/3327/3.jpg",
+   "galeri/3327/4.jpg",
+   "galeri/3327/5.jpg",
+   "galeri/3327/6.jpg",
+   "galeri/3327/7.jpg",
+   "galeri/3327/8.jpg",
+   "galeri/3327/9.jpg",
+   "galeri/3327/10.jpg"
+  ],
+  "videolar": [
+   "selin/3327/0",
+   "selin/3327/1"
+  ],
+  "fiyat": 46,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3329",
   "baslik": "Notched Collar Shirt Set",
   "kategori": "sets",
