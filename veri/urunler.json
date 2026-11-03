@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3372",
+  "baslik": "Guipure Lace Cropped Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a cropped collared jacket with a fitted mini skirt, both in white floral guipure lace. Sheer lace sleeves, gold-tone buttons and a scalloped skirt hem give it a refined finish. Wear it together for daytime events and celebrations, or style each piece separately. Made in Istanbul with careful attention to detail.",
+   "fr": "Un ensemble deux pièces associant une veste courte à col et une mini-jupe ajustée, toutes deux en guipure florale blanche. Les manches en dentelle ajourée, les boutons dorés et l'ourlet festonné de la jupe apportent une touche raffinée. À porter ensemble pour les événements de journée et les célébrations, ou séparément. Confectionné à Istanbul avec un soin particulier.",
+   "pt": "Conjunto de duas peças com casaco curto de gola e minissaia ajustada, ambos em renda guipure floral branca. As mangas em renda vazada, os botões dourados e a barra recortada da saia dão um acabamento elegante. Use junto em eventos diurnos e celebrações, ou combine as peças separadamente. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3372/1.jpg",
+   "galeri/3372/2.jpg",
+   "galeri/3372/3.jpg",
+   "galeri/3372/4.jpg",
+   "galeri/3372/5.jpg"
+  ],
+  "videolar": [
+   "selin/3372/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3377",
   "baslik": "Floral Organza Maxi Dress",
   "kategori": "dresses",
