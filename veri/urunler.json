@@ -1,5 +1,33 @@
 [
  {
+  "kod": "3394",
+  "baslik": "Draped Kimono Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a draped kimono-style top with a high-waisted pleated maxi skirt. The top falls in soft cowl folds from a shawl collar, with wide batwing sleeves and a curved hem, while the skirt's fine pleats and elastic waistband give easy movement. Made for celebrations, receptions and elegant daytime events. Produced in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces qui associe un haut drapé façon kimono à une jupe longue plissée taille haute. Le haut tombe en plis souples depuis un col châle, avec de larges manches chauve-souris et un ourlet arrondi, tandis que la jupe finement plissée à taille élastique accompagne chaque mouvement. Idéal pour les cérémonies, réceptions et sorties élégantes en journée. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que une uma blusa drapeada estilo quimono a uma saia longa plissada de cintura alta. A blusa cai em dobras suaves a partir da gola xale, com mangas morcego amplas e barra arredondada, enquanto a saia de pregas finas e cós elástico acompanha cada movimento. Ideal para cerimônias, recepções e eventos elegantes de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3394/1.jpg",
+   "galeri/3394/2.jpg",
+   "galeri/3394/3.jpg",
+   "galeri/3394/4.jpg",
+   "galeri/3394/5.jpg",
+   "galeri/3394/6.jpg",
+   "galeri/3394/7.jpg",
+   "galeri/3394/8.jpg"
+  ],
+  "videolar": [
+   "selin/3394/0",
+   "selin/3394/1"
+  ],
+  "fiyat": 62,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3396",
   "baslik": "Tweed Trim Shirt Set",
   "kategori": "sets",
