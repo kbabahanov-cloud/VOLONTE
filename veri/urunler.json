@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3392",
+  "baslik": "Printed Satin Kaftan Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing sheer kaftan with a black inner slip dress. The kaftan has wide draped sleeves, a satin collar and a front snap closure, with a lilac and black abstract print panel on satin. Wear it open over the slip for evenings, receptions and special occasions. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant un caftan fluide et transparent à une robe fond noire. Le caftan offre de larges manches drapées, un col satiné et une fermeture à pressions, avec un panneau imprimé abstrait lilas et noir sur satin. À porter ouvert sur la robe pour les soirées, réceptions et occasions spéciales. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que une um cafetã fluido e transparente a um vestido interior preto de alças. O cafetã tem mangas largas e soltas, gola acetinada e fecho de molas, com um painel de estampa abstrata lilás e preta em cetim. Use-o aberto sobre o vestido em noites, recepções e ocasiões especiais. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3392/1.jpg",
+   "galeri/3392/2.jpg",
+   "galeri/3392/3.jpg",
+   "galeri/3392/4.jpg"
+  ],
+  "videolar": [
+   "selin/3392/0"
+  ],
+  "fiyat": 75,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3394",
   "baslik": "Draped Kimono Skirt Set",
   "kategori": "sets",
