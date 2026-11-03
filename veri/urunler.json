@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3358",
+  "baslik": "Belted Double-Breasted Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a double-breasted jacket with a pleated midi skirt. The jacket has wide notched lapels, a slim belt that defines the waist and sleeves that can be pushed up for a relaxed line. Suited to the office, meetings and daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une veste croisée à une jupe midi plissée. La veste se distingue par ses larges revers crantés, une fine ceinture qui marque la taille et des manches que l'on peut remonter pour une allure plus décontractée. Idéal pour le bureau, les rendez-vous professionnels et les événements de journée. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um casaco trespassado com uma saia midi plissada. O casaco tem lapelas largas, um cinto fino que marca a cintura e mangas que podem ser arregaçadas para um visual mais descontraído. Perfeito para o escritório, reuniões e eventos durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3358/1.jpg",
+   "galeri/3358/2.jpg",
+   "galeri/3358/3.jpg"
+  ],
+  "videolar": [
+   "selin/3358/0",
+   "selin/3358/1"
+  ],
+  "fiyat": 46,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3362",
   "baslik": "Beaded Jacket Maxi Set",
   "kategori": "sets",
