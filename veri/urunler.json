@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3338",
+  "baslik": "Studded Collared Jumpsuit",
+  "kategori": "jumpsuits",
+  "aciklama": {
+   "en": "A long-sleeve jumpsuit with a shirt collar, fitted bodice and wide flared legs. Fine studs cover the fabric, while beaded trim outlines the collar, placket and flap pockets, finished with jewelled flower buttons. A defined waistband shapes the silhouette for events, dinners or polished daytime looks. Made in Istanbul with careful workmanship.",
+   "fr": "Une combinaison à manches longues avec col chemise, buste ajusté et jambes larges évasées. De fins clous parsèment le tissu, tandis qu'un liseré perlé souligne le col, la patte de boutonnage et les poches à rabat, ornées de boutons fleurs bijoux. La ceinture marquée dessine la silhouette, pour un événement, un dîner ou une tenue de jour soignée. Fabriquée à Istanbul avec un travail minutieux.",
+   "pt": "Um macacão de manga comprida com gola de camisa, corpo ajustado e pernas largas e evasê. Pequenos aplicados brilhantes cobrem o tecido, enquanto um debrum perolado contorna a gola, a carcela e os bolsos com pala, com botões em flor de pedraria. A cintura marcada valoriza a silhueta em eventos, jantares ou looks diurnos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3338/1.jpg",
+   "galeri/3338/2.jpg",
+   "galeri/3338/3.jpg",
+   "galeri/3338/4.jpg",
+   "galeri/3338/5.jpg"
+  ],
+  "videolar": [
+   "selin/3338/0"
+  ],
+  "fiyat": 45,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3343",
   "baslik": "Belted Utility Vest Set",
   "kategori": "sets",
