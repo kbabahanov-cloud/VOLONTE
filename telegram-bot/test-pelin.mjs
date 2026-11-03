@@ -53,6 +53,7 @@ function ortam({ fal = true } = {}) {
       async delete(k) { depo.delete(k); },
     },
   };
+  for (const k of ["3557", "3601", "3627", "3630"]) depo.set(`pelinboy:${k}`, JSON.stringify({ boy: "midi" })); // testlerde boy kayıtlı (boy sorusu ayrı testte)
   return { env, depo, g, falIstek, claude, falSonuc, site, yaziCevap };
 }
 const yazi = (o, kimden, text) => guncelleme({ message: { message_id: 1, date: 1, chat: { id: kimden, type: "private" }, from: { id: kimden, first_name: kimden === MURAT ? "Murat" : "Hemra" }, text } }, o.env);
@@ -429,4 +430,60 @@ test("eski akışa düşmüş fotoğraflar tek seferlik aktarılır (venom:pelin
   await cronlar(o, 1);
   assert.deepEqual(fotoSirala(JSON.parse(o.depo.get("pelin:urunfoto:3627"))).map((x) => [x.anahtar[0], x.rol]), [["1", "on"], ["2", "arka"]]);
   assert.ok(!o.depo.has("venom:pelinUrunFoto"));
+});
+
+// ---------- Boy ve kadraj (3 Kasım) ----------
+test("boy: ilk üretimden önce Pelin tahmin edip tek tuşla sorar → kalıcı (bütün renkler, iki seri) → maliyet kartı; boy referansı ön/arkadan ayrı; kartta boy + kadraj", async () => {
+  const o = uretimOrtami();
+  o.site.push({ kod: "3700", bedenler: "44-46-48-50", fotolar: ["galeri/3700/1.jpg"] });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  await fotoMesaj(o, { caption: "3700 boy referansı", mid: 30 });
+  assert.match(o.g.at(-1).govde.text, /📏 3700 boy referansı kaydedildi \(fotoğraf; ön\/arka ürün fotoğraflarından ayrı\)/);
+  assert.ok(!o.depo.has("pelin:urunfoto:3700")); // ürün fotoğrafı sayılmaz
+  o.claude.cevaplar = [claudeJsonCevap({ boy: "bilek", emin: true, neden: "Etek bilekte bitiyor." })];
+  await yazi(o, MURAT, "/uret 3700 koyu bordo");
+  const soru = o.g.at(-1).govde;
+  assert.match(soru.text, /📏 3700: bilek boyu mu\? Etek bilekte bitiyor\./);
+  assert.deepEqual(soru.reply_markup.inline_keyboard[0].map((x) => x.text), ["✅ Evet, bilek", "Mini", "Diz", "Midi", "Maksi"]);
+  assert.equal(o.falIstek.length, 0);
+  await bas(o, MURAT, soru.reply_markup.inline_keyboard[0][0].callback_data);
+  const b = JSON.parse(o.depo.get("pelinboy:3700"));
+  assert.equal(b.boy, "bilek");
+  assert.equal(b.referans.length, 1);
+  const kart = o.g.at(-1).govde;
+  assert.match(kart.text, /Renk: 3700 sadece koyu bordo/);
+  assert.match(kart.text, /Boy: 3700 bilek \(ayakkabı görünür, etek yere değmez\) · referans var/);
+  assert.match(kart.text, /Kadraj: tam boy \(baş ve ayakkabı kesilmez\) · sade, zarif ayakkabı/);
+  assert.match(kart.text, /3700 büyük seri \(3 numaralı dolgun kız\)/);
+  // ikinci üretimde boy sorulmaz
+  await yazi(o, MURAT, "/uret 3700 beyaz");
+  assert.match(o.g.at(-1).govde.text, /Renk: 3700 sadece beyaz[\s\S]*Boy: 3700 bilek/);
+  // üretim: istemde boy + kadraj + referans görseli (son), kontrol boyu denetler; boy farklıysa otomatik yeniden
+  await bas(o, MURAT, `pu:o:${kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+  o.yaziCevap.kod = "3700";
+  o.claude.cevaplar = [claudeJsonCevap({ ...GECTI, boy_dogru: false, kadraj_tam: true, sorunlar: ["boy farklı: maksi, yerde sürünüyor"] }), ...Array.from({ length: 4 }, () => claudeJsonCevap({ ...GECTI, boy_dogru: true, kadraj_tam: true }))];
+  await cronlar(o, 16);
+  const edit = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
+  assert.equal(edit[0].govde.image_urls.length, 3); // yüz + site fotoğrafı + boy referansı (son)
+  assert.equal(edit[0].govde.image_urls[2], `https://pelin.test/dosya/${b.referans[0].anahtar}`);
+  assert.match(edit[0].govde.prompt, /dark burgundy \(koyu bordo\) color variant ONLY[\s\S]*LENGTH[\s\S]*ankle length: the hem ends exactly at the ankles; the shoes and feet are fully visible and the hem does NOT touch the floor[\s\S]*plus-size[\s\S]*FRAMING: full body from head to toe — never crop the head or the shoes[\s\S]*SHOES: simple, elegant[\s\S]*LAST image is a LENGTH\/FRAMING reference only/);
+  const kontrol = o.claude.find((x) => JSON.stringify(x.messages).includes("İSTENEN BOY: bilek"));
+  assert.ok(kontrol && kontrol.output_config.format.schema.required.includes("boy_dogru"));
+  const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3700-"))[1]);
+  assert.ok(is.gecmis.some(([, t]) => /foto 1: geçmedi \(.*boy farklı/.test(t)));
+  assert.ok(edit.length >= 3); // boy farkı → katalog fotoğrafı yeniden üretildi
+  const video = o.falIstek.find((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video");
+  assert.match(video.govde.prompt, /ankle length[\s\S]*shoes visible/);
+});
+
+test("boy: sohbetle kaydedilir; Venom boysuz üretim başlatamaz; şablonda boy saklanır", async () => {
+  const o = uretimOrtami();
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  const { venomUretimi } = await import("./pelin.js");
+  assert.match((await venomUretimi(o.env, { kodlar: ["3701"], test: false }, 1)).hata, /3701 için boy kayıtlı değil/);
+  const tu = { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "boy_kaydet", input: { kod: "3701", boy: "midi" } }], usage: { input_tokens: 10, output_tokens: 5 } };
+  o.claude.cevaplar = [tu, { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", content: [{ type: "text", text: "Kaydettim." }], usage: { input_tokens: 10, output_tokens: 5 } }];
+  await yazi(o, MURAT, "3701 midi boy");
+  assert.match(o.claude[1].messages.at(-1).content[0].content, /KAYDEDİLDİ: 3701 boyu midi/);
+  assert.equal(JSON.parse(o.depo.get("pelinboy:3701")).boy, "midi");
 });

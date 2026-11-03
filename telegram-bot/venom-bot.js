@@ -17,7 +17,7 @@ import { ciroBolumu } from "./ciro.js";
 import { silKuyrugu } from "./sil.js";
 import { topluRaporMetni } from "./venom.js";
 import { KISILER, kuyrugaEkle, kuyruguAl, hataEkle } from "./venom-kopru.js";
-import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para } from "./pelin.js";
+import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi } from "./pelin.js";
 export { KISILER };
 
 const SAAT_FARKI = 3 * 3600;
@@ -50,6 +50,7 @@ const ARACLAR = [
   { name: "mutabakat_gonder", description: "Fuat'a güncel cuma mutabakatını (bakiye mesajları) tekrar gönderip onayını ister. Önce Patron'a önizleme kartı.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "siteden_kaldir", description: "Bir modeli siteden (Selin) ve VOLONTE kanalından (Kemal) kaldırır. Önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
+  { name: "model_boyu", description: "Bir modelin Pelin'de kayıtlı boyunu (mini/diz/midi/bilek/maksi, referans) gösterir. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "yetenek_istegi", description: "Venom'un henüz yapamadığı bir iş için Claude Code'a not bırakır (yeni yetenek isteği).", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string" } } } },
 ];
 
@@ -99,12 +100,17 @@ export async function aracCalistir(env, ad, g, simdi) {
   if (ad === "pelin_uret") {
     const kodlar = [...new Set((g.kodlar || []).map(String).filter((x) => /^\d{3,6}$/.test(x)))].slice(0, g.test ? 5 : 40);
     if (!kodlar.length) return "Geçerli model kodu yok.";
-    const secim = await oku(env, "pelin:secim", null);
+    const secim = await oku(env, "venom:pelinSecim", null); // Pelin'in seçiminin aynası (yüzler, ortamlar, araç)
     if (!secim) return "Pelin'de kurulum yapılmamış (yüz + ortam seçimi). Patron önce Pelin'e /kurulum yazmalı.";
+    const boylar = {};
+    for (const k of kodlar) boylar[k] = await boyOku(env, k);
+    const boysuz = kodlar.filter((k) => !(boylar[k] && boylar[k].boy));
+    if (boysuz.length) return `${boysuz.join(", ")} için boy kayıtlı değil. Patron Pelin'e "/uret ${boysuz[0]}" yazınca Pelin boyu bir kez sorar; sonra buradan üretilebilir.`;
     const mm = uretimMaliyeti(secim.arac || "veo", secim);
     const toplam = mm.toplam * kodlar.length, harcanan = await buAyHarcanan(env, simdi);
     await kartAc(env, { tur: "pelin", kodlar, test: Boolean(g.test) }, [
       `🎬 Pelin ${g.test ? "MALİYET TESTİ" : "üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}`,
+      `Boy: ${kodlar.map((k) => `${k} ${boyYazi(boylar[k])}`).join(", ")}`,
       ...mm.kalemler.map((k) => `• ${k.ad}: ${para(k.birim)}`),
       `Model başı ~${para(mm.toplam)} · toplam ~${para(toplam)} (kalite kontrol yeniden ürettirirse en fazla 2 katı)`,
       `Bu ay Pelin: ${para(harcanan)} / ${AYLIK_SINIR_USD} $${harcanan + toplam > AYLIK_SINIR_USD ? " ⚠️ SINIRI AŞAR (Pelin başlamaz)" : ""}`,
@@ -112,6 +118,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     ].join("\n"), simdi);
     return "Maliyet kartı Patron'a gösterildi; onaylamadan para harcanmaz.";
   }
+  if (ad === "model_boyu") return `${g.kod} boyu: ${boyYazi(await boyOku(env, String(g.kod)))}`;
   if (ad === "yetenek_istegi") {
     const l = await oku(env, "venom:yetenekIstekleri", []);
     l.push({ zaman: simdi, istek: String(g.istek).slice(0, 500) });
