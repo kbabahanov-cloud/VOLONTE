@@ -104,6 +104,7 @@ export default {
     if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/cari") return kopruCari(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/ciro") return kopruCiro(request, env);
+    if (request.method === "POST" && url.pathname === "/kopru/gider-kesif") return kopruMaliKesif(request, env);
     if (request.method === "POST" && (url.pathname === "/kopru/surum" || url.pathname === "/kopru/dosya")) return kopruGuncelleme(request, env, url.pathname);
     // Pelin'in kör testi: modelin gerçek mankenli kanal videosu (tek seferlik anahtar Pelin'den, ortak kayıtta).
     if (request.method === "GET" && /^\/kanal-video\/[a-f0-9]{32}$/.test(url.pathname)) return kanalVideo(env, url.pathname.split("/")[2], request.headers.get("Range"));
@@ -2145,6 +2146,19 @@ async function kopruCiro(request, env) {
   }));
   await stokIste(env, "/ayar-yaz", { k: `ciro:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), satirlar }) });
   return Response.json({ ok: true, satir: satirlar.length });
+}
+
+// Mali keşif (3 Kasım, Patron onayı): gider tabloları + fiyat sütunları + fatura satırı bağları. Ham hâliyle Sami'nin deposuna
+// ("mali:kesif:<MAĞAZA>"); SADECE Patron'un /gider ve /kar raporlarının kurulumu için. Hiçbir bota, kanala, siteye gitmez.
+async function kopruMaliKesif(request, env) {
+  const magaza = String(request.headers.get("X-Magaza") || "").toUpperCase();
+  const anahtar = String(request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!/^[A-Z0-9_]{2,20}$/.test(magaza) || !env.STOK || !gizliEsit(anahtar, env[`KOPRU_${magaza}`])) return new Response("yetkisiz", { status: 401 });
+  const metin = await request.text();
+  if (metin.length > 900000) return new Response("çok büyük", { status: 413 });
+  let g; try { g = JSON.parse(metin); } catch { return new Response("geçersiz", { status: 400 }); }
+  await stokIste(env, "/ayar-yaz", { k: `mali:kesif:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), surum: String(g.surum || ""), tablolar: g.tablolar || [], mali: g.mali || null }) });
+  return Response.json({ ok: true });
 }
 
 async function kopruCari(request, env) {

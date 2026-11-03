@@ -4,8 +4,9 @@
 # Kilitler: (1) her sorgu SadeceOku() denetiminden geçer, SELECT dışı her şey reddedilir;
 # (2) bağlantı ApplicationIntent=ReadOnly ile açılır; (3) her sorgu bir işlem (transaction)
 # içinde çalışır ve sonunda geri alınır (Rollback); (4) veritabanı kullanıcısı zaten sadece okuma.
-# Okunan alanlar SADECE: STOKKODU, MALINCINSI, adet (ENVANTER toplamı) ve SATISFIYATI1.
-# Alış fiyatı, maliyet, kâr oranı, vergi no, TC kimlik no okunmaz.
+# Stok: STOKKODU, MALINCINSI, adet (ENVANTER toplamı) ve SATISFIYATI1. Vergi no, TC kimlik no okunmaz.
+# 3 Kasım (Patron onayı): ciro, gider ve kâr raporu için alış/satış fiyatı ve giderler de okunur — SADECE Patron'un
+# Sami raporlarına gider; başka hiçbir bota, kanala, siteye, Fuat'a/Nuri'ye gitmez.
 #
 # Kullanım (çift tıklanan .bat dosyaları bunu çağırır):
 #   sami.ps1 kurulum   şifreyi sorar (Windows kasasında şifreli saklanır), köprü anahtarı üretir
@@ -44,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026110303"
+$SURUM = "2026110304"
 
 function Gunluge([string]$m) {
   try {
@@ -345,6 +346,107 @@ function CiroOku([string]$sifre) {
   }
   return $ciroSatir
 }
+# ---- Gider keşfi (3 Kasım, Patron: giderler nerede?) — SADECE SELECT, sürüm başına bir kez ----
+# Adında MASRAF/KASA/GIDER/BANKA/MUHASEBE/PERSONEL/MAAS/HESAP/ODEME/TEDIYE geçen tablolar: satır sayısı, sütun ADLARI, son 13
+# ayın ay ay adet + tutar toplamları ve kısa kod sütunlarının (KOD/TIP/TUR/GRUP) dağılımı. Kişi adı, ünvan, açıklama, TC,
+# telefon, adres sütunlarının İÇERİĞİ okunmaz; adında PERSONEL/MAAS geçen tablolarda hiçbir metin değeri okunmaz.
+function GiderKesif([string]$sifre) {
+  $gkDesen = @("%MASRAF%", "%KASA%", "%GIDER%", "%BANKA%", "%MUHASEBE%", "%PERSONEL%", "%MAAS%", "%HESAP%", "%ODEME%", "%TEDIYE%")
+  $gkKosul = ($gkDesen | ForEach-Object { "TABLE_NAME LIKE '$($Ayar.firma)$_'" }) -join " OR "
+  $gkTablolar = Sorgu $sifre "SELECT TOP 80 TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE $gkKosul ORDER BY TABLE_NAME"
+  $gkTarihAday = @("TARIH", "ISLEMTARIHI", "BELGETARIHI", "FISTARIHI", "EVRAKTARIHI", "KAYITTARIHI")
+  $gkTutarAday = @("TUTAR", "BORC", "ALACAK", "GIRIS", "CIKIS", "NETTUTAR", "TOPLAM", "DOVIZTUTAR")
+  $gkYasak = '(AD|ADI|UNVAN|ACIKLAMA|ISIM|PERSONEL|TC|TEL|ADRES|MAIL|IBAN|SOYAD|NOT)'
+  $gkSonuc = @()
+  foreach ($gt in $gkTablolar.Rows) {
+    $gtAd = [string]$gt.AD
+    $gtKayit = @{ tablo = $gtAd.Substring($Ayar.firma.Length); satir = $null; sutunlar = @(); aylar = @(); kodlar = @() }
+    try {
+      $gtSut = @(Sutunlar $sifre $gtAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+      $gtKayit.sutunlar = $gtSut
+      $gtKayit.satir = [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$gtAd]").Rows[0].N)
+      $gtTarih = $gkTarihAday | Where-Object { $gtSut -contains $_ } | Select-Object -First 1
+      $gtTutar = @($gkTutarAday | Where-Object { $gtSut -contains $_ })
+      if ($gtKayit.satir -gt 0 -and $gtTarih) {
+        $gtTopla = ($gtTutar | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
+        foreach ($gx in (Sorgu $sifre "SELECT YEAR([$gtTarih]) AS Y, MONTH([$gtTarih]) AS M, COUNT(*) AS N$gtTopla FROM [$gtAd] WHERE [$gtTarih] >= @t GROUP BY YEAR([$gtTarih]), MONTH([$gtTarih]) ORDER BY YEAR([$gtTarih]), MONTH([$gtTarih])" @{ t = (Get-Date).Date.AddMonths(-13) }).Rows) {
+          $gxKayit = @{ ay = ("{0}-{1:D2}" -f $gx.Y, [int]$gx.M); n = [int]$gx.N }
+          foreach ($s in $gtTutar) { $gxKayit[$s.ToLowerInvariant()] = (Num $gx[$s]) }
+          $gtKayit.aylar += $gxKayit
+        }
+        if ($gtAd -notmatch 'PERSONEL|MAAS') {
+          $gtKod = @($gtSut | Where-Object { ($_ -match 'KOD|TIP|TUR|GRUP') -and ($_ -notmatch $gkYasak) } | Select-Object -First 6)
+          foreach ($gk in $gtKod) {
+            try {
+              $gkSay = [int]((Sorgu $sifre "SELECT COUNT(DISTINCT [$gk]) AS D FROM [$gtAd] WHERE [$gtTarih] >= @t" @{ t = (Get-Date).Date.AddMonths(-13) }).Rows[0].D)
+              if ($gkSay -lt 1 -or $gkSay -gt 40) { continue }
+              $gkToplaSql = $(if ($gtTutar.Count) { ", SUM(CAST([$($gtTutar[0])] AS FLOAT)) AS T" } else { "" })
+              $gkDeger = @()
+              foreach ($gv in (Sorgu $sifre "SELECT [$gk] AS V, COUNT(*) AS N$gkToplaSql FROM [$gtAd] WHERE [$gtTarih] >= @t GROUP BY [$gk] ORDER BY COUNT(*) DESC" @{ t = (Get-Date).Date.AddMonths(-13) }).Rows) {
+                $gkDeger += @{ v = ([string]$gv.V).Trim(); n = [int]$gv.N; t = $(if ($gtTutar.Count) { Num $gv.T } else { $null }) }
+              }
+              $gtKayit.kodlar += @{ sutun = $gk; tutarSutunu = $(if ($gtTutar.Count) { $gtTutar[0] } else { $null }); degerler = $gkDeger }
+            } catch { }
+          }
+        }
+      }
+    } catch { $gtKayit.hata = $_.Exception.Message.Substring(0, [Math]::Min(150, $_.Exception.Message.Length)) }
+    $gkSonuc += $gtKayit
+  }
+  return $gkSonuc
+}
+# ---- Mali keşif (3 Kasım, Patron onayı: alış fiyatı + satış fiyatı + gider → SADECE Patron'un /kar raporu) ----
+# Stok kartı ve birim tablolarının sütun ADLARI + fiyat sütunlarının dolu kart sayısı/ortalaması (kart kart değer okunmaz);
+# satış/alış fatura satırlarının başlığa hangi sütunla bağlandığı (eşleşme sayısı) ve yıllık miktar/tutar/alış-fiyatlı tutar.
+function MaliKesif([string]$sifre) {
+  $mk = @{ stokKart = @(); hareket = @() }
+  foreach ($mt in @($T_STOK, $T_BIRIM)) {
+    try {
+      $mtSut = @(Sutunlar $sifre $mt | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+      $mtFiyat = @()
+      foreach ($fs in @($mtSut | Where-Object { $_ -match 'ALIS|MALIYET|FIYAT|AFIYAT|MLYT' } | Select-Object -First 12)) {
+        try { $fr = (Sorgu $sifre "SELECT COUNT(*) AS N, AVG(CAST([$fs] AS FLOAT)) AS O FROM [$mt] WHERE ISNULL([$fs], 0) <> 0").Rows[0]; $mtFiyat += @{ sutun = $fs; dolu = [int]$fr.N; ortalama = (Num $fr.O) } } catch { }
+      }
+      $mk.stokKart += @{ tablo = $mt.Substring($Ayar.firma.Length); sutunlar = $mtSut; fiyatSutunlari = $mtFiyat }
+    } catch { }
+  }
+  $mhTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a OR TABLE_NAME LIKE @b ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFATHAREKET"; b = "$($Ayar.firma)D____TBLALFATHAREKET" }
+  foreach ($mh in $mhTablolar.Rows) {
+    $mhAd = [string]$mh.AD
+    $mhBas = $mhAd -replace 'HAREKET$', 'BASLIK'
+    $mhKayit = @{ tablo = $mhAd.Substring($Ayar.firma.Length); baglar = @(); yillar = @() }
+    try {
+      $mhSut = @(Sutunlar $sifre $mhAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+      $mhKayit.satir = [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$mhAd]").Rows[0].N)
+      if ($mhKayit.satir -eq 0) { $mk.hareket += $mhKayit; continue }
+      foreach ($mb in @("EVRAKNO", "BELGEIND", "BASLIKIND", "FATURAIND", "FISIND", "DETAY", "BELGENO")) {
+        if ($mhSut -notcontains $mb) { continue }
+        try { $mkEs = [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$mhAd] H WHERE H.[$mb] IN (SELECT B.IND FROM [$mhBas] B)").Rows[0].N); $mhKayit.baglar += @{ sutun = $mb; eslesen = $mkEs } } catch { }
+      }
+      $mhPara = if ($mhSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+      $mhSec = "SELECT YEAR(TARIH) AS Y" + $(if ($mhPara) { ", [$mhPara] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(MIKTAR AS FLOAT)) AS MIKTAR" +
+        $(if ($mhSut -contains "GERCEKTOPLAM") { ", SUM(CAST(GERCEKTOPLAM AS FLOAT)) AS GERCEKTOPLAM" } else { "" }) +
+        $(if ($mhSut -contains "FIYATI") { ", SUM(CAST(MIKTAR AS FLOAT) * CAST(FIYATI AS FLOAT)) AS MFIYATI" } else { "" }) +
+        $(if ($mhSut -contains "AFIYATI") { ", SUM(CAST(MIKTAR AS FLOAT) * CAST(AFIYATI AS FLOAT)) AS MAFIYATI, SUM(CASE WHEN ISNULL(AFIYATI, 0) <> 0 THEN 1 ELSE 0 END) AS AFDOLU" } else { "" }) +
+        " FROM [$mhAd] GROUP BY YEAR(TARIH)" + $(if ($mhPara) { ", [$mhPara]" } else { "" })
+      foreach ($my in (Sorgu $sifre $mhSec).Rows) {
+        $myK = @{ yil = [int]$my.Y; n = [int]$my.N; miktar = (Num $my.MIKTAR) }
+        if ($mhPara) { $myK.doviz = ([string]$my.D).Trim() }
+        foreach ($s in @("GERCEKTOPLAM", "MFIYATI", "MAFIYATI", "AFDOLU")) { if ($my.Table.Columns.Contains($s)) { $myK[$s.ToLowerInvariant()] = (Num $my[$s]) } }
+        $mhKayit.yillar += $myK
+      }
+    } catch { $mhKayit.hata = $_.Exception.Message.Substring(0, [Math]::Min(150, $_.Exception.Message.Length)) }
+    $mk.hareket += $mhKayit
+  }
+  return $mk
+}
+function GiderKesifGonder([string]$anahtar, $tablolar, $mali) {
+  $gkGovde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); surum = $SURUM; tablolar = [object[]]$tablolar; mali = $mali } | ConvertTo-Json -Depth 8 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/gider-kesif" -TimeoutSec 90 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($gkGovde)) | Out-Null
+}
+
 function CiroGonder([string]$anahtar, $satirlar) {
   $ciroGovde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); satirlar = [object[]]$satirlar } | ConvertTo-Json -Depth 5 -Compress
   Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/ciro" -TimeoutSec 60 `
@@ -489,6 +591,12 @@ function Esitle([switch]$Zorla) {
   if ($Zorla -or ((Get-Date) - $cariSon).TotalMinutes -ge 60) {
     try { CariGonder (Duz $g.Anahtar) (CariBakiyeleri (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $cariDosya; $satisNot += ", cari bakiyeler gönderildi" }
     catch { $satisNot += ", cari okunamadı: $($_.Exception.Message)" }
+  }
+  # Gider keşfi: bu sürümde bir kez (Patron'un gider raporu için hangi tabloda olduğunu bulmak)
+  $gkDosya = Join-Path $VeriKlasoru "gider-kesif-$($Ayar.magaza)-$SURUM.txt"
+  if (-not (Test-Path $gkDosya)) {
+    try { GiderKesifGonder (Duz $g.Anahtar) @(GiderKesif (Duz $g.Sifre)) (MaliKesif (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $gkDosya; $satisNot += ", mali keşif gönderildi" }
+    catch { $satisNot += ", gider keşfi yapılamadı: $($_.Exception.Message)" }
   }
   # Yıllık ciro: 6 saatte bir (sadece Patron'un raporu için); hata olursa diğer işler etkilenmez
   $ciroDosya = Join-Path $VeriKlasoru "ciro-son-$($Ayar.magaza).txt"

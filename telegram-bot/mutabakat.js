@@ -134,7 +134,8 @@ export function mesajlara(bolumler, sinir = 3800) {
 }
 
 // Fuat'a giden metinde VOLONTE defteri, fark, ödeme, fiyat, satış ASLA olmaz (son kapı; bozuksa gönderilmez)
-const YASAK_FUAT = [/VOLONTE kaydı/i, /\bfark\b/i, /ödeme/i, /dekont/i, /fiyat/i, /satış/i, /maliyet/i, /kâr\b/i, /Patron/i];
+// 3 Kasım (Patron): alış fiyatı, maliyet, kâr, gider (maaş, kira, kargo) ve ciro da ASLA dışarı gitmez
+const YASAK_FUAT = [/VOLONTE kaydı/i, /\bfark\b/i, /ödeme/i, /dekont/i, /fiyat/i, /satış/i, /maliyet/i, /kâr\b/i, /(?<!\p{L})kar oran/iu, /Patron/i, /(?<!\p{L})alış(?!\p{L})/iu, /(?<!\p{L})gider/iu, /maaş/iu, /(?<!\p{L})kira(?!\p{L})/iu, /kargo/i, /(?<!\p{L})ciro/iu, /net kâr/iu];
 export function fuatSuzgec(duz) {
   const bulunan = YASAK_FUAT.filter((r) => r.test(duz));
   return bulunan.length ? bulunan.map(String) : null;
