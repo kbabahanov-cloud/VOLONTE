@@ -1846,3 +1846,27 @@ test("görselli istek (3319): indirme zaman aşımında 3 kez adresle dener, son
     assert.equal(n, 1);
   } finally { globalThis.fetch = asil; }
 });
+
+test("Pelin teslim (4 Kasım): onaylı Pelin videosu kanala (video ilk, fiyat yok) → Selin'e site için; DENEME hiç gitmez; sitede olmayan paylaşılmaz", async () => {
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  const { pelinKanalAdimi } = await import("./worker.js");
+  const { kuyrugaEkle, kuyruguAl } = await import("./venom-kopru.js");
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "3403-a", kod: "3403", video: "https://vid/pelin.mp4", foto: "https://img/foto.jpg", kapak: "https://img/kapak.jpg", deneme: false });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "3403-d", kod: "3403", video: "https://vid/deneme.mp4", deneme: true });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "8888-a", kod: "8888", video: "https://vid/x.mp4", deneme: false });
+  o.gonderilen.length = 0;
+  await pelinKanalAdimi(o.env, ist(11));
+  const kanal = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
+  assert.equal(kanal.length, 1);
+  assert.deepEqual(kanal[0].govde.media.map((m) => [m.type, m.media]), [["video", "https://vid/pelin.mp4"], ["photo", "https://img/kapak.jpg"]]);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(kanal)));
+  assert.ok(!JSON.stringify(o.gonderilen).includes("deneme.mp4"));
+  const patron = cagrilar(o.gonderilen, "sendMessage").filter((m) => m.govde.chat_id === "999").map((m) => m.govde.text);
+  assert.ok(patron.some((t) => /📣 3403: Pelin videosu kanalda/.test(t)));
+  assert.ok(patron.some((t) => /🧪 3403: deneme video kanala\/siteye gönderilmedi/.test(t)));
+  assert.ok(patron.some((t) => /8888: Pelin videosu kanala paylaşılmadı — model sitede yok/.test(t)));
+  const site = await kuyruguAl(o.env, "pelinSite");
+  assert.deepEqual(site.map((x) => [x.kod, x.kanal, typeof x.videoMesaj]), [["3403", "Volonteroseoffical", "number"]]);
+  assert.equal((await kuyruguAl(o.env, "pelinKanal")).length, 0); // iki kez paylaşılmaz
+});

@@ -49,6 +49,7 @@ import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "
 import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici } from "./duzen.js";
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
+import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
@@ -1790,7 +1791,7 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
   if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
   const ilk = g.ids.find((id) => id > 0);
-  return { ok: true, link: kanal.kullanici && ilk ? `https://t.me/${kanal.kullanici}/${ilk}` : null, markaNotu: g.not || null };
+  return { ok: true, ids: g.ids, kanal: kanal.kullanici || null, link: kanal.kullanici && ilk ? `https://t.me/${kanal.kullanici}/${ilk}` : null, markaNotu: g.not || null };
 }
 
 // ---------- REPETE PAYLAŞIMI (kullanıcı kararı 30 Ekim) ----------
@@ -1977,7 +1978,31 @@ export async function yeniModelIsleri(env, simdi) {
   await env.KAYIT.put("venom:yeniModel", JSON.stringify(guncel.flatMap((x) => (!islenen.has(x.kod) ? [x] : tekrar[x.kod] ? [{ ...x, deneme: tekrar[x.kod] }] : hataTekrar[x.kod] ? [{ ...x, hataTur: hataTekrar[x.kod] }] : []))));
 }
 
+// ---------- PELİN TESLİM (4 Kasım, Patron onayı): Pelin'de "✅ Onayla" denen video → kanal (Kemal) → site (Selin) ----------
+// Kuyruk StokDO "pelinKanal" (ekle/al tek adım → iki kez paylaşılmaz). DENEME işaretliler HİÇ gitmez. Fiyat yok (yeni düzen alt yazısı).
+export async function pelinKanalAdimi(env, simdi) {
+  const isler = await kuyruguAl(env, "pelinKanal");
+  for (const x of isler) {
+    const bildir = (text) => telegram(env, "sendMessage", { chat_id: muratId(env), text, disable_web_page_preview: true });
+    try {
+      if (x.deneme || x.v !== 2) { await bildir(`🧪 ${x.kod}: deneme video kanala/siteye gönderilmedi (kural).`); continue; }
+      const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
+      if (!u) { await bildir(`⚠️ ${x.kod}: Pelin videosu kanala paylaşılmadı — model sitede yok ya da gizli. Önce siteye eklenmeli.`); continue; }
+      const medya = [{ type: "video", media: x.video }, ...(x.kapak || x.foto ? [{ type: "photo", media: x.kapak || x.foto }] : [])];
+      const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya });
+      const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false });
+      if (!g.ok) { await bildir(`⚠️ ${x.kod}: Pelin videosu kanala paylaşılamadı: ${kisaHata(g.hata)}`); continue; }
+      await bildir(`📣 ${x.kod}: Pelin videosu kanalda${g.link ? `: ${g.link}` : ""}. Site için Selin'e iletildi.`);
+      await kuyrugaEkle(env, "pelinSite", { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: g.ids[0], foto: x.foto || null, zaman: simdi });
+    } catch (e) {
+      await env.KAYIT.put("kemal:pelinTeslimHata", JSON.stringify({ zaman: simdi, kod: x.kod, hata: String(e && e.message).slice(0, 400) }), { expirationTtl: 7 * 86400 });
+      await bildir(`⚠️ ${x.kod}: Pelin videosu paylaşılamadı: ${kisaHata(e)}`).catch(() => null);
+    }
+  }
+}
+
 export async function fabrikaIsleri(env, simdi) {
+  if (env.STOK) { try { await pelinKanalAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:pelinTeslimHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
   // Tek seferlik (2 Kasım): KV "venom:soldoutUygula" = [{kod, kanal, arsiv}] → daha önce silinemeyen eski paylaşımlar SOLD OUT ile gizlenir
   const uygula = await env.KAYIT.get("venom:soldoutUygula", "json");
   if (uygula && uygula.length) {

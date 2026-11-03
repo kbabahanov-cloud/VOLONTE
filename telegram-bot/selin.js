@@ -12,6 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
+import { kuyruguAl } from "./venom-kopru.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -202,7 +203,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -752,7 +753,10 @@ async function siteVerisi(env) {
 const b64Metin = (s) => btoa(unescape(encodeURIComponent(s)));
 
 // dosyalar: [{ yol, b64 }] (null b64 = sil) + yeni ürün listesi → tek commit
+// 4 Kasım (Patron): FİYAT açık depoya YAZILMAZ (depo herkese açık); fiyatın tek kaynağı Vegawin (Sami'nin deposu, gizli).
+export const fiyatsiz = (liste) => (liste || []).map(({ fiyat, ...u }) => u);
 export async function siteyeYaz(env, dosyalar, liste, mesaj) {
+  liste = fiyatsiz(liste);
   const ref = await gh(env, "/git/ref/heads/main");
   const sonCommit = await gh(env, `/git/commits/${ref.object.sha}`);
   const agac = [];
@@ -786,14 +790,14 @@ export async function siteStokEsitle(env, simdi) {
   const yeni = liste.map((u) => {
     const st = stok[u.kod];
     if (!st) return u; // Vegawin'de yok: dokunulmaz
-    const fiyat = st.fiyat ?? u.fiyat ?? null;
     const gizli = Boolean(st.gizli);
-    if (fiyat === (u.fiyat ?? null) && gizli === Boolean(u.gizli)) return u;
-    degisen.push(`${u.kod}${gizli !== Boolean(u.gizli) ? (gizli ? " gizlendi" : " yeniden görünür") : ""}${fiyat !== (u.fiyat ?? null) ? ` ${fiyat} $` : ""}`);
-    return { ...u, fiyat, gizli };
+    if (gizli === Boolean(u.gizli) && !("fiyat" in u)) return u;
+    degisen.push(`${u.kod}${gizli !== Boolean(u.gizli) ? (gizli ? " gizlendi" : " yeniden görünür") : " (fiyat alanı kaldırıldı)"}`);
+    const { fiyat, ...temiz } = u; // fiyat açık depoya yazılmaz (4 Kasım)
+    return { ...temiz, gizli };
   });
   if (!degisen.length) return;
-  await siteyeYaz(env, [], yeni, `Selin: Vegawin stok/fiyat güncellemesi (${degisen.length} model)`);
+  await siteyeYaz(env, [], yeni, `Selin: Vegawin stok güncellemesi (${degisen.length} model)`);
   await notEkle(env, `Site güncellendi (Vegawin): ${degisen.slice(0, 10).join(", ")}${degisen.length > 10 ? " …" : ""}`);
 }
 
@@ -825,7 +829,6 @@ async function siteyeYukle(env, kod, kim, simdi) {
     kod, baslik: t.baslik, kategori: t.kategori, aciklama: { en: t.aciklama.en, fr: t.aciklama.fr, pt: t.aciklama.pt },
     bedenler: t.bedenler, fotolar: dosyalar.map((d) => d.yol),
     videolar: t.kaynak === "ozel" ? t.videolar.filter((v) => !(v.boyut > VIDEO_SINIR)).map((v) => `selin/${kod}/${v.id}`) : t.videolar.map((v) => `${bilgi.kanal.kullanici}/${v.id}`),
-    fiyat: st ? st.fiyat : t.fiyat ?? null, // Vegawin satış fiyatı ($)
     gizli: Boolean(st && st.gizli),        // stoğu bitince sitede görünmez (kayıt silinmez)
     eklenme: gunAnahtari(simdi),
   };
@@ -1533,6 +1536,51 @@ async function kemaleDevret(env, anahtar, kayit) {
   l.push(kayit);
   await env.KAYIT.put(anahtar, JSON.stringify(l.slice(-50)));
 }
+// ---------- PELİN TESLİM → SİTE (4 Kasım): Kemal kanala paylaştı → video (kanal mesajı, sitenin oynatıcısı) + Pelin fotoğrafı ----------
+export async function pelinSiteAdimi(env, simdi) {
+  if (!env.STOK || !env.GITHUB_TOKEN) return;
+  const isler = await kuyruguAl(env, "pelinSite");
+  for (const x of isler) {
+    const bildir = async (text) => { for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text }); };
+    try {
+      const { liste } = await siteVerisi(env);
+      const i = liste.findIndex((u) => String(u.kod) === String(x.kod));
+      if (i < 0) { await bildir(`⚠️ ${x.kod}: Pelin videosu siteye eklenemedi — model sitede yok.`); continue; }
+      const u = { ...liste[i] };
+      const vid = x.kanal && x.videoMesaj ? `${x.kanal}/${x.videoMesaj}` : null;
+      if (vid) u.videolar = [vid, ...(u.videolar || []).filter((v) => v !== vid)];
+      const dosyalar = [];
+      if (x.foto) {
+        try {
+          const r = await fetch(x.foto);
+          if (r.ok) {
+            let bayt = new Uint8Array(await r.arrayBuffer());
+            if (env.IMAGES) { const k = await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: 1600, fit: "scale-down" }).output({ format: "image/jpeg", quality: 88 }); bayt = new Uint8Array(await k.response().arrayBuffer()); }
+            const yol = `galeri/${x.kod}/pelin-${simdi.toString(36)}.jpg`;
+            dosyalar.push({ yol, b64: b64Yap(bayt) });
+            const f = [...(u.fotolar || [])];
+            f.splice(Math.min(1, f.length), 0, yol); // ilk fotoğraf (afiş olabilir) yerinde kalır
+            u.fotolar = f;
+          }
+        } catch { /* fotoğraf olmadan video yine eklenir */ }
+      }
+      const yeni = [...liste]; yeni[i] = u;
+      await siteyeYaz(env, dosyalar, yeni, `Selin: ${x.kod} Pelin videosu${dosyalar.length ? " + fotoğrafı" : ""} siteye eklendi`);
+      await bildir(`🌸 ${x.kod}: Pelin videosu${dosyalar.length ? " ve fotoğrafı" : ""} siteye eklendi (birkaç dakika içinde görünür).`);
+    } catch (e) {
+      await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
+      await bildir(`⚠️ ${x.kod}: Pelin videosu siteye eklenemedi (hata Claude Code'da).`).catch(() => null);
+    }
+  }
+  // Tek seferlik (4 Kasım, Patron): KV "venom:siteFiyatSil" → açık depodaki ürün listesinden fiyatlar hemen çıkarılır
+  if (await env.KAYIT.get("venom:siteFiyatSil")) {
+    await env.KAYIT.delete("venom:siteFiyatSil");
+    const { liste } = await siteVerisi(env);
+    const n = liste.filter((u) => "fiyat" in u).length;
+    if (n) { await siteyeYaz(env, [], liste, `Selin: fiyatlar açık depodan çıkarıldı (${n} model; fiyatın kaynağı Vegawin)`); await notEkle(env, `Fiyatlar açık depodan çıkarıldı (${n} model).`); }
+  }
+}
+
 export async function siteSilAdimi(env, simdi) {
   const l = (await env.KAYIT.get("venom:siteSil", "json")) || [];
   if (l.length) {

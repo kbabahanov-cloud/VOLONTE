@@ -166,6 +166,26 @@ export async function dugme(env, cq, simdi) {
   return cevap("Önce ✅ Onayla.");
 }
 
+// ---------- Harcama (4 Kasım, Patron): Venom'un kendi yapay zekâ harcaması kaydedilir; aylık tavan (öneri 30 $) ----------
+// KV "venom-harcama:<ay>" (USD). Tavan KV "venom:bot:sinir" (Patron rakamı söyleyince yazılır); yoksa 30 $. %80'de Patron'a bir kez haber.
+export const VENOM_SINIR_VARSAYILAN = 30;
+const CLAUDE_FIYAT = { "claude-sonnet-5-5": { giris: 2, cikis: 10, okuma: 0.2 }, "claude-opus-5-5": { giris: 4, cikis: 20, okuma: 0.2 } };
+const SES_DAKIKA_USD = 0.003; // gpt-4o-mini-transcribe (yaklaşık)
+const ay = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 7);
+export const venomHarcanan = async (env, simdi) => Number((await env.KAYIT.get(`venom-harcama:${ay(simdi)}`)) || 0);
+export const venomSinir = async (env) => Number((await env.KAYIT.get("venom:bot:sinir")) || VENOM_SINIR_VARSAYILAN);
+async function venomHarcamaYaz(env, usd, simdi) {
+  const k = `venom-harcama:${ay(simdi)}`;
+  const yeni = Math.round(((await venomHarcanan(env, simdi)) + usd) * 10000) / 10000;
+  await env.KAYIT.put(k, String(yeni), { expirationTtl: 400 * 86400 });
+  const sinir = await venomSinir(env);
+  if (yeni >= sinir * 0.8 && !(await env.KAYIT.get(`venom:bot:uyari:${ay(simdi)}`))) {
+    await env.KAYIT.put(`venom:bot:uyari:${ay(simdi)}`, "1", { expirationTtl: 40 * 86400 });
+    await yaz(env, `⚠️ Venom bu ay ${yeni.toFixed(2).replace(".", ",")} $ yapay zekâ harcadı (aylık sınır ${sinir} $, %80). Sınır dolunca sohbet durur; stok/bakiye raporları ve onay düğmeleri çalışmaya devam eder.`);
+  }
+}
+const claudeUsd = (model, u = {}) => { const f = CLAUDE_FIYAT[model] || CLAUDE_FIYAT["claude-opus-5-5"]; return ((u.input_tokens || 0) * f.giris + (u.cache_creation_input_tokens || 0) * f.giris * 1.25 + (u.cache_read_input_tokens || 0) * f.okuma + (u.output_tokens || 0) * f.cikis) / 1e6; };
+
 // ---------- Sohbet ----------
 const SISTEM = `Sen VENOM'sun: VOLONTE'nin (İstanbul Laleli, kadın giyim toptan; iki AYRI mağaza: VOLONTE ve BLACK ROSE) komuta merkezi. Sadece Patron'la konuşursun; ona "Patron" diye hitap edersin. Kısa, net, sade Türkçe (Rusça yazarsa Rusça).
 Görevin: Patron'un isteğini anlayıp ilgili bota yaptırmak (araçlarla), sonucu kısa göstermek.
@@ -193,6 +213,8 @@ async function sesiYaziyaCevir(env, dosyaId) {
 }
 
 export async function sohbet(env, metin, simdi) {
+  const sinir = await venomSinir(env), harcanan = await venomHarcanan(env, simdi);
+  if (harcanan >= sinir) return yaz(env, `Bu ayın Venom yapay zekâ sınırı (${sinir} $) doldu Patron. Sohbet gelecek ay açılır; sınırı artırmak için Claude Code'a söyleyin. Onay düğmeleri ve 20:00 özeti çalışmaya devam eder.`);
   const gecmis = await oku(env, "venom:bot:sohbet", []);
   const duzelt = await oku(env, "venom:bot:duzelt", null);
   let girdi = String(metin).slice(0, 3000);
@@ -205,7 +227,9 @@ export async function sohbet(env, metin, simdi) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
   let cevapMetni = "";
   for (let tur = 0; tur < 4; tur++) {
-    const r = await client.messages.create({ model: env.VENOM_MODEL || MODEL, max_tokens: 1500, system: [{ type: "text", text: SISTEM, cache_control: { type: "ephemeral" } }, { type: "text", text: `Şimdi: ${tarihSaat(simdi)} (İstanbul).` }], tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
+    const model = env.VENOM_MODEL || MODEL;
+    const r = await client.messages.create({ model, max_tokens: 1500, system: [{ type: "text", text: SISTEM, cache_control: { type: "ephemeral" } }, { type: "text", text: `Şimdi: ${tarihSaat(simdi)} (İstanbul).` }], tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
+    await venomHarcamaYaz(env, claudeUsd(model, r.usage), simdi);
     const yazi = r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     if (yazi) cevapMetni = yazi;
     const kullan = r.content.filter((b) => b.type === "tool_use");
@@ -236,7 +260,9 @@ export async function guncelleme(u, env) {
   if (!m || !m.from || m.chat.type !== "private" || !patronMu(env, m.from.id)) return; // sadece Patron
   let metin = m.text || m.caption || "";
   if (m.voice || m.audio) {
+    if ((await venomHarcanan(env, simdi)) >= (await venomSinir(env))) return yaz(env, `Bu ayın Venom yapay zekâ sınırı doldu; sesli mesaj gelecek ay açılır.`);
     const t = await sesiYaziyaCevir(env, (m.voice || m.audio).file_id).catch(() => null);
+    if (t) await venomHarcamaYaz(env, Math.max(0.001, ((m.voice || m.audio).duration || 30) / 60 * SES_DAKIKA_USD), simdi);
     if (!t) return yaz(env, env.OPENAI_API_KEY ? "Sesli mesajı anlayamadım Patron; tekrar söyler misiniz?" : "Sesli mesaj için OPENAI_API_KEY gerekli (Cloudflare → volonte-venom → Secret).");
     metin = t;
     await yaz(env, `🎙 "${t.slice(0, 300)}"`);

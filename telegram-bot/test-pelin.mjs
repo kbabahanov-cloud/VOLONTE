@@ -1,6 +1,8 @@
 // Çalıştırma: node --test test-pelin.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { StokDO } from "./stok.js";
 import { guncelleme, pelinCron, videoGirdisi, buAyHarcanan, fotoYazisi, fotoSirala, yeniVideoIstemi, SAHNE_VARSAYILAN } from "./pelin.js";
 
 const MURAT = 9000000001;
@@ -44,7 +46,16 @@ function ortam({ fal = true } = {}) {
     g.push({ metod: u.split("/").pop(), govde });
     return Response.json({ ok: true, result: { message_id: id++, url: "", file_path: "x.jpg" } });
   };
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) {
+    if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; }
+    const st = db.prepare(q);
+    const satir = /^\s*SELECT/i.test(q) ? st.all(...p).map((x) => ({ ...x })) : (st.run(...p), []);
+    return { toArray: () => satir };
+  } };
+  const stok = new StokDO({ storage: { sql } });
   const env = {
+    STOK: { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) },
     BOT_TOKEN: "t", ANTHROPIC_API_KEY: "k", SELF_URL: "https://pelin.test", WEBHOOK_SECRET: "s", ALLOWED_IDS: `${MURAT},9000000003`, MURAT_ID: String(MURAT), HEMRA_ID: String(HEMRA),
     ...(fal ? { FAL_KEY: "fal-anahtar" } : {}),
     KAYIT: {
@@ -56,6 +67,8 @@ function ortam({ fal = true } = {}) {
   for (const k of ["3557", "3601", "3627", "3630"]) depo.set(`pelinboy:${k}`, JSON.stringify({ boy: "midi" })); // testlerde boy kayıtlı (boy sorusu ayrı testte)
   return { env, depo, g, falIstek, claude, falSonuc, site, yaziCevap };
 }
+// Teslim kuyruğu (StokDO "pelinKanal"; okumak tüketmez)
+const teslim = async (o) => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "kuyruk:pelinKanal" }) })).json()).v || "[]");
 const yazi = (o, kimden, text) => guncelleme({ message: { message_id: 1, date: 1, chat: { id: kimden, type: "private" }, from: { id: kimden, first_name: kimden === MURAT ? "Murat" : "Hemra" }, text } }, o.env);
 const bas = (o, kimden, data) => guncelleme({ callback_query: { id: "c", from: { id: kimden, first_name: "X" }, data, message: { chat: { id: kimden }, message_id: 9, text: "kart" } } }, o.env);
 const sonDugmeler = (o) => o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde.reply_markup.inline_keyboard.flat();
@@ -146,9 +159,9 @@ test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden ü
   assert.ok(!o.g.some((x) => /\$|fiyat|stok/i.test(String(x.govde.caption || ""))));
   const isId = on.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   await bas(o, HEMRA, `pu:a:${isId}`);
-  assert.ok(!o.depo.has("venom:pelinTeslim"));
+  assert.equal((await teslim(o)).length, 0);
   await bas(o, MURAT, `pu:a:${isId}`);
-  assert.deepEqual(JSON.parse(o.depo.get("venom:pelinTeslim")).map((x) => x.kod), ["3557"]);
+  assert.deepEqual((await teslim(o)).map((x) => [x.kod, x.v, x.deneme]), [["3557", 2, false]]);
 });
 
 test("üretim: 2 denemede kontrolden geçmezse Patron'a ⚠️ (sorunlarla); maliyet testi bitince model başı maliyet raporu", async () => {
@@ -407,7 +420,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   assert.equal(sb.sahne.sonYazi, true);
   assert.match(o.g.at(-1).govde.text, /"3627 şablonu" kaydedildi/);
   await bas(o, MURAT, dugmeler[0].callback_data);
-  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim"))[0].kapak, is.kapak || JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]).kapak);
+  assert.equal((await teslim(o))[0].kapak, is.kapak || JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]).kapak);
   // şablonla yeni model
   await yazi(o, MURAT, "/uret 3630 şablon:3627");
   assert.match(o.g.at(-1).govde.text, /şablon: 3627/);
@@ -546,7 +559,7 @@ test("kontrol: makyajsız yüz ve kadraj büyük sorun; video aşamasında kalan
   assert.match(o.g.at(-1).govde.text, /Hemra onayı: KAPALI/);
   await bas(o, MURAT, "pu:a:3627-x");
   assert.equal(JSON.parse(o.depo.get("pelin:is:3627-x")).durum, "onaylandi");
-  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim"))[0].kod, "3627");
+  assert.equal((await teslim(o))[0].kod, "3627");
 });
 
 test("örnek video 'bunun gibi yap, büyük 3627 koyu bordo' → tarif → ▶️ üret: seri + renk + şablon kartta", async () => {
@@ -674,7 +687,7 @@ test("Veo reddederse aynı kareyle Kling 4.0; katalog fotoğrafından video kart
   o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-onayli", islem: "katalogdan", muzik: { url: "https://pelin.test/dosya/" + "m".repeat(32), ad: "romantik örnek videonun müziği (deneme, telifli olabilir)" }, deneme: true }));
   await cronlar(o, 1);
   const kart = o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde;
-  assert.match(kart.text, /🎬 3627: bu katalog fotoğrafından 6 sn video \+ müzik denemesi[\s\S]*Google Veo 3\.1 \(1080p\) — 6 × 0,40 \$ = 2,40 \$ \(Veo reddederse aynı fotoğrafla Kling 4\.0: 0,94 \$\)[\s\S]*🧪 DENEME: video kanala ve siteye OTOMATİK GİTMEZ/);
+  assert.match(kart.text, /🎬 3627: bu katalog fotoğrafından 6 sn video \+ müzik denemesi[\s\S]*Google Veo 3\.1 \(1080p\) — 6 × 0,40 \$ = 2,40 \$ \(Veo reddederse aynı fotoğrafla Kling 4\.0: 0,94 \$\)[\s\S]*🧪 DENEME: video kanala ve siteye HİÇ GİTMEZ/);
   assert.ok(o.g.some((x) => x.metod === "sendPhoto" && x.govde.photo === "https://img/katalog.jpg"));
   assert.equal(o.falIstek.length, 0); // onaysız harcama yok
   await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
@@ -694,17 +707,45 @@ test("Veo reddederse aynı kareyle Kling 4.0; katalog fotoğrafından video kart
   const mz = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video");
   assert.equal(mz.govde.audio_url, "https://pelin.test/dosya/" + "m".repeat(32));
   const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
-  assert.match(on.govde.text, /🎵 Müzik: romantik örnek videonun müziği[\s\S]*↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4\.0 kullanıldı\.[\s\S]*🧪 DENEME — kanala ve siteye OTOMATİK GİTMEZ/);
+  assert.match(on.govde.text, /🎵 Müzik: romantik örnek videonun müziği[\s\S]*↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4\.0 kullanıldı\.[\s\S]*🧪 DENEME — kanala ve siteye HİÇ GİTMEZ/);
   assert.ok(!/did not generate/.test(on.govde.text));
   const yayin = on.govde.reply_markup.inline_keyboard[0][0];
-  assert.equal(yayin.text, "📤 Yayına gönder");
-  assert.ok(!o.depo.has("venom:pelinTeslim"));
-  await bas(o, MURAT, yayin.callback_data); // telifli olabilir → ikinci onay
-  assert.match(o.g.at(-1).govde.text, /telifli olabilir\)\. Yine de kanala ve siteye gönderilsin mi/);
-  assert.ok(!o.depo.has("venom:pelinTeslim"));
+  assert.equal(yayin.text, "💾 Beğendim (yayına gitmez)");
+  await bas(o, MURAT, yayin.callback_data);
   await bas(o, MURAT, `${yayin.callback_data}:evet`);
-  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim"))[0].kod, "3627");
+  assert.equal((await teslim(o)).length, 0); // DENEME hiç yayına gitmez
+  assert.match(o.g.filter((x) => x.metod === "editMessageText").at(-1).govde.text, /denemesi beğenildi ve saklandı — DENEME olduğu için kanala\/siteye gönderilmez/);
   const is = JSON.parse([...o.depo.entries()].filter(([k]) => k.startsWith("pelin:is:3627-") && k !== "pelin:is:3627-onayli").at(-1)[1]);
   assert.ok(is.videoSessiz && is.video !== is.videoSessiz); // sessiz hali saklı (müzik değiştirilebilir)
   assert.ok(is.gecmis.some(([, t]) => /Veo 3\.1 \(1080p\) işleyemedi \(araç bu istemi işleyemedi/.test(t)));
+});
+
+
+// ---------- Teslim zinciri + bütçe (4 Kasım) ----------
+test("eski teslim kaydı otomatik GÖNDERİLMEZ: Patron'a sorulur; evet → kanal kuyruğu, hayır → gitmez; üretim onayı aylık sınırı aşarsa başlamaz", async () => {
+  const o = uretimOrtami();
+  o.depo.set("venom:pelinTeslim", JSON.stringify([{ kod: "3627", video: "https://vid/eski.mp4", foto: "https://img/f.jpg", kapak: "https://img/k.jpg", renk: "koyu bordo", zaman: 1793724600 }, { kod: "3601", video: "https://vid/b.mp4", zaman: 1 }]));
+  await cronlar(o, 1);
+  assert.equal((await teslim(o)).length, 0);
+  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim")).length, 0);
+  const sorular = o.g.filter((x) => /Bekleyen eski teslim/.test(x.govde.text || ""));
+  assert.equal(sorular.length, 2);
+  assert.match(sorular[0].govde.text, /3627 · koyu bordo[\s\S]*Siz demeden gitmez/);
+  await bas(o, HEMRA, sorular[0].govde.reply_markup.inline_keyboard[0][0].callback_data);
+  assert.equal((await teslim(o)).length, 0);
+  await bas(o, MURAT, sorular[0].govde.reply_markup.inline_keyboard[0][0].callback_data);
+  await bas(o, MURAT, sorular[1].govde.reply_markup.inline_keyboard[0][1].callback_data);
+  assert.deepEqual((await teslim(o)).map((x) => [x.kod, x.v]), [["3627", 2]]);
+  await cronlar(o, 1); // tekrar sorulmaz
+  assert.equal(o.g.filter((x) => /Bekleyen eski teslim/.test(x.govde.text || "")).length, 2);
+  // bütçe: sınır aşılıyorsa onay düğmesi üretimi durdurur
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.site.push({ kod: "3557", bedenler: "38-44", fotolar: ["galeri/3557/1.jpg"] });
+  o.depo.set(`uretim-harcama:${ay}`, "149");
+  await yazi(o, MURAT, "/uret 3557");
+  const kart = o.g.at(-1).govde;
+  assert.match(kart.text, /SINIRI AŞAR/);
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
+  assert.match(o.g.at(-1).govde.text, /⛔ Üretim başlamadı: bu ay Pelin 149,00 \$ harcadı/);
+  assert.equal(o.falIstek.length, 0);
 });

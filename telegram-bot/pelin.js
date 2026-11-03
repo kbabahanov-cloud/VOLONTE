@@ -20,7 +20,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
-import { venomPelinAdimi, hataEkle } from "./venom-kopru.js";
+import { venomPelinAdimi, hataEkle, kuyrugaEkle } from "./venom-kopru.js";
 
 export const AYLIK_SINIR_USD = 150;
 export const UYARI_ORANI = 0.8;
@@ -216,6 +216,7 @@ export async function pelinCron(env, simdi) {
   try { const ik = await env.KAYIT.get("venom:pelinIsKomut", "json"); if (ik && ik.isId) { await env.KAYIT.delete("venom:pelinIsKomut"); await katalogdanVideoKarti(env, ik, simdi); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinIsKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinKomut" = { metin } → Patron yazmış gibi kart hazırlanır (kart yine Patron onayı ister)
   try { const pk = await env.KAYIT.get("venom:pelinKomut", "json"); if (pk && /^\/(uret|maliyettesti)\b/.test(String(pk.metin))) { await env.KAYIT.delete("venom:pelinKomut"); const p = murat(env); await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: pk.metin }, simdi, /^\/maliyettesti/.test(pk.metin)); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  if (env.STOK) { try { await eskiTeslimSor(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "eskiTeslim", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
   try { await urunFotoAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoAktar", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { const yk = await env.KAYIT.get("venom:pelinYuzKart", "json"); if (Array.isArray(yk) && yk.length) { await env.KAYIT.delete("venom:pelinYuzKart"); for (const k of yk) await yuzDuzenleKarti(env, murat(env), k.seri, k.talimat, k.istem, simdi, k.onEk || ""); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKart", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await yuzKaydiUygula(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKaydi", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
@@ -375,6 +376,7 @@ export async function guncelleme(u, env) {
     if (/^ps:/.test(v)) return sablonDugmesi(env, cq, simdi);
     if (/^pz:/.test(v)) return yuzDuzenDugmesi(env, cq, simdi);
     if (/^pb:/.test(v)) return boyDugmesi(env, cq, simdi);
+    if (/^pt:/.test(v)) return eskiTeslimDugmesi(env, cq, simdi);
     if (/^pyk:/.test(v)) return yuzFotoDugmesi(env, cq, simdi);
     return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Geçersiz düğme." });
   }
@@ -1041,7 +1043,7 @@ async function uretimAdimi(env, is, simdi) {
     is.sorunlar = k.sorunlar; is.durum = is.videoDeneme < URETIM_DENEME ? "video_gonder" : "uyari"; return;
   }
 }
-const isKlavye = (id, sablon = false, uyari = false, digerAraclar = [], deneme = false) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : deneme ? "📤 Yayına gönder" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : []),
+const isKlavye = (id, sablon = false, uyari = false, digerAraclar = [], deneme = false) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : deneme ? "💾 Beğendim (yayına gitmez)" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : []),
   ...(digerAraclar.length ? [digerAraclar.map((a) => ({ text: `🎬 ${ARACLAR[a].ad.replace(/ \(.*\)/, "")} ile de dene (${para(ARACLAR[a].saniye * URETIM_SN)})`, callback_data: `pu:k:${id}:${a}` }))] : [])] });
 const KARSILASTIRMA = ["veo31", "kling4", "kling4k"];
 // Kontrolden geçmeyen iş "yine de onayla" ile nereden devam eder?
@@ -1056,12 +1058,39 @@ const puanSatiri = (is) => {
   const p = [["foto", is.fotoKontrol], ["video karesi", is.sahneKontrol], ["video", is.videoKontrol]].filter(([, k]) => k && k.puan && (k.puan.pelin || k.puan.chatgpt)).map(([ad, k]) => `${ad} ${k.puan.pelin ?? "—"}${k.puan.chatgpt ? `/${k.puan.chatgpt}` : ""}`);
   return p.length ? `🎯 Kontrol puanı (Pelin/ChatGPT, 10 üzerinden): ${p.join(" · ")}` : "";
 };
+// Teslim (4 Kasım): Patron "✅ Onayla" dedi → StokDO kuyruğu "pelinKanal": Kemal kanala paylaşır, sonra Selin siteye ekler.
+// DENEME (yayinYok) işler buraya HİÇ gelmez. v: 2 = yeni düzen kaydı (eski KV "venom:pelinTeslim" kayıtları önce Patron'a sorulur).
 async function teslimEt(env, is, simdi) {
+  if (is.yayinYok) throw new Error("deneme iş yayına gönderilemez");
   is.durum = "onaylandi"; is.onayZaman = simdi;
   await kaydet(env, `pelin:is:${is.id}`, is);
+  await kuyrugaEkle(env, "pelinKanal", { v: 2, id: is.id, kod: is.kod, foto: is.foto, video: is.video, kapak: is.kapak || null, renk: is.renk || null, ortam: is.ortam ? is.ortam.ad : null, deneme: false, onay: "patron", zaman: simdi });
+}
+// Eski teslim kayıtları (KV "venom:pelinTeslim", okuyucu kod yokken birikti): OTOMATİK GÖNDERİLMEZ, Patron'a sorulur
+async function eskiTeslimSor(env, simdi) {
   const l = (await env.KAYIT.get("venom:pelinTeslim", "json")) || [];
-  l.push({ kod: is.kod, foto: is.foto, video: is.video, kapak: is.kapak || null, renk: is.renk || null, ortam: is.ortam ? is.ortam.ad : null, zaman: simdi });
-  await env.KAYIT.put("venom:pelinTeslim", JSON.stringify(l.slice(-100)));
+  if (!l.length) return;
+  await env.KAYIT.put("venom:pelinTeslim", "[]");
+  for (const x of l) {
+    const id = kisaId();
+    await kaydet(env, `pelin:teslimSoru:${id}`, x, 14 * 86400);
+    if (x.video) await tg(env, "sendVideo", { chat_id: murat(env), video: x.video, caption: `🎬 ${x.kod} (bekleyen eski teslim)` });
+    await yaz(env, murat(env), `📦 Bekleyen eski teslim: ${x.kod}${x.renk ? ` · ${x.renk}` : ""} · onay ${tarihSaatYaz(x.zaman || simdi)}.\nBu video ve kapak fotoğrafı kanala (Kemal) ve siteye (Selin) gönderilsin mi? Siz demeden gitmez.`,
+      { reply_markup: { inline_keyboard: [[{ text: "📤 Evet, yayınla", callback_data: `pt:y:${id}` }, { text: "❌ Gönderme", callback_data: `pt:n:${id}` }]] } });
+  }
+}
+async function eskiTeslimDugmesi(env, cq, simdi) {
+  const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!muratMi(env, cq.from.id)) return cevap("Sadece Patron.");
+  const [, islem, id] = cq.data.split(":");
+  const x = await oku(env, `pelin:teslimSoru:${id}`, null);
+  if (!x) return cevap("Bu soru artık geçerli değil.");
+  await env.KAYIT.delete(`pelin:teslimSoru:${id}`);
+  const kapat = (text) => tg(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text });
+  if (islem !== "y") { await cevap("Gönderilmedi"); return kapat(`❌ ${x.kod}: eski teslim gönderilmedi.`); }
+  await kuyrugaEkle(env, "pelinKanal", { ...x, v: 2, id: x.id || `eski-${id}`, deneme: false, onay: "patron (eski kayıt)", zaman: simdi });
+  await cevap("Yayına alındı");
+  return kapat(`📤 ${x.kod}: yayına alındı — önce Kemal kanala, sonra Selin siteye ekler; sonuç mesajı gelecek.`);
 }
 async function ogrenmeYaz(env, kayit) {
   const l = await oku(env, "pelin:ogrenme", []);
@@ -1089,7 +1118,7 @@ async function isBildir(env, is) {
   }
   return yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
     ...(is.aracYedek ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
-    is.yayinYok ? "🧪 DENEME — kanala ve siteye OTOMATİK GİTMEZ. Yayınlamak isterseniz 📤 Yayına gönder." : "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC)) : [], Boolean(is.yayinYok)) });
+    is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC)) : [], Boolean(is.yayinYok)) });
 }
 export async function uretimCron(env, simdi) {
   const liste = await oku(env, "pelin:isler", []);
@@ -1134,6 +1163,12 @@ async function uretimDugmesi(env, cq, simdi) {
   if (islem === "o" || islem === "i") {
     const onay = await oku(env, `pelin:uretimOnay:${id}`, null);
     if (!onay || onay.kullanildi) return cevap("Bu onay geçersiz.");
+    if (islem === "o") { // 4 Kasım (Patron): aylık sınır aşılıyorsa üretim BAŞLAMAZ
+      const secimB = await oku(env, "pelin:secim", null);
+      const tahmin = yuvarla(uretimMaliyeti(aracSec(secimB), secimB).toplam * onay.kodlar.length);
+      const harcanan = await buAyHarcanan(env, simdi);
+      if (harcanan + tahmin > AYLIK_SINIR_USD) { await cevap("Aylık sınır aşılır"); return yaz(env, cq.message.chat.id, `⛔ Üretim başlamadı: bu ay Pelin ${para(harcanan)} harcadı, bu iş ~${para(tahmin)}; aylık sınır ${AYLIK_SINIR_USD} $. Sınırı artırmak Patron kararıyla (Claude Code'a söyleyin).`); }
+    }
     onay.kullanildi = true; await kaydet(env, `pelin:uretimOnay:${id}`, onay, 86400);
     if (islem === "i") { await cevap("İptal"); return kapat("❌ İptal edildi, hiçbir şey harcanmadı."); }
     await cevap("Başlıyorum"); await kapat(`✅ Onaylandı — ${onay.kodlar.length} model üretime alındı (${onay.kodlar.join(", ")}). Hazır olan önizleme olarak gelecek.`);
@@ -1180,6 +1215,12 @@ async function uretimDugmesi(env, cq, simdi) {
     return kapat(`✅ ${is.kod}: fotoğraf Patron onayıyla geçti — ${devam === "sahne_gonder" ? "video karesi ve video" : "video"} üretiliyor. Hazır olunca önizleme gelecek.`);
   }
   if (islem === "r") { Object.assign(is, { durum: "foto_gonder", fotoDeneme: 0, sahneDeneme: 0, videoDeneme: 0, foto: null, sahne: null, video: null, kapak: null }); await kaydet(env, `pelin:is:${id}`, is); await cevap("Yeniden"); return kapat(`🔄 ${is.kod} yeniden üretiliyor.`); }
+  if (islem === "a" && is.durum === "onay" && is.yayinYok) { // DENEME: hiç yayına gitmez (Patron kuralı 4 Kasım)
+    is.durum = "deneme_begenildi"; is.onayZaman = simdi; await kaydet(env, `pelin:is:${id}`, is);
+    await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "onay", farklar: [], notlar: (is.notlar || []).slice(0, 4) });
+    await cevap("Kaydedildi");
+    return kapat(`💾 ${is.kod} denemesi beğenildi ve saklandı — DENEME olduğu için kanala/siteye gönderilmez. Yayın için aynı ayarlarla normal üretim yapılır (müzik telifsiz VOLONTE müziğiyle).`);
+  }
   if (islem === "a" && is.durum === "onay") {
     if (is.muzik && is.muzikEklendi && /telifli/.test(is.muzik.ad || "") && ek !== "evet") { // deneme müziği telifli olabilir → ikinci onay
       await cevap("Emin misiniz?");
@@ -1217,7 +1258,7 @@ export async function katalogdanVideoKarti(env, ik, simdi) {
     `• Video: ${ARACLAR[arac].ad} — ${URETIM_SN} × ${para(ARACLAR[arac].saniye)} = ${para(v)} (Veo reddederse aynı fotoğrafla Kling 4.0: ${para(ARACLAR.kling4.saniye * URETIM_SN)})`,
     `• Kontrol + son kare yazısı: ~${para(KONTROL_TAHMIN * 2 + OPENAI_TAHMIN)}${ik.muzik ? " · müzik ekleme ~0,01 $" : ""}`,
     ...(ik.muzik ? [`🎵 Müzik: ${ik.muzik.ad}. Sessiz hali saklanır; müzik sonra telifsiz VOLONTE müziğiyle değiştirilebilir.`] : []),
-    "🧪 DENEME: video kanala ve siteye OTOMATİK GİTMEZ; önce size gelir, yayın kararı sizin.",
+    "🧪 DENEME: video kanala ve siteye HİÇ GİTMEZ; sadece size gelir.",
     "Dekor yok (zarf/eldiven/şapka yok); boy bilek, siyah-altın ortam.",
   ].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:b:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }]] } });
 }

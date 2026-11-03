@@ -258,3 +258,27 @@ test("webhook: gizli anahtar yanlışsa 401; aynı güncelleme iki kez gelirse b
   for (let i = 0; i < 2; i++) await venom.fetch(new Request("https://venom.test/telegram", { method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": "gizli" }, body: JSON.stringify(u) }), o.env);
   assert.equal(o.claude.length, 1);
 });
+
+test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; tavan dolunca sohbet durur (Claude çağrılmaz); varsayılan tavan 30 $", async () => {
+  const o = ortam();
+  const { venomHarcanan, venomSinir, VENOM_SINIR_VARSAYILAN } = await import("./venom-bot.js");
+  assert.equal(VENOM_SINIR_VARSAYILAN, 30);
+  assert.equal(await venomSinir(o.env), 30);
+  await yazi(o, PATRON, "merhaba");
+  const h1 = await venomHarcanan(o.env, Math.floor(Date.now() / 1000));
+  assert.ok(h1 > 0 && h1 < 0.01, String(h1)); // 10 giriş + 5 çıkış token
+  const ay = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7);
+  o.depo.set(`venom-harcama:${ay}`, "24.5");
+  await yazi(o, PATRON, "devam");
+  assert.ok(patronaGiden(o).some((x) => /Venom bu ay 24,50 \$ yapay zekâ harcadı \(aylık sınır 30 \$, %80\)/.test(x.govde.text)));
+  await yazi(o, PATRON, "bir daha");
+  assert.equal(patronaGiden(o).filter((x) => /%80/.test(x.govde.text)).length, 1); // bir kez
+  o.depo.set(`venom-harcama:${ay}`, "30");
+  const n = o.claude.length;
+  await yazi(o, PATRON, "stok 3557");
+  assert.equal(o.claude.length, n);
+  assert.match(patronaGiden(o).at(-1).govde.text, /Venom yapay zekâ sınırı \(30 \$\) doldu/);
+  o.depo.set("venom:bot:sinir", "50");
+  await yazi(o, PATRON, "stok 3557");
+  assert.equal(o.claude.length, n + 1);
+});
