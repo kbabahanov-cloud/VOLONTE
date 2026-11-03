@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3218",
+  "baslik": "Belted Tulle Skirt Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece set pairing a tailored white jacket with a full, layered tulle midi skirt and a matching wide belt. The jacket features a stand collar with a soft V opening, covered buttons and flap pockets, while the rhinestone buckle defines the waist. Suited to ceremonies, receptions and special daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble trois pièces associant une veste blanche ajustée, une jupe midi ample en tulle superposé et une large ceinture assortie. La veste se distingue par son col montant légèrement ouvert en V, ses boutons recouverts et ses poches à rabat, tandis que la boucle strass marque la taille. Idéal pour les cérémonies, réceptions et événements de journée. Confectionné à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de três peças que combina um casaco branco acinturado, uma saia midi ampla em tule em camadas e um cinto largo a condizer. O casaco tem gola alta com abertura suave em V, botões forrados e bolsos com pala, e a fivela com strass define a cintura. Ideal para cerimónias, receções e eventos especiais de dia. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3218/1.jpg",
+   "galeri/3218/2.jpg",
+   "galeri/3218/3.jpg",
+   "galeri/3218/4.jpg",
+   "galeri/3218/5.jpg"
+  ],
+  "videolar": [
+   "selin/3218/0"
+  ],
+  "fiyat": 53,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3254",
   "baslik": "Pleated Kimono Skirt Set",
   "kategori": "sets",
