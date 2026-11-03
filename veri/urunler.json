@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3254",
+  "baslik": "Pleated Kimono Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a relaxed kimono-style wrap top with a flowing pleated maxi skirt. The top features wide draped sleeves, a shawl collar and a tie belt that defines the waist, while the skirt has an elastic waistband and fine pleats; offered in black and in fuchsia with an ombre skirt. Suited to celebrations, events and elegant daytime occasions. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut portefeuille esprit kimono à une jupe longue plissée et fluide. Le haut se distingue par ses larges manches drapées, son col châle et sa ceinture à nouer qui marque la taille ; la jupe a une taille élastique et de fins plis. Disponible en noir et en fuchsia avec jupe dégradée. Idéal pour les cérémonies, les événements et les journées élégantes. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa transpassada estilo quimono com uma saia longa plissada e fluida. A blusa tem mangas amplas e caídas, gola xale e cinto de amarrar que marca a cintura; a saia tem cós elástico e pregas finas. Disponível em preto e em fúcsia com saia em degradê. Ideal para celebrações, eventos e ocasiões elegantes de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3254/1.jpg",
+   "galeri/3254/2.jpg",
+   "galeri/3254/3.jpg",
+   "galeri/3254/4.jpg",
+   "galeri/3254/5.jpg",
+   "galeri/3254/6.jpg",
+   "galeri/3254/7.jpg",
+   "galeri/3254/8.jpg",
+   "galeri/3254/9.jpg",
+   "galeri/3254/10.jpg"
+  ],
+  "videolar": [
+   "selin/3254/0",
+   "selin/3254/1"
+  ],
+  "fiyat": 52,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3271",
   "baslik": "Wrap Vest Trouser Set",
   "kategori": "sets",
