@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3329",
+  "baslik": "Notched Collar Shirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A relaxed two-piece set pairing a short-sleeve shirt with wide-leg trousers in a matching tone. The shirt features a notched lapel collar, rolled cuffs and a row of gold-tone buttons, finished with a softly curved hem. Easy to wear for daytime meetings, city errands or relaxed weekends. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces décontracté associant une chemise à manches courtes et un pantalon large assorti. La chemise se distingue par son col à revers cranté, ses manches retroussées et sa rangée de boutons dorés, avec un bas légèrement arrondi. Idéal pour les rendez-vous en journée, la ville ou le week-end. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças descontraído que combina uma camisa de manga curta com calças de perna larga no mesmo tom. A camisa tem gola com lapela entalhada, mangas dobradas e uma fila de botões dourados, com bainha suavemente arredondada. Fácil de usar em reuniões de dia, na cidade ou no fim de semana. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3329/1.jpg",
+   "galeri/3329/2.jpg",
+   "galeri/3329/3.jpg",
+   "galeri/3329/4.jpg",
+   "galeri/3329/5.jpg",
+   "galeri/3329/6.jpg",
+   "galeri/3329/7.jpg",
+   "galeri/3329/8.jpg",
+   "galeri/3329/9.jpg",
+   "galeri/3329/10.jpg"
+  ],
+  "videolar": [
+   "selin/3329/0",
+   "selin/3329/1"
+  ],
+  "fiyat": 38,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3331",
   "baslik": "Ruffled Halter Pleated Set",
   "kategori": "sets",
