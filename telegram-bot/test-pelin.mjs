@@ -391,7 +391,8 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   assert.ok(kontrol.length >= 3);
   const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.equal(video.length, 2); // ilk videonun son karesinde kod yanlış okundu (3672) → otomatik yeniden
-  assert.match(video[0].govde.prompt, /red \(kırmızı\) color variant ONLY[\s\S]*orbits[\s\S]*"VOLONTE"[\s\S]*"3627"/);
+  assert.match(video[0].govde.prompt, /\(red only\)[\s\S]*orbits[\s\S]*"VOLONTE"[\s\S]*"3627"/);
+  assert.ok(video[0].govde.prompt.length <= 1900, `video istemi kısa olmalı: ${video[0].govde.prompt.length}`);
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]);
   assert.ok(is.gecmis.some(([, t]) => /video 1: geçmedi \(.*son karedeki kod yanlış \(okunan: "3672"/.test(t)));
   assert.ok(o.g.some((x) => x.metod === "sendPhoto" && /🖼 3627 kapak \(videodan\)/.test(x.govde.caption || "")));
@@ -656,4 +657,54 @@ test("boy güçlendirme: istemin başında LENGTH RULE + FORBIDDEN; system_promp
   globalThis.fetch = asil;
   assert.equal(k.gecti, true);
   assert.ok(k.notlar.some((x) => /ChatGPT: boy farklı: daha kısa \(Pelin boyu doğru buldu\)/.test(x)));
+});
+
+// ---------- 3627 video hatası + müzik denemesi (3 Kasım gece) ----------
+test("Veo reddederse aynı kareyle Kling 4.0; katalog fotoğrafından video kartı; müzik denemesi; DENEME yayına gitmez; dekor temizlenir; hata Türkçe", async () => {
+  const { temizOrtam, falHataTr } = await import("./pelin.js");
+  assert.ok(!/envelope\b.*Atmosphere|velvet bow/.test(temizOrtam("Minimal studio with a plain muted green backdrop and no props beyond a small paper envelope. Atmosphere is whimsical, with ornate floral embroidery, velvet bow and long gloves as styling cues.").split("No props")[0]));
+  assert.equal(falHataTr('[{"loc":["body"],"msg":"The model did not generate the expected output for this prompt."}]'), "araç bu istemi işleyemedi (istem uzun ya da içerik filtresine takıldı)");
+  assert.equal(falHataTr("something weird"), "araç hatası (ayrıntı Claude Code'da)");
+  const o = uretimOrtami();
+  o.falSonuc["fal-ai/veo3.1/image-to-video"] = () => ({ detail: [{ msg: "The model did not generate the expected output for this prompt." }] });
+  o.falSonuc["kling/v4/image-to-video"] = (n) => ({ video: { url: `https://vid/k${n}.mp4` } });
+  o.falSonuc["fal-ai/ffmpeg-api/merge-audio-video"] = (n) => ({ video: { url: `https://vid/muzikli${n}.mp4` } });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.depo.set("pelin:is:3627-onayli", JSON.stringify({ id: "3627-onayli", kod: "3627", seri: "buyuk", renk: "koyu bordo", boy: { boy: "bilek" }, durum: "uyari", foto: "https://img/katalog.jpg", sahne: "https://img/romantik.jpg", urunler: ["https://u/on.jpg"], ortam: { id: "2", ad: "Siyah Altın Lüks", sahne: "black gold studio" }, videoOrtam: { id: "ornek-romantik", sahne: "green backdrop" }, sahneAyar: { ...SAHNE_VARSAYILAN }, sablon: { ad: "romantik", kamera: "x", isik: "soft", hiz: "slow", poz: "envelope" }, fotoDeneme: 1, sahneDeneme: 2, videoDeneme: 2, maliyet: 1, gecmis: [], zaman: 1 }));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-onayli", islem: "katalogdan", muzik: { url: "https://pelin.test/dosya/" + "m".repeat(32), ad: "romantik örnek videonun müziği (deneme, telifli olabilir)" }, deneme: true }));
+  await cronlar(o, 1);
+  const kart = o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde;
+  assert.match(kart.text, /🎬 3627: bu katalog fotoğrafından 6 sn video \+ müzik denemesi[\s\S]*Google Veo 3\.1 \(1080p\) — 6 × 0,40 \$ = 2,40 \$ \(Veo reddederse aynı fotoğrafla Kling 4\.0: 0,94 \$\)[\s\S]*🧪 DENEME: video kanala ve siteye OTOMATİK GİTMEZ/);
+  assert.ok(o.g.some((x) => x.metod === "sendPhoto" && x.govde.photo === "https://img/katalog.jpg"));
+  assert.equal(o.falIstek.length, 0); // onaysız harcama yok
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
+  o.yaziCevap.kod = "3627";
+  o.claude.cevaplar = Array.from({ length: 3 }, () => K2());
+  await cronlar(o, 12);
+  const veo = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
+  assert.equal(veo.length, 1);
+  assert.equal(veo[0].govde.image_url, "https://img/katalog.jpg"); // video katalog fotoğrafından (romantik kareden değil)
+  assert.equal(veo[0].govde.auto_fix, true);
+  assert.ok(veo[0].govde.prompt.length <= 1900);
+  assert.match(veo[0].govde.prompt, /Setting and atmosphere: black gold studio/);
+  assert.ok(!/envelope|green backdrop/.test(veo[0].govde.prompt.replace(/props or accessories such as hats, gloves or envelopes/, "")));
+  const kl = o.falIstek.filter((x) => x.uc === "kling/v4/image-to-video");
+  assert.equal(kl.length, 1);
+  assert.equal(kl[0].govde.start_image_url, "https://img/katalog.jpg");
+  const mz = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video");
+  assert.equal(mz.govde.audio_url, "https://pelin.test/dosya/" + "m".repeat(32));
+  const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
+  assert.match(on.govde.text, /🎵 Müzik: romantik örnek videonun müziği[\s\S]*↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4\.0 kullanıldı\.[\s\S]*🧪 DENEME — kanala ve siteye OTOMATİK GİTMEZ/);
+  assert.ok(!/did not generate/.test(on.govde.text));
+  const yayin = on.govde.reply_markup.inline_keyboard[0][0];
+  assert.equal(yayin.text, "📤 Yayına gönder");
+  assert.ok(!o.depo.has("venom:pelinTeslim"));
+  await bas(o, MURAT, yayin.callback_data); // telifli olabilir → ikinci onay
+  assert.match(o.g.at(-1).govde.text, /telifli olabilir\)\. Yine de kanala ve siteye gönderilsin mi/);
+  assert.ok(!o.depo.has("venom:pelinTeslim"));
+  await bas(o, MURAT, `${yayin.callback_data}:evet`);
+  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim"))[0].kod, "3627");
+  const is = JSON.parse([...o.depo.entries()].filter(([k]) => k.startsWith("pelin:is:3627-") && k !== "pelin:is:3627-onayli").at(-1)[1]);
+  assert.ok(is.videoSessiz && is.video !== is.videoSessiz); // sessiz hali saklı (müzik değiştirilebilir)
+  assert.ok(is.gecmis.some(([, t]) => /Veo 3\.1 \(1080p\) işleyemedi \(araç bu istemi işleyemedi/.test(t)));
 });
