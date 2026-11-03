@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3398",
+  "baslik": "Satin Kimono Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a floor-length kimono with high-waisted wide-leg trousers in a lustrous satin-look finish. The abstract print in rose, copper and deep brown flows across both pieces, while the wide kimono sleeves and pleated trouser front give a soft, fluid line. Wear it open over a simple top for gatherings or relaxed occasions. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant un kimono long et un pantalon large taille haute, au tombé satiné et lumineux. L'imprimé abstrait aux tons rose, cuivre et brun profond relie les deux pièces, tandis que les manches amples et les plis du pantalon dessinent une silhouette fluide. À porter ouvert sur un haut simple pour les réceptions ou les moments plus détendus. Fabriqué à Istanbul avec une finition soignée.",
+   "pt": "Conjunto de duas peças que combina um quimono comprido com calça de cintura alta e pernas largas, num acabamento acetinado e luminoso. A estampa abstrata em tons de rosa, cobre e castanho profundo une as duas peças, e as mangas amplas e as pregas da calça criam uma linha fluida. Use aberto sobre uma blusa simples em encontros ou ocasiões descontraídas. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3398/1.jpg",
+   "galeri/3398/2.jpg",
+   "galeri/3398/3.jpg",
+   "galeri/3398/4.jpg",
+   "galeri/3398/5.jpg"
+  ],
+  "videolar": [
+   "selin/3398/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3404",
   "baslik": "Bow-Neck Lace Maxi Dress",
   "kategori": "dresses",
