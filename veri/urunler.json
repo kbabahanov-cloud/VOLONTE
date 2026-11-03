@@ -1,5 +1,32 @@
 [
  {
+  "kod": "3319",
+  "baslik": "Cropped Shirt Pleated Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a cropped long-sleeve shirt with a high-waisted pleated midi skirt. The shirt features layered cape panels over the front, a classic pointed collar, button closure and a drawstring hem that ties at the waist. Easy to style for office days, events or weekend outings. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une chemise courte à manches longues et une jupe midi plissée taille haute. La chemise se distingue par des pans superposés façon cape sur le devant, un col classique, une fermeture boutonnée et un ourlet coulissant noué à la taille. Idéal pour le bureau, les événements ou les sorties du week-end. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma camisa cropped de manga comprida com uma saia midi plissada de cintura alta. A camisa tem painéis sobrepostos em estilo capa na frente, gola clássica, fecho de botões e bainha com cordão que se ata na cintura. Fácil de usar no escritório, em eventos ou nos passeios de fim de semana. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3319/1.jpg",
+   "galeri/3319/2.jpg",
+   "galeri/3319/3.jpg",
+   "galeri/3319/4.jpg",
+   "galeri/3319/5.jpg",
+   "galeri/3319/6.jpg",
+   "galeri/3319/7.jpg"
+  ],
+  "videolar": [
+   "selin/3319/0",
+   "selin/3319/1"
+  ],
+  "fiyat": 38,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3327",
   "baslik": "Denim Panel Blazer Suit",
   "kategori": "sets",
