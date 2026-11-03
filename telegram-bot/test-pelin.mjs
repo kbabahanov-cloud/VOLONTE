@@ -617,3 +617,43 @@ test("yüz yükseltme kartları (tek seferlik) ve /arac seçenekleri", async () 
   await yazi(o, MURAT, "/arac kling4");
   assert.equal(JSON.parse(o.depo.get("pelin:secim")).aracElle, true);
 });
+
+// ---------- Boy sorunu (3 Kasım gece): kural istemin başında + sistem talimatı + yasaklar; şablon kadrajı ezmez; ChatGPT boyu tek başına durduramaz ----------
+test("boy güçlendirme: istemin başında LENGTH RULE + FORBIDDEN; system_prompt; referans etiketli; Veo negatifine yasak; örnek şablonun yakın planı/aksesuarı alınmaz; ChatGPT-sadece-boy → not", async () => {
+  const o = uretimOrtami();
+  o.site.push({ kod: "3627", bedenler: "38-50", fotolar: ["galeri/3627/1.jpg"] });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.depo.set("pelinboy:3627", JSON.stringify({ boy: "bilek", referans: [{ anahtar: "r".repeat(32), tur: "foto" }] }));
+  o.depo.set("pelin:sablonlar", JSON.stringify({ romantik: { ad: "romantik", kaynak: "ornek", kamera: "Locked-off camera; tight medium close-up framed from head to chest", isik: "soft diffused beauty light", hiz: "slow calm tempo", poz: "holds an envelope with a gloved hand, touches a wide hat brim", ortam_havasi: "sage green seamless backdrop" } }));
+  o.depo.set("venom:pelinKomut", JSON.stringify({ metin: "/uret büyük:3627 koyu bordo şablon:romantik" }));
+  await cronlar(o, 1); // kart Patron'a (Patron onaylar)
+  const kart = o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde;
+  assert.match(kart.text, /3627 büyük seri[\s\S]*Renk: 3627 sadece koyu bordo[\s\S]*Boy: 3627 bilek[\s\S]*örnek videonun ortamı \(romantik\)/);
+  assert.ok(!o.depo.has("venom:pelinKomut"));
+  assert.equal(o.falIstek.length, 0);
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
+  o.yaziCevap.kod = "3627";
+  o.claude.cevaplar = Array.from({ length: 4 }, () => K2());
+  await cronlar(o, 12);
+  const edit = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
+  for (const e of edit.slice(0, 2)) {
+    assert.match(e.govde.prompt, /^LENGTH RULE \(HIGHEST PRIORITY, before anything else\): ankle length[\s\S]*Both shoes and both ankles are completely visible[\s\S]*FORBIDDEN: floor-length dress, maxi dress, long skirt touching or pooling on the floor, hem covering the shoes[\s\S]*camera at hip height[\s\S]*The LAST image shows the correct length/);
+    assert.match(e.govde.system_prompt, /Hard rules that override everything else[\s\S]*never produce: floor-length dress/);
+    assert.equal(e.govde.image_urls.at(-1), `https://pelin.test/dosya/${"r".repeat(32)}`);
+  }
+  const v = o.falIstek.find((x) => x.uc === "fal-ai/veo3.1/image-to-video");
+  assert.match(v.govde.prompt, /^LENGTH RULE \(highest priority\): ankle length/);
+  assert.match(v.govde.negative_prompt, /floor-length dress[\s\S]*hem covering the shoes/);
+  assert.match(v.govde.prompt, /use ONLY its light, color grade, mood and tempo — NOT its framing, props or accessories such as hats, gloves/);
+  assert.ok(!/tight medium close-up|gloved hand|holds an envelope/.test(v.govde.prompt));
+  // ChatGPT sadece boy yüzünden "geçmedi" derse, Pelin boyu doğru bulduysa üretim durmaz (not olur)
+  const { kaliteKontrol } = await import("./pelin.js");
+  o.env.OPENAI_API_KEY = "x";
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).includes("api.openai.com") ? Response.json({ choices: [{ message: { content: JSON.stringify({ renk_buyuk_fark: false, kesim_buyuk_fark: false, boy_buyuk_fark: true, kadraj_tam: true, makyaj_var: true, puan: 6, buyuk_sorunlar: ["boy farklı: daha kısa"], kucuk_notlar: [] }) } }] }) : asil(url, istek));
+  o.claude.cevaplar = [K2()];
+  const k = await kaliteKontrol(o.env, ["u"], ["g"], 1, { boy: { boy: "bilek" }, yuz: true });
+  globalThis.fetch = asil;
+  assert.equal(k.gecti, true);
+  assert.ok(k.notlar.some((x) => /ChatGPT: boy farklı: daha kısa \(Pelin boyu doğru buldu\)/.test(x)));
+});

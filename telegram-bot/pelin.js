@@ -191,7 +191,7 @@ async function falSor(env) {
   if (!Array.isArray(l) || !l.length) return;
   await env.KAYIT.delete("venom:pelinFalSor");
   const c = { zaman: Math.floor(Date.now() / 1000), sonuc: {} };
-  for (const yol of l.filter((x) => /^\/v1\/[a-z/]+(\?|$)/.test(String(x))).slice(0, 12)) {
+  for (const yol of l.filter((x) => /^\/v1\/[a-z/-]+(\?|$)/.test(String(x))).slice(0, 12)) {
     try { const r = await fetch(`https://api.fal.ai${yol}`, { headers: falBaslik(env) }); c.sonuc[yol] = { durum: r.status, govde: (await r.text()).slice(0, 40000) }; } catch (e) { c.sonuc[yol] = { hata: String(e.message) }; }
   }
   // Şema: "sema:<uç>" → fal belge şeması (sadece okuma); sadece giriş alanları saklanır
@@ -211,6 +211,8 @@ export async function pelinCron(env, simdi) {
   await webhookKur(env);
   if (env.FAL_KEY) { try { await falSor(env); } catch (e) { await env.KAYIT.put("venom:pelinFalSonuc", JSON.stringify({ hata: String(e && e.message) })); } }
   try { const sc = await env.KAYIT.get("pelin:secim"); if (sc && sc !== (await env.KAYIT.get("pelin:secimAyna"))) { await env.KAYIT.put("venom:pelinSecim", sc); await env.KAYIT.put("pelin:secimAyna", sc); } } catch { /* sonra */ }
+  // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinKomut" = { metin } → Patron yazmış gibi kart hazırlanır (kart yine Patron onayı ister)
+  try { const pk = await env.KAYIT.get("venom:pelinKomut", "json"); if (pk && /^\/(uret|maliyettesti)\b/.test(String(pk.metin))) { await env.KAYIT.delete("venom:pelinKomut"); const p = murat(env); await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: pk.metin }, simdi, /^\/maliyettesti/.test(pk.metin)); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await urunFotoAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoAktar", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { const yk = await env.KAYIT.get("venom:pelinYuzKart", "json"); if (Array.isArray(yk) && yk.length) { await env.KAYIT.delete("venom:pelinYuzKart"); for (const k of yk) await yuzDuzenleKarti(env, murat(env), k.seri, k.talimat, k.istem, simdi, k.onEk || ""); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKart", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await yuzKaydiUygula(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKaydi", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
@@ -571,6 +573,10 @@ export async function kaliteKontrol(env, urunler, uretilen, simdi, ek = {}) {
   const claudeHam = await claudeJson(env, [{ type: "text", text: "ÜRÜN (gerçek):" }, ...urunler.map(resimUrl), { type: "text", text: "ÜRETİLEN:" }, ...uretilen.map(resimUrl), { type: "text", text: kontrolSorusu(ekk) }], KONTROL2_SEMA(ekk), simdi, 700);
   const openaiHam = await openaiKontrol(env, urunler, uretilen, simdi, ekk).catch((e) => ({ hata: String(e.message).slice(0, 160) }));
   const c = kontrolOku(claudeHam), o = openaiHam && !openaiHam.hata ? kontrolOku(openaiHam) : null;
+  // 3 Kasım: ChatGPT boyda tutarsız ("daha kısa" ↔ Pelin "bilek, doğru") → sadece boy yüzünden geçmediyse ve Pelin boyu doğru bulduysa not olur
+  if (o && !o.gec && c.gec && openaiHam.boy_buyuk_fark && !openaiHam.renk_buyuk_fark && !openaiHam.kesim_buyuk_fark && openaiHam.kadraj_tam !== false && openaiHam.makyaj_var !== false) {
+    o.gec = true; o.kucuk = [...o.kucuk, ...o.buyuk.map((x) => `${x} (Pelin boyu doğru buldu)`)]; o.buyuk = [];
+  }
   const sorunlar = [...c.buyuk.map((s) => `Pelin: ${s}`), ...(o ? o.buyuk.map((s) => `ChatGPT: ${s}`) : [])];
   const notlar = [...c.kucuk.map((s) => `Pelin: ${s}`), ...(o ? o.kucuk.map((s) => `ChatGPT: ${s}`) : [])];
   return { gecti: c.gec && (o ? o.gec : true), claude: c.gec, openai: openaiHam === null ? "yok" : openaiHam.hata ? `hata (${openaiHam.hata})` : o.gec, sorunlar, notlar, puan: { pelin: c.puan, chatgpt: o ? o.puan : null } };
@@ -698,6 +704,15 @@ const boyYaz = async (env, kod, kayit) => { await env.KAYIT.put(`pelinboy:${kod}
 export const boyYazi = (b) => (b && BOYLAR[b.boy] ? `${BOYLAR[b.boy].ad}${b.boy === "bilek" ? " (ayakkabı görünür, etek yere değmez)" : ""}${(b.referans || []).length ? " · referans var" : ""}` : "kayıtlı değil");
 const boyIstemi = (b) => (b && BOYLAR[b.boy] ? ` LENGTH (most important after the garment itself): ${BOYLAR[b.boy].en}. Keep exactly this length on her body (also on a curvy plus-size figure).` : "");
 const KADRAJ_ISTEMI = " FRAMING: full body from head to toe — never crop the head or the shoes; leave a little space above the head and below the feet. SHOES: simple, elegant shoes that suit the setting and do not draw attention away from the dress.";
+// 3 Kasım (3627 tekrar uzun çıktı): boy kuralı istemin EN BAŞINDA + görsel aracın sistem talimatında (system_prompt) + yasaklar
+// (Nano Banana'da negatif alan yok → "FORBIDDEN" listesi; Veo/Kling'de negative_prompt). Kadraj ayakları ve zemini gösterir.
+const BOY_YASAK = { mini: "knee-length or longer skirt", diz: "midi or longer skirt, skirt covering the knees", midi: "floor-length or ankle-length skirt, skirt covering the ankles", bilek: "floor-length dress, maxi dress, long skirt touching or pooling on the floor, hem covering the shoes or feet, train", maksi: "short skirt, skirt above the ankles" };
+export const boyYasagi = (b) => (b && BOY_YASAK[b.boy] ? `${BOY_YASAK[b.boy]}, cropped feet, cropped shoes, cropped head` : "");
+export function boyBasi(b, refVar) {
+  if (!b || !BOYLAR[b.boy]) return "";
+  return `LENGTH RULE (HIGHEST PRIORITY, before anything else): ${BOYLAR[b.boy].en}.${b.boy === "bilek" ? " Both shoes and both ankles are completely visible, and there is a clear visible gap of floor between the hem and the ground." : ""} FORBIDDEN: ${boyYasagi(b)}. FRAMING FOR THIS: a wide full-length shot with the camera at hip height; the whole body from the top of the head to the soles of the shoes is inside the frame, with a strip of floor visible below the feet.${refVar ? " The LAST image shows the correct length on a body — match that hem height relative to the ankles exactly (copy ONLY the length and framing, nothing else from that image)." : ""} `;
+}
+export const boySistem = (b) => (b && BOYLAR[b.boy] ? `You are a fashion catalog image editor. Hard rules that override everything else in the prompt: (1) the garment length is ${BOYLAR[b.boy].en}; never produce: ${boyYasagi(b)}. (2) full-length framing: head and shoes fully inside the frame. (3) the garment's color, print and cut stay identical to the product photos.` : "");
 const refIstemi = (n) => (n ? ` The LAST image is a LENGTH/FRAMING reference only (a different woman and a different dress): copy only how long the dress is relative to her body and the full-body framing with the feet visible. Do NOT copy that woman's face, body, dress, color or anything else.` : "");
 
 // Patron/Hemra'nın "boy referansı" (ön/arka ürün fotoğrafından AYRI): yazıda kod + "boy" ("3627 boy", "3627 boy referansı"); fotoğraf, dosya ya da video
@@ -773,9 +788,9 @@ const rolIstemi = (roller) => (roller && roller.length ? ` Product photos after 
 export function yeniVideoIstemi(is) {
   const a = is.sahneAyar || SAHNE_VARSAYILAN, o = is.videoOrtam || is.ortam, t = is.sablon && is.sablon.kamera ? is.sablon : null;
   return [
-    `Vertical 9:16, ${URETIM_SN}-second fashion video of the same woman wearing exactly the same garment.${renkIstemi(is.renk)}${boyIstemi(is.boy)}`,
+    `${is.boy && BOYLAR[is.boy.boy] ? `LENGTH RULE (highest priority): ${BOYLAR[is.boy.boy].en}; in every wide shot both shoes are fully visible below the hem. ` : ""}Vertical 9:16, ${URETIM_SN}-second fashion video of the same woman wearing exactly the same garment.${renkIstemi(is.renk)}${boyIstemi(is.boy)}`,
     o ? `Setting and atmosphere: ${String(o.sahne).replace(/\.?\s*$/, ".")}` : "Setting: clean bright studio.",
-    t ? `Style reference (do not copy any real person): camera ${t.kamera}; light ${t.isik}; pace ${t.hiz}; pose ${t.poz}.` : "",
+    t ? `Style reference from an example video (use ONLY its light, color grade, mood and tempo — NOT its framing, props or accessories such as hats, gloves or envelopes; our framing and length rules come first): light ${t.isik}; pace ${t.hiz}; camera feel ${String(t.kamera).replace(/(tight|medium)?\s*close-up[^.;]*/gi, "").slice(0, 200)}; begin and end on a wide full-length shot.` : "",
     a.acilis, a.kamera, a.kumas, is.boy ? "Wide shots show her full body with the shoes visible; elegant simple shoes." : "",
     a.detay ? `Include one brief smooth close-up of the neckline/collar and stitching detail.${DETAY_SANAT}` : "",
     a.hiz, "Slow-motion movement of the skirt and her hair.", SINEMA.trim(), VOLONTE_KADINI.trim(), POZ.trim(), aksesuarIstemi(is.stil).trim(),
@@ -783,8 +798,8 @@ export function yeniVideoIstemi(is) {
     `Her face stays exactly the same.${MAKYAJ}${YAKA_DETAY}${detayIstemi(is.modelKaydi)} Realistic natural skin; natural light; hands and fingers natural and flawless. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no logo, no watermark, no music.`,
   ].filter(Boolean).join(" ");
 }
-const uretimFotoIstemi = (ortam, sablon, is = {}) => `${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo or text): ${sablon.isik}; ${sablon.ortam_havasi || ""}.` : ""}${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${is.sahneAyar ? `${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}` : ""}${refIstemi((is.boyRef || []).length)} Realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
-const sahneIstemi = (ortam, is = {}) => `Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
+const uretimFotoIstemi = (ortam, sablon, is = {}) => `${boyBasi(is.boy, (is.boyRef || []).length)}${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo or text): ${sablon.isik}; ${sablon.ortam_havasi || ""}.` : ""}${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${is.sahneAyar ? `${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}` : ""}${refIstemi((is.boyRef || []).length)} Realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
+const sahneIstemi = (ortam, is = {}) => `${boyBasi(is.boy, (is.boyRef || []).length)}Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
 const uretimVideoIstemi = (ortam, sablon) => `${sablon ? `${sablon.kamera}. ${sablon.poz}. ${sablon.hiz}.` : ortam ? ortam.hareket : VIDEO_ISTEMI} The woman's face stays the same. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no text, no logo, no watermark, no music.`;
 
 async function uretKomutu(env, m, simdi, test = false) {
@@ -903,7 +918,7 @@ async function uretimAdimi(env, is, simdi) {
   };
   if (is.durum === "foto_gonder") {
     is.fotoDeneme++;
-    await falIsle(env, is, GORSEL.duzenle, { prompt: uretimFotoIstemi(is.ortam, is.sablon, is), image_urls: [yuz, ...is.urunler.slice(0, 3), ...(is.boyRef || [])], num_images: 1, aspect_ratio: "9:16", resolution: "2K", output_format: "jpeg" }, GORSEL.fiyat, simdi);
+    await falIsle(env, is, GORSEL.duzenle, { prompt: uretimFotoIstemi(is.ortam, is.sablon, is), ...(is.boy ? { system_prompt: boySistem(is.boy) } : {}), image_urls: [yuz, ...is.urunler.slice(0, 3), ...(is.boyRef || [])], num_images: 1, aspect_ratio: "9:16", resolution: "2K", output_format: "jpeg" }, GORSEL.fiyat, simdi);
     is.durum = "foto_bekle"; return;
   }
   if (is.durum === "foto_bekle") {
@@ -920,7 +935,7 @@ async function uretimAdimi(env, is, simdi) {
   // Video başlangıç karesi (video ortamı, ör. "Live Your Life Şehir"): katalog fotoğrafından ayrı, aynı yüz + aynı kıyafet
   if (is.durum === "sahne_gonder") {
     is.sahneDeneme = (is.sahneDeneme || 0) + 1;
-    await falIsle(env, is, GORSEL.duzenle, { prompt: sahneIstemi(is.videoOrtam, is), image_urls: [yuz, ...is.urunler.slice(0, 3), ...(is.boyRef || [])], num_images: 1, aspect_ratio: "9:16", resolution: "2K", output_format: "jpeg" }, GORSEL.fiyat, simdi);
+    await falIsle(env, is, GORSEL.duzenle, { prompt: sahneIstemi(is.videoOrtam, is), ...(is.boy ? { system_prompt: boySistem(is.boy) } : {}), image_urls: [yuz, ...is.urunler.slice(0, 3), ...(is.boyRef || [])], num_images: 1, aspect_ratio: "9:16", resolution: "2K", output_format: "jpeg" }, GORSEL.fiyat, simdi);
     is.durum = "sahne_bekle"; return;
   }
   if (is.durum === "sahne_bekle") {
@@ -937,6 +952,7 @@ async function uretimAdimi(env, is, simdi) {
   if (is.durum === "video_gonder") {
     is.videoDeneme++;
     const g = { ...videoGirdisi(arac, is.sahne || is.foto), prompt: is.sahneAyar ? yeniVideoIstemi(is) : uretimVideoIstemi(is.videoOrtam || is.ortam, is.sablon) };
+    if (is.boy && "negative_prompt" in g) g.negative_prompt = [g.negative_prompt, boyYasagi(is.boy)].filter(Boolean).join(", ");
     await falIsle(env, is, ARACLAR[arac].uc, g, yuvarla(ARACLAR[arac].saniye * URETIM_SN), simdi);
     is.durum = "video_bekle"; return;
   }
