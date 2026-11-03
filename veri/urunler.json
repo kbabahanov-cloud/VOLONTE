@@ -1,5 +1,36 @@
 [
  {
+  "kod": "3362",
+  "baslik": "Beaded Jacket Maxi Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted maxi slip dress with thin straps and a cropped jacket. The jacket features an open shawl-style lapel, vertical beaded embellishment on the front and softly flared bell sleeves, while the dress falls into a gentle mermaid hem. Ideal for evening events, ceremonies and formal gatherings. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant une robe longue ajustée à fines bretelles et une veste courte. La veste se distingue par un col ouvert, des broderies de perles verticales sur le devant et des manches évasées, tandis que la robe s'achève en un léger bas sirène. Parfait pour les soirées, cérémonies et réceptions. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um vestido longo ajustado de alças finas com um casaco curto. O casaco tem gola aberta, aplicações verticais de pérolas na frente e mangas em sino, enquanto o vestido termina numa suave barra sereia. Ideal para eventos noturnos, cerimónias e ocasiões formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3362/1.jpg",
+   "galeri/3362/2.jpg",
+   "galeri/3362/3.jpg",
+   "galeri/3362/4.jpg",
+   "galeri/3362/5.jpg",
+   "galeri/3362/6.jpg",
+   "galeri/3362/7.jpg",
+   "galeri/3362/8.jpg",
+   "galeri/3362/9.jpg",
+   "galeri/3362/10.jpg"
+  ],
+  "videolar": [
+   "selin/3362/0",
+   "selin/3362/1",
+   "selin/3362/2"
+  ],
+  "fiyat": 42,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3364",
   "baslik": "Jacquard Puff Sleeve Maxi Dress",
   "kategori": "dresses",
