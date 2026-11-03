@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3366",
+  "baslik": "Lace Flared-Sleeve Maxi Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A fitted maxi dress in floral lace with a deep V-neckline, cut close to the body and finished with a front slit. Flared lace cuffs, scalloped edges and a three-button detail at the bodice give it a refined look. Made for evening events, celebrations and special occasions, in white or black. Produced in Istanbul with careful workmanship.",
+   "fr": "Robe longue ajustée en dentelle florale, au décolleté en V profond et fendue sur le devant. Les manches évasées, les bords festonnés et le détail de trois boutons au buste lui donnent une allure raffinée. Idéale pour les soirées, cérémonies et occasions spéciales, en blanc ou en noir. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Vestido longo justo em renda floral, com decote em V profundo e fenda frontal. As mangas em sino, as bordas recortadas e o detalhe de três botões no corpete trazem um toque sofisticado. Ideal para eventos à noite, celebrações e ocasiões especiais, em branco ou preto. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3366/1.jpg",
+   "galeri/3366/2.jpg",
+   "galeri/3366/3.jpg",
+   "galeri/3366/4.jpg",
+   "galeri/3366/5.jpg",
+   "galeri/3366/6.jpg",
+   "galeri/3366/7.jpg",
+   "galeri/3366/8.jpg",
+   "galeri/3366/9.jpg",
+   "galeri/3366/10.jpg"
+  ],
+  "videolar": [
+   "selin/3366/0",
+   "selin/3366/1"
+  ],
+  "fiyat": 35,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3369",
   "baslik": "Lace Shirt Pleated Skirt Set",
   "kategori": "sets",
