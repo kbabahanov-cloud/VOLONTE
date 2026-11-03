@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3271",
+  "baslik": "Wrap Vest Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sleeveless wrap vest with high-waisted straight-leg trousers in a warm brown tone. The shawl collar is edged in black, echoed by double black stripes across the front and a long black tie at the waist. Easy to wear to the office, daytime meetings or polished evenings out. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un gilet portefeuille sans manches à un pantalon droit taille haute, dans un brun chaleureux. Le col châle est souligné de noir, rappelé par deux bandes noires sur le devant et un long lien noir noué à la taille. Idéal pour le bureau, les rendez-vous en journée ou les sorties élégantes. Confectionné à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de duas peças que combina um colete transpassado sem mangas com calças de cintura alta e perna reta, num tom castanho quente. A gola xale tem acabamento a preto, repetido nas duas riscas pretas da frente e no laço comprido na cintura. Perfeito para o escritório, reuniões de dia ou saídas mais elegantes. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3271/1.jpg",
+   "galeri/3271/2.jpg",
+   "galeri/3271/3.jpg"
+  ],
+  "videolar": [
+   "selin/3271/0"
+  ],
+  "fiyat": 38,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3275",
   "baslik": "Printed Wrap Vest Set",
   "kategori": "sets",
