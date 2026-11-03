@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3383",
+  "baslik": "Tie-Neck Polka Dot Jumpsuit",
+  "kategori": "jumpsuits",
+  "aciklama": {
+   "en": "A wide-leg jumpsuit in emerald green with a classic black polka dot print and a defined waistband. The gathered high neck ties into a long bow at the back, while full bishop sleeves finish in neat elastic cuffs. Easy to wear to the office, daytime events or dinners. Made in Istanbul with careful workmanship.",
+   "fr": "Une combinaison jambes larges vert émeraude, à imprimé pois noirs classique et taille marquée par une ceinture. Le col montant froncé se noue en long lien dans le dos, tandis que les manches bouffantes se terminent par des poignets élastiqués. Idéale au bureau, en journée ou pour un dîner. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Um macacão de pernas largas em verde esmeralda, com estampa clássica de bolinhas pretas e cintura marcada. A gola alta franzida amarra-se num laço comprido nas costas, e as mangas bufantes terminam em punhos elásticos. Perfeito para o escritório, eventos de dia ou jantares. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3383/1.jpg",
+   "galeri/3383/2.jpg",
+   "galeri/3383/3.jpg",
+   "galeri/3383/4.jpg"
+  ],
+  "videolar": [
+   "selin/3383/0"
+  ],
+  "fiyat": 38,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3392",
   "baslik": "Printed Satin Kaftan Set",
   "kategori": "sets",
