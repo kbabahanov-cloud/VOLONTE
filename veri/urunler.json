@@ -1,5 +1,36 @@
 [
  {
+  "kod": "3331",
+  "baslik": "Ruffled Halter Pleated Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a halter crop top with high-waisted, wide-leg pleated trousers. The top features ruffled halter straps, sculpted ruffled cups and a fabric sash that ties at the back, while fine pleats give the trousers a fluid movement. Suited to celebrations, evening events and special occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces composé d'un haut court dos nu et d'un pantalon large plissé taille haute. Le haut se distingue par ses bretelles volantées, ses bonnets sculptés à volants et sa ceinture en tissu nouée dans le dos, tandis que les plis fins donnent au pantalon un tombé fluide. Idéal pour les fêtes, les soirées et les grandes occasions. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um top cropped de alça halter com calça pantalona plissada de cintura alta. O top traz alças com babados, bojos esculpidos com babados e uma faixa de tecido amarrada nas costas, enquanto as pregas finas dão à calça um caimento fluido. Ideal para festas, eventos noturnos e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3331/1.jpg",
+   "galeri/3331/2.jpg",
+   "galeri/3331/3.jpg",
+   "galeri/3331/4.jpg",
+   "galeri/3331/5.jpg",
+   "galeri/3331/6.jpg",
+   "galeri/3331/7.jpg",
+   "galeri/3331/8.jpg",
+   "galeri/3331/9.jpg"
+  ],
+  "videolar": [
+   "selin/3331/0",
+   "selin/3331/1",
+   "selin/3331/2",
+   "selin/3331/3"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3338",
   "baslik": "Studded Collared Jumpsuit",
   "kategori": "jumpsuits",
