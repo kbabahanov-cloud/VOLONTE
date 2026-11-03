@@ -21,6 +21,7 @@ import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
 import { venomPelinAdimi, hataEkle, kuyrugaEkle } from "./venom-kopru.js";
+import { gorselBase64, gecici } from "./duzen.js";
 
 export const AYLIK_SINIR_USD = 150;
 export const UYARI_ORANI = 0.8;
@@ -253,6 +254,7 @@ Sahne ayarları her yeni videoda var: yürürken kameraya dönüş, kamera etraf
 Lüks marka seviyesi (3 Kasım): varsayılan video aracı Google Veo 3.1 (1080p); sinematik ışık; VOLONTE kadını (başarılı, zengin, özgüvenli, 30-45); poz ile bel vurgusu (kesim ASLA daraltılmaz); aksesuarı elbiseye göre sen seçersin (kartta yazar); "premium" = lüks mekân (otel lobisi, mermer merdiven, şık restoran, villa terası, lüks araba, Lagos/Nairobi daveti), "standart" = aynı kalite, sade sahne. Önizlemede aynı kareyle Kling 4.0 / Kling 4K karşılaştırması.
 Kalıcı ayarlar (3 Kasım): her üretimde şık, belirgin ama doğal makyaj; yaka şekli ve dantel/payet yoğunluğu birebir (modele özel detay: model_detay_kaydet). Kalite kontrol: sadece renk, boy, kesimde BÜYÜK fark yeniden üretir; küçük farklar Patron'a not. PATRON SON SÖZ: kontrolden geçmeyen işi "✅ Yine de onayla" ile onaylayabilir (kaldığı yerden devam eder). Ekip: sen baş üreticisin, ChatGPT yardımcı ikinci göz; her kontrolün 1-10 puanı var; Patron'un kararlarından öğrenilir. Hemra onayı hazır ama kapalı (/hemraonay).
 Boy ve kadraj: her modelin boyu (mini/diz/midi/bilek/maksi) bir kez kaydedilir, bütün renklerde ve iki seride geçerli; ilk üretimden önce sorulur (boy_kaydet ile de kaydedilir). Boy referansı: Patron fotoğrafı/videoyu yazısında "3627 boy" ile atar (ön/arka ürün fotoğrafından ayrı). Katalog fotoğrafı tam boy (baş ve ayakkabı kesilmez), ayakkabı sade; kontrol boyu da denetler.
+NORA (senarist, 4 Kasım): her videodan önce Nora kısa senaryo yazar, Patron onaylar (✏️ Düzelt ile değiştirir). HAREKET KURALI: hızlı dönüş YOK, kamera etrafında dönüş YOK; sadece yavaş doğal hareket (kameraya birkaç adım, hafif duruş, omuz üstünden bakış, kumaş doğal dalgalanır).
 Örnek video: Patron dosya atar (ya da "sitedeki 3627 videosu gibi" yazar) → tarif çıkarılır → şablon.
 DÜRÜSTLÜK (kesin): Bir aracı çağırmadan ve araç sonucunu görmeden "gönderdim / kaydettim / başladım / hazırladım" ASLA deme. Araç sonucu "GÖNDERİLMEDİ" diyorsa bunu Patron'a aynen söyle. Yapamadığın işi yapmış gibi gösterme; araç yoksa "bunun için aracım yok, Claude Code'a iletilmeli" de.`;
 
@@ -377,6 +379,7 @@ export async function guncelleme(u, env) {
     if (/^pz:/.test(v)) return yuzDuzenDugmesi(env, cq, simdi);
     if (/^pb:/.test(v)) return boyDugmesi(env, cq, simdi);
     if (/^pt:/.test(v)) return eskiTeslimDugmesi(env, cq, simdi);
+    if (/^pn:/.test(v)) return noraDugmesi(env, cq, simdi);
     if (/^pyk:/.test(v)) return yuzFotoDugmesi(env, cq, simdi);
     return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Geçersiz düğme." });
   }
@@ -387,6 +390,7 @@ export async function guncelleme(u, env) {
     await env.KAYIT.put(`pelin:bekleyen:${id}`, JSON.stringify({ ad: kisiAdi(m.from), zaman: m.date }), { expirationTtl: 7 * 86400 });
     return;
   }
+  if (await noraDuzeltMesaji(env, m, simdi)) return;
   if (await boyReferansAl(env, m)) return;
   if (await ornekVideo(env, m, simdi)) return;
   if (await urunFotoAl(env, m)) return;
@@ -530,10 +534,22 @@ export function uretimMaliyeti(arac = VARSAYILAN_ARAC, secim = null) {
   return { kalemler, toplam: yuvarla(kalemler.reduce((s, k) => s + k.birim, 0)) };
 }
 
+// 4 Kasım: Claude görseli adresinden indiremezse ("timed out while trying to download the file") 3 kez dener, sonra görselleri
+// Pelin kendisi indirip küçültür ve doğrudan gönderir (indirilemeyen görsel atlanır).
 async function claudeJson(env, content, schema, simdi, maxTokens = 1200) {
   const model = BEYINLER[(await env.KAYIT.get("pelin:beyin")) || "sonnet"] || BEYINLER.sonnet;
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
-  const r = await client.messages.create({ model, max_tokens: maxTokens, output_config: { effort: "low", format: { type: "json_schema", schema } }, messages: [{ role: "user", content }] });
+  const iste = (c) => client.messages.create({ model, max_tokens: maxTokens, output_config: { effort: "low", format: { type: "json_schema", schema } }, messages: [{ role: "user", content: c }] });
+  let r, son;
+  for (let i = 0; i < 3 && !r; i++) { try { r = await iste(content); } catch (e) { son = e; if (!gecici(e)) throw e; if (i < 2) await new Promise((x) => setTimeout(x, 1500 * (i + 1))); } }
+  if (!r) {
+    const yeni = [];
+    for (const b of content) {
+      if (b.type === "image" && b.source && b.source.type === "url") { try { yeni.push(await gorselBase64(env, b.source.url)); } catch { /* atla */ } } else yeni.push(b);
+    }
+    if (!yeni.some((b) => b.type === "image") && content.some((b) => b.type === "image")) throw son;
+    r = await iste(yeni);
+  }
   await claudeHarcama(env, model, r.usage || {}, simdi);
   return JSON.parse(r.content.filter((b) => b.type === "text").map((b) => b.text).join(""));
 }
@@ -795,10 +811,14 @@ async function stilSec(env, kod, renk, urller, simdi) {
 }
 
 // Sahne ayarları (3 Kasım, Patron — 3627 brifi): yeni işlerin hepsinde; şablon bunları değiştirebilir
+// 4 Kasım (Patron, 3627 videosu yapay ve dönüşler dengesizdi): HIZLI DÖNÜŞ YOK, kamera etrafında dönüş YOK; sadece yavaş, doğal hareket
+export const HAREKET_KURALI = "Slow, natural, real-time movement only: no spinning, no twirling, no fast turns, no orbiting camera; the camera stays still or very slowly pushes in.";
+export const HAREKET_VARSAYILAN = "She takes a few slow, natural steps toward the camera, pauses softly, then glances over her shoulder.";
+export const HAREKET_YASAK = "spinning, twirling, fast turn, orbiting camera, sudden movement, jerky motion";
 export const SAHNE_VARSAYILAN = {
-  acilis: "Strong first second: she is walking and turns to face the camera.",
-  kamera: "The camera slowly orbits around her so that both the front and the back of the outfit are clearly seen, matching the product photos exactly.",
-  kumas: "The fabric moves naturally; the skirt sways and flows as she moves.",
+  acilis: HAREKET_VARSAYILAN,
+  kamera: "Static camera or a very slow, gentle push-in.",
+  kumas: "The fabric flows and sways naturally with her steps.",
   detay: true, // yakın detay karesi: yaka / dikiş
   sonYazi: true, // son karede küçük VOLONTE + model kodu (fiyat yok)
   hiz: "Smooth natural pace with a gentle cinematic slow-motion feel.",
@@ -821,10 +841,11 @@ export function yeniVideoIstemi(is) {
     `Vertical 9:16, ${URETIM_SN}-second fashion video of the same woman in exactly the same garment as in the first frame${is.renk ? ` (${renkEn(is.renk)} only)` : ""}.`,
     o ? `Setting and atmosphere: ${kisalt(o.sahne, 260).replace(/\.?\s*$/, ".")}` : "Setting: elegant studio.",
     t ? `Style reference: use ONLY its light, color grade, mood and tempo — NOT its framing, props or accessories such as hats, gloves or envelopes: ${kisalt(t.isik, 150)}; ${kisalt(t.hiz, 80)}.` : "",
-    a.acilis, "The camera slowly orbits around her so the front and the back of the dress are seen.", a.kumas,
+    is.senaryo && is.senaryo.hareketEn ? `Motion (approved scenario): ${kisalt(is.senaryo.hareketEn, 380)}` : HAREKET_VARSAYILAN,
+    HAREKET_KURALI, "The fabric flows and sways naturally with her steps.",
     b ? "Wide shots show her full body with the shoes visible." : "",
     a.detay ? "Include one brief close-up of the neckline/collar and stitching detail, with artistic close-ups of the lace, sequins and fabric texture." : "",
-    "Slow-motion movement of the skirt and her hair. Warm cinematic light, rich colors, glowing skin. A poised, confident, elegant woman with professional makeup.",
+    "Gentle natural movement of the skirt and her hair. Warm cinematic light, rich colors, glowing skin. A poised, confident, elegant woman with professional makeup.",
     is.stil && is.stil.aksesuarEn ? `Accessories: ${kisalt(is.stil.aksesuarEn, 110)}.` : "",
     a.sonYazi ? `The last second ends on an elegant frame with a small, tasteful gold text "VOLONTE" and directly below it the model code "${is.kod}" in a corner; no other text, no price.` : "No text.",
     "Her face and the dress color, print, cut and collar stay exactly as in the first frame. Natural motion, no morphing, no logo, no music.",
@@ -886,7 +907,7 @@ async function uretKomutu(env, m, simdi, test = false) {
     ...kodlar.filter((k) => stiller[k]).map((k) => `Aksesuar (${k}): ${stiller[k].aksesuarTr}`),
     ...(seviye === "premium" ? kodlar.filter((k) => stiller[k]).map((k) => `Premium mekân (${k}): ${stiller[k].mekanTr}`) : []),
     "Manken: VOLONTE kadını (başarılı, zengin, özgüvenli) · profesyonel makyaj · sinematik ışık · poz ile bel vurgusu (kesim daraltılmaz)",
-    `Sahne: yürürken kameraya dönüş · kamera etrafında dönüş · kumaş hareketi · yaka/dikiş yakın kare · son karede küçük VOLONTE + kod (fiyat yok) · kapak fotoğrafı videodan${sablonAd ? ` · şablon ${sablonAd}` : ""}`,
+    `Sahne: kameraya doğru birkaç yavaş adım · hafif duruş · omuz üstünden bakış · kumaş doğal dalgalanır · hızlı dönüş ve kamera dönüşü YOK · yaka/dikiş yakın kare · son karede küçük VOLONTE + kod (fiyat yok) · kapak fotoğrafı videodan · videodan önce Nora senaryosu onayınıza gelir${sablonAd ? ` · şablon ${sablonAd}` : ""}`,
     ...mm.kalemler.map((k) => `• ${k.ad}: ${para(k.birim)}`),
     `Model başı ~${para(mm.toplam)} · toplam ~${para(toplam)} (kalite kontrol yeniden ürettirirse en fazla 2 katı)`,
     `Bu ay Pelin: ${para(harcanan)} / ${AYLIK_SINIR_USD} $${harcanan + toplam > AYLIK_SINIR_USD ? " ⚠️ SINIRI AŞAR" : ""}`,
@@ -996,10 +1017,18 @@ async function uretimAdimi(env, is, simdi) {
     if (s.hata || !s.video) { is.hamHata = String(s.hata || "video yok").slice(0, 400); is.muzikHata = falHataTr(s.hata || "video yok"); is.video = is.videoSessiz; is.durum = "onay"; return; }
     is.video = s.video; is.muzikEklendi = true; is.gecmis.push([simdi, `müzik eklendi: ${is.muzik.ad}`]); is.durum = "onay"; return;
   }
+  // Nora: video yeni işlerde ancak Patron senaryoyu onaylayınca üretilir
+  if (is.durum === "video_gonder" && is.sahneAyar && !is.senaryo) { is.durum = "senaryo_yaz"; return; }
+  if (is.durum === "senaryo_yaz") {
+    is.senaryo = await noraYaz(env, is, simdi);
+    is.durum = "senaryo_onay";
+    await noraKarti(env, is.id, [is], simdi);
+    return;
+  }
   if (is.durum === "video_gonder") {
     is.videoDeneme++;
     const g = { ...videoGirdisi(arac, is.sahne || is.foto), prompt: is.sahneAyar ? yeniVideoIstemi(is) : uretimVideoIstemi(is.videoOrtam || is.ortam, is.sablon) };
-    if (is.boy && "negative_prompt" in g) g.negative_prompt = [g.negative_prompt, boyYasagiVideo(is.boy)].filter(Boolean).join(", ");
+    if ("negative_prompt" in g) g.negative_prompt = [g.negative_prompt, is.boy ? boyYasagiVideo(is.boy) : "", is.sahneAyar ? HAREKET_YASAK : ""].filter(Boolean).join(", ");
     await falIsle(env, is, ARACLAR[arac].uc, g, yuvarla(ARACLAR[arac].saniye * URETIM_SN), simdi);
     is.durum = "video_bekle"; return;
   }
@@ -1126,7 +1155,7 @@ export async function uretimCron(env, simdi) {
   for (const id of liste) {
     if (islenen >= 8) break;
     const is = await oku(env, `pelin:is:${id}`, null);
-    if (!is || !["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle"].includes(is.durum)) continue;
+    if (!is || !["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz"].includes(is.durum)) continue;
     islenen++;
     const once = is.durum;
     try { await uretimAdimi(env, is, simdi); } catch (e) { is.durum = "uyari"; is.hamHata = String(e && e.message).slice(0, 400); is.sorunlar = [`hata: ${falHataTr(e && e.message)}`]; }
@@ -1243,9 +1272,84 @@ async function sablonKaydet(env, is, simdi, ad = null) {
   await kaydet(env, "pelin:sablonlar", sablonlar);
   return isim;
 }
+// ---------- NORA — senarist (4 Kasım, Patron): her videodan önce kısa senaryo; Patron [✅ Onayla] [✏️ Düzelt] [❌ İptal] ----------
+// Kural: hızlı dönüş ve kamera dönüşü yok; yavaş doğal hareket. Videolar birbirinin aynısı olmasın (son senaryolar hatırlanır).
+const NORA_SEMA = { type: "object", additionalProperties: false, required: ["senaryo_tr", "hareket_en"], properties: { senaryo_tr: { type: "string" }, hareket_en: { type: "string" } } };
+export async function noraYaz(env, is, simdi, duzeltme = "") {
+  const gecmis = await oku(env, "pelin:noraGecmis", []);
+  const kare = is.sahne || is.foto;
+  const n = await claudeJson(env, [
+    { type: "text", text: `Sen Nora'sın: VOLONTE'nin (lüks kadın giyim) senaristi. Model ${is.kod}${is.renk ? `, renk ${is.renk}` : ""}${is.boy && BOYLAR[is.boy.boy] ? `, boy ${BOYLAR[is.boy.boy].ad}` : ""}. Videonun başlangıç karesi:` },
+    ...(kare ? [resimUrl(kare)] : []),
+    { type: "text", text: `Bu kareden ${URETIM_SN} saniyelik dikey video için KISA senaryo yaz.
+KESİN KURALLAR: hızlı dönüş YOK, kendi etrafında dönme YOK, kamera etrafında dönüş YOK. Sadece yavaş, doğal hareket: kameraya doğru birkaç adım yürüme, hafif durma, omuz üstünden bakış; kumaş doğal dalgalansın; kamera sabit ya da çok yavaş yaklaşır. Elbise, renk, boy, yaka ve mekân karedeki gibi kalır; yeni eşya/dekor ekleme. Kadın: başarılı, zengin, özgüvenli, zarif.
+Videolar birbirinin aynısı olmasın; son senaryolar: ${gecmis.slice(-4).map((x) => x.tr).join(" | ") || "yok"}.${duzeltme ? `
+PATRON'UN DÜZELTMESİ (mutlaka uygula): ${duzeltme}` : ""}
+senaryo_tr: Patron'a gösterilecek en fazla 3 kısa satır Türkçe (saniye saniye). hareket_en: aynı hareketin video aracı için kısa İngilizce tarifi (en fazla 350 karakter; sadece hareket ve kamera).` },
+  ], NORA_SEMA, simdi, 500);
+  const sen = { tr: String(n.senaryo_tr).slice(0, 400), hareketEn: String(n.hareket_en).slice(0, 380), zaman: simdi, duzeltme: duzeltme || null };
+  await kaydet(env, "pelin:noraGecmis", [...gecmis, { kod: is.kod, tr: sen.tr, zaman: simdi }].slice(-20));
+  return sen;
+}
+// Nora kartı: hedef = iş kimliği ya da "g-<grup>" (karşılaştırma: aynı senaryo iki araçla)
+async function noraKarti(env, hedef, isler, simdi, onEk = []) {
+  const s0 = isler[0].senaryo;
+  const maliyetli = isler.some((x) => x.durum === "kart");
+  return yaz(env, murat(env), [
+    ...onEk,
+    `📝 Nora — senaryo (${isler[0].kod}, ${URETIM_SN} sn):`,
+    s0.tr,
+    "Kural: hızlı dönüş ve kamera dönüşü yok; yavaş, doğal hareket.",
+    ...(maliyetli ? isler.map((x) => `• ${ARACLAR[x.arac].ad}: ${URETIM_SN} × ${para(ARACLAR[x.arac].saniye)} = ${para(ARACLAR[x.arac].saniye * URETIM_SN)}`) : []),
+    ...(maliyetli ? [`• Kontrol: ~${para((KONTROL_TAHMIN * 2 + OPENAI_TAHMIN) * isler.length)}`] : []),
+    maliyetli ? "Onaylarsanız senaryo ve maliyet onaylanmış olur; videolar üretilip yan yana gelir." : "Onaylarsanız video bu senaryoyla üretilir.",
+  ].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pn:o:${hedef}` }, { text: "✏️ Düzelt", callback_data: `pn:d:${hedef}` }, { text: "❌ İptal", callback_data: `pn:x:${hedef}` }]] } });
+}
+async function noraIsleri(env, hedef) {
+  if (String(hedef).startsWith("g-")) { const g = await oku(env, `pelin:grup:${hedef}`, null); const l = []; for (const id of (g && g.ids) || []) { const x = await oku(env, `pelin:is:${id}`, null); if (x) l.push(x); } return l; }
+  const x = await oku(env, `pelin:is:${hedef}`, null);
+  return x ? [x] : [];
+}
+async function noraDugmesi(env, cq, simdi) {
+  const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!muratMi(env, cq.from.id)) return cevap("Sadece Patron.");
+  const [, islem, hedef] = cq.data.split(":");
+  const isler = (await noraIsleri(env, hedef)).filter((x) => ["kart", "senaryo_onay"].includes(x.durum));
+  if (!isler.length) return cevap("Bu senaryo artık beklemiyor.");
+  const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "pn:-" }]] } });
+  if (islem === "x") { for (const x of isler) { x.durum = "iptal"; await kaydet(env, `pelin:is:${x.id}`, x); } await cevap("İptal"); return kapat("❌ İptal edildi (harcama yok)"); }
+  if (islem === "d") {
+    await kaydet(env, "pelin:noraDuzelt", { hedef, zaman: simdi }, 3600);
+    await cevap("Düzelt"); await kapat("✏️ Düzeltiliyor");
+    return yaz(env, murat(env), "✏️ Senaryoda neyi değiştireyim? Kısaca yazın (ör. \"önce omuz üstünden baksın, sonra iki adım yürüsün\").");
+  }
+  const toplam = isler.filter((x) => x.durum === "kart").reduce((t, x) => t + ARACLAR[x.arac].saniye * URETIM_SN + KONTROL_TAHMIN * 2, 0);
+  if (toplam && (await buAyHarcanan(env, simdi)) + toplam > AYLIK_SINIR_USD) return cevap("Aylık sınır aşılır.");
+  const liste = await oku(env, "pelin:isler", []);
+  for (const x of isler) { x.durum = "video_gonder"; x.gecmis.push([simdi, "Nora senaryosu Patron onaylı"]); await kaydet(env, `pelin:is:${x.id}`, x); if (!liste.includes(x.id)) liste.push(x.id); }
+  await kaydet(env, "pelin:isler", liste.slice(-200));
+  await cevap("Başlıyorum"); await kapat("✅ Senaryo onaylandı");
+  return yaz(env, murat(env), `🎬 ${isler[0].kod}: ${isler.map((x) => ARACLAR[x.arac].ad).join(" + ")} ile video üretiliyor. Hazır olunca ${isler.length > 1 ? "yan yana " : ""}önizleme gelir.`);
+}
+// Patron'un düzeltme metni → Nora yeniden yazar → yeni kart
+async function noraDuzeltMesaji(env, m, simdi) {
+  if (!muratMi(env, m.from.id) || !m.text || m.text.startsWith("/")) return false;
+  const d = await oku(env, "pelin:noraDuzelt", null);
+  if (!d) return false;
+  await env.KAYIT.delete("pelin:noraDuzelt");
+  const isler = (await noraIsleri(env, d.hedef)).filter((x) => ["kart", "senaryo_onay"].includes(x.durum));
+  if (!isler.length) return false;
+  const sen = await noraYaz(env, isler[0], simdi, String(m.text).slice(0, 500));
+  for (const x of isler) { x.senaryo = sen; await kaydet(env, `pelin:is:${x.id}`, x); }
+  await noraKarti(env, d.hedef, isler, simdi, ["✏️ Düzeltildi."]);
+  return true;
+}
+
 export async function katalogdanVideoKarti(env, ik, simdi) {
   const kaynak = await oku(env, `pelin:is:${ik.isId}`, null);
   if (!kaynak || !kaynak.foto) return yaz(env, murat(env), `⚠️ ${ik.isId}: katalog fotoğrafı bulunamadı.`);
+  const araclar = (Array.isArray(ik.araclar) && ik.araclar.length ? ik.araclar : [VARSAYILAN_ARAC]).filter((a) => ARACLAR[a]);
+  if (araclar.length > 1 || ik.nora !== false) return katalogdanNora(env, kaynak, ik, araclar, simdi);
   const id = `${kaynak.kod}-${kisaId()}`;
   const arac = VARSAYILAN_ARAC;
   const is = { ...kaynak, id, arac, aracYedek: false, durum: "kart", sahne: null, videoOrtam: null, video: null, videoSessiz: null, kareler: [], kareFal: [], kapak: null, videoKontrol: null, sahneKontrol: null, videoDeneme: 0, maliyet: 0, testId: null, patronOnay: [], sorunlar: [], notlar: [], karsilastirma: null,
@@ -1261,6 +1365,18 @@ export async function katalogdanVideoKarti(env, ik, simdi) {
     "🧪 DENEME: video kanala ve siteye HİÇ GİTMEZ; sadece size gelir.",
     "Dekor yok (zarf/eldiven/şapka yok); boy bilek, siyah-altın ortam.",
   ].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:b:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }]] } });
+}
+// Katalog fotoğrafından video (Nora'lı): her araç için bir iş (aynı senaryo), tek kart = senaryo + maliyet onayı
+async function katalogdanNora(env, kaynak, ik, araclar, simdi) {
+  const gid = `g-${kisaId()}`;
+  const ortak = { ...kaynak, aracYedek: false, durum: "kart", sahne: null, videoOrtam: null, video: null, videoSessiz: null, kareler: [], kareFal: [], kapak: null, videoKontrol: null, sahneKontrol: null, videoDeneme: 0, maliyet: 0, testId: null, patronOnay: [], sorunlar: [], notlar: [], karsilastirma: null,
+    sablon: null, sahneAyar: { ...SAHNE_VARSAYILAN }, muzik: ik.muzik || null, muzikEklendi: false, yayinYok: ik.deneme === true, kaynakIs: kaynak.id, grup: gid, zaman: simdi };
+  const isler = araclar.map((arac) => ({ ...ortak, id: `${kaynak.kod}-${kisaId()}`, arac, aracYedek: araclar.length > 1, gecmis: [[simdi, `katalog fotoğrafından video (${kaynak.id}) · ${ARACLAR[arac].ad}${araclar.length > 1 ? " · karşılaştırma" : ""}`]] }));
+  const sen = await noraYaz(env, isler[0], simdi);
+  for (const x of isler) { x.senaryo = sen; await kaydet(env, `pelin:is:${x.id}`, x); }
+  await kaydet(env, `pelin:grup:${gid}`, { ids: isler.map((x) => x.id), kaynakIs: kaynak.id, zaman: simdi }, 14 * 86400);
+  await tg(env, "sendPhoto", { chat_id: murat(env), photo: kaynak.foto, caption: `📸 ${kaynak.kod} — videonun kaynağı (onaylı katalog fotoğrafı)` });
+  return noraKarti(env, gid, isler, simdi, [`🎬 ${kaynak.kod}: bu katalog fotoğrafından ${URETIM_SN} sn video — ${araclar.map((a) => ARACLAR[a].ad).join(" ve ")}${araclar.length > 1 ? " (yan yana karşılaştırma)" : ""}${ik.deneme === true ? " · 🧪 DENEME (yayına gitmez)" : ""}`, ""]);
 }
 async function sonIs(env, kod) {
   const liste = await oku(env, "pelin:isler", []);

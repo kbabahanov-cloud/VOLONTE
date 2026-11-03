@@ -18,6 +18,7 @@ function ortam({ fal = true } = {}) {
   const falSonuc = {}; // uc → sonuç
   const site = []; // veri/urunler.json
   const yaziCevap = { kod: "3557", fn: null }; // son kare yazısı (sahte okuma)
+  const noraCevap = { senaryo_tr: "0-2 sn: kameraya doğru iki yavaş adım. 2-4 sn: hafif durur. 4-6 sn: omuz üstünden bakar.", hareket_en: "She takes two slow steps toward the camera, pauses softly and glances over her shoulder." };
   globalThis.fetch = async (url, istek = {}) => {
     const u = String(url);
     const govde = istek.body ? JSON.parse(istek.body) : null;
@@ -39,6 +40,7 @@ function ortam({ fal = true } = {}) {
     if (u.startsWith("https://api.anthropic.com")) {
       claude.push(govde);
       const sema = govde.output_config && govde.output_config.format && govde.output_config.format.schema;
+      if (sema && (sema.required || []).includes("hareket_en")) return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(noraCevap) }], usage: { input_tokens: 10, output_tokens: 5 } });
       if (sema && (sema.required || []).includes("kod_okunan")) return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(yaziCevap.fn ? yaziCevap.fn() : { volonte_var: true, kod_okunan: yaziCevap.kod, baska_yazi_var: false, fiyat_var: false }) }], usage: { input_tokens: 10, output_tokens: 5 } });
       const c = claude.cevaplar && claude.cevaplar.shift();
       return Response.json(c || { id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: "Merhaba!" }], usage: { input_tokens: 100, output_tokens: 50 } });
@@ -108,7 +110,14 @@ function uretimOrtami() {
 const GECTI = { renk_ayni: true, desen_ayni: true, kesim_ayni: true, sorunlar: [] };
 const GECMEDI = { renk_ayni: false, desen_ayni: true, kesim_ayni: true, sorunlar: ["renk tonu koyulaşmış"] };
 const secimKur = (o) => o.depo.set("pelin:secim", JSON.stringify({ yuz: { manken: "siyahi", fileId: "YUZ", anahtar: "a".repeat(32) }, ortamlar: [{ id: "1", ad: "Siyah-altın", sahne: "black and gold studio", hareket: "slow turn" }], arac: "veo" }));
-const cronlar = async (o, n) => { for (let i = 0; i < n; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000)); };
+// Patron Nora senaryosunu onaylar (testlerde otomatik; noraOto=false ile kapatılır)
+const noraOnayla = async (o) => {
+  o.noraBasilan = o.noraBasilan || new Set();
+  for (const x of o.g) for (const d of ((x.govde && x.govde.reply_markup && x.govde.reply_markup.inline_keyboard) || []).flat()) {
+    if (/^pn:o:/.test(d.callback_data) && !o.noraBasilan.has(d.callback_data)) { o.noraBasilan.add(d.callback_data); await guncelleme({ callback_query: { id: "c", from: { id: MURAT, first_name: "M" }, data: d.callback_data, message: { chat: { id: MURAT }, message_id: 9, text: "kart" } } }, o.env); }
+  }
+};
+const cronlar = async (o, n) => { for (let i = 0; i < n; i++) { await pelinCron(o.env, Math.floor(Date.now() / 1000)); if (o.noraOto !== false) await noraOnayla(o); } };
 
 test("kurulum: /kurulum maliyet onayı → 3 yüz + 3 ortam önerisi → Patron yüz ve ortam seçer → kalıcı seçim; başkası seçemez", async () => {
   const o = uretimOrtami();
@@ -325,7 +334,9 @@ test("üretim rollerle: büyük seri modeli büyük seri yüzüyle; katalog foto
   assert.ok(!edit.some((x) => /80s neon/.test(x.govde.prompt)));
   const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.equal(video.length, 2);
-  assert.match(video[0].govde.prompt, /Setting and atmosphere: city street golden hour\. Strong first second: she is walking and turns to face the camera\. The camera slowly orbits around her[\s\S]*close-up of the neckline\/collar and stitching[\s\S]*"VOLONTE" and directly below it the model code "3557"[\s\S]*no price/);
+  assert.match(video[0].govde.prompt, /Setting and atmosphere: city street golden hour\. Motion \(approved scenario\): She takes two slow steps toward the camera[\s\S]*no spinning, no twirling, no fast turns, no orbiting camera[\s\S]*close-up of the neckline\/collar and stitching[\s\S]*"VOLONTE" and directly below it the model code "3557"[\s\S]*no price/);
+  assert.ok(!/orbits around her|turns to face the camera/.test(video[0].govde.prompt));
+  assert.match(video[0].govde.negative_prompt, /spinning, twirling, fast turn, orbiting camera/);
   assert.match(video[1].govde.prompt, /model code "3601"/);
   assert.ok(o.g.some((x) => /🎞 3557 \(video karesi\)/.test(x.govde.caption || "")));
 });
@@ -391,7 +402,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   const kart = o.g.at(-1).govde;
   assert.match(kart.text, /Renk: 3627 sadece kırmızı/);
   assert.match(kart.text, /Ürün fotoğrafı: 3627 sizin gönderdiğiniz \(ön, arka\)/);
-  assert.match(kart.text, /Sahne: yürürken kameraya dönüş · kamera etrafında dönüş · kumaş hareketi · yaka\/dikiş yakın kare · son karede küçük VOLONTE \+ kod \(fiyat yok\) · kapak fotoğrafı videodan/);
+  assert.match(kart.text, /Sahne: kameraya doğru birkaç yavaş adım · hafif duruş · omuz üstünden bakış · kumaş doğal dalgalanır · hızlı dönüş ve kamera dönüşü YOK · yaka\/dikiş yakın kare · son karede küçük VOLONTE \+ kod \(fiyat yok\) · kapak fotoğrafı videodan · videodan önce Nora senaryosu onayınıza gelir/);
   await bas(o, MURAT, `pu:o:${kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
   o.yaziCevap.fn = (() => { let n = 0; return () => (++n === 1 ? { volonte_var: true, kod_okunan: "3672", baska_yazi_var: false, fiyat_var: false } : { volonte_var: true, kod_okunan: "3627", baska_yazi_var: false, fiyat_var: false }); })();
   o.claude.cevaplar = Array.from({ length: 6 }, () => claudeJsonCevap(GECTI));
@@ -404,7 +415,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   assert.ok(kontrol.length >= 3);
   const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.equal(video.length, 2); // ilk videonun son karesinde kod yanlış okundu (3672) → otomatik yeniden
-  assert.match(video[0].govde.prompt, /\(red only\)[\s\S]*orbits[\s\S]*"VOLONTE"[\s\S]*"3627"/);
+  assert.match(video[0].govde.prompt, /\(red only\)[\s\S]*no orbiting camera[\s\S]*"VOLONTE"[\s\S]*"3627"/);
   assert.ok(video[0].govde.prompt.length <= 1900, `video istemi kısa olmalı: ${video[0].govde.prompt.length}`);
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]);
   assert.ok(is.gecmis.some(([, t]) => /video 1: geçmedi \(.*son karedeki kod yanlış \(okunan: "3672"/.test(t)));
@@ -602,7 +613,7 @@ test("lüks: varsayılan Veo 3.1 (1080p, gerçek fiyat); premium kartında akses
   const v = o.falIstek.find((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.equal(v.govde.resolution, "1080p");
   assert.equal(v.govde.generate_audio, false);
-  assert.match(v.govde.prompt, /Slow-motion movement of the skirt and her hair/);
+  assert.match(v.govde.prompt, /Gentle natural movement of the skirt and her hair/);
   assert.match(v.govde.prompt, /artistic close-ups of the lace, sequins/);
   const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
   assert.match(on.govde.text, /Video aracı: Google Veo 3\.1 \(1080p\) · aksesuar: altın küpe[\s\S]*PREMIUM/);
@@ -684,10 +695,11 @@ test("Veo reddederse aynı kareyle Kling 4.0; katalog fotoğrafından video kart
   o.falSonuc["fal-ai/ffmpeg-api/merge-audio-video"] = (n) => ({ video: { url: `https://vid/muzikli${n}.mp4` } });
   o.depo.set("pelin:secim", SECIM_ROLLU());
   o.depo.set("pelin:is:3627-onayli", JSON.stringify({ id: "3627-onayli", kod: "3627", seri: "buyuk", renk: "koyu bordo", boy: { boy: "bilek" }, durum: "uyari", foto: "https://img/katalog.jpg", sahne: "https://img/romantik.jpg", urunler: ["https://u/on.jpg"], ortam: { id: "2", ad: "Siyah Altın Lüks", sahne: "black gold studio" }, videoOrtam: { id: "ornek-romantik", sahne: "green backdrop" }, sahneAyar: { ...SAHNE_VARSAYILAN }, sablon: { ad: "romantik", kamera: "x", isik: "soft", hiz: "slow", poz: "envelope" }, fotoDeneme: 1, sahneDeneme: 2, videoDeneme: 2, maliyet: 1, gecmis: [], zaman: 1 }));
+  o.noraOto = false; // bu testte Patron senaryo kartını elle onaylar
   o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-onayli", islem: "katalogdan", muzik: { url: "https://pelin.test/dosya/" + "m".repeat(32), ad: "romantik örnek videonun müziği (deneme, telifli olabilir)" }, deneme: true }));
   await cronlar(o, 1);
   const kart = o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde;
-  assert.match(kart.text, /🎬 3627: bu katalog fotoğrafından 6 sn video \+ müzik denemesi[\s\S]*Google Veo 3\.1 \(1080p\) — 6 × 0,40 \$ = 2,40 \$ \(Veo reddederse aynı fotoğrafla Kling 4\.0: 0,94 \$\)[\s\S]*🧪 DENEME: video kanala ve siteye HİÇ GİTMEZ/);
+  assert.match(kart.text, /🎬 3627: bu katalog fotoğrafından 6 sn video — Google Veo 3\.1 \(1080p\) · 🧪 DENEME \(yayına gitmez\)[\s\S]*📝 Nora — senaryo \(3627, 6 sn\):\n0-2 sn: kameraya doğru iki yavaş adım[\s\S]*hızlı dönüş ve kamera dönüşü yok[\s\S]*• Google Veo 3\.1 \(1080p\): 6 × 0,40 \$ = 2,40 \$/);
   assert.ok(o.g.some((x) => x.metod === "sendPhoto" && x.govde.photo === "https://img/katalog.jpg"));
   assert.equal(o.falIstek.length, 0); // onaysız harcama yok
   await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
@@ -748,4 +760,58 @@ test("eski teslim kaydı otomatik GÖNDERİLMEZ: Patron'a sorulur; evet → kana
   await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
   assert.match(o.g.at(-1).govde.text, /⛔ Üretim başlamadı: bu ay Pelin 149,00 \$ harcadı/);
   assert.equal(o.falIstek.length, 0);
+});
+
+// ---------- Nora + hareket kuralı + Kling/Veo karşılaştırma (4 Kasım) ----------
+test("Nora: senaryo kartı (iki araç + maliyet) → ✏️ Düzelt → yeniden yazar → ✅ → aynı fotoğraftan Kling 4.0 ve Veo 3.1 yan yana; hızlı dönüş/kamera dönüşü yok; normal üretimde video öncesi senaryo onayı", async () => {
+  const o = uretimOrtami();
+  o.noraOto = false;
+  o.falSonuc["kling/v4/image-to-video"] = (n) => ({ video: { url: `https://vid/k${n}.mp4` } });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.depo.set("pelin:is:3627-foto", JSON.stringify({ id: "3627-foto", kod: "3627", seri: "buyuk", renk: "koyu bordo", boy: { boy: "bilek" }, durum: "uyari", foto: "https://img/onayli.jpg", urunler: ["https://u/on.jpg"], ortam: { id: "2", ad: "Siyah Altın Lüks", sahne: "black gold studio" }, sahneAyar: { ...SAHNE_VARSAYILAN, kamera: "The camera slowly orbits around her" }, fotoDeneme: 1, videoDeneme: 0, maliyet: 0, gecmis: [], zaman: 1 }));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-foto", islem: "katalogdan", araclar: ["kling4", "veo31"] }));
+  await cronlar(o, 1);
+  let kart = o.g.filter((x) => x.govde && x.govde.text && x.govde.reply_markup).at(-1).govde;
+  assert.match(kart.text, /Kling 4\.0 \(1080p\) ve Google Veo 3\.1 \(1080p\) \(yan yana karşılaştırma\)[\s\S]*📝 Nora — senaryo[\s\S]*• Kling 4\.0 \(1080p\): 6 × 0,16 \$ = 0,94 \$\n• Google Veo 3\.1 \(1080p\): 6 × 0,40 \$ = 2,40 \$/);
+  assert.deepEqual(kart.reply_markup.inline_keyboard[0].map((x) => x.text), ["✅ Onayla", "✏️ Düzelt", "❌ İptal"]);
+  const nora1 = o.claude.find((x) => JSON.stringify(x).includes("Nora'sın"));
+  assert.match(JSON.stringify(nora1), /hızlı dönüş YOK, kendi etrafında dönme YOK, kamera etrafında dönüş YOK/);
+  assert.equal(o.falIstek.length, 0);
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][1].callback_data); // ✏️ Düzelt
+  assert.match(o.g.at(-1).govde.text, /Senaryoda neyi değiştireyim/);
+  await yazi(o, MURAT, "önce omuz üstünden baksın, sonra iki adım yürüsün");
+  assert.match(JSON.stringify(o.claude.at(-1)), /PATRON'UN DÜZELTMESİ \(mutlaka uygula\): önce omuz üstünden baksın/);
+  kart = o.g.filter((x) => x.govde && x.govde.text && x.govde.reply_markup).at(-1).govde;
+  assert.match(kart.text, /^✏️ Düzeltildi\.[\s\S]*📝 Nora — senaryo/);
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data); // ✅
+  assert.match(o.g.at(-1).govde.text, /Kling 4\.0 \(1080p\) \+ Google Veo 3\.1 \(1080p\) ile video üretiliyor[\s\S]*yan yana/);
+  o.yaziCevap.kod = "3627";
+  o.claude.cevaplar = Array.from({ length: 4 }, () => K2());
+  await cronlar(o, 10);
+  const kl = o.falIstek.filter((x) => x.uc === "kling/v4/image-to-video"), ve = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
+  assert.equal(kl.length, 1); assert.equal(ve.length, 1);
+  assert.equal(kl[0].govde.start_image_url, "https://img/onayli.jpg");
+  assert.equal(ve[0].govde.image_url, "https://img/onayli.jpg");
+  for (const p of [kl[0].govde.prompt, ve[0].govde.prompt]) {
+    assert.match(p, /Motion \(approved scenario\): She takes two slow steps toward the camera/);
+    assert.match(p, /no spinning, no twirling, no fast turns, no orbiting camera/);
+    assert.ok(!/orbits around her|turns to face the camera/.test(p));
+  }
+  assert.match(ve[0].govde.negative_prompt, /spinning, twirling, fast turn, orbiting camera/);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit").length, 0); // fotoğraf yeniden üretilmez
+  assert.equal(o.g.filter((x) => /ÖNİZLEME — 3627/.test(x.govde.text || "")).length, 2); // ikisi yan yana
+  // Normal üretim: video öncesi Nora kartı gelir, onaylanmadan video yok
+  o.site.push({ kod: "3557", bedenler: "38-44", fotolar: ["galeri/3557/1.jpg"] });
+  await yazi(o, MURAT, "/uret 3557");
+  await bas(o, MURAT, o.g.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data);
+  o.yaziCevap.kod = "3557";
+  o.claude.cevaplar = Array.from({ length: 3 }, () => K2());
+  const once = o.falIstek.filter((x) => /image-to-video/.test(x.uc)).length;
+  await cronlar(o, 8);
+  assert.equal(o.falIstek.filter((x) => /image-to-video/.test(x.uc)).length, once); // senaryo onayı bekleniyor
+  const nk = o.g.filter((x) => /📝 Nora — senaryo \(3557/.test(x.govde.text || "")).at(-1);
+  assert.ok(nk, "Nora kartı gelmeli");
+  await bas(o, MURAT, nk.govde.reply_markup.inline_keyboard[0][0].callback_data);
+  await cronlar(o, 2);
+  assert.equal(o.falIstek.filter((x) => /image-to-video/.test(x.uc)).length, once + 1);
 });
