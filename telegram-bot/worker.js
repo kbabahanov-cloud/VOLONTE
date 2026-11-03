@@ -46,7 +46,7 @@ import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } f
 
 export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
-import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir } from "./duzen.js";
+import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici } from "./duzen.js";
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
@@ -440,6 +440,14 @@ async function mesajIsle(msg, env) {
     }
   }
 
+  // "3319 yeni model tekrar": hazırlanamayan yeni model önizlemesi yeniden sıraya (3 Kasım)
+  const yeniTekrar = String(msg.text || "").match(/^\s*(\d{3,6})\s+yeni\s+model\s+tekrar\s*$/i);
+  if (yeniTekrar) {
+    const sira = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+    if (!sira.some((x) => String(x.kod) === yeniTekrar[1])) sira.push({ kod: yeniTekrar[1], kim: [kimden.first_name, kimden.last_name].filter(Boolean).join(" ") || "Patron", zaman: Math.floor(Date.now() / 1000) });
+    await env.KAYIT.put("venom:yeniModel", JSON.stringify(sira));
+    return telegram(env, "sendMessage", { chat_id: msg.chat.id, text: `🔁 ${yeniTekrar[1]} yeniden sıraya alındı; birkaç dakika içinde yeni model önizlemesi gelir.` });
+  }
   const komut = (msg.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   let cevap;
   if (medyaDosyasi(msg, 0)) {
@@ -547,7 +555,7 @@ async function paylasOnizle(msg, env) {
   const simdi = Math.floor(Date.now() / 1000);
   await telegram(env, "sendChatAction", { chat_id: sohbet, action: "upload_photo" });
   let paket;
-  try { paket = await paketHazirla(env, u, await durumBaglami(env, [kod], simdi), simdi); } catch (e) { return yaz(`⚠️ ${kod} hazırlanamadı: ${e.message}`); }
+  try { paket = await paketHazirla(env, u, await durumBaglami(env, [kod], simdi), simdi); } catch (e) { return yaz(`⚠️ ${kod} hazırlanamadı: ${kisaHata(e)}`); }
   const g = await paketGonder(env, sohbet, paket, (await env.KAYIT.get("bicim")) || "album");
   if (!g.ok) return yaz(`⚠️ Önizleme gönderilemedi: ${g.hata}`);
   const anahtar = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
@@ -1845,7 +1853,7 @@ export async function repeteIstegi(msg, env, { kodlar, renkler }) {
     }
     let paket;
     try { paket = await repetePaketi(env, { kod, renkler: kodlar.length === 1 ? renkler : [] }, simdi); } catch (e) {
-      for (const k of alicilar) await telegram(env, "sendMessage", { chat_id: k, text: /bulunamadı|medya/i.test(e.message) ? `⚠️ ${kod} için fotoğraf/video bulunamadı — paylaşılmadı.` : `⚠️ ${kod} hazırlanamadı: ${e.message}` });
+      for (const k of alicilar) await telegram(env, "sendMessage", { chat_id: k, text: /bulunamadı|medya/i.test(e.message) ? `⚠️ ${kod} için fotoğraf/video bulunamadı — paylaşılmadı.` : `⚠️ ${kod} hazırlanamadı: ${kisaHata(e)}` });
       continue;
     }
     const st = env.STOK ? (await stokIste(env, "/toplu", { kodlar: [kod] }).catch(() => ({})))[kod] : null;
@@ -1943,6 +1951,7 @@ export async function yeniModelIsleri(env, simdi) {
   const site = await siteUrunleriAl(env);
   const islenen = new Set();
   const tekrar = {};
+  const hataTekrar = {};
   for (const r of sira.slice(0, 3)) {
     islenen.add(r.kod);
     if (indirimliMi(r.kod)) continue;
@@ -1950,7 +1959,10 @@ export async function yeniModelIsleri(env, simdi) {
     if (!u) { if ((r.deneme || 0) < 12) tekrar[r.kod] = (r.deneme || 0) + 1; continue; }
     let paket;
     try { paket = { ...(await paketHazirla(env, u, await durumBaglami(env, [String(r.kod)], simdi), simdi, { durum: "yeni" })), kaynak: "site" }; } catch (e) {
-      await telegram(env, "sendMessage", { chat_id: muratId(env), text: `⚠️ 🆕 ${r.kod} yeni model önizlemesi hazırlanamadı: ${e.message}` });
+      // Geçici hata (indirme/zaman aşımı/yoğunluk): sessizce sonraki turlarda tekrar (en fazla 3 tur); olmazsa Patron'a kısa Türkçe
+      await env.KAYIT.put("kemal:sonHata", JSON.stringify({ zaman: simdi, kod: r.kod, hata: String(e && e.message).slice(0, 500) }), { expirationTtl: 7 * 86400 });
+      if (gecici(e) && (r.hataTur || 0) < 3) { hataTekrar[r.kod] = (r.hataTur || 0) + 1; continue; }
+      await telegram(env, "sendMessage", { chat_id: muratId(env), text: `⚠️ 🆕 ${r.kod} yeni model önizlemesi hazırlanamadı: ${kisaHata(e)}. Tekrar denemek için Kemal'e "${r.kod} yeni model tekrar" yazın.` });
       continue;
     }
     const st = env.STOK ? (await stokIste(env, "/toplu", { kodlar: [String(r.kod)] }).catch(() => ({})))[String(r.kod)] : null;
@@ -1962,7 +1974,7 @@ export async function yeniModelIsleri(env, simdi) {
   }
   // Bu arada Selin yeni model eklemiş olabilir: güncel kuyruğu okuyup sadece işlenenleri çıkar
   const guncel = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
-  await env.KAYIT.put("venom:yeniModel", JSON.stringify(guncel.flatMap((x) => (!islenen.has(x.kod) ? [x] : tekrar[x.kod] ? [{ ...x, deneme: tekrar[x.kod] }] : []))));
+  await env.KAYIT.put("venom:yeniModel", JSON.stringify(guncel.flatMap((x) => (!islenen.has(x.kod) ? [x] : tekrar[x.kod] ? [{ ...x, deneme: tekrar[x.kod] }] : hataTekrar[x.kod] ? [{ ...x, hataTur: hataTekrar[x.kod] }] : []))));
 }
 
 export async function fabrikaIsleri(env, simdi) {
@@ -2000,7 +2012,7 @@ export async function fabrikaIsleri(env, simdi) {
       let paket = null;
       let sorun = null;
       if (!r.deneme) {
-        try { paket = await repetePaketi(env, r, simdi); } catch (e) { sorun = e.message; }
+        try { paket = await repetePaketi(env, r, simdi); } catch (e) { sorun = kisaHata(e); }
       }
       const metin = [
         `${r.deneme ? DENEME : ""}🔁 Repete geldi – ${r.kod}`,

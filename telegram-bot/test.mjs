@@ -1826,3 +1826,23 @@ test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyl
   assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.message_ids.length, 3);
   assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Kanalda SOLD OUT görselli 1 eski paylaşım duruyor[\s\S]*\/300/);
 });
+
+test("görselli istek (3319): indirme zaman aşımında 3 kez adresle dener, sonra kendisi indirip base64 gönderir; hata kısa Türkçe", async () => {
+  const { gorselliIstek, kisaHata, gecici } = await import("./duzen.js");
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url) => (String(url).startsWith("https://site/") ? new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/jpeg" } }) : asil(url));
+  const hata = new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"request timed out while trying to download the file"}}');
+  const gelen = [];
+  const istek = async (g) => { gelen.push(g[0].source.type); if (g[0].source.type === "url") throw hata; return { ok: true }; };
+  try {
+    assert.deepEqual(await gorselliIstek({}, ["https://site/a.jpg"], istek, { beklemeMs: [0] }), { ok: true });
+    assert.deepEqual(gelen, ["url", "url", "url", "base64"]);
+    assert.equal(kisaHata(hata), "fotoğraf indirilemedi (zaman aşımı); birkaç kez denendi");
+    assert.equal(kisaHata(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"bad schema"}}')), "yapay zekâ hatası: bad schema");
+    assert.ok(gecici(hata) && !gecici(new Error("bad schema")));
+    // kalıcı hata: yeniden denenmez
+    let n = 0;
+    await assert.rejects(gorselliIstek({}, ["https://site/a.jpg"], async () => { n++; throw new Error("400 invalid schema"); }, { beklemeMs: [0] }));
+    assert.equal(n, 1);
+  } finally { globalThis.fetch = asil; }
+});
