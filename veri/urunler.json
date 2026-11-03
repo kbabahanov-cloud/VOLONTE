@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3377",
+  "baslik": "Floral Organza Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A long A-line dress in black with a scattered floral print, cut with a round neck and a softly defined waist. Sheer sleeves open into layered ruffle cuffs finished with satin bows, and a back zip keeps the line clean. Wear it to receptions, celebrations or elegant evening plans. Made in Istanbul with careful finishing.",
+   "fr": "Une robe longue évasée noire à motif floral parsemé, avec col rond et taille légèrement marquée. Les manches transparentes s'ouvrent sur des volants superposés ornés de nœuds en satin, et la fermeture au dos préserve une ligne nette. Idéale pour les réceptions, les fêtes ou une soirée élégante. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Um vestido longo evasê preto com estampa floral espalhada, decote redondo e cintura suavemente marcada. As mangas transparentes terminam em babados sobrepostos com laços de cetim, e o fecho nas costas mantém a linha limpa. Perfeito para recepções, celebrações ou noites elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3377/1.jpg",
+   "galeri/3377/2.jpg",
+   "galeri/3377/3.jpg",
+   "galeri/3377/4.jpg",
+   "galeri/3377/5.jpg"
+  ],
+  "videolar": [
+   "selin/3377/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3383",
   "baslik": "Tie-Neck Polka Dot Jumpsuit",
   "kategori": "jumpsuits",
