@@ -815,3 +815,29 @@ test("Nora: senaryo kartı (iki araç + maliyet) → ✏️ Düzelt → yeniden 
   await cronlar(o, 2);
   assert.equal(o.falIstek.filter((x) => /image-to-video/.test(x.uc)).length, once + 1);
 });
+
+test("önizleme gönderimi kaydedilir; video adresten gitmezse belge olarak; 'bildir' ile yeniden gönderilir; modele özel araç (3627: Kling 4.0, Veo kapalı)", async () => {
+  const o = uretimOrtami();
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).endsWith("/sendVideo") ? Response.json({ ok: false, description: "Bad Request: failed to get HTTP URL content" }) : asil(url, istek));
+  o.depo.set("pelin:is:3627-k", JSON.stringify({ id: "3627-k", kod: "3627", seri: "buyuk", durum: "onay", arac: "kling4", foto: "https://img/f.jpg", video: "https://vid/k.mp4", kapak: "https://img/kap.jpg", ortam: { ad: "Siyah Altın Lüks" }, sahneAyar: { ...SAHNE_VARSAYILAN }, fotoDeneme: 1, videoDeneme: 1, gecmis: [], aracYasak: ["veo31"] }));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-k", islem: "bildir", onEk: "🔁 3627 Kling videosu yeniden gönderiliyor." }));
+  await cronlar(o, 1);
+  globalThis.fetch = asil;
+  assert.ok(o.g.some((x) => x.metod === "sendDocument" && x.govde.document === "https://vid/k.mp4")); // belge olarak
+  assert.ok(o.g.some((x) => /🔁 3627 Kling videosu yeniden gönderiliyor/.test(x.govde.text || "")));
+  const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
+  assert.ok(on);
+  assert.ok(!on.govde.reply_markup.inline_keyboard.flat().some((d) => /Veo/.test(d.text))); // Veo kapalı → karşılaştırma düğmesi yok
+  const is = JSON.parse(o.depo.get("pelin:is:3627-k"));
+  assert.deepEqual(is.bildirim.sonuc.map(([ad, ok]) => [ad, ok]), [["foto", true], ["video", true], ["kapak", true], ["metin", true]]);
+  // modele özel araç: yeni üretim Kling 4.0 ile
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.site.push({ kod: "3627", bedenler: "38-50", fotolar: ["galeri/3627/1.jpg"] });
+  o.depo.set("pelinboy:3627", JSON.stringify({ boy: "bilek", arac: "kling4", aracYasak: ["veo31", "veofast", "veo"] }));
+  await yazi(o, MURAT, "/uret büyük:3627");
+  await bas(o, MURAT, o.g.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data);
+  const yeni = [...o.depo.entries()].filter(([k]) => k.startsWith("pelin:is:3627-") && k !== "pelin:is:3627-k").map(([, v]) => JSON.parse(v));
+  assert.equal(yeni[0].arac, "kling4");
+  assert.ok(o.g.some((x) => /Video aracı: Kling 4\.0 \(1080p\) \(modele özel\)[\s\S]*Video 6 sn — Kling 4\.0/.test(x.govde.text || "")));
+});
