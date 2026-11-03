@@ -537,22 +537,23 @@ async function fotoAl(env, m) {
 // ---------- Sohbet (Claude; komutsuz) ----------
 const SISTEM = `Sen Pelin'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyim toptancısı; ana pazar Afrika, dünya geneli) görsel ve video yapımcısı. Hollywood seviyesinde bir yapımcı gibi düşünürsün: ışık, kadraj, hareket, müzik, ilk 2 saniyede dikkat çekme, Telegram/Instagram/WhatsApp için dikey video.
 Sade, kısa, samimi Türkçe konuş (Rusça yazılırsa Rusça). Sohbet gibi konuş: soru sor, fikir ver, daha iyi bir yol görürsen söyle. Komut bekleme.
-Kesin kurallar (asla esnemez): kıyafetin rengi, deseni ve kesimi asla değişmez; manken yüzleri hep aynı; fiyat, maliyet, alış fiyatı, kâr ve stok hiçbir görsele/yazıya girmez; videoya AI notu basılmaz; model kodu VOLONTE yazısının altında ya da üstünde net okunur (paketlemede eklenir). Onaysız harcama yok: her üretimden önce maliyet önizlemesi gider, sadece Murat onaylar. Para harcayan bir işi sen başlatamazsın; sadece "onizleme_gonder" ile maliyet kartını gönderebilirsin.
+Kesin kurallar (asla esnemez): kıyafetin rengi, deseni ve kesimi asla değişmez; manken yüzleri hep aynı; fiyat, maliyet, alış fiyatı, kâr ve stok hiçbir görsele/yazıya girmez; videoya AI notu basılmaz; model kodu VOLONTE yazısının altında ya da üstünde net okunur (paketlemede eklenir). Onaysız harcama yok: her üretimden önce maliyet önizlemesi gider, sadece Murat onaylar. Para harcayan bir işi sen başlatamazsın; sadece "kurulum_karti" (yüz + ortam kurulumu) ya da "uretim_karti" (model kodlarıyla üretim / maliyet testi) ile Patron'a ✅ Onayla / ❌ İptal düğmeli maliyet kartı gönderebilirsin. Eski deneme akışı ("fal hazır", kör test) KAPANDI; ondan söz etme.
 Üretim akışı (2 Kasım, Patron): /kurulum → 3 manken yüzü + 3 ortam önerisi, Patron seçer, kalıcı kaydedilir. /uret <kod> → ürün fotoğrafı (site ya da Hemra'nın "<kod>" yazılı fotoğrafı) → sabit yüzle fotoğraf → aynı fotoğraftan 6 sn video → kalite kontrol (sen + ikinci göz OpenAI) → renk/desen/kesim farkı varsa otomatik yeniden; 2 denemede olmazsa Patron'a ⚠️ → Patron [✅ Onayla] [🔄 Yeniden üret] [❌ İptal] → onaylanınca Selin siteye, Kemal kanala. /maliyettesti 5 kod → model başı maliyet raporu. Örnek video ("bunun gibi yap, 3557"): kamera, ışık, hız, poz ve ortam havasını tarif olarak çıkarırsın; birebir kopya yok, başkasının yüzü/logosu/müziği yok; beğenilen tarif şablon olur (/sablonlar).
 Yapay zekâ yüzden kişi tanıyamaz; "ünlüye benziyor mu" kontrolünü kullanıcının gözü yapar — bunu dürüstçe söyle.`;
 
-const ARAC_ONIZLEME = { name: "onizleme_gonder", description: "Murat'a bir sonraki üretim adımının maliyet önizlemesini (✅ Onayla / ❌ İptal düğmeli) gönderir. Para harcamaz.", strict: true,
-  input_schema: { type: "object", additionalProperties: false, required: ["adim"], properties: { adim: { type: "string", enum: ["yuz", "foto", "video"] } } } };
+// Sohbet araçları (3 Kasım): sadece maliyet KARTI gönderir; para harcamaz (Patron kartta onaylar)
+const SOHBET_ARACLARI = [
+  { name: "kurulum_karti", description: "Patron'a kurulum (3 manken yüzü + 3 ortam önerisi) maliyet kartını gönderir. Para harcamaz.", strict: true, input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] } },
+  { name: "uretim_karti", description: "Patron'a model kodlarıyla üretim (ya da test=true ise 5 modellik maliyet testi) maliyet kartını gönderir. Para harcamaz.", strict: true,
+    input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
+];
 
 async function durumMetni(env, simdi) {
   const secim = await oku(env, "pelin:secim", null);
   const anahtar = `Anahtarlar: BOT ✅ · FAL ${env.FAL_KEY ? "✅" : "❌"} · ANTHROPIC ${env.ANTHROPIC_API_KEY ? "✅" : "❌"} · OPENAI ${env.OPENAI_API_KEY ? "✅" : "❌ (ikinci göz kapalı)"}.`;
   const kur = secim ? `Kurulum: yüz ${MANKENLER[secim.yuz.manken].ad}, ortam ${secim.ortamlar.map((x) => x.ad).join(", ")}, video ${ARACLAR[secim.arac || "veo"].ad}.` : "Kurulum: yapılmadı (/kurulum).";
-  const d = await denemeOku(env);
-  if (secim || (d.asama === "fal" && !env.FAL_KEY)) return `${anahtar} ${kur} Bu ay harcanan: ${para(await buAyHarcanan(env, simdi))} / ${AYLIK_SINIR_USD} $. Beyin: ${(await env.KAYIT.get("pelin:beyin")) || "sonnet"}.`;
-  const yuz = Object.keys(MANKENLER).map((m) => `${MANKENLER[m].ad}: ${d.yuzler[m] && d.yuzler[m].secilen ? "onaylı" : d.yuzler[m] ? "aday bekliyor" : "yok"}`).join(", ");
-  const mod = Object.keys(DENEME_MODELLERI).map((k) => `${k}: askı ${d.modeller[k].aski.length ? "var" : "yok"}, kare ${d.modeller[k].fotoOnay ? "onaylı" : d.modeller[k].foto ? "bekliyor" : "yok"}`).join("; ");
-  return `Aşama: ${d.asama}${d.asama === "fal" ? " (fal hazır bekleniyor)" : ""}. FAL_KEY: ${env.FAL_KEY ? "var" : "yok"}. Yüzler: ${yuz}. Modeller: ${mod}. Devam eden iş: ${d.isler.filter((i) => i.durum === "gonderildi").length}. Bu ay harcanan: ${para(await buAyHarcanan(env, simdi))} / ${AYLIK_SINIR_USD} $. Beyin: ${(await env.KAYIT.get("pelin:beyin")) || "sonnet"}.`;
+  return `${anahtar} ${kur} Bu ay harcanan: ${para(await buAyHarcanan(env, simdi))} / ${AYLIK_SINIR_USD} $. Beyin: ${(await env.KAYIT.get("pelin:beyin")) || "sonnet"}.`;
+
 }
 
 async function sohbet(env, m, simdi) {
@@ -570,7 +571,7 @@ async function sohbet(env, m, simdi) {
   const sistem = [{ type: "text", text: SISTEM, cache_control: { type: "ephemeral" } }, { type: "text", text: `Şu anki durum: ${await durumMetni(env, simdi)}\nKonuşan: ${m.from.first_name || ""} (${yonetici(env, m.from.id) ? "yönetici" : "ekip"}).` }];
   let cevapMetni = "";
   for (let tur = 0; tur < 3; tur++) {
-    const r = await client.messages.create({ model, max_tokens: 2000, system: sistem, tools: [ARAC_ONIZLEME], output_config: { effort: "low" }, messages: mesajlar });
+    const r = await client.messages.create({ model, max_tokens: 2000, system: sistem, tools: SOHBET_ARACLARI, output_config: { effort: "low" }, messages: mesajlar });
     await claudeHarcama(env, model, r.usage || {}, simdi);
     const metin = r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     if (metin) cevapMetni = metin;
@@ -579,8 +580,9 @@ async function sohbet(env, m, simdi) {
     mesajlar.push({ role: "assistant", content: r.content });
     const sonuclar = [];
     for (const a of araclar) {
-      await onizlemeGonder(env, a.input.adim, simdi);
-      sonuclar.push({ type: "tool_result", tool_use_id: a.id, content: "Önizleme Murat'a gönderildi (onaylarsa başlar)." });
+      if (a.name === "kurulum_karti") await kurulumKomutu(env, m, simdi);
+      else await uretKomutu(env, { ...m, text: `/${a.input.test ? "maliyettesti" : "uret"} ${(a.input.kodlar || []).join(" ")}` }, simdi, Boolean(a.input.test));
+      sonuclar.push({ type: "tool_result", tool_use_id: a.id, content: "Maliyet kartı Patron'a gönderildi (onaylarsa başlar)." });
     }
     mesajlar.push({ role: "user", content: sonuclar });
   }
@@ -640,15 +642,7 @@ export async function guncelleme(u, env) {
     await env.KAYIT.put("pelin:beyin", sec);
     return yaz(env, m.chat.id, `🧠 Beyin: ${sec === "opus" ? "Opus (daha güçlü, ~2 kat pahalı)" : "Sonnet"}.`);
   }
-  if (/^fal\s+haz[ıi]r\b/i.test(metin)) {
-    if (!muratMi(env, id)) return yaz(env, m.chat.id, "\"fal hazır\" onayını Murat verir.");
-    if (!env.FAL_KEY) return yaz(env, m.chat.id, "FAL_KEY henüz görünmüyor. Cloudflare → Workers & Pages → volonte-pelin → Settings → Variables and Secrets → Add → Type: Secret, Name: FAL_KEY → Deploy. Sonra tekrar \"fal hazır\" yazın.");
-    const d = await denemeOku(env);
-    if (d.asama === "fal") d.asama = "hazir";
-    await kaydet(env, "pelin:deneme", d);
-    await yaz(env, m.chat.id, "👍 fal hazır. İlk adım: 3 manken yüzü. Maliyet önizlemesi geliyor; onaylarsanız başlarım.");
-    return onizlemeGonder(env, "yuz", simdi);
-  }
+  if (/^fal\s+haz[ıi]r\b/i.test(metin)) return kurulumKomutu(env, m, simdi); // eski deneme akışı kapandı (3 Kasım)
   if (metin.startsWith("/")) return yaz(env, m.chat.id, "Komutlar: /durum · /kurulum · /uret 3557 · /maliyettesti 5 kod · /sablonlar · /arac · /beyin. Örnek video: dosyayı \"bunun gibi yap, 3557\" yazısıyla atın. Gerisi için normal yazın.");
   return sohbet(env, m, simdi);
 }

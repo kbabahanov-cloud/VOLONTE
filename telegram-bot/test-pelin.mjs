@@ -63,103 +63,9 @@ test("maliyet: yüz 6 aday 0,90 $; kare 2 × 0,15; video 3 araç × 2 model, ayn
   assert.equal(videoGirdisi("kling", "k").start_image_url, "k");
 });
 
-test("fal hazır yazılmadan ve onaysız hiçbir üretim yok; sadece Murat onaylar; harcama yazılır", async () => {
-  const o = ortam();
-  await onizlemeGonder(o.env, "yuz", 1000);
-  assert.match(o.g.at(-1).govde.text, /fal hazır/);
-  await yazi(o, HEMRA, "fal hazır");
-  assert.match(o.g.at(-1).govde.text, /Murat verir/);
-  await yazi(o, MURAT, "fal hazır");
-  const kart = o.g.filter((x) => /Maliyet önizlemesi/.test((x.govde || {}).text || "")).at(-1);
-  assert.match(kart.govde.text, /Toplam \(yaklaşık\): 0,90 \$/);
-  assert.equal(o.falIstek.length, 0); // önizleme para harcamaz
-  const onay = sonDugmeler(o).find((d) => d.text === "✅ Onayla").callback_data;
-  await bas(o, HEMRA, onay);
-  assert.equal(o.falIstek.length, 0);
-  await bas(o, MURAT, onay);
-  assert.equal(o.falIstek.length, 3);
-  assert.ok(o.falIstek.every((f) => f.uc === "fal-ai/nano-banana-pro" && f.govde.num_images === 2 && /must not resemble any celebrity/.test(f.govde.prompt)));
-  assert.equal(await buAyHarcanan(o.env, Math.floor(Date.now() / 1000)), 0.9);
-  await bas(o, MURAT, onay); // ikinci basış
-  assert.equal(o.falIstek.length, 3);
-});
 
-test("FAL_KEY yokken 'fal hazır' nereye gireceğini söyler; aylık sınırı aşan önizleme onaylanamaz; %80 uyarısı", async () => {
-  const o = ortam({ fal: false });
-  await yazi(o, MURAT, "fal hazır");
-  assert.match(o.g.at(-1).govde.text, /volonte-pelin → Settings → Variables and Secrets/);
-  const p = ortam();
-  p.depo.set(`uretim-harcama:${ay}`, "149.5");
-  await yazi(p, MURAT, "fal hazır");
-  const kart = p.g.filter((x) => /Maliyet önizlemesi/.test((x.govde || {}).text || "")).at(-1);
-  assert.match(kart.govde.text, /⛔/);
-  assert.equal(kart.govde.reply_markup, undefined);
-  const r = ortam();
-  r.depo.set(`uretim-harcama:${ay}`, "119.5");
-  await yazi(r, MURAT, "fal hazır");
-  await bas(r, MURAT, sonDugmeler(r).find((d) => d.text === "✅ Onayla").callback_data);
-  assert.ok(r.g.some((x) => /%80'e ulaştı/.test((x.govde || {}).text || "")));
-});
 
-test("yüz adayları → seçim; askı fotoğrafları → kare önizlemesi; kare onayı → video önizlemesi", async () => {
-  const o = ortam();
-  await yazi(o, MURAT, "fal hazır");
-  await bas(o, MURAT, sonDugmeler(o).find((d) => d.text === "✅ Onayla").callback_data);
-  await pelinCron(o.env, Math.floor(Date.now() / 1000));
-  assert.equal(o.g.filter((x) => x.metod === "sendMediaGroup").length, 3);
-  for (const m of ["beyaz", "siyahi", "dolgun"]) await bas(o, MURAT, `py:${m}:1`);
-  assert.match(o.g.filter((x) => x.metod === "sendMessage").at(-1).govde.text, /3577 ve 3592 askı/);
-  const foto = (kimden, caption) => guncelleme({ message: { message_id: 2, date: 1, chat: { id: kimden, type: "private" }, from: { id: kimden }, photo: [{ file_id: "k" }, { file_id: `b${caption}` }], caption } }, o.env);
-  await foto(MURAT, "3592 askı");
-  await foto(HEMRA, "3577 askı");
-  const kart = o.g.filter((x) => /Maliyet önizlemesi — başlangıç/.test((x.govde || {}).text || "")).at(-1);
-  assert.ok(kart);
-  await bas(o, MURAT, sonDugmeler(o).find((d) => d.text === "✅ Onayla").callback_data);
-  const edit = o.falIstek.filter((f) => f.uc === "fal-ai/nano-banana-pro/edit");
-  assert.equal(edit.length, 2);
-  assert.deepEqual(edit.map((e) => e.govde.image_urls[0]).sort(), ["https://img/1b.jpg", "https://img/2b.jpg"]); // 3577 beyaz, 3592 siyahi (2. adaylar)
-  assert.match(edit[0].govde.image_urls[1], /^https:\/\/pelin\.test\/dosya\/[a-f0-9]{32}$/);
-  await pelinCron(o.env, Math.floor(Date.now() / 1000));
-  await bas(o, MURAT, "pf:3592");
-  await bas(o, MURAT, "pf:3577");
-  assert.ok(o.g.some((x) => /Maliyet önizlemesi — video denemesi/.test((x.govde || {}).text || "")));
-});
 
-test("video denemesi: aynı kareden 3 araç × 2 model; kareler + puan; kör test Murat'a ve Hemra'ya; oylar tamamlanınca sonuç", async () => {
-  const o = ortam();
-  const simdi = () => Math.floor(Date.now() / 1000);
-  await yazi(o, MURAT, "fal hazır");
-  await bas(o, MURAT, sonDugmeler(o).find((d) => d.text === "✅ Onayla").callback_data);
-  await pelinCron(o.env, simdi());
-  for (const m of ["beyaz", "siyahi", "dolgun"]) await bas(o, MURAT, `py:${m}:0`);
-  for (const [k, kim] of [["3592", MURAT], ["3577", HEMRA]]) await guncelleme({ message: { message_id: 2, date: 1, chat: { id: kim, type: "private" }, from: { id: kim }, photo: [{ file_id: `a${k}` }], caption: `${k} askı` } }, o.env);
-  await bas(o, MURAT, sonDugmeler(o).find((d) => d.text === "✅ Onayla").callback_data);
-  await pelinCron(o.env, simdi());
-  await bas(o, MURAT, "pf:3592");
-  await bas(o, MURAT, "pf:3577");
-  for (const uc of ["fal-ai/veo3.1/lite/image-to-video", "fal-ai/kling-video/v3/pro/image-to-video", "bytedance/seedance-2.0/image-to-video"]) o.falSonuc[uc] = (n) => ({ video: { url: `https://vid/${n}.mp4` } });
-  await bas(o, MURAT, sonDugmeler(o).find((d) => d.text === "✅ Onayla").callback_data);
-  const videolar = o.falIstek.filter((f) => /image-to-video$/.test(f.uc));
-  assert.equal(videolar.length, 6);
-  const kareler = new Set(videolar.map((v) => v.govde.image_url || v.govde.start_image_url));
-  assert.equal(kareler.size, 2); // her model için 3 araç aynı başlangıç karesi
-  await pelinCron(o.env, simdi()); // videolar biter → kare çıkarma işleri (gerçek video dahil)
-  const kareIsleri = o.falIstek.filter((f) => f.uc === "fal-ai/ffmpeg-api/extract-frame");
-  assert.equal(kareIsleri.length, 24);
-  assert.ok(kareIsleri.some((k) => /volonte-asistan\.volonte\.workers\.dev\/kanal-video\/[a-f0-9]{32}$/.test(k.govde.video_url)));
-  const puan = (n) => ({ id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 },
-    content: [{ type: "text", text: JSON.stringify({ videolar: [1, 2, 3, 4].slice(0, n).map((no) => ({ no, renk: 9, desen: 8, kesim: 9, not: "iyi" })) }) }] });
-  o.claude.cevaplar = [puan(4), puan(4)];
-  for (let i = 0; i < 5; i++) await pelinCron(o.env, simdi());
-  const korVideo = o.g.filter((x) => x.metod === "sendVideo");
-  assert.equal(korVideo.length, 16); // 2 kişi × 2 model × 4 (3 araç + gerçek)
-  assert.ok(korVideo.every((v) => /^\d{4} · [A-D] · renk 9\/10 · desen 8\/10 · kesim 9\/10$/.test(v.govde.caption)));
-  assert.ok(!JSON.stringify(korVideo).match(/Veo|Kling|Seedance|\$/)); // kör: araç adı ve maliyet yok
-  for (const kim of [MURAT, HEMRA]) for (const kod of ["3592", "3577"]) await bas(o, kim, `pv:${kod}:A`);
-  const sonuc = o.g.filter((x) => /KÖR TEST SONUCU/.test((x.govde || {}).text || ""));
-  assert.equal(sonuc.length, 2);
-  assert.match(sonuc[0].govde.text, /A = .* · 🏆 Murat \+ Hemra/);
-});
 
 test("kör test: harfler karışık, sonuçta araç adları, maliyet ve oylar açılır", () => {
   const h = harfDagit(["veo", "kling", "seedance", "gercek"], () => 0);
@@ -300,4 +206,23 @@ test("örnek video: Patron video + 'bunun gibi yap, 3557' → kareler → tarif 
   globalThis.fetch = async (url, istek) => (String(url).startsWith("https://instagram") ? new Response("<html>", { headers: { "content-type": "text/html" } }) : asil(url, istek));
   await yazi(o, MURAT, "bunun gibi yap https://instagram.com/reel/x");
   assert.match(o.g.at(-1).govde.text, /videoyu dosya olarak atın/);
+});
+
+test("eski deneme akışı kapalı (3 Kasım): 'fal hazır' ve sohbet aracı yeni kurulum kartını gönderir; 'fal hazır yazın' engeli yok; /durum anahtarları gösterir", async () => {
+  const o = ortam();
+  o.env.OPENAI_API_KEY = "x";
+  await yazi(o, MURAT, "fal hazır");
+  assert.match(o.g.at(-1).govde.text, /Kurulum: 3 manken yüzü/);
+  assert.ok(!o.g.some((x) => /fal hazır" yazın/.test(x.govde.text || "")));
+  o.claude.cevaplar = [
+    { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "uretim_karti", input: { kodlar: ["3557"], test: false } }], usage: { input_tokens: 10, output_tokens: 5 } },
+    { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", content: [{ type: "text", text: "Kartı gönderdim Patron." }], usage: { input_tokens: 10, output_tokens: 5 } },
+  ];
+  o.depo.set("pelin:secim", JSON.stringify({ yuz: { manken: "siyahi", fileId: "Y", anahtar: "a".repeat(32) }, ortamlar: [{ id: "1", ad: "Siyah-altın", sahne: "x", hareket: "y" }], arac: "veo" }));
+  await yazi(o, MURAT, "3557 için video yapalım");
+  assert.ok(o.g.some((x) => /Üretim — 1 model: 3557/.test(x.govde.text || "")));
+  assert.equal(o.falIstek.length, 0); // kart para harcamaz
+  assert.ok(!o.claude[0].tools.some((x) => x.name === "onizleme_gonder"));
+  await yazi(o, MURAT, "/durum");
+  assert.match(o.g.at(-1).govde.text, /FAL ✅ · ANTHROPIC ✅ · OPENAI ✅/);
 });
