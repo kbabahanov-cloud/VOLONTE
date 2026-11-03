@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3343",
+  "baslik": "Belted Utility Vest Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sleeveless utility vest with wide-leg pleated trousers in charcoal grey denim-look fabric. The vest features a notched lapel, four flap pockets, a buckled waist belt and a removable floral brooch. Wear it as a set for the office or city days, or style the pieces separately. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces composé d'un gilet sans manches de style utilitaire et d'un pantalon large à pinces, dans un tissu effet denim gris anthracite. Le gilet se distingue par son col cranté, ses quatre poches à rabat, sa ceinture à boucle et sa broche fleur amovible. À porter ensemble au bureau ou en ville, ou séparément. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças com colete sem mangas de estilo utilitário e calça larga com pregas, em tecido efeito ganga cinzento carvão. O colete destaca-se pela gola com lapela, quatro bolsos com pala, cinto com fivela e broche floral removível. Use o conjunto completo no escritório ou na cidade, ou combine as peças separadamente. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3343/1.jpg",
+   "galeri/3343/2.jpg",
+   "galeri/3343/3.jpg",
+   "galeri/3343/4.jpg",
+   "galeri/3343/5.jpg"
+  ],
+  "videolar": [
+   "selin/3343/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3340",
   "baslik": "Denim Panel Zip Set",
   "kategori": "sets",
