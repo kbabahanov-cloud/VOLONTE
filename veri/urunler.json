@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3275",
+  "baslik": "Printed Wrap Vest Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sleeveless wrap top with wide-leg black trousers. The top carries a bold brushstroke stripe print in blue, yellow and black, finished with a notched lapel, a small brooch and a long side tie. Easy to wear to the office, daytime events or dinners. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut portefeuille sans manches à un pantalon noir large. Le haut présente un imprimé rayé effet coup de pinceau en bleu, jaune et noir, avec col cranté, petite broche et long lien noué sur le côté. Idéal au bureau, en journée comme au dîner. Confectionné à Istanbul avec un soin particulier.",
+   "pt": "Um conjunto de duas peças que combina um top transpassado sem mangas com calça preta de perna larga. O top tem estampa listrada em pinceladas azul, amarelo e preto, gola com lapela, pequeno broche e laço lateral comprido. Funciona bem no escritório, em eventos diurnos ou jantares. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3275/1.jpg",
+   "galeri/3275/2.jpg",
+   "galeri/3275/3.jpg",
+   "galeri/3275/4.jpg",
+   "galeri/3275/5.jpg",
+   "galeri/3275/6.jpg"
+  ],
+  "videolar": [
+   "selin/3275/0"
+  ],
+  "fiyat": 42,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3284",
   "baslik": "Beaded Pleated Cape Set",
   "kategori": "sets",
