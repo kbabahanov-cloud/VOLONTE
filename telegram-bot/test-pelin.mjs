@@ -89,7 +89,7 @@ function uretimOrtami() {
     if (String(url).endsWith("/sendMediaGroup")) { const gv = JSON.parse(istek.body); o.g.push({ metod: "sendMediaGroup", govde: gv }); return Response.json({ ok: true, result: gv.media.map((_, i) => ({ message_id: 500 + i, photo: [{ file_id: `kucuk${i}` }, { file_id: `YUZ${i}` }] })) }); }
     return asil(url, istek);
   };
-  o.falSonuc["fal-ai/veo3.1/lite/image-to-video"] = (n) => ({ video: { url: `https://vid/${n}.mp4` } });
+  o.falSonuc["fal-ai/veo3.1/image-to-video"] = (n) => ({ video: { url: `https://vid/${n}.mp4` } });
   return o;
 }
 const GECTI = { renk_ayni: true, desen_ayni: true, kesim_ayni: true, sorunlar: [] };
@@ -137,7 +137,7 @@ test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden ü
   assert.equal(foto.length, 2); // ilk deneme renk farkı → otomatik yeniden
   assert.deepEqual(foto[0].govde.image_urls, ["https://pelin.test/dosya/" + "a".repeat(32), "https://pelin.test/dosya/" + "b".repeat(32)]);
   assert.match(foto[0].govde.prompt, /black and gold studio/);
-  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video").length, 1);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video").length, 1);
   assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame").length, 3);
   const on = o.g.find((x) => /ÖNİZLEME — 3557/.test(x.govde.text || ""));
   assert.ok(on, "önizleme gelmeli");
@@ -162,7 +162,7 @@ test("üretim: 2 denemede kontrolden geçmezse Patron'a ⚠️ (sorunlarla); mal
   o.claude.cevaplar = [claudeJsonCevap(GECMEDI), claudeJsonCevap(GECMEDI)];
   await cronlar(o, 6);
   assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit").length, 2);
-  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video").length, 0); // geçmeyen fotoğraftan video yapılmaz
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video").length, 0); // geçmeyen fotoğraftan video yapılmaz
   const uyari = o.g.find((x) => /⚠️ 3557 · .*2\. deneme|Sorunlar:/.test(x.govde.text || ""));
   assert.ok(uyari);
   assert.match(uyari.govde.text, /renk tonu koyulaşmış/);
@@ -245,7 +245,7 @@ test("tek seferlik yüz kaydı: iki seri yüzü fotoğraflarıyla tek mesaj + or
   const d = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
   assert.equal(d.length, 1);
   assert.deepEqual(d[0].govde.image_urls, [`https://pelin.test/dosya/${s.yuzler.buyuk.anahtar}`]);
-  assert.match(d[0].govde.prompt, /Change ONLY this: make her skin tone slightly deeper\. Keep her identity exactly the same: same face shape, eyes, eyebrows, nose, lips/);
+  assert.match(d[0].govde.prompt, /Change ONLY this: make her skin tone slightly deeper\. Keep her identity exactly the same — she must clearly be the same person: same face shape/);
   await bas(o, MURAT, `pz:o:${id}`); // ikinci basış harcamaz
   assert.equal(o.falIstek.length, 1);
   await cronlar(o, 1);
@@ -310,7 +310,7 @@ test("üretim rollerle: büyük seri modeli büyük seri yüzüyle; katalog foto
   const k = edit.filter((x) => x.govde.image_urls.includes("https://www.wearvolonte.com/galeri/3601/1.jpg"));
   assert.equal(k[0].govde.image_urls[0], "https://pelin.test/dosya/" + "a".repeat(32)); // küçük seri yüzü
   assert.ok(!edit.some((x) => /80s neon/.test(x.govde.prompt)));
-  const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video");
+  const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.equal(video.length, 2);
   assert.match(video[0].govde.prompt, /Setting and atmosphere: city street golden hour\. Strong first second: she is walking and turns to face the camera\. The camera slowly orbits around her[\s\S]*close-up of the neckline\/collar and stitching[\s\S]*"VOLONTE" and directly below it the model code "3557"[\s\S]*no price/);
   assert.match(video[1].govde.prompt, /model code "3601"/);
@@ -389,7 +389,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   assert.match(edit[1].govde.prompt, /city street golden hour[\s\S]*red \(kırmızı\) color variant ONLY/);
   const kontrol = o.claude.filter((x) => JSON.stringify(x.messages).includes("İSTENEN RENK: kırmızı"));
   assert.ok(kontrol.length >= 3);
-  const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video");
+  const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.equal(video.length, 2); // ilk videonun son karesinde kod yanlış okundu (3672) → otomatik yeniden
   assert.match(video[0].govde.prompt, /red \(kırmızı\) color variant ONLY[\s\S]*orbits[\s\S]*"VOLONTE"[\s\S]*"3627"/);
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]);
@@ -398,7 +398,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   const on2 = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
   assert.match(on2.govde.text, /son kare yazısı ✅[\s\S]*Ürün fotoğrafı: sizin gönderdiğiniz · renk kırmızı/);
   const dugmeler = on2.govde.reply_markup.inline_keyboard.flat();
-  assert.deepEqual(dugmeler.map((x) => x.text), ["✅ Onayla", "🔄 Yeniden üret", "❌ İptal", "💾 Bu ayarları şablon olarak kaydet"]);
+  assert.deepEqual(dugmeler.map((x) => x.text), ["✅ Onayla", "🔄 Yeniden üret", "❌ İptal", "💾 Bu ayarları şablon olarak kaydet", "🎬 Kling 4.0 ile de dene (0,94 $)", "🎬 Kling 3.0 4K ile de dene (2,52 $)"]);
   await bas(o, MURAT, dugmeler[3].callback_data);
   const sb = JSON.parse(o.depo.get("pelin:sablonlar"))["3627"];
   assert.equal(sb.katalogOrtamId, "2");
@@ -472,7 +472,7 @@ test("boy: ilk üretimden önce Pelin tahmin edip tek tuşla sorar → kalıcı 
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3700-"))[1]);
   assert.ok(is.gecmis.some(([, t]) => /foto 1: geçmedi \(.*boy farklı/.test(t)));
   assert.ok(edit.length >= 3); // boy farkı → katalog fotoğrafı yeniden üretildi
-  const video = o.falIstek.find((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video");
+  const video = o.falIstek.find((x) => x.uc === "fal-ai/veo3.1/image-to-video");
   assert.match(video.govde.prompt, /ankle length[\s\S]*shoes visible/);
 });
 
@@ -562,4 +562,58 @@ test("örnek video 'bunun gibi yap, büyük 3627 koyu bordo' → tarif → ▶�
   assert.match(kart, /3627 büyük seri/);
   assert.match(kart, /Renk: 3627 sadece koyu bordo/);
   assert.match(kart, /video örnek videonun ortamı \(salon\)/);
+});
+
+// ---------- Lüks marka seviyesi (3 Kasım): A + B ----------
+test("lüks: varsayılan Veo 3.1 (1080p, gerçek fiyat); premium kartında aksesuar + lüks mekân; istemde sinematik ışık, VOLONTE kadını, poz (kesim daraltılmaz); karşılaştırma Kling 4.0", async () => {
+  const o = uretimOrtami();
+  o.falSonuc["kling/v4/image-to-video"] = (n) => ({ video: { url: `https://vid/k${n}.mp4` } });
+  o.site.push({ kod: "3627", bedenler: "38-50", fotolar: ["galeri/3627/1.jpg"] });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.claude.cevaplar = [claudeJsonCevap({ aksesuar_tr: "altın küpe ve ince altın kolye, nude çanta", aksesuar_en: "gold earrings, a delicate gold necklace and a nude clutch", mekan_tr: "5 yıldızlı otel lobisi", mekan_en: "a grand five-star hotel lobby with marble floors and warm chandeliers" })];
+  await yazi(o, MURAT, "/uret büyük:3627 koyu bordo premium");
+  const kart = o.g.at(-1).govde;
+  assert.match(kart.text, /· PREMIUM\nVideo aracı: Google Veo 3\.1 \(1080p\)/);
+  assert.match(kart.text, /Aksesuar \(3627\): altın küpe ve ince altın kolye, nude çanta\nPremium mekân \(3627\): 5 yıldızlı otel lobisi/);
+  assert.match(kart.text, /Video 6 sn — Google Veo 3\.1 \(1080p\): 6 × 0,40 \$ \(fal fiyat listesi\): 2,40 \$/);
+  assert.match(kart.text, /poz ile bel vurgusu \(kesim daraltılmaz\)/);
+  assert.equal(JSON.parse(o.depo.get("pelinboy:3627")).stil["koyu bordo"].aksesuarTr, "altın küpe ve ince altın kolye, nude çanta"); // bir kez seçilir, saklanır
+  await bas(o, MURAT, `pu:o:${kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+  o.yaziCevap.kod = "3627";
+  o.claude.cevaplar = Array.from({ length: 4 }, () => K2());
+  await cronlar(o, 12);
+  const edit = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
+  assert.match(edit[0].govde.prompt, /black gold studio[\s\S]*VOLONTE WOMAN: successful, wealthy and self-confident[\s\S]*NEVER make the garment tighter[\s\S]*LIGHT: cinematic[\s\S]*ACCESSORIES: gold earrings/);
+  assert.match(edit[1].govde.prompt, /grand five-star hotel lobby[\s\S]*people in the background softly blurred/); // premium video karesi lüks mekânda
+  const v = o.falIstek.find((x) => x.uc === "fal-ai/veo3.1/image-to-video");
+  assert.equal(v.govde.resolution, "1080p");
+  assert.equal(v.govde.generate_audio, false);
+  assert.match(v.govde.prompt, /Slow-motion movement of the skirt and her hair/);
+  assert.match(v.govde.prompt, /artistic close-ups of the lace, sequins/);
+  const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
+  assert.match(on.govde.text, /Video aracı: Google Veo 3\.1 \(1080p\) · aksesuar: altın küpe[\s\S]*PREMIUM/);
+  const k4 = on.govde.reply_markup.inline_keyboard.flat().find((x) => /Kling 4\.0/.test(x.text));
+  await bas(o, MURAT, k4.callback_data);
+  assert.match(o.g.at(-1).govde.text, /aynı kareyle Kling 4\.0 \(1080p\) videosu üretiliyor \(~0,94 \$\)/);
+  o.claude.cevaplar = Array.from({ length: 2 }, () => K2());
+  await cronlar(o, 6);
+  const kv = o.falIstek.find((x) => x.uc === "kling/v4/image-to-video");
+  assert.ok(kv && kv.govde.start_image_url && kv.govde.resolution === "1080p" && kv.govde.duration === 6);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit").length, edit.length); // karşılaştırmada yeni fotoğraf üretilmez
+  assert.equal(o.g.filter((x) => /ÖNİZLEME — 3627/.test(x.govde.text || "")).length, 2);
+});
+
+test("yüz yükseltme kartları (tek seferlik) ve /arac seçenekleri", async () => {
+  const o = uretimOrtami();
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.depo.set("venom:pelinYuzKart", JSON.stringify([{ seri: "kucuk", talimat: "zengin, bakımlı kadın görünümü", istem: "polished wealthy look" }, { seri: "buyuk", talimat: "zengin, bakımlı kadın görünümü", istem: "polished wealthy look" }]));
+  await cronlar(o, 1);
+  const kartlar = o.g.filter((x) => /✏️ Yüz düzenleme/.test(x.govde.text || ""));
+  assert.equal(kartlar.length, 2);
+  assert.ok(!o.depo.has("venom:pelinYuzKart"));
+  assert.equal(o.falIstek.length, 0);
+  await yazi(o, MURAT, "/arac");
+  assert.match(o.g.at(-1).govde.text, /Video aracı: Google Veo 3\.1 \(1080p\)\. Seçenekler: veo31[\s\S]*kling4 \(Kling 4\.0 \(1080p\), 0,16 \$\/sn\)/);
+  await yazi(o, MURAT, "/arac kling4");
+  assert.equal(JSON.parse(o.depo.get("pelin:secim")).aracElle, true);
 });

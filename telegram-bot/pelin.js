@@ -32,7 +32,14 @@ const GUNLUK_SOHBET = 100;
 
 // Araçlar (fal.ai). Fiyatlar fal sayfalarındaki yaklaşık değerler; harcama bu tahminle tutulur, gerçek fatura fal panelinde.
 export const SURE_SN = 6; // üç araçta ortak süre (Veo Lite: 4/6/8 s; Kling 3.0: 3–15; Seedance 2.0: 4–15)
+// 3 Kasım (Patron: "lüks marka seviyesi, para sorun değil"): varsayılan Veo 3.1 TAM (1080p). Fiyatlar fal fiyat listesinden
+// (api.fal.ai/v1/models/pricing, 3 Kasım): Veo 3.1 0,40 $/sn · Veo 3.1 Fast 0,15 · Kling 4.0 0,157 · Kling v3 4K 0,42 · Veo Lite 0,05.
+export const VARSAYILAN_ARAC = "veo31";
 export const ARACLAR = {
+  veo31: { ad: "Google Veo 3.1 (1080p)", uc: "fal-ai/veo3.1/image-to-video", saniye: 0.4 },
+  kling4: { ad: "Kling 4.0 (1080p)", uc: "kling/v4/image-to-video", saniye: 0.157 },
+  kling4k: { ad: "Kling 3.0 4K", uc: "fal-ai/kling-video/v3/4k/image-to-video", saniye: 0.42 },
+  veofast: { ad: "Google Veo 3.1 Fast (1080p)", uc: "fal-ai/veo3.1/fast/image-to-video", saniye: 0.15 },
   veo: { ad: "Google Veo 3.1 Lite", uc: "fal-ai/veo3.1/lite/image-to-video", saniye: 0.05 },
   kling: { ad: "Kling 3.0 Pro", uc: "fal-ai/kling-video/v3/pro/image-to-video", saniye: 0.112 },
   seedance: { ad: "Seedance 2.0", uc: "bytedance/seedance-2.0/image-to-video", saniye: 0.3024 },
@@ -67,15 +74,25 @@ const yuzAdi = (y) => (y ? y.ad || (MANKENLER[y.manken] ? MANKENLER[y.manken].ad
 
 
 // Kalıcı ayarlar (3 Kasım, Patron): her üretimde makyaj; yaka ve detay birebir
+export const SINEMA = " LIGHT: cinematic — warm golden-hour light or soft painterly studio light like a fine-art portrait; rich, deep colors; luminous, glowing skin.";
+export const VOLONTE_KADINI = " SHE IS THE VOLONTE WOMAN: successful, wealthy and self-confident (mature elegance, 30-45) — like an African businesswoman or a refined lady arriving at a gala; noble, poised, assured expression. Keep her exact face from the first image.";
+export const POZ = " POSE: show the dress beautifully fitted on her body through pose only — waist emphasis, a hand on the waist, side or three-quarter stance, a look over the shoulder. NEVER make the garment tighter, narrower or more body-hugging than in the product photos; the real cut stays exactly the same.";
+export const DETAY_SANAT = " Include artistic close-ups of the lace, sequins, fabric texture and stitching, and show the fabric moving naturally (chiffon flowing, satin sheen).";
 export const MAKYAJ = " MAKEUP (always): elegant, defined yet natural — eye makeup with mascara and lashes, groomed shaped eyebrows, a soft blush, and a lipstick shade that harmonizes with the dress. Never a bare, makeup-free face.";
 export const YAKA_DETAY = " NECKLINE AND DETAILS: copy the exact neckline/collar shape from the product photos (e.g. a draped, scarf-like, loose high collar must stay exactly so — never simplify it into a plain collar) and the exact density, size and placement of lace, sequins, beads, buttons and embroidery.";
+const aksesuarIstemi = (st) => (st && st.aksesuarEn ? ` ACCESSORIES: ${st.aksesuarEn}. Accessories stay minimal and never overpower the dress.` : "");
 const detayIstemi = (mk) => (mk && mk.detayEn ? ` THIS MODEL: ${mk.detayEn}.` : "");
 const YUZ_ISTEMI = (m) => `Photorealistic fashion catalog reference portrait of ${m.tarif}. Head and upper body, looking at the camera with a soft natural smile, elegant defined natural makeup (eye makeup, lashes, shaped brows, soft blush, lipstick), plain fitted black top, clean light-grey studio background, soft professional studio light, sharp focus, 3:4. She is an ORIGINAL, fictional person: she must not resemble any celebrity, model, actress, influencer or other real public figure. No text, no logo, no watermark.`;
 const FOTO_ISTEMI = `Full-length vertical (9:16) fashion catalog photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s). The garment must stay identical: same colors, same print/pattern with the same motif size and placement, same fabric texture, same cut, length, sleeves, collar and every detail. Do not redesign, recolor, simplify or add anything. She stands naturally, full body visible from head to toe, clean light studio background, soft natural light, photorealistic, sharp. No text, no logo, no watermark.`;
 const VIDEO_ISTEMI = "The woman stands still for a moment, then turns slowly and gracefully to show the outfit from the front and side, then faces the camera again. Static camera, gentle slow motion, soft studio light. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no text, no logo, no watermark.";
 const NEGATIF = "blur, distortion, morphing, color change, pattern change, extra limbs, text, logo, watermark";
 
+// Seçili araç: Patron /arac ile elle seçtiyse o; yoksa en iyi (Veo 3.1 tam)
+export const aracSec = (secim) => (secim && secim.aracElle && ARACLAR[secim.arac] ? secim.arac : VARSAYILAN_ARAC);
 export function videoGirdisi(arac, kare) {
+  if (arac === "veo31" || arac === "veofast") return { prompt: VIDEO_ISTEMI, image_url: kare, duration: `${SURE_SN}s`, resolution: "1080p", aspect_ratio: "9:16", generate_audio: false, negative_prompt: NEGATIF };
+  if (arac === "kling4") return { prompt: VIDEO_ISTEMI, start_image_url: kare, duration: SURE_SN, resolution: "1080p" };
+  if (arac === "kling4k") return { prompt: VIDEO_ISTEMI, start_image_url: kare, duration: String(SURE_SN), negative_prompt: NEGATIF, generate_audio: false };
   if (arac === "veo") return { prompt: VIDEO_ISTEMI, image_url: kare, duration: `${SURE_SN}s`, resolution: "720p", aspect_ratio: "9:16" };
   if (arac === "kling") return { prompt: VIDEO_ISTEMI, start_image_url: kare, duration: String(SURE_SN), negative_prompt: NEGATIF, generate_audio: false };
   return { prompt: VIDEO_ISTEMI, image_url: kare, duration: String(SURE_SN), resolution: "720p", aspect_ratio: "9:16", generate_audio: false };
@@ -168,10 +185,34 @@ async function teshis(env) {
   await env.KAYIT.put("venom:pelinTeshisSonuc", JSON.stringify(c), { expirationTtl: 3 * 86400 });
 }
 
+// Tek seferlik fal bilgi sorgusu (Claude Code için; KV "venom:pelinFalSor" = ["/v1/models?q=…", …]): sadece GET, sadece api.fal.ai
+async function falSor(env) {
+  const l = await env.KAYIT.get("venom:pelinFalSor", "json");
+  if (!Array.isArray(l) || !l.length) return;
+  await env.KAYIT.delete("venom:pelinFalSor");
+  const c = { zaman: Math.floor(Date.now() / 1000), sonuc: {} };
+  for (const yol of l.filter((x) => /^\/v1\/[a-z/]+(\?|$)/.test(String(x))).slice(0, 12)) {
+    try { const r = await fetch(`https://api.fal.ai${yol}`, { headers: falBaslik(env) }); c.sonuc[yol] = { durum: r.status, govde: (await r.text()).slice(0, 40000) }; } catch (e) { c.sonuc[yol] = { hata: String(e.message) }; }
+  }
+  // Şema: "sema:<uç>" → fal belge şeması (sadece okuma); sadece giriş alanları saklanır
+  for (const x of l.filter((x) => /^sema:[a-z0-9./-]+$/i.test(String(x))).slice(0, 10)) {
+    const uc = x.slice(5);
+    try {
+      const r = await fetch(`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${encodeURIComponent(uc)}`);
+      const j = await r.json().catch(() => null);
+      const sema = j && j.components && j.components.schemas ? Object.fromEntries(Object.entries(j.components.schemas).filter(([n, v]) => /Input/.test(n) && v.properties).map(([n, v]) => [n, { required: v.required, properties: Object.fromEntries(Object.entries(v.properties).map(([pk, pv]) => [pk, { type: pv.type || (pv.anyOf || []).map((y) => y.type), enum: pv.enum, default: pv.default, aciklama: String(pv.description || "").slice(0, 160) }])) }])) : null;
+      c.sonuc[x] = { durum: r.status, sema };
+    } catch (e) { c.sonuc[x] = { hata: String(e.message) }; }
+  }
+  await env.KAYIT.put("venom:pelinFalSonuc", JSON.stringify(c), { expirationTtl: 3 * 86400 });
+}
+
 export async function pelinCron(env, simdi) {
   await webhookKur(env);
+  if (env.FAL_KEY) { try { await falSor(env); } catch (e) { await env.KAYIT.put("venom:pelinFalSonuc", JSON.stringify({ hata: String(e && e.message) })); } }
   try { const sc = await env.KAYIT.get("pelin:secim"); if (sc && sc !== (await env.KAYIT.get("pelin:secimAyna"))) { await env.KAYIT.put("venom:pelinSecim", sc); await env.KAYIT.put("pelin:secimAyna", sc); } } catch { /* sonra */ }
   try { await urunFotoAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoAktar", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  try { const yk = await env.KAYIT.get("venom:pelinYuzKart", "json"); if (Array.isArray(yk) && yk.length) { await env.KAYIT.delete("venom:pelinYuzKart"); for (const k of yk) await yuzDuzenleKarti(env, murat(env), k.seri, k.talimat, k.istem, simdi, k.onEk || ""); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKart", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await yuzKaydiUygula(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKaydi", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   if (env.FAL_KEY) { try { await yuzDuzenCron(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzDuzen", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
   try { await teshis(env); } catch (e) { await env.KAYIT.put("venom:pelinTeshisSonuc", JSON.stringify({ hata: String(e && e.message) })); }
@@ -203,6 +244,7 @@ Ortamlar rollü: katalog fotoğrafı ortamı (renk doğruluğu), video ortamı, 
 Ürün fotoğrafları: Patron/Hemra fotoğrafı yazısında model koduyla atar ("3627 ön", "3627 arka", "3627 kırmızı"; albümde ilk fotoğrafa yazmak yeter: 1. ön, 2. arka). Bunlar üretimde siteden önce kullanılır; "dosya olarak" gönderilirse renk daha net kalır. Kontrol: urun_fotolari.
 Renk: Patron "3627 kırmızı" derse uretim_karti'ya renkler ile ver; sadece o renk üretilir ve kontrol o rengi arar.
 Sahne ayarları her yeni videoda var: yürürken kameraya dönüş, kamera etrafında dönüş, kumaş hareketi, yaka/dikiş yakın kare, son karede küçük VOLONTE + model kodu (fiyat yok; son kare okunarak kontrol edilir), videodan kapak fotoğrafı. Beğenilen iş "şablon" olur (önizlemedeki düğme ya da sablon_kaydet); "3630'u 3627 şablonuyla yap" → uretim_karti sablon="3627".
+Lüks marka seviyesi (3 Kasım): varsayılan video aracı Google Veo 3.1 (1080p); sinematik ışık; VOLONTE kadını (başarılı, zengin, özgüvenli, 30-45); poz ile bel vurgusu (kesim ASLA daraltılmaz); aksesuarı elbiseye göre sen seçersin (kartta yazar); "premium" = lüks mekân (otel lobisi, mermer merdiven, şık restoran, villa terası, lüks araba, Lagos/Nairobi daveti), "standart" = aynı kalite, sade sahne. Önizlemede aynı kareyle Kling 4.0 / Kling 4K karşılaştırması.
 Kalıcı ayarlar (3 Kasım): her üretimde şık, belirgin ama doğal makyaj; yaka şekli ve dantel/payet yoğunluğu birebir (modele özel detay: model_detay_kaydet). Kalite kontrol: sadece renk, boy, kesimde BÜYÜK fark yeniden üretir; küçük farklar Patron'a not. PATRON SON SÖZ: kontrolden geçmeyen işi "✅ Yine de onayla" ile onaylayabilir (kaldığı yerden devam eder). Ekip: sen baş üreticisin, ChatGPT yardımcı ikinci göz; her kontrolün 1-10 puanı var; Patron'un kararlarından öğrenilir. Hemra onayı hazır ama kapalı (/hemraonay).
 Boy ve kadraj: her modelin boyu (mini/diz/midi/bilek/maksi) bir kez kaydedilir, bütün renklerde ve iki seride geçerli; ilk üretimden önce sorulur (boy_kaydet ile de kaydedilir). Boy referansı: Patron fotoğrafı/videoyu yazısında "3627 boy" ile atar (ön/arka ürün fotoğrafından ayrı). Katalog fotoğrafı tam boy (baş ve ayakkabı kesilmez), ayakkabı sade; kontrol boyu da denetler.
 Örnek video: Patron dosya atar (ya da "sitedeki 3627 videosu gibi" yazar) → tarif çıkarılır → şablon.
@@ -212,9 +254,10 @@ DÜRÜSTLÜK (kesin): Bir aracı çağırmadan ve araç sonucunu görmeden "gön
 const SOHBET_ARACLARI = [
   { name: "kurulum_karti", description: "Patron'a TAMAMEN YENİ kurulum (3 yeni manken yüzü + 3 ortam önerisi) maliyet kartını gönderir. Sadece Patron açıkça yeni yüz isterse. Para harcamaz.", strict: true, input_schema: { type: "object", additionalProperties: false, properties: {}, required: [] } },
   { name: "uretim_karti", description: "Patron'a model kodlarıyla üretim (ya da test=true ise 5 modellik maliyet testi) maliyet kartını gönderir. Seri (yüz) sitedeki bedenden bulunur; Patron bir kodun büyük seri olduğunu söylerse buyuk_seri'ye yaz. Para harcamaz.", strict: true,
-    input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test", "buyuk_seri", "renkler", "sablon"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" }, buyuk_seri: { type: "array", items: { type: "string" } },
+    input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test", "buyuk_seri", "renkler", "sablon", "premium"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" }, buyuk_seri: { type: "array", items: { type: "string" } },
       renkler: { type: "array", description: "Patron bir renk dediyse (\"3627 kırmızı\"): sadece o renk üretilir", items: { type: "object", additionalProperties: false, required: ["kod", "renk"], properties: { kod: { type: "string" }, renk: { type: "string" } } } },
-      sablon: { type: "string", description: "Kayıtlı şablon adı (\"3627 şablonu\" → \"3627\"); yoksa boş" } } } },
+      sablon: { type: "string", description: "Kayıtlı şablon adı (\"3627 şablonu\" → \"3627\"); yoksa boş" },
+      premium: { type: "boolean", description: "Patron premium/vitrin dediyse true (lüks mekân)" } } } },
   { name: "boy_kaydet", description: "Bir modelin boyunu kalıcı kaydeder (bütün renklerde, iki seride geçerli): mini, diz, midi, bilek, maksi. Para harcamaz.", strict: true,
     input_schema: { type: "object", additionalProperties: false, required: ["kod", "boy"], properties: { kod: { type: "string" }, boy: { type: "string", enum: ["mini", "diz", "midi", "bilek", "maksi"] } } } },
   { name: "model_detay_kaydet", description: "Bir modelin korunacak özel detaylarını kalıcı kaydeder (yaka şekli, dantel/payet yeri…); her üretimde istem olarak kullanılır. Para harcamaz.", strict: true,
@@ -239,7 +282,7 @@ function kartSonucu(r) {
 async function durumMetni(env, simdi) {
   const secim = await oku(env, "pelin:secim", null);
   const anahtar = `Anahtarlar: BOT ✅ · FAL ${env.FAL_KEY ? "✅" : "❌"} · ANTHROPIC ${env.ANTHROPIC_API_KEY ? "✅" : "❌"} · OPENAI ${env.OPENAI_API_KEY ? "✅" : "❌ (ikinci göz kapalı)"}.`;
-  const kur = secim ? `Kayıtlı yüzler: ${Object.keys(SERILER).map((sr) => `${SERILER[sr].ad} = ${secim.yuzler ? yuzAdi(secim.yuzler[sr]) : sr === "kucuk" ? yuzAdi(secim.yuz) : "yok"}`).join("; ")}. Ortamlar: ${(secim.ortamlar || []).map((x) => `${x.id}) ${x.ad}${x.rol ? ` → ${ORTAM_ROLLERI[x.rol]}` : ""}`).join(", ") || "yok"}. Video aracı ${ARACLAR[secim.arac || "veo"].ad}.` : "Kurulum: yapılmadı (yüz yok).";
+  const kur = secim ? `Video aracı: ${ARACLAR[aracSec(secim)].ad}. Kayıtlı yüzler: ${Object.keys(SERILER).map((sr) => `${SERILER[sr].ad} = ${secim.yuzler ? yuzAdi(secim.yuzler[sr]) : sr === "kucuk" ? yuzAdi(secim.yuz) : "yok"}`).join("; ")}. Ortamlar: ${(secim.ortamlar || []).map((x) => `${x.id}) ${x.ad}${x.rol ? ` → ${ORTAM_ROLLERI[x.rol]}` : ""}`).join(", ") || "yok"}.` : "Kurulum: yapılmadı (yüz yok).";
   return `${anahtar} ${kur} Bu ay harcanan: ${para(await buAyHarcanan(env, simdi))} / ${AYLIK_SINIR_USD} $. Beyin: ${(await env.KAYIT.get("pelin:beyin")) || "sonnet"}.`;
 
 }
@@ -288,6 +331,7 @@ async function sohbetAraci(env, m, ad, g, simdi) {
     const bilinmeyen = Object.values(renk).filter((x) => !renkGecerli(x));
     if (bilinmeyen.length) return `KART GÖNDERİLMEDİ: renk tanınmadı (${bilinmeyen.join(", ")}). Patron'a hangi renk olduğunu sor.`;
     const sozler = (g.kodlar || []).map((k) => `${buyuk.includes(String(k)) ? "büyük:" : ""}${k}${renk[String(k)] ? ` ${renk[String(k)]}` : ""}`);
+    if (g.premium) sozler.push("premium");
     if (g.sablon) sozler.push(`şablon:${String(g.sablon).toLocaleLowerCase("tr").replace(/[^a-zçğıöşü0-9]/g, "")}`);
     return kartSonucu(await uretKomutu(env, { ...m, text: `/${g.test ? "maliyettesti" : "uret"} ${sozler.join(" ")}` }, simdi, Boolean(g.test)));
   }
@@ -363,8 +407,8 @@ export async function guncelleme(u, env) {
     if (!muratMi(env, id)) return yaz(env, m.chat.id, "Bu ayar sadece Patron'da.");
     const a = (metin.split(/\s+/)[1] || "").toLowerCase();
     const secim = await oku(env, "pelin:secim", null);
-    if (!ARACLAR[a] || !secim) return yaz(env, m.chat.id, `Video aracı: ${secim ? ARACLAR[secim.arac || "veo"].ad : "(önce /kurulum)"}. Değiştirmek: /arac veo | kling | seedance`);
-    secim.arac = a; await kaydet(env, "pelin:secim", secim);
+    if (!ARACLAR[a] || !secim) return yaz(env, m.chat.id, `Video aracı: ${secim ? ARACLAR[aracSec(secim)].ad : "(önce /kurulum)"}. Seçenekler: ${Object.entries(ARACLAR).map(([k, x]) => `${k} (${x.ad}, ${para(x.saniye)}/sn)`).join(" · ")}. Değiştirmek: /arac veo31`);
+    secim.arac = a; secim.aracElle = true; await kaydet(env, "pelin:secim", secim);
     return yaz(env, m.chat.id, `🎬 Video aracı: ${ARACLAR[a].ad} (${para(ARACLAR[a].saniye * URETIM_SN)} / ${URETIM_SN} sn).`);
   }
   if (komut === "/beyin") {
@@ -453,13 +497,14 @@ async function dosyaKaydet(env, fileId, tur, ttl) {
   await kaydet(env, `pelindosya:${anahtar}`, { file_id: fileId, tur }, ttl);
   return anahtar;
 }
-export function uretimMaliyeti(arac = "veo", secim = null) {
+export function uretimMaliyeti(arac = VARSAYILAN_ARAC, secim = null) {
+  if (!ARACLAR[arac]) arac = aracSec(secim);
   const kat = rolOrtami(secim, "katalog"), vid = rolOrtami(secim, "video");
   const ayriKare = Boolean(kat && vid && kat.id !== vid.id);
   const kalemler = [
     { ad: `Katalog fotoğrafı (sabit yüz + ürün${kat ? `, ${kat.ad}` : ""})`, birim: GORSEL.fiyat },
     ...(ayriKare ? [{ ad: `Video başlangıç karesi (${vid.ad}) + kontrol`, birim: yuvarla(GORSEL.fiyat + KONTROL_TAHMIN + OPENAI_TAHMIN) }] : []),
-    { ad: `Video ${URETIM_SN} sn (${ARACLAR[arac].ad})`, birim: yuvarla(ARACLAR[arac].saniye * URETIM_SN) },
+    { ad: `Video ${URETIM_SN} sn — ${ARACLAR[arac].ad}: ${URETIM_SN} × ${para(ARACLAR[arac].saniye)} (fal fiyat listesi)`, birim: yuvarla(ARACLAR[arac].saniye * URETIM_SN) },
     { ad: "Kalite kontrol (Claude + OpenAI, foto + 3 video karesi)", birim: yuvarla(2 * (KONTROL_TAHMIN + OPENAI_TAHMIN) + 3 * KARE.saniye * URETIM_SN) },
   ];
   return { kalemler, toplam: yuvarla(kalemler.reduce((s, k) => s + k.birim, 0)) };
@@ -477,7 +522,7 @@ const resimUrl = (url) => ({ type: "image", source: { type: "url", url } });
 // ---------- Kalite kontrol: renk / desen / kesim (Claude + ikinci göz OpenAI) ----------
 // 3 Kasım (Patron): üretimi SADECE renk, boy ve kesimde BÜYÜK fark durdurur; küçük farklar (payet yoğunluğu, hafif ton, yaka
 // hafif sade…) Patron'a not olarak yazılır. Her kontrolün 1-10 puanı var. Patron'un "yine de onayla" kararları öğrenilir.
-const KONTROL2_SORU = "İlk görsel(ler) ÜRÜNÜN gerçek fotoğrafı, son görsel(ler) yapay zekâ ile üretilmiş manken görseli. Farkları İKİYE ayır. BÜYÜK fark (üretim yeniden yapılır): renk açıkça başka (ör. koyu bordo yerine parlak kırmızı, siyah yerine kahve), kesim/model açıkça başka (başka yaka tipi, kol yok/var, etek tipi tamamen farklı, tamamen başka desen/baskı), boy açıkça başka. KÜÇÜK fark (sadece not): payet/dantel yoğunluğu biraz farklı, hafif ton farkı, yaka ya da detay biraz sade, ışığa bağlı küçük farklar. Emin değilsen KÜÇÜK say. Sadece GÖRÜNEN kısmı değerlendir (görünmeyen arka için fark yazma). Ürün fotoğraflarının üzerindeki yazı/logo önemsiz; ÜRETİLEN görselde yazı/logo/filigran varsa büyük sorun yaz. puan: 1-10 genel uygunluk.";
+const KONTROL2_SORU = "İlk görsel(ler) ÜRÜNÜN gerçek fotoğrafı, son görsel(ler) yapay zekâ ile üretilmiş manken görseli. Farkları İKİYE ayır. BÜYÜK fark (üretim yeniden yapılır): renk açıkça başka (ör. koyu bordo yerine parlak kırmızı, siyah yerine kahve), kesim/model açıkça başka (başka yaka tipi, kol yok/var, etek tipi tamamen farklı, tamamen başka desen/baskı, kıyafet üründen belirgin DAR/vücuda yapışık yapılmış), boy açıkça başka. KÜÇÜK fark (sadece not): payet/dantel yoğunluğu biraz farklı, hafif ton farkı, yaka ya da detay biraz sade, ışığa bağlı küçük farklar. Emin değilsen KÜÇÜK say. Sadece GÖRÜNEN kısmı değerlendir (görünmeyen arka için fark yazma). Ürün fotoğraflarının üzerindeki yazı/logo önemsiz; ÜRETİLEN görselde yazı/logo/filigran varsa büyük sorun yaz. puan: 1-10 genel uygunluk.";
 const KONTROL2_SEMA = (ek = {}) => ({ type: "object", additionalProperties: false,
   required: ["renk_buyuk_fark", "kesim_buyuk_fark", "boy_buyuk_fark", "kadraj_tam", "makyaj_var", "puan", "buyuk_sorunlar", "kucuk_notlar"],
   properties: { renk_buyuk_fark: { type: "boolean" }, kesim_buyuk_fark: { type: "boolean" }, boy_buyuk_fark: { type: "boolean" }, kadraj_tam: { type: "boolean" }, makyaj_var: { type: "boolean" }, puan: { type: "integer" }, buyuk_sorunlar: { type: "array", items: { type: "string" } }, kucuk_notlar: { type: "array", items: { type: "string" } } } });
@@ -700,6 +745,20 @@ async function boyDugmesi(env, cq, simdi) {
   return uretKomutu(env, { from: cq.from, chat: cq.message.chat, text: q.metin }, simdi, q.test); // sıradaki boy sorusu ya da maliyet kartı
 }
 
+// ---------- Stil (3 Kasım, lüks seviye): Pelin elbiseye göre aksesuarı seçer; premium'da lüks mekân ----------
+// Kayıt: pelinboy:<kod>.stil[<renk|genel>] = { aksesuarTr, aksesuarEn, mekanTr, mekanEn } (kartta yazar, Patron görür)
+export const PREMIUM_MEKANLAR = ["5 yıldızlı otel lobisi", "mermer merdiven", "şık restoran", "villa terası", "lüks araba yanı", "Lagos'ta lüks davet", "Nairobi'de lüks davet"];
+const STIL_SEMA = { type: "object", additionalProperties: false, required: ["aksesuar_tr", "aksesuar_en", "mekan_tr", "mekan_en"], properties: { aksesuar_tr: { type: "string" }, aksesuar_en: { type: "string" }, mekan_tr: { type: "string" }, mekan_en: { type: "string" } } };
+async function stilSec(env, kod, renk, urller, simdi) {
+  const mk = (await boyOku(env, kod)) || {};
+  const anahtar = renk || "genel";
+  if (mk.stil && mk.stil[anahtar]) return mk.stil[anahtar];
+  const st = await claudeJson(env, [{ type: "text", text: `VOLONTE (lüks kadın giyim) model ${kod}${renk ? `, renk: ${renk}` : ""}. Ürün fotoğrafları:` }, ...urller.slice(0, 3).map(resimUrl), { type: "text", text: `1) Bu elbiseye uygun AKSESUAR seç (rengine, desenine, tarzına göre): örn. bordo elbise → altın küpe/kolye, nude ya da altın çanta; siyah → inci ya da gümüş; çiçekli → sade, desenle yarışmayan; payetli/dantelli → az ve zarif takı. Aksesuar elbiseyi ASLA gölgelemez. aksesuar_tr: kısa Türkçe (kartta görünecek); aksesuar_en: aynısı kısa İngilizce (görsel üretim için). 2) PREMIUM video için lüks mekân seç (şunlardan biri, elbisenin tarzına göre): ${PREMIUM_MEKANLAR.join(", ")}. Sıradan sokak YOK. mekan_tr: kısa Türkçe; mekan_en: İngilizce sahne tarifi (mekân + ışık + hava; yazı/logo/marka yok; arka plandaki insanlar hafif bulanık).` }], STIL_SEMA, simdi, 500);
+  const kayit = { aksesuarTr: String(st.aksesuar_tr).slice(0, 160), aksesuarEn: String(st.aksesuar_en).slice(0, 240), mekanTr: String(st.mekan_tr).slice(0, 80), mekanEn: String(st.mekan_en).slice(0, 400) };
+  await boyYaz(env, kod, { stil: { ...(mk.stil || {}), [anahtar]: kayit } });
+  return kayit;
+}
+
 // Sahne ayarları (3 Kasım, Patron — 3627 brifi): yeni işlerin hepsinde; şablon bunları değiştirebilir
 export const SAHNE_VARSAYILAN = {
   acilis: "Strong first second: she is walking and turns to face the camera.",
@@ -718,14 +777,14 @@ export function yeniVideoIstemi(is) {
     o ? `Setting and atmosphere: ${String(o.sahne).replace(/\.?\s*$/, ".")}` : "Setting: clean bright studio.",
     t ? `Style reference (do not copy any real person): camera ${t.kamera}; light ${t.isik}; pace ${t.hiz}; pose ${t.poz}.` : "",
     a.acilis, a.kamera, a.kumas, is.boy ? "Wide shots show her full body with the shoes visible; elegant simple shoes." : "",
-    a.detay ? "Include one brief smooth close-up of the neckline/collar and stitching detail." : "",
-    a.hiz,
+    a.detay ? `Include one brief smooth close-up of the neckline/collar and stitching detail.${DETAY_SANAT}` : "",
+    a.hiz, "Slow-motion movement of the skirt and her hair.", SINEMA.trim(), VOLONTE_KADINI.trim(), POZ.trim(), aksesuarIstemi(is.stil).trim(),
     a.sonYazi ? `The last second ends on an elegant frame with a small, tasteful gold text "VOLONTE" and directly below it the model code "${is.kod}" in a corner; no other text anywhere, no price.` : "No text anywhere.",
     `Her face stays exactly the same.${MAKYAJ}${YAKA_DETAY}${detayIstemi(is.modelKaydi)} Realistic natural skin; natural light; hands and fingers natural and flawless. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no logo, no watermark, no music.`,
   ].filter(Boolean).join(" ");
 }
-const uretimFotoIstemi = (ortam, sablon, is = {}) => `${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo or text): ${sablon.isik}; ${sablon.ortam_havasi || ""}.` : ""}${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${refIstemi((is.boyRef || []).length)} Realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
-const sahneIstemi = (ortam, is = {}) => `Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
+const uretimFotoIstemi = (ortam, sablon, is = {}) => `${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo or text): ${sablon.isik}; ${sablon.ortam_havasi || ""}.` : ""}${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${is.sahneAyar ? `${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}` : ""}${refIstemi((is.boyRef || []).length)} Realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
+const sahneIstemi = (ortam, is = {}) => `Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
 const uretimVideoIstemi = (ortam, sablon) => `${sablon ? `${sablon.kamera}. ${sablon.poz}. ${sablon.hiz}.` : ortam ? ortam.hareket : VIDEO_ISTEMI} The woman's face stays the same. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no text, no logo, no watermark, no music.`;
 
 async function uretKomutu(env, m, simdi, test = false) {
@@ -746,6 +805,7 @@ async function uretKomutu(env, m, simdi, test = false) {
     onceki = rk;
   }
   const sablonAd = (sozler.find((x) => /^şablon:|^sablon:/i.test(x)) || "").split(":")[1] || null;
+  const seviye = sozler.some((x) => /^premium$/i.test(x)) ? "premium" : "standart"; // premium: lüks mekân (vitrin modelleri)
   if (!kodlar.length) return yaz(env, m.chat.id, test ? "Kullanım: /maliyettesti 3557 3592 3577 3601 3602 (5 model)" : "Kullanım: /uret 3557 [3592 …] [şablon:ad]");
   const sablonlar = await oku(env, "pelin:sablonlar", {});
   if (sablonAd && !sablonlar[sablonAd]) return yaz(env, m.chat.id, `"${sablonAd}" adlı şablon yok. /sablonlar`);
@@ -753,24 +813,29 @@ async function uretKomutu(env, m, simdi, test = false) {
   for (const k of kodlar) boylar[k] = await boyOku(env, k);
   const boysuz = kodlar.find((k) => !(boylar[k] && BOYLAR[boylar[k].boy]));
   if (boysuz) return boySorusu(env, m, boysuz, simdi, test); // ilk üretimden önce boy bir kez sorulur
-  const mm = uretimMaliyeti(secim.arac, secim);
+  const mm = uretimMaliyeti(aracSec(secim), secim);
   const toplam = yuvarla(mm.toplam * kodlar.length);
   const harcanan = await buAyHarcanan(env, simdi);
   const id = kisaId();
   const seriler = {};
   for (const k of kodlar) seriler[k] = buyukler.includes(k) ? "buyuk" : seriBul((await siteUrunu(env, k) || {}).bedenler);
-  const foto = {};
+  const foto = {}, stiller = {};
   for (const k of kodlar) foto[k] = await urunFotoSecimi(env, k, renkler[k] || null);
-  await kaydet(env, `pelin:uretimOnay:${id}`, { kodlar, sablonAd, test, seriler, renkler, zaman: simdi }, 3 * 86400);
+  for (const k of kodlar) stiller[k] = foto[k].urller.length ? await stilSec(env, k, renkler[k] || null, foto[k].urller, simdi).catch(() => null) : null;
+  await kaydet(env, `pelin:uretimOnay:${id}`, { kodlar, sablonAd, test, seriler, renkler, seviye, stiller, zaman: simdi }, 3 * 86400);
   const kat = rolOrtami(secim, "katalog"), vid = rolOrtami(secim, "video");
   return yaz(env, m.chat.id, [
-    `💰 ${test ? "MALİYET TESTİ" : "Üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}${sablonAd ? ` (şablon: ${sablonAd})` : ""}`,
+    `💰 ${test ? "MALİYET TESTİ" : "Üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}${sablonAd ? ` (şablon: ${sablonAd})` : ""} · ${seviye === "premium" ? "PREMIUM" : "standart"}`,
+    `Video aracı: ${ARACLAR[aracSec(secim)].ad}`,
     `Yüz: ${kodlar.map((k) => `${k} ${seriler[k] === "buyuk" ? "büyük seri" : "küçük seri"} (${yuzAdi(seriYuzu(secim, seriler[k]))})`).join(", ")}`,
     ...(Object.keys(renkler).length ? [`Renk: ${Object.entries(renkler).map(([k, rk]) => `${k} sadece ${rk}`).join(", ")}`] : []),
     `Ürün fotoğrafı: ${kodlar.map((k) => `${k} ${foto[k].kaynak === "patron" ? `sizin gönderdiğiniz (${foto[k].roller.map((x) => ROL_AD[x]).join(", ")})` : foto[k].urller.length ? "site" : "YOK ⚠️"}`).join(", ")}`,
     `Boy: ${kodlar.map((k) => `${k} ${boyYazi(boylar[k])}`).join(", ")}`,
-    `Ortam: katalog fotoğrafı ${kat ? kat.ad : "stüdyo"} · video ${sablonAd && sablonlar[sablonAd] && sablonlar[sablonAd].kaynak === "ornek" ? `örnek videonun ortamı (${sablonAd})` : vid ? vid.ad : "stüdyo"}`,
+    `Ortam: katalog fotoğrafı ${kat ? kat.ad : "stüdyo"} · video ${sablonAd && sablonlar[sablonAd] && sablonlar[sablonAd].kaynak === "ornek" ? `örnek videonun ortamı (${sablonAd})` : seviye === "premium" ? "lüks mekân (aşağıda)" : vid ? vid.ad : "stüdyo"}`,
     `Kadraj: tam boy (baş ve ayakkabı kesilmez) · sade, zarif ayakkabı`,
+    ...kodlar.filter((k) => stiller[k]).map((k) => `Aksesuar (${k}): ${stiller[k].aksesuarTr}`),
+    ...(seviye === "premium" ? kodlar.filter((k) => stiller[k]).map((k) => `Premium mekân (${k}): ${stiller[k].mekanTr}`) : []),
+    "Manken: VOLONTE kadını (başarılı, zengin, özgüvenli) · profesyonel makyaj · sinematik ışık · poz ile bel vurgusu (kesim daraltılmaz)",
     `Sahne: yürürken kameraya dönüş · kamera etrafında dönüş · kumaş hareketi · yaka/dikiş yakın kare · son karede küçük VOLONTE + kod (fiyat yok) · kapak fotoğrafı videodan${sablonAd ? ` · şablon ${sablonAd}` : ""}`,
     ...mm.kalemler.map((k) => `• ${k.ad}: ${para(k.birim)}`),
     `Model başı ~${para(mm.toplam)} · toplam ~${para(toplam)} (kalite kontrol yeniden ürettirirse en fazla 2 katı)`,
@@ -783,7 +848,7 @@ export async function venomUretimi(env, onay, simdi) {
   const secim = await oku(env, "pelin:secim", null);
   if (!secim) return { hata: "kurulum yapılmamış (Pelin'e /kurulum: yüz + ortam seçimi)" };
   for (const k of onay.kodlar) if (!((await boyOku(env, k)) || {}).boy) return { hata: `${k} için boy kayıtlı değil — Pelin'e "/uret ${k}" yazın, boyu bir kez sorar` };
-  const tahmin = yuvarla(uretimMaliyeti(secim.arac, secim).toplam * onay.kodlar.length);
+  const tahmin = yuvarla(uretimMaliyeti(aracSec(secim), secim).toplam * onay.kodlar.length);
   const harcanan = await buAyHarcanan(env, simdi);
   if (harcanan + tahmin > AYLIK_SINIR_USD) return { hata: `aylık sınır aşılır (bu ay ${para(harcanan)} / ${AYLIK_SINIR_USD} $, bu iş ~${para(tahmin)}); sınırı artırmak Patron onayıyla` };
   await uretimBaslat(env, onay, simdi);
@@ -807,9 +872,11 @@ async function uretimBaslat(env, onay, simdi) {
     const ortamBul = (oid) => (oid ? (secim.ortamlar || []).find((o) => o.id === oid) || null : null);
     const ortam = (sablon && ortamBul(sablon.katalogOrtamId)) || rolOrtami(secim, "katalog", i);
     const ornekOrtam = sablon && sablon.kaynak === "ornek" && sablon.ortam_havasi ? { id: `ornek-${sablon.ad}`, ad: `örnek video (${sablon.ad})`, sahne: sablon.ortam_havasi } : null;
-    const videoOrtam = ornekOrtam || (sablon && ortamBul(sablon.videoOrtamId)) || rolOrtami(secim, "video", i);
+    const stil = (onay.stiller && onay.stiller[kod]) || null;
+    const premiumOrtam = onay.seviye === "premium" && stil && stil.mekanEn && !ornekOrtam ? { id: `premium-${kod}`, ad: `premium: ${stil.mekanTr}`, sahne: `${stil.mekanEn}. Luxurious, elegant atmosphere; people in the background softly blurred, the focus always on her and the dress.` } : null;
+    const videoOrtam = premiumOrtam || ornekOrtam || (sablon && ortamBul(sablon.videoOrtamId)) || rolOrtami(secim, "video", i);
     const boy = await boyOku(env, kod);
-    const is = { id, kod, testId, seri, renk, modelKaydi: boy && (boy.detayEn || boy.detayTr) ? { detayEn: boy.detayEn || null, detayTr: boy.detayTr || null } : null, boy: boy && BOYLAR[boy.boy] ? { boy: boy.boy } : null, boyRef: ((boy && boy.referans) || []).filter((x) => x.tur === "foto").slice(0, 1).map((x) => dosyaAdresi(env, x.anahtar)), urunRoller: fs.roller, urunKaynak: fs.kaynak, sahneAyar: { ...SAHNE_VARSAYILAN, ...((sablon && sablon.sahne) || {}) }, ortam, videoOrtam: videoOrtam && (!ortam || videoOrtam.id !== ortam.id) ? videoOrtam : null, sahneDeneme: 0, sablon, urunler, durum: urunler.length ? "foto_gonder" : "hata", fotoDeneme: 0, videoDeneme: 0, maliyet: 0, zaman: simdi, gecmis: [] };
+    const is = { id, kod, testId, seri, renk, seviye: onay.seviye || "standart", stil, arac: aracSec(secim), modelKaydi: boy && (boy.detayEn || boy.detayTr) ? { detayEn: boy.detayEn || null, detayTr: boy.detayTr || null } : null, boy: boy && BOYLAR[boy.boy] ? { boy: boy.boy } : null, boyRef: ((boy && boy.referans) || []).filter((x) => x.tur === "foto").slice(0, 1).map((x) => dosyaAdresi(env, x.anahtar)), urunRoller: fs.roller, urunKaynak: fs.kaynak, sahneAyar: { ...SAHNE_VARSAYILAN, ...((sablon && sablon.sahne) || {}) }, ortam, videoOrtam: videoOrtam && (!ortam || videoOrtam.id !== ortam.id) ? videoOrtam : null, sahneDeneme: 0, sablon, urunler, durum: urunler.length ? "foto_gonder" : "hata", fotoDeneme: 0, videoDeneme: 0, maliyet: 0, zaman: simdi, gecmis: [] };
     if (!urunler.length) is.hata = "ürün fotoğrafı yok (sitede değil; fotoğrafı yazısında model koduyla Pelin'e gönderin: \"3627 ön\", \"3627 arka\")";
     await kaydet(env, `pelin:is:${id}`, is);
     liste.push(id);
@@ -827,7 +894,7 @@ async function falIsle(env, is, uc, girdi, fiyat, simdi) {
 async function uretimAdimi(env, is, simdi) {
   const secim = await oku(env, "pelin:secim", null);
   const yuz = dosyaAdresi(env, seriYuzu(secim, is.seri || "kucuk").anahtar);
-  const arac = secim.arac || "veo";
+  const arac = is.arac || aracSec(secim);
   const bekle = async () => {
     const s = await falDurum(env, is.fal).catch((e) => ({ bitti: false, hata: String(e.message) }));
     if (!s.bitti) { if (simdi - is.bekleZaman > 3 * 3600) return { hata: "3 saatte bitmedi" }; return null; }
@@ -904,7 +971,9 @@ async function uretimAdimi(env, is, simdi) {
     is.sorunlar = k.sorunlar; is.durum = is.videoDeneme < URETIM_DENEME ? "video_gonder" : "uyari"; return;
   }
 }
-const isKlavye = (id, sablon = false, uyari = false) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : [])] });
+const isKlavye = (id, sablon = false, uyari = false, digerAraclar = []) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : []),
+  ...(digerAraclar.length ? [digerAraclar.map((a) => ({ text: `🎬 ${ARACLAR[a].ad.replace(/ \(.*\)/, "")} ile de dene (${para(ARACLAR[a].saniye * URETIM_SN)})`, callback_data: `pu:k:${id}:${a}` }))] : [])] });
+const KARSILASTIRMA = ["veo31", "kling4", "kling4k"];
 // Kontrolden geçmeyen iş "yine de onayla" ile nereden devam eder?
 export function devamAsamasi(is) {
   if (is.video) return "teslim";
@@ -948,7 +1017,7 @@ async function isBildir(env, is) {
     if (is.video) await tg(env, "sendVideo", { chat_id: hemra(env), video: is.video, caption: `🎬 ${is.kod} — Pelin önizlemesi` });
     await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi. Uygunsa ✅ Onayla (Patron da görüyor).`, { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${is.id}` }]] } });
   }
-  return yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar)) });
+  return yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC)) : []) });
 }
 export async function uretimCron(env, simdi) {
   const liste = await oku(env, "pelin:isler", []);
@@ -986,7 +1055,7 @@ async function testRaporu(env, liste) {
 }
 async function uretimDugmesi(env, cq, simdi) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  const [, islem, id] = cq.data.split(":");
+  const [, islem, id, ek] = cq.data.split(":");
   const hemraYetkili = String(cq.from.id) === hemra(env) && islem === "a" && Boolean((await oku(env, "pelin:ayar", {})).hemraOnay);
   if (!muratMi(env, cq.from.id) && !hemraYetkili) return cevap("Sadece Patron.");
   const kapat = (text) => tg(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text });
@@ -1003,6 +1072,17 @@ async function uretimDugmesi(env, cq, simdi) {
     const ad = await sablonKaydet(env, is, simdi);
     await cevap("Şablon kaydedildi");
     return yaz(env, cq.message.chat.id, `💾 "${ad} şablonu" kaydedildi (ortamlar, sahne ayarları, video aracı${is.sablon && is.sablon.kamera ? ", örnek video tarifi" : ""}). Kullanmak için: /uret 3630 şablon:${ad} — ya da Pelin'e "3630'u ${ad} şablonuyla yap" yazın.`);
+  }
+  // Karşılaştırma: aynı fotoğraf/kareden başka araçla video (yeni iş; düğmeye basmak = o maliyetin onayı)
+  if (islem === "k" && is && ARACLAR[ek] && ["onay", "onaylandi"].includes(is.durum)) {
+    const fiyat = ARACLAR[ek].saniye * URETIM_SN;
+    if ((await buAyHarcanan(env, simdi)) + fiyat > AYLIK_SINIR_USD) return cevap("Aylık sınır aşılır.");
+    const yeniId = `${is.kod}-${kisaId()}`;
+    const yeni = { ...is, id: yeniId, arac: ek, karsilastirma: is.id, durum: "video_gonder", videoDeneme: 0, video: null, kareler: [], kareFal: [], kapak: null, videoKontrol: null, maliyet: 0, testId: null, patronOnay: [], gecmis: [[simdi, `karşılaştırma: ${is.id} karesinden ${ARACLAR[ek].ad}`]], zaman: simdi };
+    await kaydet(env, `pelin:is:${yeniId}`, yeni);
+    const liste = await oku(env, "pelin:isler", []); liste.push(yeniId); await kaydet(env, "pelin:isler", liste.slice(-200));
+    await cevap("Başlıyorum");
+    return yaz(env, cq.message.chat.id, `🎬 ${is.kod}: aynı kareyle ${ARACLAR[ek].ad} videosu üretiliyor (~${para(fiyat)}). Hazır olunca önizleme gelir; iki videoyu karşılaştırıp beğendiğinizi onaylayın.`);
   }
   if (!is || !["onay", "uyari"].includes(is.durum)) return cevap("Bu iş artık beklemiyor.");
   if (islem === "x") { is.durum = "iptal"; await kaydet(env, `pelin:is:${id}`, is); await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "iptal", farklar: (is.sorunlar || []).slice(0, 4), notlar: (is.notlar || []).slice(0, 4) }); await cevap("İptal"); return kapat(`❌ ${is.kod} iptal edildi.`); }
@@ -1248,7 +1328,7 @@ async function yuzKaydiUygula(env, simdi) {
   return yaz(env, murat(env), ozet);
 }
 
-const yuzDuzenIstemi = (istem) => `Edit this portrait photo of a woman. Change ONLY this: ${istem}. Keep her identity exactly the same: same face shape, eyes, eyebrows, nose, lips, ears, hairline, hair style and hair color, same expression, same pose, same framing, same clothing and same background. Natural, realistic skin with visible natural texture and an even, natural tone (no plastic or airbrushed look, no makeup change, no beautify filter). Photorealistic. No text, no logo, no watermark.`;
+const yuzDuzenIstemi = (istem) => `Edit this portrait photo of a woman. Change ONLY this: ${istem}. Keep her identity exactly the same — she must clearly be the same person: same face shape and facial proportions, same eye shape and eye color, same nose, same lips shape, same ears (skin tone stays the same unless the change asks for it). Everything not mentioned in the change (hair, makeup, expression, clothing, pose, framing, background) stays as it is. Realistic skin with natural texture (no plastic or airbrushed look). Photorealistic. No text, no logo, no watermark.`;
 
 export async function yuzDuzenleKarti(env, chat, seri, talimat, istem, simdi, onEk = "") {
   const secim = await oku(env, "pelin:secim", null);

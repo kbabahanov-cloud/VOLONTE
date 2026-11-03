@@ -17,7 +17,7 @@ import { ciroBolumu } from "./ciro.js";
 import { silKuyrugu } from "./sil.js";
 import { topluRaporMetni } from "./venom.js";
 import { KISILER, kuyrugaEkle, kuyruguAl, hataEkle } from "./venom-kopru.js";
-import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi } from "./pelin.js";
+import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
 export { KISILER };
 
 const SAAT_FARKI = 3 * 3600;
@@ -106,7 +106,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     for (const k of kodlar) boylar[k] = await boyOku(env, k);
     const boysuz = kodlar.filter((k) => !(boylar[k] && boylar[k].boy));
     if (boysuz.length) return `${boysuz.join(", ")} için boy kayıtlı değil. Patron Pelin'e "/uret ${boysuz[0]}" yazınca Pelin boyu bir kez sorar; sonra buradan üretilebilir.`;
-    const mm = uretimMaliyeti(secim.arac || "veo", secim);
+    const mm = uretimMaliyeti(aracSec(secim), secim);
     const toplam = mm.toplam * kodlar.length, harcanan = await buAyHarcanan(env, simdi);
     await kartAc(env, { tur: "pelin", kodlar, test: Boolean(g.test) }, [
       `🎬 Pelin ${g.test ? "MALİYET TESTİ" : "üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}`,
