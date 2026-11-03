@@ -468,7 +468,7 @@ test("boy: ilk üretimden önce Pelin tahmin edip tek tuşla sorar → kalıcı 
   assert.equal(edit[0].govde.image_urls[2], `https://pelin.test/dosya/${b.referans[0].anahtar}`);
   assert.match(edit[0].govde.prompt, /dark burgundy \(koyu bordo\) color variant ONLY[\s\S]*LENGTH[\s\S]*ankle length: the hem ends exactly at the ankles; the shoes and feet are fully visible and the hem does NOT touch the floor[\s\S]*plus-size[\s\S]*FRAMING: full body from head to toe — never crop the head or the shoes[\s\S]*SHOES: simple, elegant[\s\S]*LAST image is a LENGTH\/FRAMING reference only/);
   const kontrol = o.claude.find((x) => JSON.stringify(x.messages).includes("İSTENEN BOY: bilek"));
-  assert.ok(kontrol && kontrol.output_config.format.schema.required.includes("boy_dogru"));
+  assert.ok(kontrol && kontrol.output_config.format.schema.required.includes("boy_buyuk_fark"));
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3700-"))[1]);
   assert.ok(is.gecmis.some(([, t]) => /foto 1: geçmedi \(.*boy farklı/.test(t)));
   assert.ok(edit.length >= 3); // boy farkı → katalog fotoğrafı yeniden üretildi
@@ -486,4 +486,80 @@ test("boy: sohbetle kaydedilir; Venom boysuz üretim başlatamaz; şablonda boy 
   await yazi(o, MURAT, "3701 midi boy");
   assert.match(o.claude[1].messages.at(-1).content[0].content, /KAYDEDİLDİ: 3701 boyu midi/);
   assert.equal(JSON.parse(o.depo.get("pelinboy:3701")).boy, "midi");
+});
+
+// ---------- Kalıcı ayarlar + Patron son söz (3 Kasım) ----------
+const K2 = (o = {}) => claudeJsonCevap({ renk_buyuk_fark: false, kesim_buyuk_fark: false, boy_buyuk_fark: false, kadraj_tam: true, makyaj_var: true, puan: 8, buyuk_sorunlar: [], kucuk_notlar: [], ...o });
+
+test("Patron son söz: kontrolden geçmeyen foto → '✅ Yine de onayla' → video aşamasına devam; küçük farklar durdurmaz, not olur; puan; öğrenme; makyaj + yaka istemde", async () => {
+  const o = uretimOrtami();
+  o.site.push({ kod: "3627", bedenler: "38-50", fotolar: ["galeri/3627/1.jpg"] });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.depo.set("pelinboy:3627", JSON.stringify({ boy: "bilek", detayEn: "draped scarf-like loose high collar", detayTr: "drapeli fular yaka" }));
+  await yazi(o, MURAT, "/uret büyük:3627 koyu bordo");
+  await bas(o, MURAT, `pu:o:${o.g.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+  const buyuk = K2({ renk_buyuk_fark: true, puan: 5, buyuk_sorunlar: ["parlak kırmızı, ürün koyu bordo"], kucuk_notlar: ["payet daha seyrek"] });
+  o.claude.cevaplar = [buyuk, buyuk];
+  await cronlar(o, 5);
+  const kart = o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde;
+  assert.match(kart.text, /Büyük farklar:\n• Pelin: parlak kırmızı, ürün koyu bordo[\s\S]*📝 Küçük farklar \(üretimi durdurmadı\):\n• Pelin: payet daha seyrek[\s\S]*🎯 Kontrol puanı \(Pelin\/ChatGPT, 10 üzerinden\): foto 5[\s\S]*✅ Yine de onayla: bu fotoğrafla devam ederim \(video karesi \+ video\)/);
+  assert.equal(kart.reply_markup.inline_keyboard[0][0].text, "✅ Yine de onayla");
+  const edit = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
+  assert.equal(edit.length, 2);
+  assert.match(edit[0].govde.prompt, /NECKLINE AND DETAILS: copy the exact neckline\/collar shape[\s\S]*THIS MODEL: draped scarf-like loose high collar\.[\s\S]*MAKEUP \(always\): elegant, defined yet natural — eye makeup with mascara and lashes, groomed shaped eyebrows, a soft blush, and a lipstick shade that harmonizes with the dress\. Never a bare, makeup-free face\./);
+  // Patron yine de onaylar → video karesine devam (küçük farklar artık durdurmaz)
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
+  assert.match(o.g.at(-1).govde.text, /fotoğraf Patron onayıyla geçti — video karesi ve video üretiliyor/);
+  const og = JSON.parse(o.depo.get("pelin:ogrenme"));
+  assert.equal(og[0].karar, "yine de onay");
+  assert.match(og[0].farklar[0], /parlak kırmızı/);
+  o.yaziCevap.kod = "3627";
+  o.claude.cevaplar = [K2({ kucuk_notlar: ["yaka biraz sade"] }), K2({ puan: 9 })];
+  await cronlar(o, 10);
+  const sahneKontrol = o.claude.find((x) => JSON.stringify(x.messages).includes("Patron'un önceki kararları (öğren)"));
+  assert.ok(sahneKontrol, "öğrenme kontrol sorusuna girer");
+  assert.match(JSON.stringify(sahneKontrol.messages), /makyaj_var: yüzde belirgin makyaj/);
+  const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
+  assert.ok(on, "video önizlemesi gelmeli");
+  assert.match(on.govde.text, /bir aşama Patron onayıyla geçti[\s\S]*📝 Küçük farklar[\s\S]*yaka biraz sade/);
+  assert.equal(on.govde.reply_markup.inline_keyboard[0][0].text, "✅ Onayla");
+});
+
+test("kontrol: makyajsız yüz ve kadraj büyük sorun; video aşamasında kalan iş 'yine de onayla' ile teslim; Hemra onayı hazır ama kapalı", async () => {
+  const { kaliteKontrol, devamAsamasi } = await import("./pelin.js");
+  const o = uretimOrtami();
+  o.claude.cevaplar = [K2({ makyaj_var: false })];
+  const k = await kaliteKontrol(o.env, ["u"], ["g"], 1, { yuz: true });
+  assert.equal(k.gecti, false);
+  assert.deepEqual(k.sorunlar, ["Pelin: yüz makyajsız"]);
+  o.claude.cevaplar = [K2({ kucuk_notlar: ["hafif ton farkı"] })];
+  const k2 = await kaliteKontrol(o.env, ["u"], ["g"], 1, {});
+  assert.equal(k2.gecti, true);
+  assert.deepEqual(k2.notlar, ["Pelin: hafif ton farkı"]);
+  assert.equal(devamAsamasi({ video: "v" }), "teslim");
+  assert.equal(devamAsamasi({ foto: "f" }), "video_gonder");
+  o.depo.set("pelin:is:3627-x", JSON.stringify({ id: "3627-x", kod: "3627", durum: "uyari", foto: "f", sahne: "s", video: "v", sorunlar: ["Pelin: son karedeki kod yanlış"] }));
+  await bas(o, HEMRA, "pu:a:3627-x");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3627-x")).durum, "uyari"); // Hemra onayı kapalı
+  await yazi(o, MURAT, "/hemraonay");
+  assert.match(o.g.at(-1).govde.text, /Hemra onayı: KAPALI/);
+  await bas(o, MURAT, "pu:a:3627-x");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3627-x")).durum, "onaylandi");
+  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim"))[0].kod, "3627");
+});
+
+test("örnek video 'bunun gibi yap, büyük 3627 koyu bordo' → tarif → ▶️ üret: seri + renk + şablon kartta", async () => {
+  const o = uretimOrtami();
+  o.site.push({ kod: "3627", bedenler: "38-50", fotolar: ["galeri/3627/1.jpg"] });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  await guncelleme({ message: { message_id: 7, date: 1, chat: { id: MURAT, type: "private" }, from: { id: MURAT, first_name: "M" }, caption: "bunun gibi yap, büyük 3627 koyu bordo", video: { file_id: "V7", mime_type: "video/mp4", file_size: 9000 } } }, o.env);
+  o.claude.cevaplar = [claudeJsonCevap({ ad: "salon", kamera: "slow dolly", isik: "warm", hiz: "slow", poz: "walks", ortam_havasi: "elegant ballroom", ozet: "Salon havası." })];
+  await cronlar(o, 1);
+  const t = o.g.find((x) => /Tarif çıkarıldı — "salon"/.test(x.govde.text || ""));
+  await bas(o, MURAT, t.govde.reply_markup.inline_keyboard[0][1].callback_data);
+  const kart = o.g.at(-1).govde.text;
+  assert.match(kart, /şablon: salon/);
+  assert.match(kart, /3627 büyük seri/);
+  assert.match(kart, /Renk: 3627 sadece koyu bordo/);
+  assert.match(kart, /video örnek videonun ortamı \(salon\)/);
 });

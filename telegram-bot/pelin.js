@@ -66,7 +66,11 @@ export function rolOrtami(secim, rol, i = 0) {
 const yuzAdi = (y) => (y ? y.ad || (MANKENLER[y.manken] ? MANKENLER[y.manken].ad : "yüz") : "yok");
 
 
-const YUZ_ISTEMI = (m) => `Photorealistic fashion catalog reference portrait of ${m.tarif}. Head and upper body, looking at the camera with a soft natural smile, natural makeup, plain fitted black top, clean light-grey studio background, soft professional studio light, sharp focus, 3:4. She is an ORIGINAL, fictional person: she must not resemble any celebrity, model, actress, influencer or other real public figure. No text, no logo, no watermark.`;
+// Kalıcı ayarlar (3 Kasım, Patron): her üretimde makyaj; yaka ve detay birebir
+export const MAKYAJ = " MAKEUP (always): elegant, defined yet natural — eye makeup with mascara and lashes, groomed shaped eyebrows, a soft blush, and a lipstick shade that harmonizes with the dress. Never a bare, makeup-free face.";
+export const YAKA_DETAY = " NECKLINE AND DETAILS: copy the exact neckline/collar shape from the product photos (e.g. a draped, scarf-like, loose high collar must stay exactly so — never simplify it into a plain collar) and the exact density, size and placement of lace, sequins, beads, buttons and embroidery.";
+const detayIstemi = (mk) => (mk && mk.detayEn ? ` THIS MODEL: ${mk.detayEn}.` : "");
+const YUZ_ISTEMI = (m) => `Photorealistic fashion catalog reference portrait of ${m.tarif}. Head and upper body, looking at the camera with a soft natural smile, elegant defined natural makeup (eye makeup, lashes, shaped brows, soft blush, lipstick), plain fitted black top, clean light-grey studio background, soft professional studio light, sharp focus, 3:4. She is an ORIGINAL, fictional person: she must not resemble any celebrity, model, actress, influencer or other real public figure. No text, no logo, no watermark.`;
 const FOTO_ISTEMI = `Full-length vertical (9:16) fashion catalog photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s). The garment must stay identical: same colors, same print/pattern with the same motif size and placement, same fabric texture, same cut, length, sleeves, collar and every detail. Do not redesign, recolor, simplify or add anything. She stands naturally, full body visible from head to toe, clean light studio background, soft natural light, photorealistic, sharp. No text, no logo, no watermark.`;
 const VIDEO_ISTEMI = "The woman stands still for a moment, then turns slowly and gracefully to show the outfit from the front and side, then faces the camera again. Static camera, gentle slow motion, soft studio light. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no text, no logo, no watermark.";
 const NEGATIF = "blur, distortion, morphing, color change, pattern change, extra limbs, text, logo, watermark";
@@ -199,6 +203,7 @@ Ortamlar rollü: katalog fotoğrafı ortamı (renk doğruluğu), video ortamı, 
 Ürün fotoğrafları: Patron/Hemra fotoğrafı yazısında model koduyla atar ("3627 ön", "3627 arka", "3627 kırmızı"; albümde ilk fotoğrafa yazmak yeter: 1. ön, 2. arka). Bunlar üretimde siteden önce kullanılır; "dosya olarak" gönderilirse renk daha net kalır. Kontrol: urun_fotolari.
 Renk: Patron "3627 kırmızı" derse uretim_karti'ya renkler ile ver; sadece o renk üretilir ve kontrol o rengi arar.
 Sahne ayarları her yeni videoda var: yürürken kameraya dönüş, kamera etrafında dönüş, kumaş hareketi, yaka/dikiş yakın kare, son karede küçük VOLONTE + model kodu (fiyat yok; son kare okunarak kontrol edilir), videodan kapak fotoğrafı. Beğenilen iş "şablon" olur (önizlemedeki düğme ya da sablon_kaydet); "3630'u 3627 şablonuyla yap" → uretim_karti sablon="3627".
+Kalıcı ayarlar (3 Kasım): her üretimde şık, belirgin ama doğal makyaj; yaka şekli ve dantel/payet yoğunluğu birebir (modele özel detay: model_detay_kaydet). Kalite kontrol: sadece renk, boy, kesimde BÜYÜK fark yeniden üretir; küçük farklar Patron'a not. PATRON SON SÖZ: kontrolden geçmeyen işi "✅ Yine de onayla" ile onaylayabilir (kaldığı yerden devam eder). Ekip: sen baş üreticisin, ChatGPT yardımcı ikinci göz; her kontrolün 1-10 puanı var; Patron'un kararlarından öğrenilir. Hemra onayı hazır ama kapalı (/hemraonay).
 Boy ve kadraj: her modelin boyu (mini/diz/midi/bilek/maksi) bir kez kaydedilir, bütün renklerde ve iki seride geçerli; ilk üretimden önce sorulur (boy_kaydet ile de kaydedilir). Boy referansı: Patron fotoğrafı/videoyu yazısında "3627 boy" ile atar (ön/arka ürün fotoğrafından ayrı). Katalog fotoğrafı tam boy (baş ve ayakkabı kesilmez), ayakkabı sade; kontrol boyu da denetler.
 Örnek video: Patron dosya atar (ya da "sitedeki 3627 videosu gibi" yazar) → tarif çıkarılır → şablon.
 DÜRÜSTLÜK (kesin): Bir aracı çağırmadan ve araç sonucunu görmeden "gönderdim / kaydettim / başladım / hazırladım" ASLA deme. Araç sonucu "GÖNDERİLMEDİ" diyorsa bunu Patron'a aynen söyle. Yapamadığın işi yapmış gibi gösterme; araç yoksa "bunun için aracım yok, Claude Code'a iletilmeli" de.`;
@@ -212,6 +217,8 @@ const SOHBET_ARACLARI = [
       sablon: { type: "string", description: "Kayıtlı şablon adı (\"3627 şablonu\" → \"3627\"); yoksa boş" } } } },
   { name: "boy_kaydet", description: "Bir modelin boyunu kalıcı kaydeder (bütün renklerde, iki seride geçerli): mini, diz, midi, bilek, maksi. Para harcamaz.", strict: true,
     input_schema: { type: "object", additionalProperties: false, required: ["kod", "boy"], properties: { kod: { type: "string" }, boy: { type: "string", enum: ["mini", "diz", "midi", "bilek", "maksi"] } } } },
+  { name: "model_detay_kaydet", description: "Bir modelin korunacak özel detaylarını kalıcı kaydeder (yaka şekli, dantel/payet yeri…); her üretimde istem olarak kullanılır. Para harcamaz.", strict: true,
+    input_schema: { type: "object", additionalProperties: false, required: ["kod", "detay_tr", "detay_en"], properties: { kod: { type: "string" }, detay_tr: { type: "string" }, detay_en: { type: "string", description: "aynı detay, görsel araç için kısa İngilizce" } } } },
   { name: "sablon_kaydet", description: "Bir modelin son üretim işinin ayarlarını (ortamlar, sahne ayarları, video aracı, örnek tarif) şablon olarak kaydeder (ör. \"3627 şablonu\"). Para harcamaz.", strict: true,
     input_schema: { type: "object", additionalProperties: false, required: ["kod", "ad"], properties: { kod: { type: "string" }, ad: { type: "string", description: "şablon adı; boşsa model kodu" } } } },
   { name: "urun_fotolari", description: "Bir model için kayıtlı (Patron/Hemra'nın gönderdiği) ürün fotoğraflarını rolleriyle (ön/arka/detay, renk) Patron'a gösterir. Para harcamaz.", strict: true,
@@ -289,6 +296,11 @@ async function sohbetAraci(env, m, ad, g, simdi) {
     await boyYaz(env, String(g.kod), { boy: g.boy, kaynak: `Patron (sohbet) ${tarihSaatYaz(simdi)}`, zaman: simdi });
     return `KAYDEDİLDİ: ${g.kod} boyu ${BOYLAR[g.boy].ad}.`;
   }
+  if (ad === "model_detay_kaydet") {
+    if (!/^\d{3,6}$/.test(String(g.kod))) return "KAYDEDİLMEDİ: kod geçersiz.";
+    await boyYaz(env, String(g.kod), { detayTr: String(g.detay_tr).slice(0, 300), detayEn: String(g.detay_en).slice(0, 400) });
+    return `KAYDEDİLDİ: ${g.kod} detayı — ${g.detay_tr}`;
+  }
   if (ad === "sablon_kaydet") {
     const is = await sonIs(env, g.kod);
     if (!is || !["onay", "onaylandi"].includes(is.durum)) return `KAYDEDİLMEDİ: ${g.kod} için kontrolden geçmiş bir iş yok (önce üretim + önizleme).`;
@@ -339,6 +351,13 @@ export async function guncelleme(u, env) {
   if (komut === "/maliyettesti") return uretKomutu(env, m, simdi, true);
   if (komut === "/yuzler") return yuzleriGoster(env, m.chat.id);
   if (komut === "/fotolar") return fotolarKomutu(env, m);
+  if (komut === "/hemraonay") {
+    if (!muratMi(env, id)) return yaz(env, m.chat.id, "Bu ayar sadece Patron'da.");
+    const a = (metin.split(/\s+/)[1] || "").toLocaleLowerCase("tr");
+    const ayar = await oku(env, "pelin:ayar", {});
+    if (["aç", "ac", "kapat"].includes(a)) { ayar.hemraOnay = a !== "kapat"; await kaydet(env, "pelin:ayar", ayar); }
+    return yaz(env, m.chat.id, `Hemra onayı: ${ayar.hemraOnay ? "AÇIK (önizleme Hemra'ya da gider, Hemra da onaylayabilir)" : "KAPALI (sadece Patron onaylar)"}. Değiştirmek: /hemraonay aç | kapat`);
+  }
   if (komut === "/sablonlar") { const s = await oku(env, "pelin:sablonlar", {}); return yaz(env, m.chat.id, Object.keys(s).length ? ["Kayıtlı şablonlar:", ...Object.values(s).map((x) => `• ${x.ad}: ${x.ozet}`), "Kullanım: /uret 3557 şablon:ad"].join("\n") : "Henüz şablon yok. Örnek videoyu \"bunun gibi yap, 3557\" yazısıyla atın."); }
   if (komut === "/arac") {
     if (!muratMi(env, id)) return yaz(env, m.chat.id, "Bu ayar sadece Patron'da.");
@@ -456,6 +475,12 @@ async function claudeJson(env, content, schema, simdi, maxTokens = 1200) {
 const resimUrl = (url) => ({ type: "image", source: { type: "url", url } });
 
 // ---------- Kalite kontrol: renk / desen / kesim (Claude + ikinci göz OpenAI) ----------
+// 3 Kasım (Patron): üretimi SADECE renk, boy ve kesimde BÜYÜK fark durdurur; küçük farklar (payet yoğunluğu, hafif ton, yaka
+// hafif sade…) Patron'a not olarak yazılır. Her kontrolün 1-10 puanı var. Patron'un "yine de onayla" kararları öğrenilir.
+const KONTROL2_SORU = "İlk görsel(ler) ÜRÜNÜN gerçek fotoğrafı, son görsel(ler) yapay zekâ ile üretilmiş manken görseli. Farkları İKİYE ayır. BÜYÜK fark (üretim yeniden yapılır): renk açıkça başka (ör. koyu bordo yerine parlak kırmızı, siyah yerine kahve), kesim/model açıkça başka (başka yaka tipi, kol yok/var, etek tipi tamamen farklı, tamamen başka desen/baskı), boy açıkça başka. KÜÇÜK fark (sadece not): payet/dantel yoğunluğu biraz farklı, hafif ton farkı, yaka ya da detay biraz sade, ışığa bağlı küçük farklar. Emin değilsen KÜÇÜK say. Sadece GÖRÜNEN kısmı değerlendir (görünmeyen arka için fark yazma). Ürün fotoğraflarının üzerindeki yazı/logo önemsiz; ÜRETİLEN görselde yazı/logo/filigran varsa büyük sorun yaz. puan: 1-10 genel uygunluk.";
+const KONTROL2_SEMA = (ek = {}) => ({ type: "object", additionalProperties: false,
+  required: ["renk_buyuk_fark", "kesim_buyuk_fark", "boy_buyuk_fark", "kadraj_tam", "makyaj_var", "puan", "buyuk_sorunlar", "kucuk_notlar"],
+  properties: { renk_buyuk_fark: { type: "boolean" }, kesim_buyuk_fark: { type: "boolean" }, boy_buyuk_fark: { type: "boolean" }, kadraj_tam: { type: "boolean" }, makyaj_var: { type: "boolean" }, puan: { type: "integer" }, buyuk_sorunlar: { type: "array", items: { type: "string" } }, kucuk_notlar: { type: "array", items: { type: "string" } } } });
 const KONTROL_SORU = "İlk görsel(ler) ÜRÜNÜN gerçek fotoğrafı, son görsel(ler) yapay zekâ ile üretilmiş manken görseli. Üretilen görseldeki kıyafet ürünle BİREBİR aynı mı? Renk (ton dahil), desen (motif, boyut, yerleşim) ve kesim (boy, kol, yaka, etek, detaylar) ayrı ayrı değerlendir. Küçük ışık farkı sorun değil; renk tonu kayması, desen değişmesi/sadeleşmesi, kesim farkı SORUNDUR. Şüphedeysen geçme. Sadece üretilen görselde GÖRÜNEN kısmı değerlendir: görünmeyen taraf (ör. önden çekimde arka) için sorun yazma. Ürün fotoğraflarının üzerindeki yazı/logo/filigran önemsizdir (ürünün parçası değildir); ama ÜRETİLEN görselde yazı, logo, filigran varsa sorun yaz.";
 const KONTROL_SEMA = { type: "object", additionalProperties: false, required: ["renk_ayni", "desen_ayni", "kesim_ayni", "sorunlar"], properties: { renk_ayni: { type: "boolean" }, desen_ayni: { type: "boolean" }, kesim_ayni: { type: "boolean" }, sorunlar: { type: "array", items: { type: "string" } } } };
 async function openaiKontrol(env, urunler, uretilen, simdi, ek = {}) {
@@ -464,7 +489,7 @@ async function openaiKontrol(env, urunler, uretilen, simdi, ek = {}) {
     method: "POST", headers: { authorization: `Bearer ${String(env.OPENAI_API_KEY).trim()}`, "content-type": "application/json" },
     body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4.1-mini", response_format: { type: "json_object" }, max_tokens: 500,
       messages: [{ role: "user", content: [
-        { type: "text", text: `${kontrolSorusu(ek)} Yanıtı sadece JSON ver: {"renk_ayni":bool,"desen_ayni":bool,"kesim_ayni":bool,${ek.boy ? '"boy_dogru":bool,"kadraj_tam":bool,' : ""}"sorunlar":[kısa Türkçe]}` },
+        { type: "text", text: `${kontrolSorusu(ek)} Yanıtı sadece JSON ver: {"renk_buyuk_fark":bool,"kesim_buyuk_fark":bool,"boy_buyuk_fark":bool,"kadraj_tam":bool,"makyaj_var":bool,"puan":1-10,"buyuk_sorunlar":[kısa Türkçe],"kucuk_notlar":[kısa Türkçe]}` },
         ...urunler.map((u) => ({ type: "image_url", image_url: { url: u } })), ...uretilen.map((u) => ({ type: "image_url", image_url: { url: u } })),
       ] }] }),
   });
@@ -473,7 +498,7 @@ async function openaiKontrol(env, urunler, uretilen, simdi, ek = {}) {
   if (!r.ok) return { hata: `OpenAI ${r.status}: ${JSON.stringify(j.error || j).slice(0, 160)}` };
   try { return JSON.parse(j.choices[0].message.content); } catch { return { hata: "OpenAI yanıtı okunamadı" }; }
 }
-const kontrolSorusu = (ek = {}) => `${KONTROL_SORU}${ek.boy && BOYLAR[ek.boy.boy] ? ` İSTENEN BOY: ${BOYLAR[ek.boy.boy].ad} (${BOYLAR[ek.boy.boy].en}). Üretilen görselde kıyafetin boyu vücutta bu mu? boy_dogru alanına yaz (farklıysa false ve sorunlara "boy farklı: …"). kadraj_tam: baş ve ayakkabılar kadrajda, kesilmemiş mi?` : ""}${ek.renk ? ` İSTENEN RENK: ${ek.renk} — üretilen kıyafet SADECE bu renkte olmalı (ürün fotoğraflarındaki ${ek.renk} ile aynı ton); başka renkse renk_ayni=false.` : ""}${ek.sonYazi ? ` Son karede küçük "VOLONTE" ve "${ek.sonYazi}" yazısı İSTENEN bir şeydir, sorun sayma; bunun dışında yazı, fiyat, logo varsa sorun yaz.` : ""}`;
+const kontrolSorusu = (ek = {}) => `${KONTROL2_SORU}${ek.boy && BOYLAR[ek.boy.boy] ? ` İSTENEN BOY: ${BOYLAR[ek.boy.boy].ad} (${BOYLAR[ek.boy.boy].en}); açıkça başkaysa boy_buyuk_fark=true ve büyük sorunlara "boy farklı: …". kadraj_tam: baş ve ayakkabılar kadrajda, kesilmemiş mi?` : " boy_buyuk_fark=false, kadraj_tam=true yaz (bu karede boy/kadraj denetlenmiyor)."}${ek.yuz ? " makyaj_var: yüzde belirgin makyaj (göz makyajı, kirpik, kaş, allık, ruj) var mı? Makyajsız yüz büyük sorundur." : " makyaj_var=true yaz (bu karede denetlenmiyor)."}${ek.renk ? ` İSTENEN RENK: ${ek.renk} — kıyafet bu renk değilse renk_buyuk_fark=true.` : ""}${ek.ogrenme && ek.ogrenme.length ? ` Patron'un önceki kararları (öğren): şu farklara rağmen Patron onayladı → benzerlerini KÜÇÜK say: ${ek.ogrenme.join(" | ")}.` : ""}${ek.sonYazi ? ` Son karede küçük "VOLONTE" ve "${ek.sonYazi}" yazısı İSTENEN bir şeydir, sorun sayma; bunun dışında yazı, fiyat, logo varsa sorun yaz.` : ""}`;
 const YAZI_SEMA = { type: "object", additionalProperties: false, required: ["volonte_var", "kod_okunan", "baska_yazi_var", "fiyat_var"], properties: { volonte_var: { type: "boolean" }, kod_okunan: { type: "string" }, baska_yazi_var: { type: "boolean" }, fiyat_var: { type: "boolean" } } };
 async function sonKareYazisi(env, kare, kod, simdi) {
   const y = await claudeJson(env, [resimUrl(kare), { type: "text", text: `Bu bir moda videosunun SON karesi. Görseldeki yazıları oku. volonte_var: "VOLONTE" yazısı doğru yazılmış ve okunuyor mu? kod_okunan: VOLONTE'nin altındaki/yanındaki model kodunu harf harf yaz (yoksa boş). baska_yazi_var: bunlar dışında yazı/logo/filigran var mı? fiyat_var: fiyat, para birimi, rakamlı fiyat var mı?` }], YAZI_SEMA, simdi, 300);
@@ -481,14 +506,31 @@ async function sonKareYazisi(env, kare, kod, simdi) {
   return { tamam: !sorun.length, sorun: sorun.join("; ") };
 }
 const BOY_KONTROL_SEMA = { ...KONTROL_SEMA, required: [...KONTROL_SEMA.required, "boy_dogru", "kadraj_tam"], properties: { ...KONTROL_SEMA.properties, boy_dogru: { type: "boolean" }, kadraj_tam: { type: "boolean" } } };
-export async function kaliteKontrol(env, urunler, uretilen, simdi, ek = {}) {
-  const gec = (x) => x && !x.hata && x.renk_ayni && x.desen_ayni && x.kesim_ayni && x.boy_dogru !== false && x.kadraj_tam !== false;
-  const claude = await claudeJson(env, [{ type: "text", text: "ÜRÜN (gerçek):" }, ...urunler.map(resimUrl), { type: "text", text: "ÜRETİLEN:" }, ...uretilen.map(resimUrl), { type: "text", text: kontrolSorusu(ek) }], ek.boy ? BOY_KONTROL_SEMA : KONTROL_SEMA, simdi, 600);
-  if (ek.boy) { if (claude.boy_dogru === false && !(claude.sorunlar || []).some((x) => /boy/i.test(x))) claude.sorunlar = [...(claude.sorunlar || []), `boy farklı (istenen: ${BOYLAR[ek.boy.boy].ad})`]; if (claude.kadraj_tam === false) claude.sorunlar = [...(claude.sorunlar || []), "kadraj: baş ya da ayakkabı kesilmiş"]; }
-  const openai = await openaiKontrol(env, urunler, uretilen, simdi, ek).catch((e) => ({ hata: String(e.message).slice(0, 160) }));
-  const sorunlar = [...(claude.sorunlar || []).map((s) => `Pelin: ${s}`), ...((openai && openai.sorunlar) || []).map((s) => `İkinci göz: ${s}`)];
-  return { gecti: gec(claude) && (openai === null || openai.hata ? true : gec(openai)), claude: gec(claude), openai: openai === null ? "yok" : openai.hata ? `hata (${openai.hata})` : gec(openai), sorunlar };
+// Büyük sorunlar (yeniden üretim sebebi) ve küçük notlar; eski biçimdeki cevaplar da okunur
+function kontrolOku(x) {
+  if (!x || x.hata) return { gec: false, buyuk: [], kucuk: [], puan: null };
+  if (x.renk_buyuk_fark === undefined) { // eski biçim
+    const boyNot = x.boy_dogru === false ? ["boy farklı"] : [];
+    return { gec: Boolean(x.renk_ayni && x.desen_ayni && x.kesim_ayni && x.boy_dogru !== false && x.kadraj_tam !== false), buyuk: [...(x.sorunlar || []), ...boyNot], kucuk: [], puan: null };
+  }
+  const buyuk = [...(x.buyuk_sorunlar || [])];
+  if (x.kadraj_tam === false) buyuk.push("kadraj: baş ya da ayakkabı kesilmiş");
+  if (x.makyaj_var === false) buyuk.push("yüz makyajsız");
+  if (x.boy_buyuk_fark && !buyuk.some((b) => /boy/i.test(b))) buyuk.push("boy farklı");
+  const gec = !x.renk_buyuk_fark && !x.kesim_buyuk_fark && !x.boy_buyuk_fark && x.kadraj_tam !== false && x.makyaj_var !== false;
+  return { gec, buyuk: gec ? [] : buyuk, kucuk: [...(x.kucuk_notlar || []), ...(gec ? buyuk : [])], puan: Number.isFinite(x.puan) ? Math.max(1, Math.min(10, Math.round(x.puan))) : null };
 }
+const ogrenmeOku = async (env) => (await oku(env, "pelin:ogrenme", [])).filter((x) => x.karar === "yine de onay").slice(-6).map((x) => x.farklar.join("; ").slice(0, 160));
+export async function kaliteKontrol(env, urunler, uretilen, simdi, ek = {}) {
+  const ekk = { ...ek, ogrenme: ek.ogrenme || (await ogrenmeOku(env).catch(() => [])) };
+  const claudeHam = await claudeJson(env, [{ type: "text", text: "ÜRÜN (gerçek):" }, ...urunler.map(resimUrl), { type: "text", text: "ÜRETİLEN:" }, ...uretilen.map(resimUrl), { type: "text", text: kontrolSorusu(ekk) }], KONTROL2_SEMA(ekk), simdi, 700);
+  const openaiHam = await openaiKontrol(env, urunler, uretilen, simdi, ekk).catch((e) => ({ hata: String(e.message).slice(0, 160) }));
+  const c = kontrolOku(claudeHam), o = openaiHam && !openaiHam.hata ? kontrolOku(openaiHam) : null;
+  const sorunlar = [...c.buyuk.map((s) => `Pelin: ${s}`), ...(o ? o.buyuk.map((s) => `ChatGPT: ${s}`) : [])];
+  const notlar = [...c.kucuk.map((s) => `Pelin: ${s}`), ...(o ? o.kucuk.map((s) => `ChatGPT: ${s}`) : [])];
+  return { gecti: c.gec && (o ? o.gec : true), claude: c.gec, openai: openaiHam === null ? "yok" : openaiHam.hata ? `hata (${openaiHam.hata})` : o.gec, sorunlar, notlar, puan: { pelin: c.puan, chatgpt: o ? o.puan : null } };
+}
+const notEkle = (is, k) => { if (k && k.notlar && k.notlar.length) is.notlar = [...new Set([...(is.notlar || []), ...k.notlar])].slice(-12); };
 
 // ---------- Kurulum: 3 manken yüzü + 3 ortam önerisi → Patron seçer → kalıcı ("pelin:secim") ----------
 async function kurulumKomutu(env, m, simdi) {
@@ -679,11 +721,11 @@ export function yeniVideoIstemi(is) {
     a.detay ? "Include one brief smooth close-up of the neckline/collar and stitching detail." : "",
     a.hiz,
     a.sonYazi ? `The last second ends on an elegant frame with a small, tasteful gold text "VOLONTE" and directly below it the model code "${is.kod}" in a corner; no other text anywhere, no price.` : "No text anywhere.",
-    "Her face stays exactly the same; elegant natural makeup; realistic natural skin; natural light; hands and fingers natural and flawless. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no logo, no watermark, no music.",
+    `Her face stays exactly the same.${MAKYAJ}${YAKA_DETAY}${detayIstemi(is.modelKaydi)} Realistic natural skin; natural light; hands and fingers natural and flawless. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no logo, no watermark, no music.`,
   ].filter(Boolean).join(" ");
 }
-const uretimFotoIstemi = (ortam, sablon, is = {}) => `${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo or text): ${sablon.isik}; ${sablon.ortam_havasi || ""}.` : ""}${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${refIstemi((is.boyRef || []).length)} Natural elegant makeup, realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
-const sahneIstemi = (ortam, is = {}) => `Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
+const uretimFotoIstemi = (ortam, sablon, is = {}) => `${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo or text): ${sablon.isik}; ${sablon.ortam_havasi || ""}.` : ""}${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${refIstemi((is.boyRef || []).length)} Realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
+const sahneIstemi = (ortam, is = {}) => `Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
 const uretimVideoIstemi = (ortam, sablon) => `${sablon ? `${sablon.kamera}. ${sablon.poz}. ${sablon.hiz}.` : ortam ? ortam.hareket : VIDEO_ISTEMI} The woman's face stays the same. The outfit keeps exactly the same colors, print and cut in every frame. Realistic natural motion, no morphing, no text, no logo, no watermark, no music.`;
 
 async function uretKomutu(env, m, simdi, test = false) {
@@ -767,7 +809,7 @@ async function uretimBaslat(env, onay, simdi) {
     const ornekOrtam = sablon && sablon.kaynak === "ornek" && sablon.ortam_havasi ? { id: `ornek-${sablon.ad}`, ad: `örnek video (${sablon.ad})`, sahne: sablon.ortam_havasi } : null;
     const videoOrtam = ornekOrtam || (sablon && ortamBul(sablon.videoOrtamId)) || rolOrtami(secim, "video", i);
     const boy = await boyOku(env, kod);
-    const is = { id, kod, testId, seri, renk, boy: boy && BOYLAR[boy.boy] ? { boy: boy.boy } : null, boyRef: ((boy && boy.referans) || []).filter((x) => x.tur === "foto").slice(0, 1).map((x) => dosyaAdresi(env, x.anahtar)), urunRoller: fs.roller, urunKaynak: fs.kaynak, sahneAyar: { ...SAHNE_VARSAYILAN, ...((sablon && sablon.sahne) || {}) }, ortam, videoOrtam: videoOrtam && (!ortam || videoOrtam.id !== ortam.id) ? videoOrtam : null, sahneDeneme: 0, sablon, urunler, durum: urunler.length ? "foto_gonder" : "hata", fotoDeneme: 0, videoDeneme: 0, maliyet: 0, zaman: simdi, gecmis: [] };
+    const is = { id, kod, testId, seri, renk, modelKaydi: boy && (boy.detayEn || boy.detayTr) ? { detayEn: boy.detayEn || null, detayTr: boy.detayTr || null } : null, boy: boy && BOYLAR[boy.boy] ? { boy: boy.boy } : null, boyRef: ((boy && boy.referans) || []).filter((x) => x.tur === "foto").slice(0, 1).map((x) => dosyaAdresi(env, x.anahtar)), urunRoller: fs.roller, urunKaynak: fs.kaynak, sahneAyar: { ...SAHNE_VARSAYILAN, ...((sablon && sablon.sahne) || {}) }, ortam, videoOrtam: videoOrtam && (!ortam || videoOrtam.id !== ortam.id) ? videoOrtam : null, sahneDeneme: 0, sablon, urunler, durum: urunler.length ? "foto_gonder" : "hata", fotoDeneme: 0, videoDeneme: 0, maliyet: 0, zaman: simdi, gecmis: [] };
     if (!urunler.length) is.hata = "ürün fotoğrafı yok (sitede değil; fotoğrafı yazısında model koduyla Pelin'e gönderin: \"3627 ön\", \"3627 arka\")";
     await kaydet(env, `pelin:is:${id}`, is);
     liste.push(id);
@@ -801,7 +843,8 @@ async function uretimAdimi(env, is, simdi) {
     const s = await bekle(); if (!s) return;
     if (s.hata) { is.durum = is.fotoDeneme < URETIM_DENEME ? "foto_gonder" : "uyari"; is.sorunlar = [`fotoğraf üretilemedi: ${s.hata}`]; return; }
     is.foto = s.resimler[0];
-    const k = await kaliteKontrol(env, is.urunler, [is.foto], simdi, { renk: is.renk, boy: is.boy });
+    const k = await kaliteKontrol(env, is.urunler, [is.foto], simdi, { renk: is.renk, boy: is.boy, yuz: Boolean(is.sahneAyar) });
+    notEkle(is, k);
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     is.fotoKontrol = k; is.gecmis.push([simdi, `foto ${is.fotoDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
     if (k.gecti) { is.durum = is.videoOrtam && (is.sahneAyar || !is.sablon) ? "sahne_gonder" : "video_gonder"; return; }
@@ -817,7 +860,8 @@ async function uretimAdimi(env, is, simdi) {
     const s = await bekle(); if (!s) return;
     if (s.hata) { is.durum = is.sahneDeneme < URETIM_DENEME ? "sahne_gonder" : "uyari"; is.sorunlar = [`video karesi üretilemedi: ${s.hata}`]; return; }
     is.sahne = s.resimler[0];
-    const k = await kaliteKontrol(env, is.urunler, [is.sahne], simdi, { renk: is.renk, boy: is.boy });
+    const k = await kaliteKontrol(env, is.urunler, [is.sahne], simdi, { renk: is.renk, boy: is.boy, yuz: true });
+    notEkle(is, k);
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     is.sahneKontrol = k; is.gecmis.push([simdi, `video karesi ${is.sahneDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
     if (k.gecti) { is.durum = "video_gonder"; return; }
@@ -847,6 +891,7 @@ async function uretimAdimi(env, is, simdi) {
     const kareler = is.kareler.filter((x) => x && x !== "yok");
     const sonYazi = is.sahneAyar && is.sahneAyar.sonYazi ? is.kod : null;
     const k = kareler.length ? await kaliteKontrol(env, is.urunler, kareler, simdi, { renk: is.renk, sonYazi }) : { gecti: false, sorunlar: ["video kareleri alınamadı"] };
+    notEkle(is, k);
     if (k.gecti && sonYazi && is.kareler[2] && is.kareler[2] !== "yok") { // son kare: küçük VOLONTE + doğru kod, başka yazı/fiyat yok
       const y = await sonKareYazisi(env, is.kareler[2], is.kod, simdi).catch((e) => ({ tamam: false, sorun: `son kare okunamadı: ${String(e.message).slice(0, 80)}` }));
       is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN);
@@ -859,19 +904,51 @@ async function uretimAdimi(env, is, simdi) {
     is.sorunlar = k.sorunlar; is.durum = is.videoDeneme < URETIM_DENEME ? "video_gonder" : "uyari"; return;
   }
 }
-const isKlavye = (id, sablon = false) => ({ inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : [])] });
+const isKlavye = (id, sablon = false, uyari = false) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : [])] });
+// Kontrolden geçmeyen iş "yine de onayla" ile nereden devam eder?
+export function devamAsamasi(is) {
+  if (is.video) return "teslim";
+  if (is.sahne) return "video_gonder";
+  if (is.foto) return is.videoOrtam && (is.sahneAyar || !is.sablon) && !(is.sahneKontrol && is.sahneDeneme) ? "sahne_gonder" : "video_gonder";
+  return null;
+}
+const notSatirlari = (is) => ((is.notlar || []).length ? ["📝 Küçük farklar (üretimi durdurmadı):", ...is.notlar.slice(0, 6).map((n) => `• ${n}`)] : []);
+const puanSatiri = (is) => {
+  const p = [["foto", is.fotoKontrol], ["video karesi", is.sahneKontrol], ["video", is.videoKontrol]].filter(([, k]) => k && k.puan && (k.puan.pelin || k.puan.chatgpt)).map(([ad, k]) => `${ad} ${k.puan.pelin ?? "—"}${k.puan.chatgpt ? `/${k.puan.chatgpt}` : ""}`);
+  return p.length ? `🎯 Kontrol puanı (Pelin/ChatGPT, 10 üzerinden): ${p.join(" · ")}` : "";
+};
+async function teslimEt(env, is, simdi) {
+  is.durum = "onaylandi"; is.onayZaman = simdi;
+  await kaydet(env, `pelin:is:${is.id}`, is);
+  const l = (await env.KAYIT.get("venom:pelinTeslim", "json")) || [];
+  l.push({ kod: is.kod, foto: is.foto, video: is.video, kapak: is.kapak || null, renk: is.renk || null, ortam: is.ortam ? is.ortam.ad : null, zaman: simdi });
+  await env.KAYIT.put("venom:pelinTeslim", JSON.stringify(l.slice(-100)));
+}
+async function ogrenmeYaz(env, kayit) {
+  const l = await oku(env, "pelin:ogrenme", []);
+  l.push(kayit);
+  await kaydet(env, "pelin:ogrenme", l.slice(-60));
+}
 async function isBildir(env, is) {
   const ust = `${is.kod} · ${is.seri === "buyuk" ? "büyük seri" : "küçük seri"} · ${is.ortam ? is.ortam.ad : "stüdyo"}${is.videoOrtam ? ` / video ${is.videoOrtam.ad}` : ""}${is.sablon ? ` · şablon ${is.sablon.ad}` : ""} · foto ${is.fotoDeneme}. deneme, video ${is.videoDeneme}. deneme`;
   if (is.durum === "uyari") {
     if (is.foto) await tg(env, "sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `⚠️ ${is.kod}: ${URETIM_DENEME} denemede kalite kontrolünden geçmedi.` });
-    return yaz(env, murat(env), [`⚠️ ${ust}`, "Sorunlar:", ...(is.sorunlar || []).slice(0, 6).map((s) => `• ${s}`), "Ne yapalım?"].join("\n"), { reply_markup: isKlavye(is.id) });
+    if (is.sahne) await tg(env, "sendPhoto", { chat_id: murat(env), photo: is.sahne, caption: `🎞 ${is.kod} (video karesi)` });
+    if (is.video) await tg(env, "sendVideo", { chat_id: murat(env), video: is.video, caption: `🎬 ${is.kod}` });
+    const devam = devamAsamasi(is);
+    return yaz(env, murat(env), [`⚠️ ${ust}`, "Büyük farklar:", ...(is.sorunlar || []).slice(0, 6).map((s) => `• ${s}`), ...notSatirlari(is), puanSatiri(is),
+      devam === "teslim" ? "Beğendiyseniz ✅ Yine de onayla: teslim kuyruğuna alınır (son söz sizde)." : devam ? `Beğendiyseniz ✅ Yine de onayla: bu fotoğrafla devam ederim (${devam === "sahne_gonder" ? "video karesi + video" : "video"}).` : "Fotoğraf üretilemedi; yeniden üretin ya da iptal edin."].filter(Boolean).join("\n"), { reply_markup: isKlavye(is.id, false, true) });
   }
   if (is.foto) await tg(env, "sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `📸 ${is.kod} (katalog)` });
   if (is.sahne) await tg(env, "sendPhoto", { chat_id: murat(env), photo: is.sahne, caption: `🎞 ${is.kod} (video karesi)` });
   if (is.video) await tg(env, "sendVideo", { chat_id: murat(env), video: is.video, caption: `🎬 ${is.kod}` });
   if (is.kapak) await tg(env, "sendPhoto", { chat_id: murat(env), photo: is.kapak, caption: `🖼 ${is.kod} kapak (videodan)` });
-  const kk = (k) => (k ? `Pelin ${k.claude ? "✅" : "❌"} · ikinci göz ${k.openai === true ? "✅" : k.openai === false ? "❌" : k.openai}` : "—");
-  return yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}`, `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar)) });
+  const kk = (k) => (k ? `Pelin ${k.claude ? "✅" : "❌"} · ChatGPT ${k.openai === true ? "✅" : k.openai === false ? "❌" : k.openai}` : "—");
+  if ((await oku(env, "pelin:ayar", {})).hemraOnay && hemra(env)) {
+    if (is.video) await tg(env, "sendVideo", { chat_id: hemra(env), video: is.video, caption: `🎬 ${is.kod} — Pelin önizlemesi` });
+    await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi. Uygunsa ✅ Onayla (Patron da görüyor).`, { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${is.id}` }]] } });
+  }
+  return yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar)) });
 }
 export async function uretimCron(env, simdi) {
   const liste = await oku(env, "pelin:isler", []);
@@ -909,8 +986,9 @@ async function testRaporu(env, liste) {
 }
 async function uretimDugmesi(env, cq, simdi) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
-  if (!muratMi(env, cq.from.id)) return cevap("Sadece Patron.");
   const [, islem, id] = cq.data.split(":");
+  const hemraYetkili = String(cq.from.id) === hemra(env) && islem === "a" && Boolean((await oku(env, "pelin:ayar", {})).hemraOnay);
+  if (!muratMi(env, cq.from.id) && !hemraYetkili) return cevap("Sadece Patron.");
   const kapat = (text) => tg(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text });
   if (islem === "o" || islem === "i") {
     const onay = await oku(env, `pelin:uretimOnay:${id}`, null);
@@ -927,17 +1005,27 @@ async function uretimDugmesi(env, cq, simdi) {
     return yaz(env, cq.message.chat.id, `💾 "${ad} şablonu" kaydedildi (ortamlar, sahne ayarları, video aracı${is.sablon && is.sablon.kamera ? ", örnek video tarifi" : ""}). Kullanmak için: /uret 3630 şablon:${ad} — ya da Pelin'e "3630'u ${ad} şablonuyla yap" yazın.`);
   }
   if (!is || !["onay", "uyari"].includes(is.durum)) return cevap("Bu iş artık beklemiyor.");
-  if (islem === "x") { is.durum = "iptal"; await kaydet(env, `pelin:is:${id}`, is); await cevap("İptal"); return kapat(`❌ ${is.kod} iptal edildi.`); }
+  if (islem === "x") { is.durum = "iptal"; await kaydet(env, `pelin:is:${id}`, is); await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "iptal", farklar: (is.sorunlar || []).slice(0, 4), notlar: (is.notlar || []).slice(0, 4) }); await cevap("İptal"); return kapat(`❌ ${is.kod} iptal edildi.`); }
+  // PATRON SON SÖZ (3 Kasım): kontrolden geçmeyen işi Patron yine de onaylayabilir → kaldığı yerden devam ya da teslim
+  if (islem === "a" && is.durum === "uyari") {
+    const devam = devamAsamasi(is);
+    if (!devam) return cevap("Fotoğraf yok; yeniden üretin.");
+    is.patronOnay = [...(is.patronOnay || []), { zaman: simdi, asama: devam, sorunlar: (is.sorunlar || []).slice(0, 6) }];
+    await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "yine de onay", farklar: (is.sorunlar || []).map((x) => x.replace(/^(Pelin|ChatGPT|İkinci göz): /, "")).slice(0, 4), notlar: (is.notlar || []).slice(0, 4) });
+    if (devam === "teslim") { await teslimEt(env, is, simdi); await cevap("Onaylandı"); return kapat(`✅ ${is.kod} Patron onayıyla teslim kuyruğuna alındı (Selin site, Kemal kanal).`); }
+    Object.assign(is, { durum: devam, sorunlar: [], ...(devam === "sahne_gonder" ? { sahneDeneme: 0 } : { videoDeneme: 0 }) });
+    await kaydet(env, `pelin:is:${id}`, is);
+    await cevap("Devam ediyorum");
+    return kapat(`✅ ${is.kod}: fotoğraf Patron onayıyla geçti — ${devam === "sahne_gonder" ? "video karesi ve video" : "video"} üretiliyor. Hazır olunca önizleme gelecek.`);
+  }
   if (islem === "r") { Object.assign(is, { durum: "foto_gonder", fotoDeneme: 0, sahneDeneme: 0, videoDeneme: 0, foto: null, sahne: null, video: null, kapak: null }); await kaydet(env, `pelin:is:${id}`, is); await cevap("Yeniden"); return kapat(`🔄 ${is.kod} yeniden üretiliyor.`); }
   if (islem === "a" && is.durum === "onay") {
-    is.durum = "onaylandi"; is.onayZaman = simdi; await kaydet(env, `pelin:is:${id}`, is);
-    const l = (await env.KAYIT.get("venom:pelinTeslim", "json")) || [];
-    l.push({ kod: is.kod, foto: is.foto, video: is.video, kapak: is.kapak || null, renk: is.renk || null, ortam: is.ortam ? is.ortam.ad : null, zaman: simdi });
-    await env.KAYIT.put("venom:pelinTeslim", JSON.stringify(l.slice(-100)));
+    await teslimEt(env, is, simdi);
+    await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "onay", farklar: [], notlar: (is.notlar || []).slice(0, 4) });
     await cevap("Onaylandı");
     return kapat(`✅ ${is.kod} onaylandı — teslim kuyruğuna alındı (Selin site, Kemal kanal).`);
   }
-  return cevap("Kontrolden geçmeyen iş onaylanamaz; yeniden üretin ya da iptal edin.");
+  return cevap("Bu düğme artık geçerli değil.");
 }
 // Beğenilen işin ayarları → şablon ("3627" → "3627 şablonu"): ortamlar, sahne ayarları, video aracı, varsa örnek video tarifi
 async function sablonKaydet(env, is, simdi, ad = null) {
@@ -984,7 +1072,7 @@ async function ornekVideo(env, m, simdi) {
   const kareFal = [];
   for (const f of ["first", "middle", "last"]) kareFal.push(await falGonder(env, KARE.uc, { video_url: url, frame_type: f }));
   await harcamaYaz(env, 3 * KARE.saniye * 10, simdi);
-  await kaydet(env, `pelin:ornek:${id}`, { id, kod, kareFal, kareler: [], zaman: simdi }, 7 * 86400);
+  await kaydet(env, `pelin:ornek:${id}`, { id, kod, yazi: yazi.slice(0, 300), kareFal, kareler: [], zaman: simdi }, 7 * 86400);
   const l = await oku(env, "pelin:ornekler", []); l.push(id); await kaydet(env, "pelin:ornekler", l.slice(-20));
   await yaz(env, m.chat.id, `🎞 Örneği inceliyorum${kod ? ` (${kod} için)` : ""}: kamera hareketi, ışık, hız, poz ve ortam havasını tarif olarak çıkaracağım. Birebir kopya yapılmaz; başkasının yüzü, logosu, müziği kullanılmaz.`);
   return true;
@@ -1015,7 +1103,10 @@ async function sablonDugmesi(env, cq, simdi) {
   sablonlar[ad] = { ...o.tarif, ad, kaynak: "ornek", zaman: simdi };
   await kaydet(env, "pelin:sablonlar", sablonlar);
   await cevap("Kaydedildi");
-  if (islem === "u" && o.kod) return uretKomutu(env, { from: cq.from, chat: cq.message.chat, text: `/uret ${o.kod} şablon:${ad}` }, simdi);
+  if (islem === "u" && o.kod) {
+    const y = fotoYazisi(o.yazi || ""), buyuk = /b[üu]y[üu]k/i.test(o.yazi || "");
+    return uretKomutu(env, { from: cq.from, chat: cq.message.chat, text: `/uret ${buyuk ? "büyük:" : ""}${o.kod}${y.renk ? ` ${y.renk}` : ""} şablon:${ad}` }, simdi);
+  }
   return yaz(env, cq.message.chat.id, `💾 Şablon kaydedildi: "${ad}". Kullanmak için: /uret 3557 şablon:${ad}`);
 }
 
