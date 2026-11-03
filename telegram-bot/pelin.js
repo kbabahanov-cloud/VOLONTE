@@ -20,6 +20,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
+import { venomPelinAdimi, hataEkle } from "./venom-kopru.js";
 
 export const AYLIK_SINIR_USD = 150;
 export const UYARI_ORANI = 0.8;
@@ -240,6 +241,7 @@ async function adimBaslat(env, d, adim, simdi) {
 // ---------- 5 dakikalık görev: işlerin durumu ----------
 export async function pelinCron(env, simdi) {
   await webhookKur(env);
+  if (env.FAL_KEY && env.STOK) { try { await venomPelinAdimi(env, simdi, venomUretimi); } catch (e) { await hataEkle(env, "pelin:venom", e); } }
   if (env.FAL_KEY) {
     for (const f of [kurulumCron, uretimCron, ornekCron]) { try { await f(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: f.name, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
   }
@@ -875,6 +877,17 @@ async function uretKomutu(env, m, simdi, test = false) {
     `Model başı ~${para(mm.toplam)} · toplam ~${para(toplam)} (kalite kontrol yeniden ürettirirse en fazla 2 katı)`,
     `Bu ay Pelin: ${para(harcanan)} / ${AYLIK_SINIR_USD} $${harcanan + toplam > AYLIK_SINIR_USD ? " ⚠️ SINIRI AŞAR" : ""}`,
   ].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:o:${id}` }, { text: "❌ İptal", callback_data: `pu:i:${id}` }]] } });
+}
+
+// Venom'dan gelen üretim (Patron Venom'da kartı onaylamış, "Emin misiniz?" demiş): kurulum ve aylık sınır burada da kontrol edilir
+export async function venomUretimi(env, onay, simdi) {
+  const secim = await oku(env, "pelin:secim", null);
+  if (!secim) return { hata: "kurulum yapılmamış (Pelin'e /kurulum: yüz + ortam seçimi)" };
+  const tahmin = yuvarla(uretimMaliyeti(secim.arac).toplam * onay.kodlar.length);
+  const harcanan = await buAyHarcanan(env, simdi);
+  if (harcanan + tahmin > AYLIK_SINIR_USD) return { hata: `aylık sınır aşılır (bu ay ${para(harcanan)} / ${AYLIK_SINIR_USD} $, bu iş ~${para(tahmin)}); sınırı artırmak Patron onayıyla` };
+  await uretimBaslat(env, onay, simdi);
+  return { ok: true };
 }
 
 async function uretimBaslat(env, onay, simdi) {

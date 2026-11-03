@@ -312,6 +312,24 @@ async function fuataGonder(env, tg, r, kim, simdi) {
   return true;
 }
 
+// Venom'dan (3 Kasım): Patron Venom'da kartı onaylayıp "Emin misiniz?" dedi → kartta gördüğü metin BİREBİR Fuat'a gider.
+// icerik = mutabakatIcerigi() (kart açılırken alınan); süzgeç, arşiv, PDF ve eski mutabakatları geçersiz kılma aynen uygulanır.
+export const mutabakatIcerigi = async (env, gun) => ({ gun, ...icerikAl(await mutabakatMetni(env, gun)) });
+export async function venomMutabakatGonder(env, tg, icerik, kim, simdi) {
+  if (!fuat(env) || !icerik || !Array.isArray(icerik.fuatMesajlar)) return null;
+  const gun = icerik.gun || gunAnahtari(simdi);
+  const id = `${gun}-${simdi.toString(36)}`;
+  for (const eskiId of (await ayarOku(env, "mt:liste", [])).slice(-10)) {
+    const e = await ayarOku(env, `mt:${eskiId}`, null);
+    if (e && e.durum === "onizleme") { e.durum = "eskidi"; e.gecmis.push([simdi, "Venom'dan yeni mutabakat, geçersiz"]); await kayitYaz(env, e); }
+  }
+  const { gun: _g, ...alanlar } = icerik;
+  const r = { id, gun, kaynak: "venom", olusturma: simdi, ...alanlar, durum: "onizleme", gecmis: [[simdi, "Venom kartı (Patron onayı + Emin misiniz)"]] };
+  await kayitYaz(env, r);
+  await arsiv(env, "onizleme", id, { kaynak: "venom", fuat: r.duzFuat, patron: r.duzPatronBakiye }, simdi);
+  return fuataGonder(env, tg, r, kim || "Patron (Venom)", simdi);
+}
+
 // Fuat'a gitmiş ama cevaplanmamış eski mutabakatlar geçersiz olur (düğmeleri kaldırılır, arşive yazılır); dışarıda tutulan hariç.
 export async function eskileriGecersizKil(env, tg, haric, simdi) {
   const kapanan = [];

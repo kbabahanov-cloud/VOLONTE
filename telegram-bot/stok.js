@@ -426,6 +426,18 @@ export class StokDO {
     if (yol === "/arsiv-dosyalar") return cevap(d.arsivDosyalar(g.mt));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
+    // Botlar arası iş kuyruğu (3 Kasım, Venom): ekleme ve alma tek adımda (KV gibi gecikmeli değil → iş kaybolmaz, iki kez gitmez)
+    if (yol === "/kuyruk-ekle") {
+      const k = `kuyruk:${g.ad}`, l = JSON.parse(d.ayarOku(k) || "[]");
+      if (g.kayit && g.kayit.id && l.some((x) => x.id === g.kayit.id)) return cevap({ ok: true, ayni: true });
+      l.push(g.kayit); d.ayarYaz(k, JSON.stringify(l.slice(-200)));
+      return cevap({ ok: true, boy: l.length });
+    }
+    if (yol === "/kuyruk-al") {
+      const k = `kuyruk:${g.ad}`, l = JSON.parse(d.ayarOku(k) || "[]");
+      if (l.length) d.ayarYaz(k, "[]");
+      return cevap(l);
+    }
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
     if (yol === "/br-stok") return cevap({ stok: d.brStok(g.kod), detay: d.brStokDetay(g.kod) });
     if (yol === "/br-stoklar") return cevap(d.brStoklar());

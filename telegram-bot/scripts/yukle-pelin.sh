@@ -23,6 +23,7 @@ cat > "$META" <<JSON
  "placement":{"region":"aws:us-east-1"}, $GOC
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"PELIN","class_name":"PelinDO"},
+             {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
              {"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-pelin.volonte.workers.dev"},

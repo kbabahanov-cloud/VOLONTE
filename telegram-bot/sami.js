@@ -29,6 +29,7 @@ import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi,
 import { borcLimitKomutu } from "./cari-takip.js";
 import { patronMu, geriKuyrugu } from "./sil.js";
 import { ciroKomutu } from "./ciro.js";
+import { venomGidenAdimi } from "./venom-kopru.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -80,8 +81,9 @@ export default {
     const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); await cariDokumu(e, tg); };
     const paylasilmamis = (e, t) => paylasimTakip(e, t, tg);
     const mutabakat = (e, t) => mutabakatAdimi(e, t, tg);
+    const venomGiden = (e, t) => venomGidenAdimi(e, t, tg); // Venom'un onaylanan dış mesajları (3 Kasım)
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis, mutabakat } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
