@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3350",
+  "baslik": "Pleated Feather Cuff Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A flowing pleated maxi dress with a relaxed A-line silhouette and long sleeves. The rounded neckline with keyhole opening is framed by a band of sparkling stone embellishment, while soft white feather cuffs finish the sleeves. Made for weddings, celebrations and evening events. Produced in Istanbul with careful attention to every detail.",
+   "fr": "Une robe longue plissée à la silhouette évasée et fluide, dotée de manches longues. L'encolure ronde à ouverture goutte est soulignée d'une bordure de pierres scintillantes, et des poignets en plumes blanches terminent les manches. Idéale pour les mariages, cérémonies et soirées. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Um vestido longo plissado, de silhueta evasê e fluida, com mangas compridas. O decote redondo com abertura em gota é contornado por pedraria brilhante, e punhos de penas brancas finalizam as mangas. Pensado para casamentos, celebrações e eventos noturnos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3350/1.jpg",
+   "galeri/3350/2.jpg",
+   "galeri/3350/3.jpg",
+   "galeri/3350/4.jpg",
+   "galeri/3350/5.jpg"
+  ],
+  "videolar": [
+   "selin/3350/0"
+  ],
+  "fiyat": 53,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3358",
   "baslik": "Belted Double-Breasted Skirt Set",
   "kategori": "sets",
