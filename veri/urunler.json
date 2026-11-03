@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3284",
+  "baslik": "Beaded Pleated Cape Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing pleated cape-style top with matching wide-leg pleated trousers. The round neckline is finished with a cascade of beaded fringe, while the draped sleeves fall into a soft asymmetrical hem. Elegant for celebrations, receptions and refined daytime events. Made in Istanbul with careful attention to finish.",
+   "fr": "Un ensemble deux pièces associant un haut plissé fluide façon cape à un pantalon large plissé assorti. L'encolure ronde est ornée d'une cascade de franges perlées, et les manches drapées descendent vers un ourlet asymétrique tout en légèreté. Idéal pour les cérémonies, réceptions et sorties de jour raffinées. Fabriqué à Istanbul avec un soin particulier des finitions.",
+   "pt": "Um conjunto de duas peças que combina uma blusa plissada fluida em estilo capa com calças largas plissadas a condizer. O decote redondo é valorizado por uma cascata de franjas com missangas, e as mangas drapeadas terminam numa bainha assimétrica suave. Elegante para celebrações, recepções e eventos diurnos sofisticados. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3284/1.jpg",
+   "galeri/3284/2.jpg",
+   "galeri/3284/3.jpg",
+   "galeri/3284/4.jpg",
+   "galeri/3284/5.jpg"
+  ],
+  "videolar": [
+   "selin/3284/0"
+  ],
+  "fiyat": 48,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3297",
   "baslik": "Brooch Blazer Pleated Set",
   "kategori": "sets",
