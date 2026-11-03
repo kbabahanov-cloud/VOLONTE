@@ -1,7 +1,7 @@
 // Çalıştırma: node --test test-pelin.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { guncelleme, pelinCron, maliyet, harfDagit, sonucMetni, videoGirdisi, buAyHarcanan, onizlemeGonder } from "./pelin.js";
+import { guncelleme, pelinCron, videoGirdisi, buAyHarcanan, fotoYazisi, fotoSirala, yeniVideoIstemi, SAHNE_VARSAYILAN } from "./pelin.js";
 
 const MURAT = 9000000001;
 const HEMRA = 9000000002;
@@ -15,6 +15,7 @@ function ortam({ fal = true } = {}) {
   let id = 100;
   const falSonuc = {}; // uc → sonuç
   const site = []; // veri/urunler.json
+  const yaziCevap = { kod: "3557", fn: null }; // son kare yazısı (sahte okuma)
   globalThis.fetch = async (url, istek = {}) => {
     const u = String(url);
     const govde = istek.body ? JSON.parse(istek.body) : null;
@@ -35,6 +36,8 @@ function ortam({ fal = true } = {}) {
     if (u.includes("raw.githubusercontent.com")) return Response.json(site);
     if (u.startsWith("https://api.anthropic.com")) {
       claude.push(govde);
+      const sema = govde.output_config && govde.output_config.format && govde.output_config.format.schema;
+      if (sema && (sema.required || []).includes("kod_okunan")) return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(yaziCevap.fn ? yaziCevap.fn() : { volonte_var: true, kod_okunan: yaziCevap.kod, baska_yazi_var: false, fiyat_var: false }) }], usage: { input_tokens: 10, output_tokens: 5 } });
       const c = claude.cevaplar && claude.cevaplar.shift();
       return Response.json(c || { id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: "Merhaba!" }], usage: { input_tokens: 100, output_tokens: 50 } });
     }
@@ -50,37 +53,15 @@ function ortam({ fal = true } = {}) {
       async delete(k) { depo.delete(k); },
     },
   };
-  return { env, depo, g, falIstek, claude, falSonuc, site };
+  return { env, depo, g, falIstek, claude, falSonuc, site, yaziCevap };
 }
 const yazi = (o, kimden, text) => guncelleme({ message: { message_id: 1, date: 1, chat: { id: kimden, type: "private" }, from: { id: kimden, first_name: kimden === MURAT ? "Murat" : "Hemra" }, text } }, o.env);
 const bas = (o, kimden, data) => guncelleme({ callback_query: { id: "c", from: { id: kimden, first_name: "X" }, data, message: { chat: { id: kimden }, message_id: 9, text: "kart" } } }, o.env);
 const sonDugmeler = (o) => o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde.reply_markup.inline_keyboard.flat();
 
-test("maliyet: yüz 6 aday 0,90 $; kare 2 × 0,15; video 3 araç × 2 model, aynı süre", () => {
-  assert.equal(maliyet("yuz").toplam, 0.9);
-  assert.equal(maliyet("foto").toplam, 0.3);
-  const v = maliyet("video");
-  assert.ok(v.toplam > 5.5 && v.toplam < 6, String(v.toplam));
+test("video araçları: üçünde aynı süre (6 sn)", () => {
   assert.deepEqual([videoGirdisi("veo", "k").duration, videoGirdisi("kling", "k").duration, videoGirdisi("seedance", "k").duration], ["6s", "6", "6"]);
   assert.equal(videoGirdisi("kling", "k").start_image_url, "k");
-});
-
-
-
-
-
-test("kör test: harfler karışık, sonuçta araç adları, maliyet ve oylar açılır", () => {
-  const h = harfDagit(["veo", "kling", "seedance", "gercek"], () => 0);
-  assert.deepEqual(Object.values(h).sort(), ["gercek", "kling", "seedance", "veo"]);
-  const env = { MURAT_ID: String(MURAT), HEMRA_ID: String(HEMRA) };
-  const d = { modeller: {
-    3592: { harfler: { A: "kling", B: "gercek" }, oylar: { [MURAT]: "A", [HEMRA]: "B" }, videolar: { kling: { url: "u", fiyat: 0.672 }, gercek: { url: "g", fiyat: 0 } }, puan: { kling: { renk: 9, desen: 8, kesim: 9, not: "iyi" } } },
-    3577: { harfler: { A: "veo" }, oylar: {}, videolar: { veo: { url: "u", fiyat: 0.3 }, seedance: { hata: "422", fiyat: 0 } }, puan: {} },
-  } };
-  const m = sonucMetni(d, env);
-  assert.match(m, /A = Kling 3\.0 Pro · 0,67 \$ · renk 9 desen 8 kesim 9 \(iyi\) · 🏆 Murat/);
-  assert.match(m, /B = Gerçek kanal videosu · — · puan yok · 🏆 Hemra/);
-  assert.match(m, /Seedance 2\.0: üretilemedi — 422/);
 });
 
 test("sohbet: komutsuz Claude (Sonnet), /beyin opus sadece Murat; yabancıya cevap yok", async () => {
@@ -210,14 +191,14 @@ test("örnek video: Patron video + 'bunun gibi yap, 3557' → kareler → tarif 
   assert.match(o.g.at(-1).govde.text, /videoyu dosya olarak atın/);
 });
 
-test("eski deneme akışı kapalı (3 Kasım): 'fal hazır' ve sohbet aracı yeni kurulum kartını gönderir; 'fal hazır yazın' engeli yok; /durum anahtarları gösterir", async () => {
+test("eski deneme akışı TAMAMEN kaldırıldı: 'fal hazır' sohbete gider; sohbet aracı yeni üretim kartını gönderir; /durum anahtarları gösterir", async () => {
   const o = ortam();
   o.env.OPENAI_API_KEY = "x";
   await yazi(o, MURAT, "fal hazır");
-  assert.match(o.g.at(-1).govde.text, /Kurulum: 3 manken yüzü/);
-  assert.ok(!o.g.some((x) => /fal hazır" yazın/.test(x.govde.text || "")));
+  assert.equal(o.claude.length, 1); // komut değil, normal sohbet
+  assert.ok(!o.g.some((x) => /fal hazır" yazın|askı fotoğraf|kör test/i.test(x.govde.text || "")));
   o.claude.cevaplar = [
-    { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "uretim_karti", input: { kodlar: ["3557"], test: false } }], usage: { input_tokens: 10, output_tokens: 5 } },
+    { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "uretim_karti", input: { kodlar: ["3557"], test: false, buyuk_seri: [], renkler: [], sablon: "" } }], usage: { input_tokens: 10, output_tokens: 5 } },
     { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", content: [{ type: "text", text: "Kartı gönderdim Patron." }], usage: { input_tokens: 10, output_tokens: 5 } },
   ];
   o.depo.set("pelin:secim", JSON.stringify({ yuz: { manken: "siyahi", fileId: "Y", anahtar: "a".repeat(32) }, ortamlar: [{ id: "1", ad: "Siyah-altın", sahne: "x", hareket: "y" }], arac: "veo" }));
@@ -303,12 +284,22 @@ test("üretim rollerle: büyük seri modeli büyük seri yüzüyle; katalog foto
   o.depo.set("pelin:secim", JSON.stringify({ yuzler: { kucuk: { ad: "2 numaralı siyahi kız", fileId: "K", anahtar: "a".repeat(32) }, buyuk: { ad: "3 numaralı dolgun kız", fileId: "B", anahtar: "c".repeat(32) } }, ortamlar: [{ ...ORTAMLAR3[0], rol: "kampanya" }, { ...ORTAMLAR3[1], rol: "katalog" }, { ...ORTAMLAR3[2], rol: "video" }], arac: "veo" }));
   await yazi(o, MURAT, "/uret 3557 3601");
   const kart = o.g.at(-1).govde;
+  const ikinci = async () => { // kart iki modeli gösterir; üretimi tek tek yürüt (son kare kodu modele göre okunur)
+    await yazi(o, MURAT, "/uret 3601");
+    o.yaziCevap.kod = "3601";
+    await bas(o, MURAT, `pu:o:${o.g.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+    o.claude.cevaplar = Array.from({ length: 4 }, () => claudeJsonCevap(GECTI));
+    await cronlar(o, 12);
+  };
   assert.match(kart.text, /Yüz: 3557 büyük seri \(3 numaralı dolgun kız\), 3601 küçük seri \(2 numaralı siyahi kız\)/);
   assert.match(kart.text, /Ortam: katalog fotoğrafı Siyah Altın Lüks · video Live Your Life Şehir/);
   assert.match(kart.text, /Video başlangıç karesi \(Live Your Life Şehir\)/);
-  await bas(o, MURAT, `pu:o:${kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
-  o.claude.cevaplar = Array.from({ length: 8 }, () => claudeJsonCevap(GECTI));
+  await bas(o, MURAT, `pu:i:${kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+  await yazi(o, MURAT, "/uret 3557");
+  await bas(o, MURAT, `pu:o:${o.g.at(-1).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+  o.claude.cevaplar = Array.from({ length: 4 }, () => claudeJsonCevap(GECTI));
   await cronlar(o, 12);
+  await ikinci();
   const edit = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
   const b = edit.filter((x) => x.govde.image_urls.includes("https://www.wearvolonte.com/galeri/3557/1.jpg"));
   assert.equal(b.length, 2); // katalog + video karesi
@@ -320,7 +311,8 @@ test("üretim rollerle: büyük seri modeli büyük seri yüzüyle; katalog foto
   assert.ok(!edit.some((x) => /80s neon/.test(x.govde.prompt)));
   const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video");
   assert.equal(video.length, 2);
-  assert.match(video[0].govde.prompt, /walk and twirl/);
+  assert.match(video[0].govde.prompt, /Setting and atmosphere: city street golden hour\. Strong first second: she is walking and turns to face the camera\. The camera slowly orbits around her[\s\S]*close-up of the neckline\/collar and stitching[\s\S]*"VOLONTE" and directly below it the model code "3557"[\s\S]*no price/);
+  assert.match(video[1].govde.prompt, /model code "3601"/);
   assert.ok(o.g.some((x) => /🎞 3557 \(video karesi\)/.test(x.govde.caption || "")));
 });
 
@@ -339,4 +331,102 @@ test("dürüstlük: kart gitmediyse araç sonucu 'GÖNDERİLMEDİ' der; araçtan
   await yazi(o, MURAT, "büyük seri yüzünü koyulaştır");
   assert.match(o.claude.at(-1).messages.at(-1).content[0].content, /KART GÖNDERİLMEDİ/);
   assert.ok(o.claude[0].system[0].text.includes("araç sonucunu görmeden \"gönderdim / kaydettim / başladım / hazırladım\" ASLA deme"));
+});
+
+// ---------- 3627 eksikleri (3 Kasım): Patron'un ürün fotoğrafları, dosya, renk, sahne ayarları, kapak + şablon, örnek video ----------
+const SECIM_ROLLU = () => JSON.stringify({ yuzler: { kucuk: { ad: "2 numaralı siyahi kız", fileId: "K", anahtar: "a".repeat(32) }, buyuk: { ad: "3 numaralı dolgun kız", fileId: "B", anahtar: "c".repeat(32) } }, ortamlar: [{ ...ORTAMLAR3[0], rol: "kampanya" }, { ...ORTAMLAR3[1], rol: "katalog" }, { ...ORTAMLAR3[2], rol: "video" }], arac: "veo" });
+const fotoMesaj = (o, { caption, grup, mid, dosya = false, tur = "image/jpeg", kimden = MURAT }) => guncelleme({ message: { message_id: mid, date: 1793700000 + mid, chat: { id: kimden, type: "private" }, from: { id: kimden, first_name: "X" }, ...(caption ? { caption } : {}), ...(grup ? { media_group_id: grup } : {}), ...(dosya ? { document: { file_id: `D${mid}`, mime_type: tur } } : { photo: [{ file_id: "k" }, { file_id: `P${mid}` }] }) } }, o.env);
+
+test("fotoğraf yazısı: kod, rol (ön/arka/detay), renk", () => {
+  assert.deepEqual(fotoYazisi("3627 Kırmızı ÖN"), { kod: "3627", rol: "on", renk: "kırmızı" });
+  assert.deepEqual(fotoYazisi("3627 arka"), { kod: "3627", rol: "arka", renk: null });
+  assert.deepEqual(fotoYazisi("3627 yaka detayı beyaz"), { kod: "3627", rol: "detay", renk: "beyaz" });
+  assert.deepEqual(fotoSirala([{ anahtar: "x", rol: "detay" }, { anahtar: "y", rol: "arka" }, "z"]).map((x) => [x.anahtar, x.rol]), [["z", "on"], ["y", "arka"], ["x", "detay"]]);
+});
+
+test("Patron'un ürün fotoğrafları: albüm (yazı ilk fotoğrafta; sıra karışık gelse de) 1. ön 2. arka, renk; 'dosya olarak' desteklenir; HEIC reddedilir; eski deneme akışına düşmez", async () => {
+  const o = uretimOrtami();
+  await fotoMesaj(o, { grup: "G1", mid: 11, dosya: true, tur: "image/png" }); // yazısız ikinci fotoğraf önce geldi → bekler, cevap yok
+  assert.equal(o.g.filter((x) => x.metod === "sendMessage").length, 0);
+  await fotoMesaj(o, { caption: "3627 kırmızı", grup: "G1", mid: 10 });
+  const l = fotoSirala(JSON.parse(o.depo.get("pelin:urunfoto:3627")));
+  assert.deepEqual(l.map((x) => [x.rol, x.renk, x.dosya]), [["on", "kırmızı", false], ["arka", "kırmızı", true]]);
+  const cevap = o.g.filter((x) => x.metod === "sendMessage");
+  assert.equal(cevap.length, 1);
+  assert.match(cevap[0].govde.text, /✅ 3627 kırmızı ürün fotoğrafı alındı .*Kayıtlı: ön, arka\. Üretimde siteden önce bunlar kullanılır/);
+  assert.ok(!o.g.some((x) => /denemede|askı|kumaş fotoğrafı/.test(x.govde.text || "")));
+  await fotoMesaj(o, { grup: "G1", mid: 12 }); // albümün 3. fotoğrafı → detay
+  assert.deepEqual(fotoSirala(JSON.parse(o.depo.get("pelin:urunfoto:3627"))).map((x) => x.rol), ["on", "arka", "detay"]);
+  await fotoMesaj(o, { caption: "3630", mid: 20, dosya: true, tur: "image/heic" });
+  assert.match(o.g.at(-1).govde.text, /image\/heic\) kullanılamıyor.*JPEG\/PNG/);
+  await fotoMesaj(o, { caption: "güzel", mid: 21, kimden: HEMRA });
+  assert.match(o.g.at(-1).govde.text, /yazısına model kodunu yazın/);
+  await yazi(o, MURAT, "/fotolar 3627");
+  assert.deepEqual(o.g.at(-1).govde.media.map((x) => x.caption), ["1. ön · kırmızı", "2. arka · kırmızı", "3. detay · kırmızı"]);
+});
+
+test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmızı + sahne ayarları + son kare yazısı kontrolü + kapak + şablon; şablonla yeni model", async () => {
+  const o = uretimOrtami();
+  o.site.push({ kod: "3627", bedenler: "38-40-42-44-46-48-50", fotolar: ["galeri/3627/1.jpg"] }, { kod: "3630", bedenler: "38-40-42-44", fotolar: ["galeri/3630/1.jpg"] });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  await fotoMesaj(o, { caption: "3627 ön", mid: 10, dosya: true });
+  await fotoMesaj(o, { caption: "3627 arka", mid: 11, dosya: true });
+  const kayit = JSON.parse(o.depo.get("pelin:urunfoto:3627"));
+  const on = kayit.find((x) => x.rol === "on").anahtar, arka = kayit.find((x) => x.rol === "arka").anahtar;
+  await yazi(o, MURAT, "/uret 3627 kırmızı");
+  const kart = o.g.at(-1).govde;
+  assert.match(kart.text, /Renk: 3627 sadece kırmızı/);
+  assert.match(kart.text, /Ürün fotoğrafı: 3627 sizin gönderdiğiniz \(ön, arka\)/);
+  assert.match(kart.text, /Sahne: yürürken kameraya dönüş · kamera etrafında dönüş · kumaş hareketi · yaka\/dikiş yakın kare · son karede küçük VOLONTE \+ kod \(fiyat yok\) · kapak fotoğrafı videodan/);
+  await bas(o, MURAT, `pu:o:${kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2]}`);
+  o.yaziCevap.fn = (() => { let n = 0; return () => (++n === 1 ? { volonte_var: true, kod_okunan: "3672", baska_yazi_var: false, fiyat_var: false } : { volonte_var: true, kod_okunan: "3627", baska_yazi_var: false, fiyat_var: false }); })();
+  o.claude.cevaplar = Array.from({ length: 6 }, () => claudeJsonCevap(GECTI));
+  await cronlar(o, 16);
+  const edit = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit");
+  assert.deepEqual(edit[0].govde.image_urls, ["https://pelin.test/dosya/" + "a".repeat(32), `https://pelin.test/dosya/${on}`, `https://pelin.test/dosya/${arka}`]); // site değil, Patron'un ön + arka
+  assert.match(edit[0].govde.prompt, /image 2 = FRONT view, image 3 = BACK view[\s\S]*red \(kırmızı\) color variant ONLY/);
+  assert.match(edit[1].govde.prompt, /city street golden hour[\s\S]*red \(kırmızı\) color variant ONLY/);
+  const kontrol = o.claude.filter((x) => JSON.stringify(x.messages).includes("İSTENEN RENK: kırmızı"));
+  assert.ok(kontrol.length >= 3);
+  const video = o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/lite/image-to-video");
+  assert.equal(video.length, 2); // ilk videonun son karesinde kod yanlış okundu (3672) → otomatik yeniden
+  assert.match(video[0].govde.prompt, /red \(kırmızı\) color variant ONLY[\s\S]*orbits[\s\S]*"VOLONTE"[\s\S]*"3627"/);
+  const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]);
+  assert.ok(is.gecmis.some(([, t]) => /video 1: geçmedi \(.*son karedeki kod yanlış \(okunan: "3672"/.test(t)));
+  assert.ok(o.g.some((x) => x.metod === "sendPhoto" && /🖼 3627 kapak \(videodan\)/.test(x.govde.caption || "")));
+  const on2 = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
+  assert.match(on2.govde.text, /son kare yazısı ✅[\s\S]*Ürün fotoğrafı: sizin gönderdiğiniz · renk kırmızı/);
+  const dugmeler = on2.govde.reply_markup.inline_keyboard.flat();
+  assert.deepEqual(dugmeler.map((x) => x.text), ["✅ Onayla", "🔄 Yeniden üret", "❌ İptal", "💾 Bu ayarları şablon olarak kaydet"]);
+  await bas(o, MURAT, dugmeler[3].callback_data);
+  const sb = JSON.parse(o.depo.get("pelin:sablonlar"))["3627"];
+  assert.equal(sb.katalogOrtamId, "2");
+  assert.equal(sb.videoOrtamId, "3");
+  assert.equal(sb.sahne.sonYazi, true);
+  assert.match(o.g.at(-1).govde.text, /"3627 şablonu" kaydedildi/);
+  await bas(o, MURAT, dugmeler[0].callback_data);
+  assert.equal(JSON.parse(o.depo.get("venom:pelinTeslim"))[0].kapak, is.kapak || JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]).kapak);
+  // şablonla yeni model
+  await yazi(o, MURAT, "/uret 3630 şablon:3627");
+  assert.match(o.g.at(-1).govde.text, /şablon: 3627/);
+});
+
+test("örnek video: Patron'un dosyası ve 'sitedeki 3627 videosu gibi' → kareler → tarif", async () => {
+  const o = uretimOrtami();
+  o.site.push({ kod: "3627", bedenler: "38-44", fotolar: [], videolar: ["selin/3627/0"] });
+  await yazi(o, MURAT, "sitedeki 3627 videosu gibi olsun");
+  const kare = o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame");
+  assert.equal(kare.length, 3);
+  assert.equal(kare[0].govde.video_url, "https://volonte-selin.volonte.workers.dev/v2/3627/0");
+  await guncelleme({ message: { message_id: 5, date: 1, chat: { id: MURAT, type: "private" }, from: { id: MURAT, first_name: "M" }, document: { file_id: "VD", mime_type: "video/mp4", file_size: 5000 } } }, o.env);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame").length, 6);
+  assert.match(o.g.at(-1).govde.text, /Örneği inceliyorum/);
+});
+
+test("eski akışa düşmüş fotoğraflar tek seferlik aktarılır (venom:pelinUrunFoto)", async () => {
+  const o = uretimOrtami();
+  o.depo.set("venom:pelinUrunFoto", JSON.stringify({ kod: "3627", fotolar: [{ anahtar: "1".repeat(32), rol: "on" }, { anahtar: "2".repeat(32), rol: "arka" }] }));
+  await cronlar(o, 1);
+  assert.deepEqual(fotoSirala(JSON.parse(o.depo.get("pelin:urunfoto:3627"))).map((x) => [x.anahtar[0], x.rol]), [["1", "on"], ["2", "arka"]]);
+  assert.ok(!o.depo.has("venom:pelinUrunFoto"));
 });
