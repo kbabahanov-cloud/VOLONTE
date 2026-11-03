@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3399",
+  "baslik": "Leaf Print Cape Top Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sheer off-shoulder cape top with high-waisted wide-leg trousers. The flowing draped sleeves and asymmetric hem carry a bold blue leaf print, echoed along the trouser hems against a deep purple sheen. Made for celebrations, dinners and refined daytime events. Produced in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un haut cape transparent à épaule dénudée et un pantalon large taille haute. Les manches drapées et l'ourlet asymétrique portent un motif de feuilles bleues, repris au bas du pantalon sur un violet profond et lustré. Idéal pour les cérémonies, dîners et sorties élégantes. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa capa transparente de ombro caído com calça de cintura alta e pernas largas. As mangas fluidas e a barra assimétrica trazem um estampado de folhas azuis, repetido na barra da calça sobre um roxo profundo e acetinado. Perfeito para celebrações, jantares e eventos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3399/1.jpg",
+   "galeri/3399/2.jpg",
+   "galeri/3399/3.jpg",
+   "galeri/3399/4.jpg",
+   "galeri/3399/5.jpg",
+   "galeri/3399/6.jpg"
+  ],
+  "videolar": [
+   "selin/3399/0"
+  ],
+  "fiyat": 36,
+  "gizli": false,
+  "eklenme": "2026-11-03"
+ },
+ {
   "kod": "3398",
   "baslik": "Satin Kimono Trouser Set",
   "kategori": "sets",
