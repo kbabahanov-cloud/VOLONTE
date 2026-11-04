@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>VOLONTE — Defile</title>
+<meta name="description" content="VOLONTE defile sahnesi — önizleme">
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --siyah: #050505;
+    --altin: #d4af5a;
+    --altin-acik: #f1dc9c;
+    --altin-koyu: #8d6b2a;
+    --krem: #f3ead8;
+    --figur-h: min(62vh, 760px);
+    --zemin: 20vh;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--siyah); color: var(--krem); font-family: "Cormorant Garamond", "Times New Roman", Georgia, serif; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+  body { position: relative; }
+
+  /* ---------- Sahne ışığı ---------- */
+  .isik {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(60vw 70vh at 50% 42%, rgba(212,175,90,.16) 0%, rgba(212,175,90,.05) 35%, transparent 62%),
+      radial-gradient(120vw 40vh at 50% 100%, rgba(212,175,90,.10) 0%, transparent 60%),
+      linear-gradient(180deg, #000 0%, #060606 55%, #0b0a08 100%);
+  }
+  .isik::after { /* tavan spotu */
+    content: ""; position: absolute; left: 50%; top: -10vh; width: 70vw; height: 80vh; transform: translateX(-50%);
+    background: radial-gradient(closest-side, rgba(255,240,200,.09), transparent 70%);
+    animation: nefes 9s ease-in-out infinite;
+  }
+  @keyframes nefes { 0%,100% { opacity: .85; } 50% { opacity: 1; } }
+
+  /* ---------- Üst yazı ---------- */
+  header {
+    position: fixed; top: max(14px, env(safe-area-inset-top)); left: 0; right: 0; z-index: 5; text-align: center; pointer-events: none;
+  }
+  .marka { font-size: clamp(26px, 5vw, 46px); letter-spacing: .42em; padding-left: .42em; font-weight: 400; color: var(--altin);
+    text-shadow: 0 0 24px rgba(212,175,90,.35); }
+  .slogan { margin-top: 2px; font-size: clamp(15px, 2.3vw, 21px); letter-spacing: .14em; font-style: italic; font-weight: 300; color: rgba(243,234,216,.78); }
+
+  /* ---------- Podyum ---------- */
+  .podyum {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--zemin); z-index: 1; pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(212,175,90,.22) 0%, rgba(212,175,90,.04) 10%, rgba(0,0,0,0) 60%),
+      linear-gradient(180deg, #0a0906, #000);
+  }
+  .podyum::before { /* ıslak parıltı çizgisi */
+    content: ""; position: absolute; left: 10%; right: 10%; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(241,220,156,.75), transparent);
+    filter: blur(.4px);
+  }
+  .podyum::after { /* zemin üstünde kayan ışık */
+    content: ""; position: absolute; left: -30%; top: 0; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(241,220,156,.06), transparent);
+    animation: parilti 11s linear infinite;
+  }
+  @keyframes parilti { from { transform: translateX(0); } to { transform: translateX(270%); } }
+
+  /* ---------- Mankenler ---------- */
+  .sahne { position: fixed; inset: 0; z-index: 2; }
+  .ray {
+    position: absolute; left: 0; right: 0; bottom: var(--zemin); height: var(--figur-h);
+    display: flex; align-items: flex-end; justify-content: center; gap: clamp(0px, 1.5vw, 24px);
+    will-change: transform; transition: transform .9s cubic-bezier(.22,.8,.26,1);
+  }
+  .figur {
+    position: relative; flex: 0 0 auto; height: 100%; cursor: pointer; outline: none;
+    transform-origin: 50% 100%;
+    transition: transform .9s cubic-bezier(.22,.8,.26,1), filter .9s ease, opacity .9s ease;
+    animation: sallan 7s ease-in-out infinite;
+  }
+  .figur:nth-child(2n) { animation-duration: 8.5s; animation-delay: -2s; }
+  .figur:nth-child(3n) { animation-duration: 9.5s; animation-delay: -4s; }
+  @keyframes sallan { 0%,100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+  .figur img { height: 100%; width: auto; display: block; user-select: none; -webkit-user-drag: none; pointer-events: none;
+    filter: drop-shadow(0 18px 22px rgba(0,0,0,.55)); }
+  .figur .yansima {
+    position: absolute; left: 0; right: 0; top: 100%; height: 42%; overflow: hidden; pointer-events: none; opacity: .5;
+    transform: scaleY(-1) translateY(-100%); transform-origin: top;
+  }
+  .figur .yansima img { height: calc(100% / .42); filter: blur(3px) brightness(.9) saturate(.9); }
+  .figur .yansima::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(5,5,5,1) 0%, rgba(5,5,5,.55) 35%, rgba(5,5,5,.1) 100%); }
+  /* uzaklık sınıfları: JS verir */
+  .figur[data-u="0"] { transform: scale(1); filter: blur(0) brightness(1.06); opacity: 1; z-index: 4; }
+  .figur[data-u="1"] { transform: scale(.86); filter: blur(1px) brightness(.72); opacity: .95; z-index: 3; }
+  .figur[data-u="2"] { transform: scale(.74); filter: blur(2.2px) brightness(.5); opacity: .85; z-index: 2; }
+  .figur[data-u="3"] { transform: scale(.64); filter: blur(3.2px) brightness(.36); opacity: .7; z-index: 1; }
+  .figur[data-u="4"] { transform: scale(.56); filter: blur(4px) brightness(.26); opacity: .5; z-index: 0; }
+
+  /* ---------- Kod etiketi ---------- */
+  .etiket {
+    position: fixed; left: 50%; bottom: calc(var(--zemin) + var(--figur-h) * .1); transform: translate(-50%, 10px);
+    z-index: 6; opacity: 0; pointer-events: none; transition: opacity .5s ease, transform .5s ease; text-align: center;
+  }
+  .etiket.acik { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .etiket .kod {
+    display: inline-block; padding: 9px 20px; border: 1px solid rgba(212,175,90,.65); border-radius: 999px;
+    background: rgba(5,5,5,.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    font-size: clamp(16px, 2.6vw, 20px); letter-spacing: .22em; color: var(--altin-acik);
+  }
+  .etiket a { display: block; margin-top: 8px; color: rgba(243,234,216,.8); font-size: 15px; letter-spacing: .1em; text-decoration: none; border-bottom: 1px solid rgba(243,234,216,.3); width: max-content; margin-inline: auto; }
+
+  /* ---------- Alt düğme ---------- */
+  footer { position: fixed; left: 0; right: 0; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 6; text-align: center; }
+  .kesfet {
+    display: inline-block; padding: 13px 30px; border: 1px solid var(--altin); color: var(--altin-acik); text-decoration: none;
+    font-size: clamp(15px, 2.4vw, 19px); letter-spacing: .26em; padding-left: calc(30px + .26em);
+    background: rgba(5,5,5,.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    transition: background .3s, color .3s, box-shadow .3s;
+  }
+  .kesfet:hover, .kesfet:focus-visible { background: var(--altin); color: #1a1407; box-shadow: 0 0 30px rgba(212,175,90,.35); }
+  .ipucu { margin-top: 10px; font-size: 13px; letter-spacing: .12em; color: rgba(243,234,216,.42); font-style: italic; }
+
+  /* ---------- Yükleniyor ---------- */
+  .perde { position: fixed; inset: 0; z-index: 9; background: #000; display: grid; place-items: center; transition: opacity 1.2s ease; }
+  .perde.git { opacity: 0; pointer-events: none; }
+  .perde span { color: var(--altin); letter-spacing: .5em; padding-left: .5em; font-size: 28px; animation: nefes 2s ease-in-out infinite; }
+
+  /* Telefon: figürler daha büyük, kaydırılabilir */
+  @media (max-width: 720px) {
+    :root { --figur-h: min(44vh, 520px); --zemin: 24vh; }
+    .ray { gap: 0; }
+    .figur { margin-inline: -3vw; } /* arkadakiler ortadakinin arkasına girer (perspektif) */
+    .figur[data-u="1"] { transform: scale(.74) translateX(0); filter: blur(1.2px) brightness(.62); }
+    .figur[data-u="2"] { transform: scale(.6); filter: blur(2.4px) brightness(.42); }
+    .figur[data-u="3"], .figur[data-u="4"] { transform: scale(.5); opacity: .4; }
+    .etiket { bottom: calc(var(--zemin) + 6px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .figur, .isik::after, .podyum::after, .perde span { animation: none !important; }
+    .ray, .figur { transition-duration: .01s; }
+  }
+</style>
+</head>
+<body>
+  <div class="isik" aria-hidden="true"></div>
+  <header>
+    <div class="marka">VOLONTE</div>
+    <div class="slogan">Live your life</div>
+  </header>
+
+  <div class="sahne" aria-label="Defile sahnesi">
+    <div class="ray" id="ray"></div>
+  </div>
+  <div class="podyum" aria-hidden="true"></div>
+
+  <div class="etiket" id="etiket">
+    <div class="kod" id="kod"></div>
+    <a id="modelLink" href="#" target="_blank" rel="noopener">Modeli gör</a>
+  </div>
+
+  <footer>
+    <a class="kesfet" href="https://www.wearvolonte.com" target="_blank" rel="noopener">Koleksiyonu keşfet</a>
+    <div class="ipucu">Bir mankene dokunun</div>
+  </footer>
+
+  <div class="perde" id="perde"><span>VOLONTE</span></div>
+
+<script>
+(function () {
+  // Mankenler: sitedeki gerçek fotoğraflarımız (arka plan ayrıldı). Sıra = sahnedeki yer; ortadaki başlangıçta öne çıkar.
+  const MANKENLER = [
+    { kod: "3475", dosya: "3475_4" },
+    { kod: "3567", dosya: "3567_6" },
+    { kod: "3608", dosya: "3608_1" },
+    { kod: "3615", dosya: "3615_4" },
+    { kod: "3622", dosya: "3622_2" },
+    { kod: "3618", dosya: "3618_1" },
+    { kod: "3630", dosya: "3630_2" },
+  ];
+  const SITE = "https://www.wearvolonte.com";
+  const ray = document.getElementById("ray");
+  const etiket = document.getElementById("etiket");
+  const kodEl = document.getElementById("kod");
+  const link = document.getElementById("modelLink");
+  let odak = 3; // ortadaki
+  let acik = false;
+
+  for (const [i, m] of MANKENLER.entries()) {
+    const f = document.createElement("div");
+    f.className = "figur"; f.dataset.i = i; f.setAttribute("role", "button"); f.setAttribute("tabindex", "0");
+    f.setAttribute("aria-label", `Model ${m.kod}`);
+    f.innerHTML = `<img src="/g/${m.dosya}.webp" alt="VOLONTE model ${m.kod}" decoding="async" fetchpriority="${i === 3 ? "high" : "auto"}"><div class="yansima" aria-hidden="true"><img src="/g/${m.dosya}.webp" alt=""></div>`;
+    f.addEventListener("click", () => sec(i, true));
+    f.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sec(i, true); } });
+    ray.appendChild(f);
+  }
+  const figurler = [...ray.children];
+
+  function yerlestir() {
+    for (const [i, f] of figurler.entries()) f.dataset.u = String(Math.min(4, Math.abs(i - odak)));
+    // odaktaki figürü ekranın ortasına getir
+    const rayKutu = ray.getBoundingClientRect();
+    const f = figurler[odak].getBoundingClientRect();
+    const mevcut = parseFloat((ray.style.transform.match(/-?[\d.]+/) || [0])[0]);
+    const kayma = mevcut + (window.innerWidth / 2 - (f.left + f.width / 2));
+    ray.style.transform = `translateX(${kayma}px)`;
+    void rayKutu;
+  }
+  function sec(i, goster) {
+    const ayni = i === odak;
+    odak = i;
+    yerlestir();
+    const m = MANKENLER[i];
+    kodEl.textContent = `MODEL ${m.kod}`;
+    link.href = `${SITE}/#model/${m.kod}`;
+    acik = goster ? (ayni ? !acik : true) : acik;
+    etiket.classList.toggle("acik", acik);
+  }
+  // Kaydırma (telefon): parmakla sola/sağa
+  let bas = null;
+  document.addEventListener("touchstart", (e) => { bas = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener("touchend", (e) => {
+    if (bas == null) return;
+    const fark = e.changedTouches[0].clientX - bas; bas = null;
+    if (Math.abs(fark) < 40) return;
+    sec(Math.max(0, Math.min(MANKENLER.length - 1, odak + (fark < 0 ? 1 : -1))), false);
+  }, { passive: true });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") sec(Math.min(MANKENLER.length - 1, odak + 1), false);
+    if (e.key === "ArrowLeft") sec(Math.max(0, odak - 1), false);
+  });
+  addEventListener("resize", yerlestir);
+
+  // Görseller gelince perde kalkar (en geç 6 sn)
+  const resimler = figurler.map((f) => f.querySelector("img"));
+  const kalk = () => { yerlestir(); requestAnimationFrame(() => { yerlestir(); document.getElementById("perde").classList.add("git"); }); };
+  Promise.all(resimler.map((im) => im.complete ? Promise.resolve() : new Promise((r) => { im.onload = r; im.onerror = r; }))).then(kalk);
+  setTimeout(kalk, 6000);
+  sec(odak, false);
+})();
+</script>
+</body>
+</html>
