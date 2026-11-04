@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3627",
+  "baslik": "Lace Waist Chiffon Maxi Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A flowing maxi dress in sheer, softly pleated fabric with a high draped neckline and a gathered bodice over a sweetheart lining. Full balloon sleeves finish in scalloped lace cuffs, echoed by a sequinned lace panel at the waist. Made for weddings, celebrations and evening events. Produced in Istanbul with careful workmanship.",
+   "fr": "Une robe longue fluide en tissu voile finement plissé, avec un col montant drapé et un corsage froncé sur une doublure cœur. Les manches bouffantes se terminent par des poignets en dentelle festonnée, assortis à la taille brodée de dentelle pailletée. Idéale pour les mariages, les cérémonies et les soirées. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido longo e fluido em tecido translúcido levemente plissado, com gola alta drapeada e corpete franzido sobre forro em decote coração. As mangas balão terminam em punhos de renda recortada, combinando com o painel de renda com lantejoulas na cintura. Perfeito para casamentos, festas e eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3627/1.jpg",
+   "galeri/3627/2.jpg",
+   "galeri/3627/3.jpg",
+   "galeri/3627/4.jpg",
+   "galeri/3627/5.jpg",
+   "galeri/3627/6.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3229",
   "baslik": "Pinstripe Piped Trouser Set",
   "kategori": "sets",
@@ -1229,29 +1251,6 @@
   "videolar": [
    "selin/3494/0",
    "selin/3494/1"
-  ],
-  "gizli": false,
-  "eklenme": "2026-11-02"
- },
- {
-  "kod": "3627",
-  "baslik": "Lace Waist Chiffon Maxi Dress",
-  "kategori": "evening",
-  "aciklama": {
-   "en": "A long chiffon dress with a high gathered neckline, sheer balloon sleeves and a softly pleated, flowing skirt. A sequined lace panel defines the waist, matched by lace cuffs with button closures, while a keyhole opening adds a quiet detail at the back. Made for evening events, ceremonies and special occasions. Produced in Istanbul with careful workmanship.",
-   "fr": "Robe longue en mousseline à col montant froncé, manches ballon transparentes et jupe plissée fluide. Un empiècement en dentelle pailletée souligne la taille, rappelé par des poignets en dentelle boutonnés, tandis qu'une ouverture goutte d'eau orne discrètement le dos. Idéale pour les soirées, cérémonies et grandes occasions. Fabriquée à Istanbul avec un savoir-faire soigné.",
-   "pt": "Vestido longo em chiffon com gola alta franzida, mangas balão transparentes e saia plissada e fluida. Um painel de renda com lantejoulas marca a cintura, em harmonia com os punhos de renda abotoados, e uma abertura em gota dá um toque discreto nas costas. Pensado para noites, cerimónias e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
-  },
-  "bedenler": "38-40-42-44-46-48-50",
-  "fotolar": [
-   "galeri/3627/1.jpg",
-   "galeri/3627/2.jpg",
-   "galeri/3627/3.jpg",
-   "galeri/3627/4.jpg",
-   "galeri/3627/5.jpg"
-  ],
-  "videolar": [
-   "selin/3627/0"
   ],
   "gizli": false,
   "eklenme": "2026-11-02"
