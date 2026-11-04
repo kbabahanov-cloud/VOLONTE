@@ -1,5 +1,33 @@
 [
  {
+  "kod": "3222",
+  "baslik": "Fringe Trim Belted Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece suit pairing a belted wrap blazer with wide-leg trousers, in black or white. The blazer features notched lapels, beaded fringe trim across the chest and belt ends, and voluminous sleeves gathered at the cuff. Suited to office days, events and evening occasions with heels. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une veste portefeuille ceinturée à un pantalon large, en noir ou en blanc. La veste se distingue par son col cranté, ses franges perlées sur le buste et au bout de la ceinture, et ses manches amples resserrées aux poignets. Idéal au bureau, pour les événements ou le soir avec des talons. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina um blazer traspassado com cinto e calça de perna larga, em preto ou branco. O blazer tem lapela entalhada, franjas com contas no peito e nas pontas do cinto, e mangas volumosas franzidas no punho. Ideal para o escritório, eventos e ocasiões à noite com salto. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3222/1.jpg",
+   "galeri/3222/2.jpg",
+   "galeri/3222/3.jpg",
+   "galeri/3222/4.jpg",
+   "galeri/3222/5.jpg",
+   "galeri/3222/6.jpg",
+   "galeri/3222/7.jpg",
+   "galeri/3222/8.jpg",
+   "galeri/3222/9.jpg"
+  ],
+  "videolar": [
+   "selin/3222/0",
+   "selin/3222/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3226",
   "baslik": "Pinstripe Vest Trouser Set",
   "kategori": "sets",
