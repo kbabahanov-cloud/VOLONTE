@@ -1,5 +1,34 @@
 [
  {
+  "kod": "3162",
+  "baslik": "Eyelet Crop Top Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece eyelet set pairing a short-sleeved cropped top with a high-waisted, flared maxi skirt. The top has a round neckline, a buttoned placket and flap chest pockets, while the skirt repeats the look with a full button-front placket and flap pockets. Easy to wear for daytime events, gatherings and warm-weather occasions. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces en broderie anglaise, associant un haut court à manches courtes et une jupe longue évasée taille haute. Le haut se distingue par son col rond, sa patte boutonnée et ses poches à rabat, que l'on retrouve sur la jupe boutonnée devant. Idéal pour les sorties de journée, les réceptions et les beaux jours. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Conjunto de duas peças em tecido laise, com top cropped de manga curta e saia longa evasê de cintura alta. O top traz decote redondo, abotoamento frontal e bolsos com lapela, detalhes repetidos na saia abotoada à frente. Perfeito para eventos diurnos, encontros e dias quentes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3162/1.jpg",
+   "galeri/3162/2.jpg",
+   "galeri/3162/3.jpg",
+   "galeri/3162/4.jpg",
+   "galeri/3162/5.jpg",
+   "galeri/3162/6.jpg",
+   "galeri/3162/7.jpg",
+   "galeri/3162/8.jpg",
+   "galeri/3162/9.jpg",
+   "galeri/3162/10.jpg"
+  ],
+  "videolar": [
+   "selin/3162/0",
+   "selin/3162/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3634",
   "baslik": "Printed Satin Shirt Set",
   "kategori": "sets",
