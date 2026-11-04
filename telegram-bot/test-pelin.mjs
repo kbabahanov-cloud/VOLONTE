@@ -841,3 +841,93 @@ test("önizleme gönderimi kaydedilir; video adresten gitmezse belge olarak; 'bi
   assert.equal(yeni[0].arac, "kling4");
   assert.ok(o.g.some((x) => /Video aracı: Kling 4\.0 \(1080p\) \(modele özel\)[\s\S]*Video 6 sn — Kling 4\.0/.test(x.govde.text || "")));
 });
+
+// ---------- Higgsfield (4 Kasım): anahtar ayırma, 3 araç yan yana, fal yedeği, karşılaştırma kartı, anahtar hatırlatması ----------
+import { hfYetki, hfVar, hfHatirlat } from "./pelin.js";
+test("Higgsfield anahtarı: tek secret 'ID:SECRET' ya da iki parça (boşluk/satır/virgül) kendiliğinden ayrılır", () => {
+  assert.equal(hfYetki({ HF_API_KEY: " abc:def \n" }), "abc:def");
+  assert.equal(hfYetki({ HF_API_KEY: "abc def" }), "abc:def");
+  assert.equal(hfYetki({ HF_API_KEY: "abc\ndef" }), "abc:def");
+  assert.equal(hfYetki({ HF_API_KEY: "Key abc, def" }), "abc:def");
+  assert.equal(hfYetki({ HF_API_KEY_ID: "a", HF_API_KEY_SECRET: "b" }), "a:b");
+  assert.equal(hfVar({ HF_API_KEY: "tekparca" }), false);
+  assert.equal(hfVar({}), false);
+});
+
+test("Higgsfield: onaylı fotoğraf + onaylı senaryo → Kling 3.0 4K, Seedance 2.5, Kling 4.0 yan yana; maliyet kartı; biri hata verirse fal yedeği; hepsi bitince 🏆 kartı", async () => {
+  const o = uretimOrtami();
+  o.env.HF_API_KEY = "kid:ksecret";
+  const hf = [];
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => {
+    const u = String(url);
+    if (u.startsWith("https://api.higgsfield.ai/requests/")) { const id = u.split("/")[4]; return Response.json({ status: "completed", request_id: id, video: { url: `https://hf/${id}.mp4` } }); }
+    if (u.startsWith("https://api.higgsfield.ai/")) {
+      const yol = u.slice("https://api.higgsfield.ai/".length);
+      hf.push({ yol, govde: JSON.parse(istek.body), yetki: istek.headers.authorization });
+      if (yol.startsWith("bytedance/")) return Response.json({ detail: "Insufficient balance" }, { status: 403 });
+      const id = `h${hf.length}`;
+      return Response.json({ status: "queued", request_id: id, status_url: `https://api.higgsfield.ai/requests/${id}/status` });
+    }
+    return asil(url, istek);
+  };
+  o.falSonuc["bytedance/seedance-2.0/image-to-video"] = (n) => ({ video: { url: `https://vid/s${n}.mp4` } });
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.depo.set("pelin:is:3627-foto", JSON.stringify({ id: "3627-foto", kod: "3627", seri: "buyuk", renk: "koyu bordo", boy: { boy: "bilek" }, durum: "onay", foto: "https://img/onayli.jpg", urunler: ["https://u/on.jpg"], ortam: { id: "2", ad: "Siyah Altın Lüks", sahne: "black gold studio" }, sahneAyar: { ...SAHNE_VARSAYILAN }, fotoDeneme: 1, videoDeneme: 0, maliyet: 0, gecmis: [], zaman: 1 }));
+  o.depo.set("pelin:is:3627-kling", JSON.stringify({ id: "3627-kling", kod: "3627", durum: "onay", senaryo: { tr: "0-2 sn: iki yavaş adım", hareketEn: "She walks two slow elegant steps toward the camera and glances over her shoulder." }, gecmis: [] }));
+  o.depo.set("pelinboy:3627", JSON.stringify({ boy: "bilek", arac: "kling4", aracYasak: ["veo31", "veofast", "veo"] }));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-foto", islem: "katalogdan", araclar: ["hf_kling3", "hf_seedance25", "hf_kling4"], senaryoIs: "3627-kling" }));
+  await cronlar(o, 1);
+  const kart = o.g.filter((x) => x.govde && x.govde.text && x.govde.reply_markup).at(-1).govde;
+  assert.match(kart.text, /daha önce ONAYLADIĞINIZ senaryo, aynen[\s\S]*0-2 sn: iki yavaş adım/);
+  assert.match(kart.text, /• Kling 3\.0 4K \(Higgsfield\): 6 × 0,21 \$ = 1,26 \$\n• Seedance 2\.5 1080p \(Higgsfield\): 6 × 1,14 \$ = en fazla 6,82 \$ \(indirim öncesi[\s\S]*• Kling 4\.0 1080p \(Higgsfield\): 6 × 0,20 \$ = 1,20 \$/);
+  assert.match(kart.text, /Higgsfield'den düşecek: en fazla 9,28 \$[\s\S]*TOPLAM: en fazla/);
+  assert.ok(!o.claude.some((x) => JSON.stringify(x).includes("Nora'sın")), "onaylı senaryo varken Nora yeniden yazmaz");
+  assert.equal(hf.length, 0); // onaysız hiçbir şey gitmez
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
+  o.yaziCevap.kod = "3627";
+  o.claude.cevaplar = Array.from({ length: 6 }, () => K2());
+  await cronlar(o, 12);
+  globalThis.fetch = asil;
+  assert.deepEqual(hf.map((x) => x.yol).sort(), ["bytedance/seedance-2.5/image-to-video", "kling-video/v3.0/4k/image-to-video", "kling-video/v4.0/image-to-video"]);
+  assert.ok(hf.every((x) => x.yetki === "Key kid:ksecret" && x.govde.image_url === "https://img/onayli.jpg" && x.govde.duration === 6));
+  assert.match(hf[0].govde.prompt, /Motion \(approved scenario\): She walks two slow elegant steps[\s\S]*Avoid: .*spinning/);
+  assert.equal(hf.find((x) => x.yol.startsWith("bytedance")).govde.resolution, "1080p");
+  assert.equal(o.falIstek.filter((x) => x.uc === "bytedance/seedance-2.0/image-to-video").length, 1); // Seedance 2.5 bakiye → fal yedeği
+  const onizleme = o.g.filter((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
+  assert.equal(onizleme.length, 3);
+  assert.ok(onizleme.some((x) => /Seedance 2\.5 1080p \(Higgsfield\) çalışmadı \(Higgsfield bakiyesi yetersiz\)/.test(x.govde.text)));
+  assert.ok(onizleme.every((x) => !x.govde.reply_markup.inline_keyboard.flat().some((d) => /ile de dene/.test(d.text))));
+  const ozet = o.g.filter((x) => /🏁 3627 KARŞILAŞTIRMA/.test(x.govde.text || ""));
+  assert.equal(ozet.length, 1);
+  assert.match(ozet[0].govde.text, /A\) Kling 3\.0 4K \(Higgsfield\)[\s\S]*B\) Seedance 2\.0 \(Higgsfield yerine fal yedeği\)[\s\S]*C\) Kling 4\.0 1080p \(Higgsfield\)/);
+  const d = ozet[0].govde.reply_markup.inline_keyboard.flat();
+  const k4 = d.find((x) => /Kling 4\.0 1080p/.test(x.text));
+  await bas(o, MURAT, k4.callback_data);
+  assert.equal(JSON.parse(o.depo.get("pelin:secim")).arac, "hf_kling4");
+  assert.equal(JSON.parse(o.depo.get("pelinboy:3627")).arac, "hf_kling4");
+  assert.match(o.g.at(-1).govde.text, /🏆 Kling 4\.0 1080p \(Higgsfield\) seçildi/);
+  await bas(o, MURAT, k4.callback_data);
+  assert.equal(JSON.parse(o.depo.get("pelin:aracKarsilastirma")).length, 1); // ikinci basış geçersiz
+  // harcama Higgsfield ayrı kayıtta
+  assert.ok(Number(o.depo.get(`pelin-hf:${ay}`)) > 0);
+});
+
+test("Higgsfield anahtarı: bitişten 5 gün önce bir kez, bitiş günü bir kez Patron'a hatırlatma", async () => {
+  const o = ortam();
+  o.depo.set("venom:hfAnahtar", JSON.stringify({ bitis: "2026-12-04", gonderilen: [] }));
+  const t = (s) => Math.floor(Date.parse(s) / 1000);
+  await hfHatirlat(o.env, t("2026-11-28T09:00:00+03:00"));
+  assert.equal(o.g.length, 0);
+  await hfHatirlat(o.env, t("2026-11-29T09:30:00+03:00")); // 10:00'dan önce
+  assert.equal(o.g.length, 0);
+  await hfHatirlat(o.env, t("2026-11-29T10:05:00+03:00"));
+  assert.match(o.g.at(-1).govde.text, /04\.12\.2026 tarihinde bitiyor \(5 gün kaldı\)/);
+  assert.equal(o.g.at(-1).govde.chat_id, String(MURAT));
+  await hfHatirlat(o.env, t("2026-11-30T11:00:00+03:00"));
+  assert.equal(o.g.length, 1);
+  await hfHatirlat(o.env, t("2026-12-04T10:30:00+03:00"));
+  assert.match(o.g.at(-1).govde.text, /süresi bugün \(04\.12\.2026\) doldu/);
+  await hfHatirlat(o.env, t("2026-12-05T10:30:00+03:00"));
+  assert.equal(o.g.length, 2);
+});

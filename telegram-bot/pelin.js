@@ -44,7 +44,14 @@ export const ARACLAR = {
   veo: { ad: "Google Veo 3.1 Lite", uc: "fal-ai/veo3.1/lite/image-to-video", saniye: 0.05 },
   kling: { ad: "Kling 3.0 Pro", uc: "fal-ai/kling-video/v3/pro/image-to-video", saniye: 0.112 },
   seedance: { ad: "Seedance 2.0", uc: "bytedance/seedance-2.0/image-to-video", saniye: 0.3024 },
+  // Higgsfield API (4 Kasım). Fiyatlar Higgsfield'in kendi tahmininden (POST /estimate, 6 sn, 9:16, indirimli): Kling 3.0 4K 1,26 $ →
+  // 0,21 $/sn; Kling 4.0 1080p 1,20 $ → 0,20 $/sn; Seedance 2.5 1080p tahmin vermiyor, fiyat açıklaması 1,1372 $/sn (indirim ÖNCESİ, üst sınır).
+  // yedek = Higgsfield çalışmazsa (anahtar yok/bitti, bakiye, hata) aynı kareyle kullanılacak fal.ai aracı.
+  hf_kling3: { ad: "Kling 3.0 4K (Higgsfield)", uc: "kling-video/v3.0/4k/image-to-video", saniye: 0.21, hf: true, yedek: "kling4k" },
+  hf_kling4: { ad: "Kling 4.0 1080p (Higgsfield)", uc: "kling-video/v4.0/image-to-video", saniye: 0.2, hf: true, yedek: "kling4" },
+  hf_seedance25: { ad: "Seedance 2.5 1080p (Higgsfield)", uc: "bytedance/seedance-2.5/image-to-video", saniye: 1.1372, hf: true, yedek: "seedance", ustSinir: true },
 };
+export const HF_KARSILASTIRMA = ["hf_kling3", "hf_seedance25", "hf_kling4"];
 export const GORSEL = { metin: "fal-ai/nano-banana-pro", duzenle: "fal-ai/nano-banana-pro/edit", fiyat: 0.15 };
 const KARE = { uc: "fal-ai/ffmpeg-api/extract-frame", saniye: 0.0002 };
 
@@ -91,6 +98,9 @@ const NEGATIF = "blur, distortion, morphing, color change, pattern change, extra
 // Seçili araç: Patron /arac ile elle seçtiyse o; yoksa en iyi (Veo 3.1 tam)
 export const aracSec = (secim) => (secim && secim.aracElle && ARACLAR[secim.arac] ? secim.arac : VARSAYILAN_ARAC);
 export function videoGirdisi(arac, kare) {
+  if (arac === "hf_kling3") return { prompt: VIDEO_ISTEMI, image_url: kare, duration: SURE_SN, sound: "off" };
+  if (arac === "hf_kling4") return { prompt: VIDEO_ISTEMI, image_url: kare, duration: SURE_SN, resolution: "1080p" };
+  if (arac === "hf_seedance25") return { prompt: VIDEO_ISTEMI, image_url: kare, duration: SURE_SN, resolution: "1080p", bitrate_mode: "high", generate_audio: false };
   if (arac === "veo31" || arac === "veofast") return { prompt: VIDEO_ISTEMI, image_url: kare, duration: `${SURE_SN}s`, resolution: "1080p", aspect_ratio: "9:16", generate_audio: false, negative_prompt: NEGATIF, auto_fix: true };
   if (arac === "kling4") return { prompt: VIDEO_ISTEMI, start_image_url: kare, duration: SURE_SN, resolution: "1080p" };
   if (arac === "kling4k") return { prompt: VIDEO_ISTEMI, start_image_url: kare, duration: String(SURE_SN), negative_prompt: NEGATIF, generate_audio: false };
@@ -108,10 +118,11 @@ export async function buAyHarcanan(env, simdi) {
   const fal = Number((await env.KAYIT.get(`uretim-harcama:${ay(simdi)}`)) || 0); // aylık rapor bu kaydı okur
   const claude = Number((await env.KAYIT.get(`pelin-claude:${ay(simdi)}`)) || 0);
   const openai = Number((await env.KAYIT.get(`pelin-openai:${ay(simdi)}`)) || 0);
-  return yuvarla(fal + claude + openai);
+  const hf = Number((await env.KAYIT.get(`pelin-hf:${ay(simdi)}`)) || 0);
+  return yuvarla(fal + claude + openai + hf);
 }
 async function harcamaYaz(env, usd, simdi, tur = "fal") {
-  const k = tur === "fal" ? `uretim-harcama:${ay(simdi)}` : tur === "openai" ? `pelin-openai:${ay(simdi)}` : `pelin-claude:${ay(simdi)}`;
+  const k = tur === "fal" ? `uretim-harcama:${ay(simdi)}` : tur === "hf" ? `pelin-hf:${ay(simdi)}` : tur === "openai" ? `pelin-openai:${ay(simdi)}` : `pelin-claude:${ay(simdi)}`;
   const once = Number((await env.KAYIT.get(k)) || 0);
   await env.KAYIT.put(k, String(yuvarla(once + usd)), { expirationTtl: 400 * 86400 });
   const toplam = await buAyHarcanan(env, simdi);
@@ -156,6 +167,7 @@ async function falGonder(env, uc, girdi) {
   return { durumUrl: j.status_url, sonucUrl: j.response_url };
 }
 async function falDurum(env, f) {
+  if (f && f.hf) return hfDurum(env, f); // Higgsfield işi (aynı bekleme akışı)
   const r = await fetch(f.durumUrl, { headers: falBaslik(env) });
   const j = await r.json().catch(() => ({}));
   if (j.status && j.status !== "COMPLETED") return { bitti: false };
@@ -226,8 +238,112 @@ async function dokumanOku(env) {
   await env.KAYIT.put("venom:pelinDokumanSonuc", JSON.stringify(c), { expirationTtl: 2 * 86400 });
 }
 
+// ---------- Higgsfield API (4 Kasım, Patron: "fal yedek kalsın") ----------
+// Belge: docs.higgsfield.ai — POST https://api.higgsfield.ai/<model yolu> → { request_id, status_url }; GET status_url →
+// status queued|in_progress|completed|failed|nsfw|canceled, video.url / images[].url. Başlık "Authorization: Key ID:SECRET".
+// Anahtar tek secret HF_API_KEY: "ID:SECRET" olarak; iki parça boşluk/virgül/satırla ayrılmışsa birleştirilir; ya da HF_API_KEY_ID + HF_API_KEY_SECRET.
+export const HF_API = "https://api.higgsfield.ai";
+export function hfYetki(env) {
+  if (env.HF_API_KEY_ID && env.HF_API_KEY_SECRET) return `${String(env.HF_API_KEY_ID).trim()}:${String(env.HF_API_KEY_SECRET).trim()}`;
+  let k = String(env.HF_API_KEY || "").trim().replace(/^key\s+/i, "");
+  if (!k) return "";
+  if (k.includes(":")) return k.split(":").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(":");
+  const p = k.split(/[\s,;|]+/).filter(Boolean);
+  return p.length >= 2 ? `${p[0]}:${p[1]}` : k;
+}
+export const hfVar = (env) => /^[^:\s]+:[^:\s]+$/.test(hfYetki(env));
+const hfBaslik = (env, ek = {}) => ({ authorization: `Key ${hfYetki(env)}`, "content-type": "application/json", ...ek });
+async function hfGonder(env, yol, girdi) {
+  const r = await fetch(`${HF_API}/${yol}`, { method: "POST", headers: hfBaslik(env, { "idempotency-key": crypto.randomUUID() }), body: JSON.stringify(girdi) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.request_id) throw new Error(`higgsfield ${yol} ${r.status}: ${JSON.stringify(j.detail || j).slice(0, 300)}`);
+  return { hf: true, id: j.request_id, durumUrl: j.status_url || `${HF_API}/requests/${j.request_id}/status` };
+}
+async function hfDurum(env, f) {
+  const r = await fetch(f.durumUrl, { headers: hfBaslik(env) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { if (r.status >= 500 || r.status === 429) return { bitti: false }; return { bitti: true, hata: `higgsfield durum ${r.status}: ${JSON.stringify(j.detail || j).slice(0, 200)}` }; }
+  if (["queued", "in_progress"].includes(j.status)) return { bitti: false };
+  if (j.status === "nsfw") return { bitti: true, hata: "higgsfield nsfw: content moderation" };
+  if (j.status !== "completed") return { bitti: true, hata: `higgsfield ${j.status || "?"}: ${String(j.error || "").slice(0, 200)}` };
+  const resimler = (j.images || []).map((x) => x && x.url).filter(Boolean);
+  const video = (j.video && j.video.url) || ((j.videos || [])[0] || {}).url;
+  return resimler.length || video ? { bitti: true, resimler, video } : { bitti: true, hata: `sonuç yok: ${JSON.stringify(j).slice(0, 200)}` };
+}
+export async function hfTahmin(env, yol, girdi) { // ücretsiz fiyat tahmini (estimate) → USD ya da null
+  try {
+    const r = await fetch(`${HF_API}/estimate/${yol}`, { method: "POST", headers: hfBaslik(env), body: JSON.stringify(girdi) });
+    const j = await r.json().catch(() => ({}));
+    const u = Number(j.usd);
+    return r.ok && Number.isFinite(u) ? u : null;
+  } catch { return null; }
+}
+// Tek seferlik Higgsfield bilgi sorgusu (Claude Code; KV "venom:pelinHfSor" = { sema: true, filtre: "kling|seedance", tahmin: [{yol, girdi}] }):
+// sadece GET openapi.json (şema özeti) ve POST /estimate (ücretsiz) → KV "venom:pelinHfSonuc". Üretim isteği ATILMAZ, anahtar yazılmaz.
+async function hfSor(env) {
+  const s = await env.KAYIT.get("venom:pelinHfSor", "json");
+  if (!s) return;
+  await env.KAYIT.delete("venom:pelinHfSor");
+  const yetki = hfYetki(env);
+  const c = { zaman: Math.floor(Date.now() / 1000), anahtar: { var: Boolean(yetki), bicim: hfVar(env) ? "ID:SECRET" : yetki ? "tek parça (ayrılamadı)" : "yok", idUzunluk: yetki.split(":")[0].length, secretUzunluk: (yetki.split(":")[1] || "").length }, sema: {}, tahmin: [], durum: null };
+  try { const r = await fetch(`${HF_API}/requests/00000000-0000-0000-0000-000000000000/status`, { headers: hfBaslik(env) }); c.durum = { kod: r.status, govde: (await r.text()).slice(0, 300) }; } catch (e) { c.durum = { hata: String(e.message) }; }
+  if (s.sema) {
+    for (const u of [`${HF_API}/openapi.json`, "https://docs.higgsfield.ai/openapi.json", "https://docs.higgsfield.ai/docs/openapi.json"]) {
+      try {
+        const r = await fetch(u, { headers: u.startsWith(HF_API) ? hfBaslik(env) : {} });
+        const j = await r.json().catch(() => null);
+        if (!j || !j.paths) { c.sema[u] = { durum: r.status }; continue; }
+        const filtre = new RegExp(String(s.filtre || "."), "i");
+        const ref = (o) => { let x = o; for (let i = 0; i < 5 && x && x.$ref; i++) x = x.$ref.split("/").slice(1).reduce((a, k) => a && a[k], j); return x; };
+        const yollar = {};
+        for (const [p, v] of Object.entries(j.paths)) {
+          if (!v.post || !filtre.test(p) || p.startsWith("/estimate")) continue;
+          const sch = ref((((v.post.requestBody || {}).content || {})["application/json"] || {}).schema || {});
+          const ozel = (sch && sch.properties) || {};
+          yollar[p] = { ozet: String(v.post.summary || "").slice(0, 120), gerekli: (sch && sch.required) || [], alanlar: Object.fromEntries(Object.entries(ozel).map(([k, a]) => { const b = ref(a) || {}; return [k, { tur: b.type || (b.anyOf || []).map((y) => (ref(y) || {}).type).join("|"), secenek: b.enum || ((b.anyOf || []).map((y) => ref(y) || {}).find((y) => y.enum) || {}).enum, vars: b.default, min: b.minimum, max: b.maximum, aciklama: String(b.description || "").slice(0, 140) }]; })) };
+        }
+        c.sema[u] = { durum: r.status, yolSayisi: Object.keys(j.paths).length, tumYollar: Object.keys(j.paths).filter((p) => !p.startsWith("/estimate")).slice(0, 300), yollar };
+        break;
+      } catch (e) { c.sema[u] = { hata: String(e.message) }; }
+    }
+  }
+  // Ham belge (sadece GET, sadece higgsfield.ai alanları): { url } → ilk 1,5 MB metin (model yolları ve şemalar için)
+  c.ham = {};
+  for (const h of (Array.isArray(s.ham) ? s.ham : []).slice(0, 6)) {
+    const u = String(h.url || h);
+    if (!/^https:\/\/([a-z0-9-]+\.)?higgsfield\.ai\//.test(u)) continue;
+    try { const r = await fetch(u, { headers: { "user-agent": "Mozilla/5.0 (VOLONTE Pelin belge okuma)", ...(u.startsWith(HF_API) ? hfBaslik(env) : {}) } }); c.ham[u] = { kod: r.status, adres: r.url, metin: (await r.text()).slice(0, 1500000) }; } catch (e) { c.ham[u] = { hata: String(e.message) }; }
+  }
+  for (const t of (Array.isArray(s.tahmin) ? s.tahmin : []).slice(0, 12)) {
+    if (!/^[a-z0-9._/-]+$/i.test(String(t.yol))) continue;
+    try { const r = await fetch(`${HF_API}/estimate/${t.yol}`, { method: "POST", headers: hfBaslik(env), body: JSON.stringify(t.girdi || {}) }); c.tahmin.push({ yol: t.yol, kod: r.status, govde: (await r.text()).slice(0, 400) }); } catch (e) { c.tahmin.push({ yol: t.yol, hata: String(e.message) }); }
+  }
+  await env.KAYIT.put("venom:pelinHfSonuc", JSON.stringify(c), { expirationTtl: 3 * 86400 });
+}
+
+// Higgsfield anahtarı süreli (4 Kasım: 30 gün). KV "venom:hfAnahtar" = { bitis: "YYYY-AA-GG" } → bitişten 5 gün önce (İstanbul 10:00'dan
+// sonra) Patron'a bir kez hatırlatma; bitiş günü bir kez daha. Anahtarın kendisi burada yok (Cloudflare secret HF_API_KEY).
+export async function hfHatirlat(env, simdi) {
+  const k = await env.KAYIT.get("venom:hfAnahtar", "json");
+  if (!k || !/^\d{4}-\d{2}-\d{2}$/.test(String(k.bitis || ""))) return;
+  const bitis = Date.parse(`${k.bitis}T00:00:00+03:00`) / 1000;
+  const yerel = new Date((simdi + SAAT_FARKI) * 1000);
+  if (yerel.getUTCHours() < 10) return;
+  const kalan = Math.ceil((bitis - simdi) / 86400);
+  const asama = kalan <= 0 ? "bitti" : kalan <= 5 ? "5gun" : null;
+  if (!asama || (k.gonderilen || []).includes(asama)) return;
+  const tarih = k.bitis.split("-").reverse().join(".");
+  const metin = asama === "5gun"
+    ? `⏰ Hatırlatma: Higgsfield API anahtarı ${tarih} tarihinde bitiyor (${kalan} gün kaldı). Yeni anahtar alıp Cloudflare → volonte-pelin → Settings → Variables and Secrets → HF_API_KEY değerini değiştirin, sonra Claude Code'a "yeni Higgsfield anahtarını girdim" yazın. Bitince Pelin otomatik fal.ai'ye döner.`
+    : `⚠️ Higgsfield API anahtarının süresi bugün (${tarih}) doldu. Pelin artık fal.ai ile üretir. Yenilemek için HF_API_KEY değerini değiştirip Claude Code'a haber verin.`;
+  const r = await tg(env, "sendMessage", { chat_id: murat(env), text: metin });
+  if (r && r.ok) await env.KAYIT.put("venom:hfAnahtar", JSON.stringify({ ...k, gonderilen: [...(k.gonderilen || []), asama] }));
+}
+
 export async function pelinCron(env, simdi) {
   await webhookKur(env);
+  if (hfYetki(env)) { try { await hfSor(env); } catch (e) { await env.KAYIT.put("venom:pelinHfSonuc", JSON.stringify({ hata: String(e && e.message) })); } }
+  try { await hfHatirlat(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "hfHatirlat", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await dokumanOku(env); } catch (e) { await env.KAYIT.put("venom:pelinDokumanSonuc", JSON.stringify({ hata: String(e && e.message) })); }
   if (env.FAL_KEY) { try { await falSor(env); } catch (e) { await env.KAYIT.put("venom:pelinFalSonuc", JSON.stringify({ hata: String(e && e.message) })); } }
   try { const sc = await env.KAYIT.get("pelin:secim"); if (sc && sc !== (await env.KAYIT.get("pelin:secimAyna"))) { await env.KAYIT.put("venom:pelinSecim", sc); await env.KAYIT.put("pelin:secimAyna", sc); } } catch { /* sonra */ }
@@ -308,7 +424,7 @@ function kartSonucu(r) {
 
 async function durumMetni(env, simdi) {
   const secim = await oku(env, "pelin:secim", null);
-  const anahtar = `Anahtarlar: BOT ✅ · FAL ${env.FAL_KEY ? "✅" : "❌"} · ANTHROPIC ${env.ANTHROPIC_API_KEY ? "✅" : "❌"} · OPENAI ${env.OPENAI_API_KEY ? "✅" : "❌ (ikinci göz kapalı)"}.`;
+  const anahtar = `Anahtarlar: BOT ✅ · FAL ${env.FAL_KEY ? "✅" : "❌"} · ANTHROPIC ${env.ANTHROPIC_API_KEY ? "✅" : "❌"} · OPENAI ${env.OPENAI_API_KEY ? "✅" : "❌ (ikinci göz kapalı)"} · HIGGSFIELD ${hfVar(env) ? "✅ (fal yedek)" : "❌"}.`;
   const kur = secim ? `Video aracı: ${ARACLAR[aracSec(secim)].ad}. Kayıtlı yüzler: ${Object.keys(SERILER).map((sr) => `${SERILER[sr].ad} = ${secim.yuzler ? yuzAdi(secim.yuzler[sr]) : sr === "kucuk" ? yuzAdi(secim.yuz) : "yok"}`).join("; ")}. Ortamlar: ${(secim.ortamlar || []).map((x) => `${x.id}) ${x.ad}${x.rol ? ` → ${ORTAM_ROLLERI[x.rol]}` : ""}`).join(", ") || "yok"}.` : "Kurulum: yapılmadı (yüz yok).";
   return `${anahtar} ${kur} Bu ay harcanan: ${para(await buAyHarcanan(env, simdi))} / ${AYLIK_SINIR_USD} $. Beyin: ${(await env.KAYIT.get("pelin:beyin")) || "sonnet"}.`;
 
@@ -399,6 +515,7 @@ export async function guncelleme(u, env) {
     if (/^pb:/.test(v)) return boyDugmesi(env, cq, simdi);
     if (/^pt:/.test(v)) return eskiTeslimDugmesi(env, cq, simdi);
     if (/^pn:/.test(v)) return noraDugmesi(env, cq, simdi);
+    if (/^pg:[^-]/.test(v)) return grupSecimDugmesi(env, cq, simdi);
     if (/^pyk:/.test(v)) return yuzFotoDugmesi(env, cq, simdi);
     return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Geçersiz düğme." });
   }
@@ -523,6 +640,11 @@ const SELIN_VIDEO = "https://volonte-selin.volonte.workers.dev"; // site videola
 // fal hataları → kısa Türkçe (ham İngilizce Patron'a gitmez; ham hali işte "hamHata" alanında, Claude Code okur)
 export function falHataTr(h) {
   const m = String(h || "");
+  if (/higgsfield/i.test(m) && /api_key_expired|expired/i.test(m)) return "Higgsfield anahtarının süresi doldu";
+  if (/higgsfield/i.test(m) && /api_key_disabled/i.test(m)) return "Higgsfield anahtarı kapatılmış";
+  if (/higgsfield \S+ 401/i.test(m)) return "Higgsfield anahtarı geçersiz";
+  if (/higgsfield \S+ 403/i.test(m)) return "Higgsfield bakiyesi yetersiz";
+  if (/higgsfield \S+ (404|423|503)/i.test(m)) return "Higgsfield bu modeli şu an vermiyor";
   if (/did not generate the expected output/i.test(m)) return "araç bu istemi işleyemedi (istem uzun ya da içerik filtresine takıldı)";
   if (/content|policy|safety|moderation|nsfw|flagged/i.test(m)) return "içerik filtresine takıldı";
   if (/insufficient|balance|credit|billing|payment|quota/i.test(m)) return "fal.ai bakiyesi yetersiz";
@@ -978,10 +1100,18 @@ async function uretimBaslat(env, onay, simdi) {
   if (testId) await kaydet(env, `pelin:test:${testId}`, { kodlar: onay.kodlar, zaman: simdi });
 }
 
-async function falIsle(env, is, uc, girdi, fiyat, simdi) {
-  is.fal = await falGonder(env, uc, girdi);
-  is.falFiyat = fiyat; is.maliyet = yuvarla(is.maliyet + fiyat); is.bekleZaman = simdi;
-  await harcamaYaz(env, fiyat, simdi);
+async function falIsle(env, is, uc, girdi, fiyat, simdi, hf = false) {
+  is.fal = hf ? await hfGonder(env, uc, girdi) : await falGonder(env, uc, girdi);
+  is.falFiyat = fiyat; is.falTur = hf ? "hf" : "fal"; is.maliyet = yuvarla(is.maliyet + fiyat); is.bekleZaman = simdi;
+  await harcamaYaz(env, fiyat, simdi, is.falTur);
+}
+// Higgsfield aracı çalışmazsa aynı kareyle fal.ai yedeği (bir kez; deneme sayılmaz)
+function hfYedegeGec(is, arac, neden, simdi) {
+  const y = ARACLAR[arac] && ARACLAR[arac].yedek;
+  if (!y || !ARACLAR[y] || is.hfYedek) return false;
+  is.gecmis.push([simdi, `${ARACLAR[arac].ad} çalışmadı (${neden}) → aynı kareyle fal.ai ${ARACLAR[y].ad}`]);
+  Object.assign(is, { arac: y, hfYedek: { from: arac, neden }, videoDeneme: Math.max(0, is.videoDeneme - 1), durum: "video_gonder" });
+  return true;
 }
 async function uretimAdimi(env, is, simdi) {
   const secim = await oku(env, "pelin:secim", null);
@@ -990,7 +1120,7 @@ async function uretimAdimi(env, is, simdi) {
   const bekle = async () => {
     const s = await falDurum(env, is.fal).catch((e) => ({ bitti: false, hata: String(e.message) }));
     if (!s.bitti) { if (simdi - is.bekleZaman > 3 * 3600) return { hata: "3 saatte bitmedi" }; return null; }
-    if (s.hata) { await harcamaYaz(env, -is.falFiyat, simdi); is.maliyet = yuvarla(is.maliyet - is.falFiyat); }
+    if (s.hata) { await harcamaYaz(env, -is.falFiyat, simdi, is.falTur || "fal"); is.maliyet = yuvarla(is.maliyet - is.falFiyat); }
     return s;
   };
   if (is.durum === "foto_gonder") {
@@ -1047,10 +1177,16 @@ async function uretimAdimi(env, is, simdi) {
     return;
   }
   if (is.durum === "video_gonder") {
+    if (ARACLAR[arac].hf && !hfVar(env) && hfYedegeGec(is, arac, "Higgsfield anahtarı yok", simdi)) return;
     is.videoDeneme++;
     const g = { ...videoGirdisi(arac, is.sahne || is.foto), prompt: is.sahneAyar ? yeniVideoIstemi(is) : uretimVideoIstemi(is.videoOrtam || is.ortam, is.sablon) };
-    if ("negative_prompt" in g) g.negative_prompt = [g.negative_prompt, is.boy ? boyYasagiVideo(is.boy) : "", is.sahneAyar ? HAREKET_YASAK : ""].filter(Boolean).join(", ");
-    await falIsle(env, is, ARACLAR[arac].uc, g, yuvarla(ARACLAR[arac].saniye * URETIM_SN), simdi);
+    const yasak = [is.boy ? boyYasagiVideo(is.boy) : "", is.sahneAyar ? HAREKET_YASAK : ""].filter(Boolean).join(", ");
+    if ("negative_prompt" in g) g.negative_prompt = [g.negative_prompt, yasak].filter(Boolean).join(", ");
+    else if (ARACLAR[arac].hf && yasak) g.prompt = `${g.prompt} Avoid: ${yasak}.`.slice(0, 2400); // Higgsfield'de negatif alan yok
+    try { await falIsle(env, is, ARACLAR[arac].uc, g, yuvarla(ARACLAR[arac].saniye * URETIM_SN), simdi, Boolean(ARACLAR[arac].hf)); } catch (e) {
+      if (ARACLAR[arac].hf) { is.hamHata = String(e.message).slice(0, 400); if (hfYedegeGec(is, arac, falHataTr(e.message), simdi)) return; }
+      throw e;
+    }
     is.durum = "video_bekle"; return;
   }
   if (is.durum === "video_bekle") {
@@ -1058,6 +1194,7 @@ async function uretimAdimi(env, is, simdi) {
     if (s.hata) {
       is.hamHata = String(s.hata).slice(0, 400);
       const aracSimdi = is.arac || aracSec(secim);
+      if (ARACLAR[aracSimdi] && ARACLAR[aracSimdi].hf && !/nsfw/i.test(s.hata) && hfYedegeGec(is, aracSimdi, falHataTr(s.hata), simdi)) return;
       if (/^veo/.test(aracSimdi) && !is.aracYedek) { // Veo bu istemi işleyemedi → aynı kareyle Kling 4.0 (deneme sayılmaz)
         is.gecmis.push([simdi, `${ARACLAR[aracSimdi].ad} işleyemedi (${falHataTr(s.hata)}) → aynı kareyle Kling 4.0`]);
         Object.assign(is, { arac: "kling4", aracYedek: true, videoDeneme: Math.max(0, is.videoDeneme - 1), durum: "video_gonder" });
@@ -1181,8 +1318,9 @@ async function isBildirIc(env, is, tgK, sonuc) {
     await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi. Uygunsa ✅ Onayla (Patron da görüyor).`, { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${is.id}` }]] } });
   }
   const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
-    ...(is.aracYedek ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
-    is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
+    ...(is.aracYedek && (is.gecmis || []).some((g) => /işleyemedi .*→ aynı kareyle Kling 4\.0/.test(String(g[1]))) ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
+    ...(is.hfYedek ? [`↪️ ${ARACLAR[is.hfYedek.from].ad} çalışmadı (${is.hfYedek.neden}); aynı fotoğrafla fal.ai ${ARACLAR[is.arac].ad} kullanıldı.`] : []),
+    is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok && !is.grup ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
   sonuc.push(["metin", Boolean(metinSonuc && metinSonuc.ok), metinSonuc && metinSonuc.ok ? null : String((metinSonuc && metinSonuc.description) || "?").slice(0, 120)]);
   return metinSonuc;
 }
@@ -1196,10 +1334,47 @@ export async function uretimCron(env, simdi) {
     islenen++;
     const once = is.durum;
     try { await uretimAdimi(env, is, simdi); } catch (e) { is.durum = "uyari"; is.hamHata = String(e && e.message).slice(0, 400); is.sorunlar = [`hata: ${falHataTr(e && e.message)}`]; }
-    if (["onay", "uyari"].includes(is.durum) && !["onay", "uyari"].includes(once)) await isBildir(env, is);
+    const yeniBitti = ["onay", "uyari"].includes(is.durum) && !["onay", "uyari"].includes(once);
+    if (yeniBitti) await isBildir(env, is);
     await kaydet(env, `pelin:is:${id}`, is);
+    if (yeniBitti && is.grup) { try { await grupOzeti(env, is.grup, simdi); } catch (e) { await hataEkle(env, "pelin:grupOzeti", e); } }
   }
   await testRaporu(env, liste);
+}
+// Karşılaştırma grubu (aynı fotoğraf + aynı senaryo, farklı araç): hepsi bitince tek kart — Patron en gerçekçisini 🏆 ile seçer
+const BITMIS = ["onay", "uyari", "onaylandi", "iptal", "hata", "deneme_begenildi"];
+async function grupOzeti(env, gid, simdi) {
+  const g = await oku(env, `pelin:grup:${gid}`, null);
+  if (!g || g.ozet) return;
+  const isler = await noraIsleri(env, gid);
+  if (isler.length < 2 || isler.some((x) => !BITMIS.includes(x.durum))) return;
+  g.ozet = simdi; await kaydet(env, `pelin:grup:${gid}`, g, 14 * 86400);
+  const puan = (x) => { const k = x.videoKontrol; return k && k.puan ? `${k.puan.pelin ?? "—"}${k.puan.chatgpt ? `/${k.puan.chatgpt}` : ""}` : "—"; };
+  const harf = "ABCDEFGH";
+  const videolu = isler.filter((x) => x.video);
+  await yaz(env, murat(env), [
+    `🏁 ${isler[0].kod} KARŞILAŞTIRMA — aynı fotoğraf, aynı senaryo, ${isler.length} araç:`,
+    ...isler.map((x, i) => `${harf[i]}) ${ARACLAR[x.arac].ad}${x.hfYedek ? ` (Higgsfield yerine fal yedeği)` : ""} — ${x.video ? `kontrol puanı ${puan(x)}${x.durum === "uyari" ? " ⚠️" : ""} · ${para(x.maliyet || 0)}` : "video üretilemedi"}`),
+    `Toplam: ${para(isler.reduce((t, x) => t + (x.maliyet || 0), 0))}`,
+    videolu.length ? "Videolar yukarıda ayrı ayrı geldi. En gerçekçisini 🏆 ile seçin: o araç bundan sonra varsayılan olur. (Kanala/siteye göndermek ayrı: o videonun ✅ Onayla düğmesi.)" : "Hiçbir araç video üretemedi.",
+  ].join("\n"), videolu.length ? { reply_markup: { inline_keyboard: [...videolu.map((x) => [{ text: `🏆 ${harf[isler.indexOf(x)]}) ${ARACLAR[x.arac].ad}`, callback_data: `pg:${gid}:${x.arac}` }]), [{ text: "Hiçbiri olmadı", callback_data: `pg:${gid}:-` }]] } } : {});
+}
+async function grupSecimDugmesi(env, cq, simdi) {
+  const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!muratMi(env, cq.from.id)) return cevap("Sadece Patron.");
+  const [, gid, arac] = cq.data.split(":");
+  const g = await oku(env, `pelin:grup:${gid}`, null);
+  if (!g || g.secim) return cevap("Bu seçim yapıldı ya da geçersiz.");
+  const isler = await noraIsleri(env, gid);
+  g.secim = { arac, zaman: simdi }; await kaydet(env, `pelin:grup:${gid}`, g, 30 * 86400);
+  const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "pg:-" }]] } });
+  await kaydet(env, "pelin:aracKarsilastirma", [...(await oku(env, "pelin:aracKarsilastirma", [])), { kod: isler[0] && isler[0].kod, grup: gid, araclar: isler.map((x) => x.arac), secilen: arac, zaman: simdi }].slice(-30));
+  if (arac === "-" || !ARACLAR[arac]) { await cevap("Not edildi"); await kapat("Hiçbiri seçilmedi"); return yaz(env, murat(env), "Not ettim: bu karşılaştırmada hiçbiri yeterince gerçekçi değil. Varsayılan araç değişmedi. Ne eksikti, kısaca yazarsanız sonraki denemede düzeltirim."); }
+  const secim = await oku(env, "pelin:secim", null);
+  if (secim) { secim.arac = arac; secim.aracElle = true; await kaydet(env, "pelin:secim", secim); }
+  if (isler[0]) await boyYaz(env, isler[0].kod, { arac });
+  await cevap("Seçildi"); await kapat(`🏆 ${ARACLAR[arac].ad} seçildi`);
+  return yaz(env, murat(env), `🏆 ${ARACLAR[arac].ad} seçildi — bundan sonra videolar bununla üretilir${ARACLAR[arac].hf ? " (Higgsfield; hata olursa fal.ai yedeği)" : ""}. Değiştirmek: /arac`);
 }
 async function testRaporu(env, liste) {
   const testler = new Set();
@@ -1334,11 +1509,13 @@ async function noraKarti(env, hedef, isler, simdi, onEk = []) {
   const maliyetli = isler.some((x) => x.durum === "kart");
   return yaz(env, murat(env), [
     ...onEk,
-    `📝 Nora — senaryo (${isler[0].kod}, ${URETIM_SN} sn):`,
+    `📝 Nora — senaryo (${isler[0].kod}, ${URETIM_SN} sn)${s0.onayliKaynak ? " — daha önce ONAYLADIĞINIZ senaryo, aynen" : ""}:`,
     s0.tr,
     "Kural: hızlı dönüş ve kamera dönüşü yok; yavaş, doğal hareket.",
-    ...(maliyetli ? isler.map((x) => `• ${ARACLAR[x.arac].ad}: ${URETIM_SN} × ${para(ARACLAR[x.arac].saniye)} = ${para(ARACLAR[x.arac].saniye * URETIM_SN)}`) : []),
-    ...(maliyetli ? [`• Kontrol: ~${para((KONTROL_TAHMIN * 2 + OPENAI_TAHMIN) * isler.length)}`] : []),
+    ...(maliyetli ? isler.map((x) => `• ${ARACLAR[x.arac].ad}: ${URETIM_SN} × ${para(ARACLAR[x.arac].saniye)} = ${ARACLAR[x.arac].ustSinir ? "en fazla " : ""}${para(ARACLAR[x.arac].saniye * URETIM_SN)}${ARACLAR[x.arac].ustSinir ? " (indirim öncesi; indirimle daha az)" : ""}`) : []),
+    ...(maliyetli ? [`• Kontrol + kare çıkarma: ~${para((KONTROL_TAHMIN * 2 + OPENAI_TAHMIN) * isler.length)}`] : []),
+    ...(maliyetli && isler.some((x) => ARACLAR[x.arac].hf) ? [`💳 Higgsfield'den düşecek: en fazla ${para(isler.filter((x) => ARACLAR[x.arac].hf).reduce((t, x) => t + ARACLAR[x.arac].saniye * URETIM_SN, 0))} (bakiye 20 $, otomatik yükleme kapalı). Higgsfield hata verirse aynı fotoğrafla fal.ai yedeği kullanılır ve önizlemede yazar.`] : []),
+    ...(maliyetli ? [`TOPLAM: en fazla ${para(isler.reduce((t, x) => t + ARACLAR[x.arac].saniye * URETIM_SN + KONTROL_TAHMIN * 2 + OPENAI_TAHMIN, 0))}`] : []),
     maliyetli ? "Onaylarsanız senaryo ve maliyet onaylanmış olur; videolar üretilip yan yana gelir." : "Onaylarsanız video bu senaryoyla üretilir.",
   ].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pn:o:${hedef}` }, { text: "✏️ Düzelt", callback_data: `pn:d:${hedef}` }, { text: "❌ İptal", callback_data: `pn:x:${hedef}` }]] } });
 }
@@ -1409,8 +1586,10 @@ async function katalogdanNora(env, kaynak, ik, araclar, simdi) {
   const gid = `g-${kisaId()}`;
   const ortak = { ...kaynak, aracYedek: false, durum: "kart", sahne: null, videoOrtam: null, video: null, videoSessiz: null, kareler: [], kareFal: [], kapak: null, videoKontrol: null, sahneKontrol: null, videoDeneme: 0, maliyet: 0, testId: null, patronOnay: [], sorunlar: [], notlar: [], karsilastirma: null,
     sablon: null, sahneAyar: { ...SAHNE_VARSAYILAN }, muzik: ik.muzik || null, muzikEklendi: false, yayinYok: ik.deneme === true, kaynakIs: kaynak.id, grup: gid, zaman: simdi };
-  const isler = araclar.map((arac) => ({ ...ortak, id: `${kaynak.kod}-${kisaId()}`, arac, aracYedek: araclar.length > 1, gecmis: [[simdi, `katalog fotoğrafından video (${kaynak.id}) · ${ARACLAR[arac].ad}${araclar.length > 1 ? " · karşılaştırma" : ""}`]] }));
-  const sen = await noraYaz(env, isler[0], simdi);
+  const isler = araclar.map((arac) => ({ ...ortak, id: `${kaynak.kod}-${kisaId()}`, arac, aracYedek: araclar.length > 1, hfYedek: null, gecmis: [[simdi, `katalog fotoğrafından video (${kaynak.id}) · ${ARACLAR[arac].ad}${araclar.length > 1 ? " · karşılaştırma" : ""}`]] }));
+  // ik.senaryoIs: Patron'un daha önce onayladığı Nora senaryosu aynen kullanılır (yeni senaryo yazılmaz)
+  const eskiSen = ik.senaryoIs ? ((await oku(env, `pelin:is:${ik.senaryoIs}`, null)) || {}).senaryo : null;
+  const sen = eskiSen && eskiSen.hareketEn ? { ...eskiSen, onayliKaynak: ik.senaryoIs } : await noraYaz(env, isler[0], simdi);
   for (const x of isler) { x.senaryo = sen; await kaydet(env, `pelin:is:${x.id}`, x); }
   await kaydet(env, `pelin:grup:${gid}`, { ids: isler.map((x) => x.id), kaynakIs: kaynak.id, zaman: simdi }, 14 * 86400);
   await tg(env, "sendPhoto", { chat_id: murat(env), photo: kaynak.foto, caption: `📸 ${kaynak.kod} — videonun kaynağı (onaylı katalog fotoğrafı)` });
