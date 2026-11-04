@@ -1579,6 +1579,15 @@ export async function pelinSiteAdimi(env, simdi) {
     const n = liste.filter((u) => "fiyat" in u).length;
     if (n) { await siteyeYaz(env, [], liste, `Selin: fiyatlar açık depodan çıkarıldı (${n} model; fiyatın kaynağı Vegawin)`); await notEkle(env, `Fiyatlar açık depodan çıkarıldı (${n} model).`); }
   }
+  // Tek seferlik (4 Kasım, Patron): GİZLİ test sayfası (360° görüntüleyici) — KV "venom:siteDosyaYaz" = { dosyalar: [{ yol: "ozel/…html",
+  // metin }], mesaj }. Sadece "ozel/" altına HTML; ürün listesi değişmez; sayfa hiçbir yerden bağlanmaz (noindex).
+  const dy = await env.KAYIT.get("venom:siteDosyaYaz", "json");
+  if (dy && Array.isArray(dy.dosyalar) && dy.dosyalar.length) {
+    await env.KAYIT.delete("venom:siteDosyaYaz");
+    const dosyalar = dy.dosyalar.filter((d) => /^ozel\/[a-z0-9-]+\.html$/.test(String(d.yol)) && typeof d.metin === "string").map((d) => ({ yol: d.yol, b64: b64Yap(new TextEncoder().encode(d.metin)) }));
+    if (dosyalar.length) { const { liste } = await siteVerisi(env); await siteyeYaz(env, dosyalar, liste, `Selin: gizli test sayfası (${dosyalar.map((d) => d.yol).join(", ")})${dy.mesaj ? ` — ${String(dy.mesaj).slice(0, 80)}` : ""}`); }
+    await yazKV(env, "venom:siteDosyaYazSonuc", { zaman: simdi, yazilan: dosyalar.map((d) => d.yol) }, 3 * 86400);
+  }
   // Tek seferlik (4 Kasım, Patron: "sitedeki eski markasız 3627 medyasını kaldır"): KV "venom:siteMedyaKaldir" =
   // [{ kod, fotolar: ["galeri/..."], videolar: ["kanal/mesaj"] }] → sadece listelenen medya modelden çıkar (model sitede kalır)
   const km = (await env.KAYIT.get("venom:siteMedyaKaldir", "json")) || [];

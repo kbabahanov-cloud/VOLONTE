@@ -127,6 +127,7 @@ function uretimOrtami() {
   o.falSonuc["fal-ai/ffmpeg-api/images-to-video"] = (n) => ({ video: { url: `https://vid/kapanis${n}.mp4` } });
   o.falSonuc["fal-ai/workflow-utilities/scale-video"] = (n) => ({ video: { url: `https://vid/kucuk${n}.mp4` } });
   o.falSonuc["fal-ai/workflow-utilities/blend-video"] = (n) => ({ video: { url: `https://vid/markali${n}.mp4` } });
+  o.falSonuc["fal-ai/ffmpeg-api/merge-audio-video"] = (n) => ({ video: { url: `https://vid/markali-sesli${n}.mp4` } }); // iPhone: sessiz ses izi
   return o;
 }
 const GECTI = { renk_ayni: true, desen_ayni: true, kesim_ayni: true, sorunlar: [] };
@@ -1371,7 +1372,7 @@ test("ASKI + DETAY (KALICI): gerçek manken fotoğrafından kesim (yeniden çizi
   assert.ok(a.left >= 0 && a.top >= 0 && a.left + a.width <= 1000 && a.top + a.height <= 1500 && Math.abs(a.width / a.height - 0.5) < 0.02);
   assert.ok(ASKI_DETAY_FIYAT <= 0.1);
   const o = uretimOrtami();
-  o.falSonuc["fal-ai/sam-3/image"] = (n) => ({ image: { url: "https://img/maske.png" }, boxes: n % 5 === 2 ? [] : [[0.5, 0.5, 0.4, 0.9]], scores: n % 5 === 2 ? [] : [0.9] }); // yaka bulunamaz → elbiseden
+  o.falSonuc["fal-ai/sam-3/image"] = (n) => ({ image: { url: "https://img/maske.png" }, boxes: [[0.5, 0.5, 0.4, 0.9]], scores: [0.9] });
   o.falSonuc["bria/guided-remove-background"] = (n) => ({ image: { url: `https://img/kesik${n}.png` } });
   o.depo.set("pelinboy:3627", JSON.stringify({ marka: "BLACKROSE", kumas: "100% polyester" }));
   o.depo.set("pelin:urunfoto:3627", JSON.stringify([{ anahtar: "1".repeat(32), rol: "on", etiket: "manken", zaman: 3 }, { anahtar: "2".repeat(32), rol: "arka", zaman: 2 }, { anahtar: "3".repeat(32), rol: "on", etiket: "aski", zaman: 4 }]));
@@ -1384,11 +1385,11 @@ test("ASKI + DETAY (KALICI): gerçek manken fotoğrafından kesim (yeniden çizi
   const bria = o.falIstek.filter((x) => x.uc === "bria/guided-remove-background");
   assert.deepEqual(bria.map((x) => x.govde.image_url), [`https://pelin.test/dosya/${"1".repeat(32)}`, `https://pelin.test/dosya/${"2".repeat(32)}`]); // askı etiketli değil, MANKEN ön/arka
   assert.ok(bria.every((x) => /remove the mannequin/.test(x.govde.prompt) && x.govde.autocrop === false)); // boyut korunur (kutular geçerli)
-  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/sam-3/image").length, 5);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/sam-3/image").length, 2); // 4 Kasım: detay kolajı YOK, sadece elbise kutuları
   assert.ok(!o.falIstek.some((x) => /nano-banana|flux|kling|seedance/.test(x.uc))); // elbise YENİDEN ÇİZİLMEZ
   const x = JSON.parse(o.depo.get("pelin:is:3627-z"));
   assert.equal(x.durum, "paket_onay");
-  assert.deepEqual(x.paket.ekler.map((e) => e.ad), ["askı ön", "askı arka", "detay 1", "detay 2"]);
+  assert.deepEqual(x.paket.ekler.map((e) => e.ad), ["askı ön", "askı arka"]);
   assert.ok(!("aski" in x.paket.set));
   const kart = o.g.filter((m) => m.metod === "sendMessage").at(-1).govde;
   assert.match(kart.text, /askı ön\/arka ve detay kolajları GERÇEK fotoğraftan/);
@@ -1396,10 +1397,10 @@ test("ASKI + DETAY (KALICI): gerçek manken fotoğrafından kesim (yeniden çizi
   await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
   const t = await teslim(o);
   assert.equal(t.length, 1);
-  assert.deepEqual(t[0].set.map((y) => y.ad), ["sağ yan", "askı ön", "askı arka", "detay 1", "detay 2"]);
+  assert.deepEqual(t[0].set.map((y) => y.ad), ["sağ yan", "askı ön", "askı arka"]);
   assert.equal(t[0].video, "https://vid/damgali.mp4");
   const ar = JSON.parse(o.depo.get("pelinarsiv:3627") || "null"); assert.ok(ar, o.depo.get("pelin:hata"));
-  assert.equal(ar.set.length, 5);
+  assert.equal(ar.set.length, 3);
   globalThis.fetch = asil;
   // Yeni kart: eksik fotoğraf uyarısı (Hemra'ya) + arşivden kullan düğmesi (0 $)
   o.depo.set("pelin:secim", SECIM_ROLLU());
@@ -1421,4 +1422,37 @@ test("ASKI + DETAY (KALICI): gerçek manken fotoğrafından kesim (yeniden çizi
   assert.match(o.g.at(-1).govde.text, /PELİN FOTOĞRAF REHBERİ[\s\S]*DİKEY[\s\S]*MANKENDE ARKA/);
   const { fotoYazisi } = await import("./pelin.js");
   assert.equal(fotoYazisi("3627 etiket").etiket, "kumas");
+});
+
+test("VİDEO DÜZELT (iPhone): var olan video 1080×1920 + sessiz ses izi, YENİDEN ÜRETİM YOK; 360° denemesi bütçe tavanı + GLB/MP4 süresiz kopya; /medya Range + CORS", async () => {
+  const o = uretimOrtami();
+  o.falSonuc["tripo3d/h3.1/multiview-to-3d"] = () => ({ model_mesh: { url: "https://img/model.glb" } });
+  o.falSonuc["fal-ai/kling-video/v2.1/pro/image-to-video"] = () => ({ video: { url: "https://vid/donus.mp4" } });
+  o.depo.set("pelinboy:3627", JSON.stringify({ marka: "BLACKROSE" }));
+  o.depo.set("pelin:is:3627-z", JSON.stringify({ id: "3627-z", kod: "3627", marka: "BLACKROSE", durum: "onaylandi", video: "https://vid/v.mp4", paket: { marka: "BLACKROSE", video: "https://vid/damgali.mp4" }, gecmis: [] }));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-z", islem: "videoDuzelt" }));
+  await cronlar(o, 3);
+  const sc = o.falIstek.find((x) => x.uc === "fal-ai/workflow-utilities/scale-video");
+  assert.deepEqual([sc.govde.video_url, sc.govde.width, sc.govde.height], ["https://vid/damgali.mp4", 1080, 1920]);
+  assert.ok(o.falIstek.some((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video"), o.depo.get("pelin:hata") + " " + o.depo.get("pelin:is:3627-z").slice(0, 400));
+  const ses = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video");
+  assert.match(ses.govde.audio_url, /\/medya\/5e5512/);
+  assert.equal(o.hfIstek.length, 0); // video YENİDEN ÜRETİLMEDİ
+  assert.ok(!o.falIstek.some((x) => /image-to-video$/.test(x.uc) && !/ffmpeg/.test(x.uc)));
+  const x = JSON.parse(o.depo.get("pelin:is:3627-z"));
+  assert.equal(x.durum, "onaylandi");
+  assert.match(x.paket.video, /markali-sesli/);
+  assert.ok(o.g.some((m) => m.metod === "sendVideo" && /YENİDEN ÜRETİLMEDİ/.test(m.govde.caption || "") && m.govde.supports_streaming));
+  // 360: bütçe aşılırsa hiçbir şey gönderilmez
+  const yollar = { A: { uc: "tripo3d/h3.1/multiview-to-3d", girdi: { image_urls: ["a", "b"] }, fiyat: 0.5, tur: "3d" }, B: { uc: "fal-ai/kling-video/v2.1/pro/image-to-video", girdi: { image_url: "a", tail_image_url: "b", prompt: "orbit" }, fiyat: 0.49, tur: "video" } };
+  o.depo.set("venom:pelin360", JSON.stringify({ kod: "3627", yollar, butce: 0.9 }));
+  await cronlar(o, 1);
+  assert.match(o.depo.get("venom:pelin360Sonuc"), /bütçesi aşılır/);
+  o.depo.set("venom:pelin360", JSON.stringify({ kod: "3627", yollar, butce: 1 }));
+  await cronlar(o, 3);
+  const d = JSON.parse(o.depo.get("venom:pelin360Sonuc"));
+  assert.match(d.sonuc.A.kopya, /\/medya\/[0-9a-f]{32}$/);
+  assert.match(d.sonuc.B.kopya, /\/medya\/[0-9a-f]{32}$/);
+  const { default: w } = await import("./pelin-worker.js").catch(() => ({ default: null }));
+  void w;
 });

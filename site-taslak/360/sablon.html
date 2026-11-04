@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>__KOD__ · 360° test</title>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+  :root { --altin: #c9a85c; --zemin: #0d0d0d; --yazi: #f3efe6; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--zemin); color: var(--yazi); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 18px 16px 8px; text-align: center; letter-spacing: .18em; font-size: 13px; color: var(--altin); }
+  h1 { margin: 4px 0 0; font-size: 18px; letter-spacing: .12em; color: var(--yazi); font-weight: 600; }
+  .not { text-align: center; font-size: 13px; opacity: .75; padding: 0 16px 12px; }
+  .urun { display: block; margin: 0 auto; width: min(92vw, 460px); border-radius: 10px; background: #fff; cursor: zoom-in; }
+  .ipucu { text-align: center; font-size: 13px; color: var(--altin); margin: 10px 0 24px; }
+  #tam { position: fixed; inset: 0; background: #fff; display: none; flex-direction: column; z-index: 10; }
+  #tam.acik { display: flex; }
+  .ust { display: flex; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 12px 8px; background: var(--zemin); align-items: center; }
+  .sekme { flex: 1; padding: 10px 6px; border: 1px solid #444; background: #1a1a1a; color: var(--yazi); border-radius: 8px; font-size: 14px; }
+  .sekme.secili { border-color: var(--altin); color: var(--altin); }
+  .kapat { width: 44px; height: 40px; border: 0; background: transparent; color: var(--yazi); font-size: 26px; }
+  .alan { position: relative; flex: 1; overflow: hidden; touch-action: none; background: #fff; }
+  model-viewer { width: 100%; height: 100%; background: #fff; --poster-color: #fff; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .durum { position: absolute; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); text-align: center; color: #555; font-size: 13px; pointer-events: none; }
+  .gizli { display: none !important; }
+</style>
+</head>
+<body>
+<header>__MARKA__<h1>__KOD__ · 360° TEST</h1></header>
+<p class="not">Gizli test sayfası (sadece Patron). Fotoğrafa dokunun → tam ekran. A = 3D model, B = 360° kareler.</p>
+<img class="urun" id="urun" src="__ON__" alt="__KOD__">
+<p class="ipucu">👆 Dokunun · parmakla döndürün · iki parmakla yakınlaştırın</p>
+
+<div id="tam">
+  <div class="ust">
+    <button class="sekme secili" data-s="A">A · 3D model</button>
+    <button class="sekme" data-s="B">B · 360° kareler</button>
+    <button class="kapat" id="kapat" aria-label="Kapat">×</button>
+  </div>
+  <div class="alan" id="alanA">
+    <model-viewer id="mv" src="__GLB__" camera-controls camera-orbit="90deg 80deg auto" touch-action="none" interaction-prompt="none" shadow-intensity="0.6" exposure="0.9" environment-image="neutral" min-camera-orbit="auto auto 40%" max-camera-orbit="auto auto 250%" alt="__KOD__ 3D"></model-viewer>
+    <div class="durum">Parmakla çevirin · iki parmakla yaklaştırın</div>
+  </div>
+  <div class="alan gizli" id="alanB">
+    <canvas id="tuval"></canvas>
+    <div class="durum" id="durumB">Kareler hazırlanıyor…</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const VIDEO = "__VIDEO__", N = 36;
+  const tam = document.getElementById("tam");
+  document.getElementById("urun").onclick = () => { tam.classList.add("acik"); };
+  document.getElementById("kapat").onclick = () => tam.classList.remove("acik");
+  const sekmeler = [...document.querySelectorAll(".sekme")];
+  sekmeler.forEach((b) => b.onclick = () => {
+    sekmeler.forEach((x) => x.classList.toggle("secili", x === b));
+    document.getElementById("alanA").classList.toggle("gizli", b.dataset.s !== "A");
+    document.getElementById("alanB").classList.toggle("gizli", b.dataset.s !== "B");
+    if (b.dataset.s === "B") hazirla();
+  });
+
+  // ---- B: videodan 36 kare (önden arkaya) + aynalı dönüş (arkadan öne) = 360° ----
+  const tuval = document.getElementById("tuval"), ctx = tuval.getContext("2d"), durum = document.getElementById("durumB");
+  let kareler = [], hazir = false, basladi = false, ind = 0, olcek = 1, kx = 0, ky = 0;
+  async function hazirla() {
+    if (basladi) return; basladi = true;
+    const v = document.createElement("video");
+    v.crossOrigin = "anonymous"; v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = VIDEO;
+    await new Promise((ok, hata) => { v.onloadeddata = ok; v.onerror = () => hata(new Error("video yüklenemedi")); v.load(); }).catch((e) => { durum.textContent = e.message; throw e; });
+    const sure = v.duration || 5;
+    for (let i = 0; i < N; i++) {
+      v.currentTime = Math.min(sure - 0.05, (i / (N - 1)) * (sure - 0.05));
+      await new Promise((ok) => { v.onseeked = ok; });
+      kareler.push(await createImageBitmap(v));
+      durum.textContent = `Kareler hazırlanıyor… ${i + 1}/${N}`;
+    }
+    hazir = true; durum.textContent = "Parmakla çevirin · iki parmakla yaklaştırın · çift dokunma: sıfırla"; boyut(); ciz();
+  }
+  function boyut() { const r = tuval.getBoundingClientRect(), d = devicePixelRatio || 1; tuval.width = r.width * d; tuval.height = r.height * d; }
+  addEventListener("resize", () => { boyut(); ciz(); });
+  function ciz() {
+    if (!hazir) return;
+    const T = 2 * N - 2, k = ((ind % T) + T) % T, ayna = k >= N, kare = kareler[ayna ? T - k : k];
+    const W = tuval.width, H = tuval.height, s = Math.min(W / kare.width, H / kare.height) * olcek;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    ctx.translate(W / 2 + kx, H / 2 + ky); if (ayna) ctx.scale(-1, 1);
+    ctx.drawImage(kare, -kare.width * s / 2, -kare.height * s / 2, kare.width * s, kare.height * s);
+  }
+  const parmak = new Map(); let son = null, ilkMesafe = 0, ilkOlcek = 1, sonDokunma = 0;
+  tuval.addEventListener("pointerdown", (e) => { tuval.setPointerCapture(e.pointerId); parmak.set(e.pointerId, e); if (parmak.size === 2) { const [a, b] = [...parmak.values()]; ilkMesafe = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); ilkOlcek = olcek; } son = e;
+    const t = Date.now(); if (t - sonDokunma < 300) { olcek = 1; kx = ky = 0; ciz(); } sonDokunma = t; });
+  tuval.addEventListener("pointermove", (e) => {
+    if (!parmak.has(e.pointerId)) return; parmak.set(e.pointerId, e);
+    if (parmak.size === 2) { const [a, b] = [...parmak.values()]; olcek = Math.max(1, Math.min(5, ilkOlcek * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / ilkMesafe)); ciz(); return; }
+    const dx = e.clientX - son.clientX;
+    if (olcek > 1.05) { kx += dx * (devicePixelRatio || 1); ky += (e.clientY - son.clientY) * (devicePixelRatio || 1); }
+    else if (Math.abs(dx) >= 7) { ind += dx > 0 ? -1 : 1; }
+    else return;
+    son = e; ciz();
+  });
+  const birak = (e) => { parmak.delete(e.pointerId); if (parmak.size === 1) son = [...parmak.values()][0]; };
+  tuval.addEventListener("pointerup", birak); tuval.addEventListener("pointercancel", birak);
+})();
+</script>
+</body>
+</html>

@@ -12,13 +12,17 @@ export const KESIM = { uc: "bria/guided-remove-background", fiyat: 0.03, autocro
   istem: "keep ONLY the dress/garment itself; remove the mannequin, dress form, its neck knob, stand, legs and base, the hanger and everything in the background" };
 export const BUL = { uc: "fal-ai/sam-3/image", fiyat: 0.005 };
 // Detay yerleri (SAM-3 metin istemi). "on" = ön fotoğraf, "arka" = arka fotoğraf.
-export const DETAY_YERLERI = [
+// 4 Kasım (Patron): "Ayrı detay çerçevesi YAPILMASIN" → kolaj KAPALI; sadece elbise kutuları (askı kırpımı için) aranır
+export const KOLAJ = false;
+const TUM_YERLER = [
   { k: "elbise", foto: "on", istem: "dress" },
   { k: "yaka", foto: "on", istem: "collar", en: "COLLAR", fr: "COL" },
   { k: "isleme", foto: "on", istem: "lace or embroidery or sequins", en: "EMBELLISHMENT", fr: "ORNEMENT" },
   { k: "kol", foto: "on", istem: "sleeve cuff", en: "CUFF", fr: "POIGNET" },
   { k: "arkaElbise", foto: "arka", istem: "dress" },
 ];
+export const DETAY_YERLERI = KOLAJ ? TUM_YERLER : TUM_YERLER.filter((y) => /elbise/i.test(y.k));
+export const DETAY_ETIKET = Object.fromEntries(TUM_YERLER.map((y) => [y.k, y]));
 export const ASKI_DETAY_FIYAT = 2 * KESIM.fiyat + DETAY_YERLERI.length * BUL.fiyat;
 
 // fal SAM-3 sonucundaki kutular: "boxes" = [merkezX, merkezY, genişlik, yükseklik] (0-1; canlıda doğrulandı 4 Kasım);
@@ -123,7 +127,7 @@ export async function elbiseKirp(env, kesik, kutu, W, H) {
   const left = Math.max(0, Math.round(a - px)), top = Math.max(0, Math.round(b - py));
   return donustur(env, kesik, { trim: { left, top, width: Math.min(W - left, Math.round(x - a + 2 * px)), height: Math.min(H - top, Math.round(y - b + 2 * py)) } });
 }
-export async function askiGorseli(env, kesik, kod, marka) {
+export async function askiGorseli(env, kesik, kod, marka, { etiketsiz = false } = {}) {
   const W = 1200, H = 1800, ust = 250, alt = 70, yan = 110;
   const bilgi = await env.IMAGES.info(akis(kesik));
   const kw = bilgi.width || 800, kh = bilgi.height || 1200;
@@ -134,7 +138,7 @@ export async function askiGorseli(env, kesik, kod, marka) {
   const kenar = Math.round(W * 0.03);
   const elbise = await donustur(env, kesik, { width: dw, height: dh, fit: "contain" });
   const isim = await donustur(env, etiketPngMarka(kod, marka), { width: Math.round(W * ETIKET_ORANI) });
-  return bas(env, await beyazPng(W, H), [{ bayt: ask.png, yer: { top: Math.max(0, ay), left: ax } }, { bayt: elbise, yer: { top: dy, left: dx } }, { bayt: isim, yer: { bottom: kenar, right: kenar } }]);
+  return bas(env, await beyazPng(W, H), [{ bayt: ask.png, yer: { top: Math.max(0, ay), left: ax } }, { bayt: elbise, yer: { top: dy, left: dx } }, ...(etiketsiz ? [] : [{ bayt: isim, yer: { bottom: kenar, right: kenar } }])]);
 }
 let etiketPngMarka = (kod, marka) => etiketPng(kod, marka);
 export function _etiketDegistir(f) { etiketPngMarka = f; } // testler için
