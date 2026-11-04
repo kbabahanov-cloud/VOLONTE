@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3459",
+  "baslik": "Sheer Floral Overlay Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A flowing maxi dress layered as a two-piece: a sheer, relaxed outer dress over a soft knee-length slip. The round neckline is finished with teardrop cut-outs, while voluminous sheer sleeves gather at the cuff, and a delicate blossom and bird print drifts across the skirt. Easy to wear for celebrations, receptions and elegant daytime events. Made in Istanbul with careful finishing.",
+   "fr": "Une robe longue et fluide en deux pièces : une robe extérieure transparente à la coupe ample, portée sur un fond de robe doux à hauteur du genou. L'encolure ronde s'orne de découpes en goutte, les manches bouffantes transparentes se resserrent aux poignets, et un délicat imprimé de fleurs et d'oiseaux habille la jupe. Idéale pour les fêtes, réceptions et sorties élégantes. Confectionnée à Istanbul avec soin.",
+   "pt": "Um vestido longo e fluido em duas peças: um vestido exterior transparente de corte solto sobre uma combinação suave na altura do joelho. O decote redondo tem recortes em gota, as mangas amplas e transparentes franzem no punho, e um delicado estampado de flores e aves percorre a saia. Perfeito para celebrações, recepções e eventos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3459/1.jpg",
+   "galeri/3459/2.jpg",
+   "galeri/3459/3.jpg",
+   "galeri/3459/4.jpg",
+   "galeri/3459/5.jpg",
+   "galeri/3459/6.jpg"
+  ],
+  "videolar": [
+   "selin/3459/0"
+  ],
+  "gizli": true,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3627",
   "baslik": "Lace Waist Chiffon Maxi Dress",
   "kategori": "evening",
