@@ -3,6 +3,11 @@
 # korunur; ilk kurulumda WEBHOOK_SECRET rastgele üretilir, adres açılır ve 2 dakikalık görev kurulur.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# 4 Kasım (Patron): botta ÇALIŞAN iş varken yükleme yapılmaz (Pelin aynası "venom:pelinDurum"); zorlamak için ZORLA=1
+CALISAN=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/9b7e7d56c7c591fb6c69d2e372b04e27/storage/kv/namespaces/cd4cd47b965142c6859bf702510166bb/values/venom:pelinDurum" 2>/dev/null | python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("calisan",0))
+except Exception: print(0)')
+if [ "${CALISAN:-0}" != "0" ] && [ "${ZORLA:-0}" != "1" ]; then echo "PELİN'DE ÇALIŞAN İŞ VAR ($CALISAN) — yüklenmedi. Bitince tekrar deneyin (ya da ZORLA=1)."; exit 1; fi
 node --test test-pelin.mjs 2>&1 | grep -E "^# (pass|fail)"
 node --test test-pelin.mjs >/dev/null 2>&1 || { echo "TESTLER GEÇMEDİ, yüklenmedi"; exit 1; }
 npm run build:pelin >/dev/null
