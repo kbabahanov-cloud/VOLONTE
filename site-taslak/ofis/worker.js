@@ -53,7 +53,7 @@ async function durum(env, simdi) {
     okuMetin(env, "venom:bot:aktif"), okuMetin(env, "sami:aktif"),
     oku(env, `venom:rapor:kemal:${bugun}`), oku(env, `venom:rapor:sami:${bugun}`), oku(env, `venom:rapor:selin:${bugun}`),
     oku(env, "selin:rapor"), okuMetin(env, `sayac:${bugun}`), oku(env, "sonpaylasim"), oku(env, "venom:hfAnahtar"),
-    oku(env, "venom:pelinTeshisSonuc"), oku(env, "venom:pelinHfSonuc"),
+    oku(env, "venom:pelinDurum"), oku(env, "venom:pelinHfSonuc"),
     okuMetin(env, `uretim-harcama:${ay}`), okuMetin(env, `pelin-claude:${ay}`), okuMetin(env, `pelin-openai:${ay}`), okuMetin(env, `pelin-hf:${ay}`),
     okuMetin(env, `venom-harcama:${ay}`), okuMetin(env, "venom:bot:sinir"),
   ]);
@@ -66,32 +66,25 @@ async function durum(env, simdi) {
   let venomIsler = [];
   try { const l = await env.KAYIT.list({ prefix: "venom:bot:is:", limit: 50 }); for (const k of l.keys) { const x = await oku(env, k.name); if (x && ["bekliyor", "emin", "yapiliyor"].includes(x.durum)) venomIsler.push({ id: x.id, baslik: temiz(x.baslik || x.tur || "iş"), durum: x.durum, zaman: x.zaman }); } } catch { /* yok */ }
 
-  // Pelin işleri: son teşhis anlık görüntüsünden (Aşama 1; canlı ayna sonra)
-  const pelinIsler = [];
-  let pelinKaynakZaman = null;
-  if (pelinTeshis && pelinTeshis.kayit) {
-    pelinKaynakZaman = pelinTeshis.zaman || null;
-    for (const [k, v] of Object.entries(pelinTeshis.kayit)) {
-      if (!k.startsWith("pelin:is:") || !v) continue;
-      try {
-        const x = JSON.parse(v);
-        if (!x || !x.durum || simdi - (x.zaman || 0) > 3 * 86400) continue;
-        pelinIsler.push({ id: x.id, kod: x.kod, durum: x.durum, arac: x.arac || null, aracAd: null, foto: x.foto || null, video: x.video || null, kapak: x.kapak || null, zaman: x.zaman, grup: x.grup || null, maliyet: x.maliyet || 0, senaryo: x.senaryo ? String(x.senaryo.tr || "").slice(0, 240) : null, sorunlar: (x.sorunlar || []).slice(0, 3).map(temiz) });
-      } catch { /* atla */ }
-    }
-  }
+  // Pelin işleri: CANLI ayna (Pelin her 2 dk, değişince yazar: "venom:pelinDurum")
+  const ayna = pelinTeshis && Array.isArray(pelinTeshis.isler) ? pelinTeshis : null;
+  const pelinIsler = ayna ? ayna.isler.map((x) => ({ ...x, sorunlar: (x.sorunlar || []).map(temiz) })) : [];
+  const pelinKaynakZaman = ayna ? ayna.zaman : null;
   pelinIsler.sort((a, b) => (b.zaman || 0) - (a.zaman || 0));
-  const ASAMA = { kart: 5, senaryo_yaz: 8, senaryo_onay: 10, foto_gonder: 20, foto_bekle: 35, sahne_gonder: 45, sahne_bekle: 55, video_gonder: 65, video_bekle: 80, kare_bekle: 90, muzik_gonder: 92, muzik_bekle: 95, onay: 100, uyari: 100, onaylandi: 100, iptal: 0, hata: 0, deneme_begenildi: 100 };
-  const ASAMA_AD = { kart: "maliyet onayı bekliyor", senaryo_yaz: "Nora senaryo yazıyor", senaryo_onay: "senaryo onayı bekliyor", foto_gonder: "katalog fotoğrafı üretiliyor", foto_bekle: "fotoğraf bekleniyor", sahne_gonder: "video karesi üretiliyor", sahne_bekle: "video karesi bekleniyor", video_gonder: "video üretiliyor", video_bekle: "video bekleniyor", kare_bekle: "kareler kontrol ediliyor", muzik_gonder: "müzik ekleniyor", muzik_bekle: "müzik bekleniyor", onay: "önizleme Patron'da", uyari: "kontrolden geçmedi — Patron'da", onaylandi: "onaylandı, teslimde", iptal: "iptal", hata: "hata", deneme_begenildi: "deneme beğenildi" };
+  const ASAMA = { foto_onay: 30, set_gonder: 40, set_bekle: 50, grup_bekle: 30, kart: 5, senaryo_yaz: 8, senaryo_onay: 10, foto_gonder: 20, foto_bekle: 35, sahne_gonder: 45, sahne_bekle: 55, video_gonder: 65, video_bekle: 80, kare_bekle: 90, muzik_gonder: 92, muzik_bekle: 95, onay: 100, uyari: 100, onaylandi: 100, iptal: 0, hata: 0, deneme_begenildi: 100 };
+  const ASAMA_AD = { foto_onay: "ön fotoğraf onayınızda", set_gonder: "fotoğraf seti üretiliyor", set_bekle: "fotoğraf seti bekleniyor", grup_bekle: "liderin fotoğrafını bekliyor", kart: "maliyet onayı bekliyor", senaryo_yaz: "Nora senaryo yazıyor", senaryo_onay: "senaryo onayı bekliyor", foto_gonder: "katalog fotoğrafı üretiliyor", foto_bekle: "fotoğraf bekleniyor", sahne_gonder: "video karesi üretiliyor", sahne_bekle: "video karesi bekleniyor", video_gonder: "video üretiliyor", video_bekle: "video bekleniyor", kare_bekle: "kareler kontrol ediliyor", muzik_gonder: "müzik ekleniyor", muzik_bekle: "müzik bekleniyor", onay: "önizleme Patron'da", uyari: "kontrolden geçmedi — Patron'da", onaylandi: "onaylandı, teslimde", iptal: "iptal", hata: "hata", deneme_begenildi: "deneme beğenildi" };
   for (const x of pelinIsler) { x.yuzde = ASAMA[x.durum] ?? 0; x.asama = ASAMA_AD[x.durum] || x.durum; }
-  const pelinCalisan = pelinIsler.filter((x) => ["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle"].includes(x.durum));
-  const pelinOnay = pelinIsler.filter((x) => ["kart", "senaryo_onay", "onay", "uyari"].includes(x.durum));
+  const pelinCalisan = pelinIsler.filter((x) => ["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle"].includes(x.durum));
+  // Patron masası: SADECE gerçekten bekleyenler — son 24 saat, deneme olmayan, geçersiz kart değil (açık kartlar aynadan)
+  const pelinOnay = pelinIsler.filter((x) => ["senaryo_onay", "foto_onay", "onay", "uyari"].includes(x.durum) && !x.deneme && simdi - (x.zaman || 0) < 86400);
+  const pelinKartlar = ayna ? (ayna.acikKartlar || []) : [];
   const noraCalisan = pelinIsler.filter((x) => x.durum === "senaryo_yaz");
   const noraOnay = pelinIsler.filter((x) => x.durum === "senaryo_onay");
 
   // Onay bekleyenler (Patron masası)
   const onaylar = [
-    ...pelinOnay.map((x) => ({ kim: x.durum === "senaryo_onay" ? "nora" : "pelin", baslik: `${x.kod}: ${x.asama}`, zaman: x.zaman, link: BOT_LINK.pelin, ayrinti: x.senaryo || x.sorunlar.join("; ") || null })),
+    ...pelinKartlar.map((k) => ({ kim: "pelin", baslik: temiz(k.baslik), zaman: k.zaman, link: BOT_LINK.pelin, ayrinti: "maliyet/araç kartı — Telegram'da seçip onaylayın" })),
+    ...pelinOnay.map((x) => ({ kim: x.durum === "senaryo_onay" ? "nora" : "pelin", baslik: `${x.kod}${x.marka ? ` (${x.marka === "BLACKROSE" ? "BLACK ROSE" : x.marka})` : ""}: ${x.asama}`, zaman: x.zaman, link: BOT_LINK.pelin, ayrinti: x.sorunlar.join("; ") || null })),
     ...venomIsler.filter((x) => x.durum !== "yapiliyor").map((x) => ({ kim: "venom", baslik: x.baslik, zaman: x.zaman, link: null, ayrinti: null })),
   ].sort((a, b) => (b.zaman || 0) - (a.zaman || 0));
 
@@ -108,15 +101,22 @@ async function durum(env, simdi) {
   const kalp = (w, alan = "zaman") => (w && w[alan] ? simdi - w[alan] < 20 * 60 : false);
   const bot = (ad, { canli, onay, hata, balon, son }) => ({ ad, durum: hata ? "kirmizi" : onay ? "sari" : canli ? "yesil" : "gri", balon: temiz(balon), son: son || null, hata: hata || null, onay: onay || 0 });
   const kemalPaylasim = (paylasimlarBugun || []).map((p) => ({ kod: p.kod, zaman: p.zaman })); // fiyat alınmaz
+  // Onaylayanlar: Kemal'in günlük turu (KV "tur": öğe başına onaylayan kişi; Merdan, Hemra, Patron…) + Selin'in site onayları
+  const tur = await oku(env, "tur").catch(() => null);
+  const onaylayan = {};
+  if (tur && tur.ogeler && (!tur.gun || tur.gun === bugun)) for (const o of Object.values(tur.ogeler)) if (o && o.kim) { const ad = temiz(String(o.kim).replace(/^(\S+)\s+\1$/, "$1")); onaylayan[ad] = (onaylayan[ad] || 0) + 1; }
+  const selinModeller = await oku(env, "selin:modeller").catch(() => null);
+  const siteOnay = {};
+  for (const m of Object.values(selinModeller || {})) if (m && m.onaylayan && m.zaman && gun(m.zaman) === bugun) siteOnay[temiz(m.onaylayan)] = (siteOnay[temiz(m.onaylayan)] || 0) + 1;
   const sonPaylasimlar = Object.entries(sonPaylasim || {}).filter(([k]) => /^\d{3,6}$/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([kod, z]) => ({ kod, zaman: z, foto: `${SITE_FOTO}galeri/${kod}/1.jpg` }));
   const botlar = {
     kemal: bot("Kemal", { canli: kalp(kemalW) || kalp(kemalW, "yzZaman"), onay: sayi(kemalW && kemalW.bekleyen), hata: hataKaydi(kemalHata, simdi) || (kemalW && kemalW.sonHataZamani && simdi - kemalW.sonHataZamani < 7200 ? { zaman: kemalW.sonHataZamani, metin: temiz(kemalW.sonHata) } : null),
-      balon: kPelinKanal.length ? `${kPelinKanal[0].kod} videosunu kanala alıyorum` : sayi(sayac) ? `Bugün ${sayi(sayac)} paylaşım yaptım` : rKemal ? rKemal.ozet : "Kanalı izliyorum", son: kemalW && kemalW.zaman }),
+      balon: kPelinKanal.length ? `${kPelinKanal[0].kod} videosunu kanala alıyorum` : kemalPaylasim.length ? `Bugün kanalda ${kemalPaylasim.length} paylaşım (${sayi(sayac)} benim turumdan)` : rKemal ? rKemal.ozet : "Kanalı izliyorum", son: kemalW && kemalW.zaman }),
     selin: bot("Selin", { canli: kalp(selinW) || Boolean(selinRapor && simdi - (selinRapor.son || 0) < 1200), onay: 0, hata: hataKaydi(selinHata, simdi),
       balon: kPelinSite.length ? `${kPelinSite[0].kod} siteye ekleniyor` : rSelin ? rSelin.ozet : "Siteyi düzenliyorum", son: Math.max(sayi(selinW && selinW.zaman), sayi(selinRapor && selinRapor.son)) || null }),
     sami: bot("Sami", { canli: kalp(samiW) || Boolean(samiAktif), onay: 0, hata: hataKaydi(samiHata, simdi),
       balon: kGiden.length ? "Venom'dan gelen mesajı gönderiyorum" : rSami ? rSami.ozet : "Stoku sayıyorum", son: samiW && samiW.zaman }),
-    pelin: bot("Pelin", { canli: pelinCalisan.length > 0 || kalp(pelinW), onay: pelinOnay.length, hata: hataKaydi(pelinHata, simdi),
+    pelin: bot("Pelin", { canli: pelinCalisan.length > 0 || kalp(pelinW) || Boolean(ayna && simdi - ayna.zaman < 1800), onay: pelinOnay.length + pelinKartlar.length, hata: (ayna && ayna.hata && simdi - ayna.hata.zaman < 7200 ? { zaman: ayna.hata.zaman, metin: temiz(`${ayna.hata.metin} (${ayna.hata.yol})`) } : null) || hataKaydi(pelinHata, simdi),
       balon: pelinCalisan.length ? `${pelinCalisan[0].kod}: ${pelinCalisan[0].asama}` : pelinOnay.length ? `${pelinOnay[0].kod}: ${pelinOnay[0].asama}` : "Stüdyo hazır", son: pelinIsler[0] ? pelinIsler[0].zaman : null }),
     nora: bot("Nora", { canli: noraCalisan.length > 0, onay: noraOnay.length, hata: null,
       balon: noraCalisan.length ? `${noraCalisan[0].kod} için senaryo yazıyorum` : noraOnay.length ? `${noraOnay[0].kod} senaryosu onayınızı bekliyor` : "Yeni sahne fikirleri düşünüyorum", son: null }),
@@ -124,11 +124,20 @@ async function durum(env, simdi) {
       balon: venomAktif ? "Ekibi yönetiyorum" : "Müdür odası hazırlanıyor (yakında)", son: venomAktif ? sayi(venomAktif) : null }),
   };
 
+  // Her bot için son 5 iş (ayrıntı penceresi)
+  const son5 = {
+    pelin: pelinIsler.slice(0, 5).map((x) => ({ zaman: x.zaman, metin: `${x.kod}${x.sablon ? ` · ${x.sablon}` : ""}${x.aracAd ? ` · ${x.aracAd}` : ""} → ${x.asama}${x.maliyet ? ` (${Math.round(x.maliyet * 100) / 100} $)` : ""}` })),
+    nora: pelinIsler.filter((x) => /senaryo/.test(x.durum)).slice(0, 5).map((x) => ({ zaman: x.zaman, metin: `${x.kod} → ${x.asama}` })),
+    kemal: [...kemalPaylasim].sort((a, b) => b.zaman - a.zaman).slice(0, 5).map((p) => ({ zaman: p.zaman, metin: `${p.kod} kanalda paylaşıldı` })),
+    sami: [...(olaylarBugun || [])].sort((a, b) => b.zaman - a.zaman).slice(0, 5).map((o) => ({ zaman: o.zaman, metin: o.tur === "geldi" ? `${o.kod} stoğa geldi` : o.tur === "bitti" ? `${o.kod} bitti` : `${o.kod} ${o.tur}` })),
+    selin: Object.entries(selinModeller || {}).filter(([, m]) => m && m.durum === "sitede" && m.zaman).sort((a, b) => b[1].zaman - a[1].zaman).slice(0, 5).map(([k, m]) => ({ zaman: m.zaman, metin: `${k} siteye eklendi${m.onaylayan ? ` (onay: ${temiz(m.onaylayan)})` : ""}` })),
+    venom: venomIsler.slice(0, 5).map((x) => ({ zaman: x.zaman, metin: `${x.baslik} → ${x.durum}` })),
+  };
   // Olaylar (bugün): stok olayları, paylaşımlar, hatalar, Pelin iş geçmişi (sadece zaman + kısa metin)
   const olaylar = [
     ...(olaylarBugun || []).map((o) => ({ zaman: o.zaman, kim: "sami", metin: o.tur === "geldi" ? `${o.kod} stoğa geldi` : o.tur === "bitti" ? `${o.kod} bitti` : `${o.kod} ${o.tur}` })),
     ...kemalPaylasim.map((p) => ({ zaman: p.zaman, kim: "kemal", metin: `${p.kod} kanalda paylaşıldı` })),
-    ...pelinIsler.filter((x) => x.zaman >= gunBasi(bugun)).map((x) => ({ zaman: x.zaman, kim: "pelin", metin: `${x.kod} işi başladı → ${x.asama}` })),
+    ...pelinIsler.filter((x) => x.zaman >= gunBasi(bugun)).map((x) => ({ zaman: (x.son && x.son.t) || x.zaman, kim: "pelin", metin: `${x.kod} → ${x.asama}${x.maliyet ? ` · ${Math.round(x.maliyet * 100) / 100} $` : ""}` })),
     ...Object.entries({ kemal: kemalHata, selin: selinHata, sami: samiHata, pelin: pelinHata, venom: venomHata }).filter(([, h]) => h && h.zaman >= gunBasi(bugun)).map(([kim, h]) => ({ zaman: h.zaman, kim, metin: `⚠️ ${temiz(h.hata || h.metin)}`, tur: "hata" })),
   ].sort((a, b) => b.zaman - a.zaman).slice(0, 60);
 
@@ -150,12 +159,13 @@ async function durum(env, simdi) {
   harcama.toplam = Math.round((harcama.fal + harcama.claude + harcama.openai + harcama.hf) * 100) / 100;
   const hf = { bakiyeTahmini: Math.max(0, Math.round((HF_BASLANGIC_USD - harcama.hf) * 100) / 100), baslangic: HF_BASLANGIC_USD, bitis: hfAnahtar && hfAnahtar.bitis ? hfAnahtar.bitis : null, bagli: Boolean(pelinHfSonuc && pelinHfSonuc.anahtar && pelinHfSonuc.anahtar.var) };
   return {
-    zaman: simdi, gun: bugun, saat: saat(simdi), botlar, onaylar, tasima, olaylar,
+    zaman: simdi, gun: bugun, saat: saat(simdi), botlar, onaylar, tasima, olaylar, son5,
+    uyarilar: [...(hf.bakiyeTahmini < 3 ? [`Higgsfield bakiyesi düşük: ~${hf.bakiyeTahmini} $ (3 $ altı) — yükleme gerekebilir`] : []), ...(ayna && ayna.bugun >= (ayna.gunlukSinir || 10) * 0.8 ? [`Pelin bugün ${ayna.bugun} $ harcadı (günlük sınır ${ayna.gunlukSinir} $)`] : [])],
     panolar: {
       satis, stok: ozet ? { stokta: ozet.stokta, stoksuz: ozet.stoksuz, kopruler: (ozet.kopruler || []).map((k) => ({ magaza: k.magaza, son: k.son, adet: k.adet })), uyari: rSami ? rSami.yapilacak || [] : [] } : null,
-      kemal: { bugunPaylasim: sayi(sayac), son: sonPaylasimlar, rapor: rKemal || null },
+      kemal: { bugunPaylasim: kemalPaylasim.length, turPaylasim: sayi(sayac), onaylayan, siteOnay, son: sonPaylasimlar, rapor: rKemal || null },
       selin: { site, rapor: rSelin || null },
-      pelin: { isler: pelinIsler.slice(0, 12), kaynakZaman: pelinKaynakZaman, harcama, sinir: AYLIK_SINIR_USD, hf },
+      pelin: { isler: pelinIsler.slice(0, 12), kaynakZaman: pelinKaynakZaman, harcama, sinir: AYLIK_SINIR_USD, hf, bugun: ayna ? ayna.bugun : null, gunlukSinir: ayna ? ayna.gunlukSinir : 10 },
       venom: { isler: venomIsler, harcama: sayi(venomHarcama), sinir: sayi(venomSinir) || 30 },
     },
     raporlar: { kemal: rKemal, sami: rSami, selin: rSelin },

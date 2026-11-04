@@ -399,8 +399,8 @@ function ekranlar(v) {
   if (!isler.length) pi.appendChild(el("text", { class: "ekranKucuk", x: 283, y: 108 }, "iş yok"));
   const biten = (p.pelin.isler || []).find((x) => x.kapak || x.foto);
   const img = $("#pelinOnizleme"); if (biten) { img.setAttribute("href", biten.kapak || biten.foto); img.style.display = ""; $("#pelinOnizlemeYazi").textContent = `${biten.kod}`; } else { img.style.display = "none"; $("#pelinOnizlemeYazi").textContent = ""; }
-  $("#pelinKaynak").textContent = p.pelin.kaynakZaman ? `son bilinen ${saatYaz(p.pelin.kaynakZaman)}` : "";
-  $("#kaynakNot").textContent = p.pelin.kaynakZaman ? `Pelin işleri: son teşhis ${saatYaz(p.pelin.kaynakZaman)} (canlı ayna sonra)` : "";
+  $("#pelinKaynak").textContent = p.pelin.kaynakZaman ? `canlı · ${saatYaz(p.pelin.kaynakZaman)}` : "";
+  $("#kaynakNot").textContent = p.pelin.kaynakZaman ? `Pelin canlı ayna: ${saatYaz(p.pelin.kaynakZaman)}` : "Pelin aynası henüz yazmadı";
   // Sami stok
   if (p.stok) {
     $("#stokSatir1").textContent = `Stokta ${p.stok.stokta} model`;
@@ -417,7 +417,7 @@ function ekranlar(v) {
   // Kemal ekranı
   const ks = $("#kemalSon"); ks.innerHTML = "";
   (p.kemal.son || []).slice(0, 3).forEach((x, i) => { const xx = 223 + i * 44; const im = el("image", { x: xx, y: 398, width: 38, height: 52, preserveAspectRatio: "xMidYMid slice", href: x.foto }); im.addEventListener("error", () => im.remove()); ks.appendChild(im); ks.appendChild(el("text", { class: "ekranKucuk", x: xx, y: 462 }, x.kod)); ks.appendChild(el("text", { class: "ekranKucuk", x: xx, y: 473 }, saatYaz(x.zaman))); });
-  $("#kemalBugun").textContent = `Bugün ${p.kemal.bugunPaylasim} paylaşım`;
+  $("#kemalBugun").textContent = `Bugün ${p.kemal.bugunPaylasim} paylaşım (tur ${p.kemal.turPaylasim})`;
   // Selin ekranı
   const ss = $("#selinSon"); ss.innerHTML = "";
   (p.selin.site.son || []).slice(0, 3).forEach((x, i) => { const xx = 854 + i * 44; if (x.foto) { const im = el("image", { x: xx, y: 398, width: 38, height: 52, preserveAspectRatio: "xMidYMid slice", href: x.foto }); im.addEventListener("error", () => im.remove()); ss.appendChild(im); } ss.appendChild(el("text", { class: "ekranKucuk", x: xx, y: 462 }, x.kod)); if (x.video) ss.appendChild(el("text", { class: "ekranKucuk", x: xx, y: 473 }, "▶ video")); });
@@ -442,6 +442,7 @@ function ekranlar(v) {
 // --- yan panel ---
 function panel(v) {
   const ol = $("#olaylar"); ol.innerHTML = "";
+  for (const u of v.uyarilar || []) { const d = document.createElement("div"); d.className = "kart"; d.style.borderLeftColor = "var(--kirmizi)"; d.innerHTML = `<div class="kim">UYARI</div>${kacir(u)}`; ol.appendChild(d); }
   if (!v.olaylar.length) ol.innerHTML = '<div class="bos">Bugün kayıtlı olay yok.</div>';
   for (const o of v.olaylar) { const d = document.createElement("div"); d.className = `olay${o.tur === "hata" ? " hata" : ""}`; d.innerHTML = `<time>${saatYaz(o.zaman)}</time><div><div class="kim">${KAR[o.kim] ? KAR[o.kim].ad : o.kim}</div>${kacir(o.metin)}</div>`; ol.appendChild(d); }
   const on = $("#onaylar"); on.innerHTML = "";
@@ -449,7 +450,10 @@ function panel(v) {
   if (!v.onaylar.length) on.innerHTML = '<div class="bos">Onay bekleyen iş yok.</div>';
   for (const o of v.onaylar) { const d = document.createElement("div"); d.className = "kart"; d.innerHTML = `<div class="kim">${KAR[o.kim] ? KAR[o.kim].ad : o.kim} · ${o.zaman ? saatYaz(o.zaman) : ""}</div>${kacir(o.baslik)}${o.ayrinti ? `<div class="ayr">${kacir(o.ayrinti)}</div>` : ""}${o.link ? `<a href="${o.link}" target="_blank" rel="noopener">Telegram'da kartı aç →</a>` : ""}`; on.appendChild(d); }
   const h = v.panolar.pelin.harcama, hf = v.panolar.pelin.hf;
-  $("#harcama").innerHTML = `<h3>PELİN · BU AY</h3>
+  $("#harcama").innerHTML = `<h3>PELİN · BUGÜN</h3>
+    <div class="sayi"><span>Bugün</span><b>${para(v.panolar.pelin.bugun || 0)} / ${v.panolar.pelin.gunlukSinir || 10} $</b></div>
+    <div class="cubuk"><i style="width:${Math.min(100, (v.panolar.pelin.bugun || 0) / (v.panolar.pelin.gunlukSinir || 10) * 100)}%"></i></div>
+    <h3>PELİN · BU AY</h3>
     <div class="sayi"><span>Toplam</span><b>${para(h.toplam)} / ${v.panolar.pelin.sinir} $</b></div>
     <div class="cubuk"><i style="width:${Math.min(100, h.toplam / v.panolar.pelin.sinir * 100)}%"></i></div>
     <div class="sayi"><span>fal.ai (görsel + video)</span><b>${para(h.fal)}</b></div>
@@ -457,7 +461,7 @@ function panel(v) {
     <div class="sayi"><span>Claude (kontrol + Nora)</span><b>${para(h.claude)}</b></div>
     <div class="sayi"><span>ChatGPT (ikinci göz)</span><b>${para(h.openai)}</b></div>
     <h3>HIGGSFIELD</h3>
-    <div class="sayi"><span>Bakiye (tahmini)</span><b>${para(hf.bakiyeTahmini)}</b></div>
+    <div class="sayi"><span>Bakiye (tahmini)</span><b style="${hf.bakiyeTahmini < 3 ? "color:var(--kirmizi)" : ""}">${para(hf.bakiyeTahmini)}${hf.bakiyeTahmini < 3 ? " ⚠️" : ""}</b></div>
     <div class="cubuk"><i style="width:${hf.bakiyeTahmini / hf.baslangic * 100}%"></i></div>
     <div class="sayi"><span>Anahtar</span><b>${hf.bagli ? "bağlı" : "—"}${hf.bitis ? ` · bitiş ${hf.bitis.split("-").reverse().join(".")}` : ""}</b></div>
     <p class="not">Bakiye = ${hf.baslangic} $ − Pelin'in Higgsfield harcaması. Kesin rakam Higgsfield panelinde (otomatik yükleme kapalı).</p>
@@ -472,7 +476,9 @@ function ayrintiAc(id) {
   const p = veri.panolar;
   let ek = "";
   if (id === "pelin" || id === "nora") ek = (p.pelin.isler || []).slice(0, 6).map((x) => `<div class="sayi"><span>${x.kod} · ${kacir(x.asama)}</span><b>${x.yuzde}%</b></div>`).join("") || '<div class="bos">iş yok</div>';
-  if (id === "kemal") ek = `<div class="sayi"><span>Bugün paylaşım</span><b>${p.kemal.bugunPaylasim}</b></div>${p.kemal.rapor ? `<p class="not">${kacir(p.kemal.rapor.ozet)}</p>` : ""}`;
+  const sayilar = (o) => Object.entries(o || {}).map(([k, n]) => `<div class="sayi"><span>${kacir(k)}</span><b>${n}</b></div>`).join("") || '<div class="bos">kayıt yok</div>';
+  const alt = (t) => `<h3 style="font:400 10px Georgia,serif;letter-spacing:.25em;color:var(--altin);margin:10px 0 4px">${t}</h3>`;
+  if (id === "kemal") ek = `<div class="sayi"><span>Bugün kanalda (hepsi)</span><b>${p.kemal.bugunPaylasim}</b></div><div class="sayi"><span>Kemal'in turundan</span><b>${p.kemal.turPaylasim}</b></div>${alt("TUR ONAYLAYANLAR")}${sayilar(p.kemal.onaylayan)}${alt("SİTE ONAYLAYANLAR (BUGÜN)")}${sayilar(p.kemal.siteOnay)}${p.kemal.rapor ? `<p class="not">${kacir(p.kemal.rapor.ozet)}</p>` : ""}`;
   if (id === "selin") ek = `${p.selin.rapor ? `<p class="not">${kacir(p.selin.rapor.ozet)}</p>` : ""}`;
   if (id === "sami") ek = `${p.stok ? `<div class="sayi"><span>Stokta</span><b>${p.stok.stokta}</b></div><div class="sayi"><span>Stoksuz</span><b>${p.stok.stoksuz}</b></div>` : ""}${(p.stok && p.stok.uyari || []).map((u) => `<p class="not">⚠ ${kacir(u)}</p>`).join("")}`;
   if (id === "venom") ek = `<p class="not">${p.venom.isler.length ? p.venom.isler.map((x) => kacir(x.baslik)).join("<br>") : "Venom botu henüz açılmadı (BOT_TOKEN bekliyor). Açılınca müdür odası canlanır."}</p>`;
@@ -483,8 +489,10 @@ function ayrintiAc(id) {
     ${b.son ? `<div class="sayi"><span>Son hareket</span><b>${saatYaz(b.son)}</b></div>` : ""}
     ${b.hata ? `<div class="kart" style="border-left-color:var(--kirmizi)"><div class="kim">HATA · ${saatYaz(b.hata.zaman)}</div>${kacir(b.hata.metin)}</div>` : ""}
     ${ek}
+    <h3 style="font:400 10px Georgia,serif;letter-spacing:.25em;color:var(--altin);margin:10px 0 4px">SON 5 İŞ</h3>
+    ${((veri.son5 || {})[id] || []).map((x) => `<div class="sayi"><span style="max-width:75%">${kacir(x.metin)}</span><b style="font-weight:400">${x.zaman ? saatYaz(x.zaman) : ""}</b></div>`).join("") || '<div class="bos">kayıt yok</div>'}
     ${link ? `<p><a href="${link}" target="_blank" rel="noopener">Telegram'da ${KAR[id].ad} ile konuş →</a></p>` : ""}
-    <p class="not">Aşama 2: buraya tıklayınca ${KAR[id].ad} ile yüz yüze sesli/yazılı konuşma açılacak.</p>`;
+    <p class="not">Sesli/yazılı konuşma (Aşama 2) henüz bağlı değil — ayrı onayla eklenecek.</p>`;
   $("#ayrinti").style.display = "block";
 }
 $("#ayrintiKapat").onclick = () => { $("#ayrinti").style.display = "none"; aktifAyrinti = null; };
