@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3229",
+  "baslik": "Pinstripe Piped Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece pinstripe set in navy, pairing a sleeveless collared shirt with high-waisted wide-leg trousers. White piping outlines the chest flap pockets, the waistband and the front seams of the trousers, adding a clean graphic contrast. Wear it to the office, to meetings or to daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces à fines rayures bleu marine, associant une chemise sans manches à col classique et un pantalon large taille haute. Un passepoil blanc souligne les poches à rabat, la ceinture et les coutures avant du pantalon pour un contraste net et graphique. Idéal au bureau, en réunion ou pour vos sorties de journée. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças com risca de giz em azul-marinho, que combina uma camisa sem mangas de gola clássica com calças largas de cintura alta. Um debrum branco contorna os bolsos com pala, o cós e as costuras frontais das calças, criando um contraste limpo e gráfico. Perfeito para o escritório, reuniões ou eventos durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3229/1.jpg",
+   "galeri/3229/2.jpg",
+   "galeri/3229/3.jpg",
+   "galeri/3229/4.jpg"
+  ],
+  "videolar": [
+   "selin/3229/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3619",
   "baslik": "Smocked Kimono Skirt Set",
   "kategori": "sets",
