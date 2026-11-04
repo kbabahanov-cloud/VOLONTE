@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3148",
+  "baslik": "Beaded Wrap Pleated Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A black midi dress with a wrap-style bodice and a softly pleated skirt. The shawl lapel and asymmetric waist are edged with beaded fringe, while sheer balloon sleeves finish in neat cuffs. Elegant for ceremonies, receptions and refined daytime events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Une robe midi noire au buste croisé, prolongée par une jupe plissée tout en légèreté. Le col châle et la taille asymétrique sont soulignés de franges perlées, et les manches ballon transparentes se terminent par des poignets nets. Idéale pour les cérémonies, réceptions et événements de journée. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido midi preto com corpete transpassado e saia plissada de movimento suave. A gola xale e a cintura assimétrica são realçadas por franjas de missangas, e as mangas balão transparentes terminam em punhos discretos. Elegante para cerimónias, receções e eventos diurnos. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3148/1.jpg",
+   "galeri/3148/2.jpg",
+   "galeri/3148/3.jpg",
+   "galeri/3148/4.jpg"
+  ],
+  "videolar": [
+   "selin/3148/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "907",
   "baslik": "Piped Bib Pleated Dress",
   "kategori": "dresses",
