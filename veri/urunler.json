@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3634",
+  "baslik": "Printed Satin Shirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a long, relaxed button-front shirt with matching wide-leg trousers in a soft satin finish. The shirt features a classic pointed collar and contrast black buttons, while a large painterly butterfly print flows over a golden-to-charcoal gradient. The trousers have an elastic front waistband and a smooth back. Easy to wear for daytime events or polished city days, made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces composé d'une chemise longue et ample boutonnée devant et d'un pantalon large assorti, au fini satiné et doux. La chemise se distingue par son col classique et ses boutons noirs contrastés, avec un grand imprimé papillon façon aquarelle sur un dégradé doré et anthracite. Le pantalon offre une taille élastique devant et un dos lisse. Idéal pour les événements de journée ou une allure soignée en ville, confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças com camisa longa e solta, abotoada à frente, e calça larga combinando, com acabamento acetinado suave. A camisa tem gola clássica e botões pretos em contraste, com um grande estampado de borboleta em estilo aquarela sobre um degradê dourado e grafite. A calça tem cós elástico na frente e costas lisas. Perfeito para eventos diurnos ou um visual elegante na cidade, produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3634/1.jpg",
+   "galeri/3634/2.jpg",
+   "galeri/3634/3.jpg",
+   "galeri/3634/4.jpg"
+  ],
+  "videolar": [
+   "selin/3634/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3459",
   "baslik": "Sheer Floral Overlay Dress",
   "kategori": "dresses",
