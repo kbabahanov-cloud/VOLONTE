@@ -2034,16 +2034,26 @@ const pelinMedya = (x) => [{ type: "video", media: x.video }, ...[x.foto, ...((x
 async function yayinOnayKarti(env, x, u, simdi) {
   const patron = String(env.MURAT_ID || "").split(",")[0].trim();
   const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x) });
-  await env.KAYIT.put(`kemal:pelinYayin:${x.id}`, JSON.stringify({ x, zaman: simdi }), { expirationTtl: 14 * 86400 });
+  // 4 Kasım (Patron): aynı işe yeni paket gelirse ESKİ kart geçersiz (kart no her pakette yeni; eski mesaj "geçersiz" diye kapatılır)
+  const kartNo = `${x.id}.${Number(x.zaman || simdi).toString(36).slice(-5)}`;
+  const eskiler = ((await env.KAYIT.list({ prefix: `kemal:pelinYayin:${x.id}` }).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
+  for (const k of eskiler) {
+    const e = await env.KAYIT.get(k, "json").catch(() => null);
+    if (e && e.mid) await telegram(env, "editMessageText", { chat_id: patron, message_id: e.mid, text: `❌ ${x.kod}: bu SON YAYIN kartı geçersiz — düzeltilmiş paketle yeni kart geldi.` }).catch(() => null);
+    await env.KAYIT.delete(k);
+  }
   const marka = x.marka === "BLACKROSE" ? "BLACK ROSE" : x.marka || "?";
-  await telegram(env, "sendVideo", { chat_id: patron, video: x.video, caption: `🎬 ${x.kod} · ${marka} — yayın önizlemesi (videonun sonunda "${marka} · ${x.kod}")`, supports_streaming: true });
+  const v = await telegram(env, "sendVideo", { chat_id: patron, video: x.video, caption: `🎬 ${x.kod} · ${marka} — yayın önizlemesi ("${marka} · ${x.kod}" videonun tamamında, sağ alt köşede)`, supports_streaming: true });
+  if (!v.ok) await telegram(env, "sendMessage", { chat_id: patron, text: `⚠️ ${x.kod}: önizleme videosu gösterilemedi (${v.description || "?"}).` });
   const fotolar = [x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, 10);
   if (fotolar.length > 1) await telegram(env, "sendMediaGroup", { chat_id: patron, media: fotolar.map((f, i) => ({ type: "photo", media: f, ...(i === 0 ? { caption: `📸 ${x.kod} — ön${(x.set || []).length ? ` + ${(x.set || []).map((y) => y.ad).join(", ")}` : ""}` } : {}) })) });
   else if (fotolar.length) await telegram(env, "sendPhoto", { chat_id: patron, photo: fotolar[0], caption: `📸 ${x.kod}` });
   const yazi = duzMetinYazi(altYazi(paket));
-  return telegram(env, "sendMessage", { chat_id: patron, disable_web_page_preview: true,
+  const kart = await telegram(env, "sendMessage", { chat_id: patron, disable_web_page_preview: true,
     text: [`📣 SON YAYIN ONAYI — ${x.kod} · ${marka}`, "Pelin'deki onay üretim onayıydı. Bu kart onaylanmadan hiçbir şey kanala/siteye gitmez.", "", "Kanala bu yazıyla gidecek:", "───", yazi.slice(0, 1500), "───", "Onaylarsanız Kemal kanala koyar, Selin siteye ekler."].join("\n"),
-    reply_markup: { inline_keyboard: [[{ text: "📣 Kanala ve siteye gönder", callback_data: `py:o:${x.id}` }, { text: "❌ Gönderme", callback_data: `py:x:${x.id}` }]] } });
+    reply_markup: { inline_keyboard: [[{ text: "📣 Kanala ve siteye gönder", callback_data: `py:o:${kartNo}` }, { text: "❌ Gönderme", callback_data: `py:x:${kartNo}` }]] } });
+  await env.KAYIT.put(`kemal:pelinYayin:${kartNo}`, JSON.stringify({ x, zaman: simdi, mid: kart && kart.ok ? kart.result.message_id : null }), { expirationTtl: 14 * 86400 });
+  return kart;
 }
 const duzMetinYazi = (html) => String(html || "").replace(/<br\s*\/?>/g, "\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 async function yayinOnayDugmesi(cq, env) {

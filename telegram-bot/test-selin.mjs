@@ -794,4 +794,13 @@ test("Pelin teslim → site (4 Kasım): kanal videosu ürün videolarının baş
   await pelinSiteAdimi(o.env, ist(12));
   assert.ok(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).every((x) => !("fiyat" in x)));
   assert.ok(!o.depo.has("venom:siteFiyatSil"));
+  // tek seferlik: eski markasız Pelin medyası kaldırılır (model sitede kalır, diğer fotoğraflara dokunulmaz)
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", fotolar: ["galeri/3618/1.jpg", "galeri/3618/pelin-abc.jpg", "galeri/3618/2.jpg"], videolar: ["Volonteroseoffical/5555", "selin/3618/0"] }]));
+  o.github.dosyalar.set("galeri/3618/pelin-abc.jpg", "x");
+  o.depo.set("venom:siteMedyaKaldir", JSON.stringify([{ kod: "3618", fotolar: ["galeri/3618/pelin-abc.jpg"], videolar: ["Volonteroseoffical/5555"] }]));
+  await pelinSiteAdimi(o.env, ist(13));
+  const u2 = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.deepEqual([u2.fotolar, u2.videolar], [["galeri/3618/1.jpg", "galeri/3618/2.jpg"], ["selin/3618/0"]]);
+  assert.ok(!o.github.dosyalar.has("galeri/3618/pelin-abc.jpg"));
+  assert.match(o.depo.get("venom:siteMedyaKaldirSonuc"), /3618: 1 fotoğraf, 1 video kaldırıldı/);
 });

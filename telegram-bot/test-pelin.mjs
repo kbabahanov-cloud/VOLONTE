@@ -125,7 +125,8 @@ function uretimOrtami() {
   const zincir = { transform() { return zincir; }, draw() { return zincir; }, output() { return { response: () => new Response("DAMGALI") }; } };
   o.env.IMAGES = { input: () => zincir, info: async () => ({ width: 1080, height: 1920 }) };
   o.falSonuc["fal-ai/ffmpeg-api/images-to-video"] = (n) => ({ video: { url: `https://vid/kapanis${n}.mp4` } });
-  o.falSonuc["fal-ai/ffmpeg-api/merge-videos"] = (n) => ({ video: { url: `https://vid/markali${n}.mp4` } });
+  o.falSonuc["fal-ai/workflow-utilities/scale-video"] = (n) => ({ video: { url: `https://vid/kucuk${n}.mp4` } });
+  o.falSonuc["fal-ai/workflow-utilities/blend-video"] = (n) => ({ video: { url: `https://vid/markali${n}.mp4` } });
   return o;
 }
 const GECTI = { renk_ayni: true, desen_ayni: true, kesim_ayni: true, sorunlar: [] };
@@ -204,9 +205,16 @@ test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden ü
   await cronlar(o, 6);
   const t = await teslim(o);
   assert.deepEqual(t.map((x) => [x.kod, x.v, x.deneme, x.yayinOnayi, x.marka]), [["3557", 3, false, true, "VOLONTE"]]);
-  assert.match(t[0].video, /^https:\/\/vid\/markali/); // videonun sonuna damgalı kapanış karesi eklendi
+  assert.match(t[0].video, /^https:\/\/vid\/markali/); // yazı videonun TAMAMINA basıldı (blend)
   assert.match(t[0].foto, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/); // damgalı fotoğraf
-  assert.ok(o.falIstek.some((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video" && x.govde.images[0].frames === 48));
+  const katman = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video");
+  assert.ok(katman.govde.images[0].frames >= 24 * 15); // katman videodan uzun
+  assert.ok(o.falIstek.some((x) => x.uc === "fal-ai/workflow-utilities/scale-video" && x.govde.width === 1080 && x.govde.height === 1920 && x.govde.crf === 20));
+  const bl = o.falIstek.find((x) => x.uc === "fal-ai/workflow-utilities/blend-video");
+  assert.deepEqual([bl.govde.top_video_url, bl.govde.blend_mode, bl.govde.shortest], [`https://vid/kapanis${o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video").length}.mp4`.replace(/kapanis\d+/, bl.govde.top_video_url.match(/kapanis\d+/)[0]), "overlay", true]);
+  assert.match(bl.govde.bottom_video_url, /^https:\/\/vid\/kucuk/);
+  assert.ok(!o.falIstek.some((x) => x.uc === "fal-ai/ffmpeg-api/merge-videos")); // kapanış karesi yok
+  assert.ok(o.g.some((x) => x.metod === "sendVideo" && /damgalı video \("VOLONTE · 3557" baştan sona sağ altta\)/.test(x.govde.caption || ""))); // önce Patron'a ayrı
 });
 
 test("üretim: 2 denemede kontrolden geçmezse Patron'a ⚠️ (sorunlarla); maliyet testi bitince model başı maliyet raporu", async () => {
@@ -375,10 +383,10 @@ test("üretim rollerle: büyük seri modeli büyük seri yüzüyle; katalog foto
   assert.ok(!edit.some((x) => /80s neon/.test(x.govde.prompt)));
   const video = o.hfIstek.filter((x) => x.yol === "kling-video/v4.0/image-to-video");
   assert.equal(video.length, 2);
-  assert.match(video[0].govde.prompt, /Setting and atmosphere: city street golden hour\. Motion \(approved scenario\): She takes two slow steps toward the camera[\s\S]*no spinning, no twirling, no fast turns, no orbiting camera[\s\S]*close-up of the neckline\/collar and stitching[\s\S]*"VOLONTE" and directly below it the model code "3557"[\s\S]*no price/);
+  assert.match(video[0].govde.prompt, /Setting and atmosphere: city street golden hour\. Motion \(approved scenario\): She takes two slow steps toward the camera[\s\S]*no spinning, no twirling, no fast turns, no orbiting camera[\s\S]*close-up of the neckline\/collar and stitching[\s\S]*No text\./);
   assert.ok(!/orbits around her|turns to face the camera/.test(video[0].govde.prompt));
   assert.match(video[0].govde.prompt, /Avoid: .*spinning, twirling, fast turn, orbiting camera/); // Higgsfield'de negatif alan yok → istemde
-  assert.match(video[1].govde.prompt, /model code "3601"/);
+  assert.ok(!/model code/.test(video[1].govde.prompt)); // 4 Kasım: video modeli yazı çizmez (yazı sonradan basılır)
   assert.ok(o.g.some((x) => /🎞 3557 \(video karesi\)/.test(x.govde.caption || "")));
 });
 
@@ -448,7 +456,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   const kart = o.g.at(-1).govde;
   assert.match(kart.text, /Renk: 3627 sadece kırmızı/);
   assert.match(kart.text, /Ürün fotoğrafı: 3627 sizin gönderdiğiniz \(ön, arka\)/);
-  assert.match(kart.text, /Sahne: kameraya doğru İLERİ birkaç yavaş adım · hafif duruş · omuz üstünden bakış · kumaş doğal dalgalanır · hızlı dönüş, geri yürüme ve kamera dönüşü YOK · yaka\/dikiş yakın kare · son karede küçük marka \+ kod \(fiyat yok\) · kapak fotoğrafı videodan\n📝 Senaryo: fotoğraf hazır olunca Nora yazar, onayınıza gelir/);
+  assert.match(kart.text, /Sahne: kameraya doğru İLERİ birkaç yavaş adım · hafif duruş · omuz üstünden bakış · kumaş doğal dalgalanır · hızlı dönüş, geri yürüme ve kamera dönüşü YOK · yaka\/dikiş yakın kare · marka \+ kod videonun tamamında sağ altta, sonradan basılır \(fiyat yok\) · kapak fotoğrafı videodan\n📝 Senaryo: fotoğraf hazır olunca Nora yazar, onayınıza gelir/);
   await onayla(o, kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2], "hf_kling4", "sehir");
   o.yaziCevap.kod = "3627";
   o.claude.cevaplar = Array.from({ length: 6 }, () => claudeJsonCevap(GECTI));
@@ -461,20 +469,20 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   assert.ok(kontrol.length >= 3);
   const video = o.hfIstek.filter((x) => x.yol === "kling-video/v4.0/image-to-video");
   assert.equal(video.length, 1); // 4 Kasım: video kendi kendine yeniden üretilmez (ayrı testte: yanlış kod → Patron'a sorar)
-  assert.match(video[0].govde.prompt, /\(red only\)[\s\S]*no orbiting camera[\s\S]*"VOLONTE"[\s\S]*"3627"/);
+  assert.match(video[0].govde.prompt, /\(red only\)[\s\S]*no orbiting camera[\s\S]*No text\./);
   assert.ok(video[0].govde.prompt.length <= 1900, `video istemi kısa olmalı: ${video[0].govde.prompt.length}`);
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]);
   assert.ok(is.gecmis.some(([, t]) => /video 1: geçti/.test(t)));
   assert.ok(o.g.some((x) => x.metod === "sendPhoto" && /🖼 3627 kapak \(videodan\)/.test(x.govde.caption || "")));
   const on2 = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
-  assert.match(on2.govde.text, /son kare yazısı ✅[\s\S]*Ürün fotoğrafı: sizin gönderdiğiniz · renk kırmızı/);
+  assert.match(on2.govde.text, /Ürün fotoğrafı: sizin gönderdiğiniz · renk kırmızı/);
   const dugmeler = on2.govde.reply_markup.inline_keyboard.flat();
   assert.deepEqual(dugmeler.map((x) => x.text), ["✅ Onayla", "🔄 Yeniden üret", "❌ İptal", "💾 Bu ayarları şablon olarak kaydet", "🎬 Seedance 2.5 1080p ile de dene (6,82 $)", "🎬 Kling 3.0 4K ile de dene (1,26 $)"]);
   await bas(o, MURAT, dugmeler[3].callback_data);
   const sb = JSON.parse(o.depo.get("pelin:sablonlar"))["3627"];
   assert.equal(sb.katalogOrtamId, "2");
   assert.equal(sb.videoOrtamId, "3");
-  assert.equal(sb.sahne.sonYazi, true);
+  assert.equal(sb.sahne.sonYazi, false);
   assert.match(o.g.at(-1).govde.text, /"3627 şablonu" kaydedildi/);
   await bas(o, MURAT, dugmeler[0].callback_data);
   await cronlar(o, 6);
@@ -633,7 +641,7 @@ test("kontrol: makyajsız yüz ve kadraj büyük sorun; video aşamasında kalan
   await cronlar(o, 8);
   assert.equal(JSON.parse(o.depo.get("pelin:is:3627-x")).durum, "onaylandi");
   assert.equal((await teslim(o))[0].kod, "3627");
-  assert.equal((await teslim(o))[0].set.length, 4);
+  assert.equal((await teslim(o))[0].set.length, 3); // askı fotoğrafı yok → üretilmez (yapay zekâ askı YOK)
 });
 
 test("örnek video 'bunun gibi yap, büyük 3627 koyu bordo' → tarif → ▶️ üret: seri + renk + şablon kartta", async () => {
@@ -663,7 +671,7 @@ test("lüks: varsayılan araç YOK, kartta fiyatlı araç düğmeleri; premium k
   const kart = o.g.at(-1).govde;
   assert.match(kart.text, /· PREMIUM\n/);
   assert.match(kart.text, /🎬 Video aracı: — SEÇİN[\s\S]*🎨 Şablon: — SEÇİN[\s\S]*Fiyat: araç seçilince yazılır/);
-  assert.deepEqual(kart.reply_markup.inline_keyboard.slice(0, 2).flat().map((d) => d.text), ["Seedance 2.5 · 7,69 $", "Kling 3.0 4K · 2,12 $", "Kling 4.0 · 2,06 $", "Hepsini dene · 10,30 $"]);
+  assert.deepEqual(kart.reply_markup.inline_keyboard.slice(0, 2).flat().map((d) => d.text), ["Seedance 2.5 · 7,54 $", "Kling 3.0 4K · 1,97 $", "Kling 4.0 · 1,91 $", "Hepsini dene · 10,15 $"]);
   assert.match(kart.text, /Aksesuar \(3627\): altın küpe ve ince altın kolye, nude çanta\nPremium mekân \(3627\): 5 yıldızlı otel lobisi/);
   await bas(o, MURAT, `pu:o:${kartId(kart)}`); // seçim yok → başlamaz
   assert.match(o.g.at(-1).govde.text, /Önce video aracını seçin/);
@@ -672,8 +680,8 @@ test("lüks: varsayılan araç YOK, kartta fiyatlı araç düğmeleri; premium k
   assert.equal(JSON.parse(o.depo.get("pelinboy:3627")).stil["koyu bordo"].aksesuarTr, "altın küpe ve ince altın kolye, nude çanta"); // bir kez seçilir, saklanır
   await bas(o, MURAT, `pc:a:${kartId(kart)}:hf_kling3`);
   const duz = o.g.filter((x) => x.metod === "editMessageText").at(-1).govde;
-  assert.match(duz.text, /🎬 Video aracı: Kling 3\.0 4K \(Higgsfield\)[\s\S]*• Video 6 sn — Kling 3\.0 4K \(Higgsfield\) \+ kontrol: 1,33 \$[\s\S]*TOPLAM ~2,12 \$/);
-  assert.equal(duz.reply_markup.inline_keyboard[0][1].text, "☑️ Kling 3.0 4K · 2,12 $");
+  assert.match(duz.text, /🎬 Video aracı: Kling 3\.0 4K \(Higgsfield\)[\s\S]*• Video 6 sn — Kling 3\.0 4K \(Higgsfield\) \+ kontrol: 1,33 \$[\s\S]*TOPLAM ~1,97 \$/);
+  assert.equal(duz.reply_markup.inline_keyboard[0][1].text, "☑️ Kling 3.0 4K · 1,97 $");
   assert.match((JSON.parse(o.depo.get("pelin:sonKartlar")) || [])[0].metin, /Kling 3\.0 4K/); // sohbet son kartın gerçek metnini görür
   await onayla(o, kartId(kart), null, "siyahaltin");
   o.yaziCevap.kod = "3627";
@@ -1205,7 +1213,7 @@ test("ÖNCE FOTOĞRAF ONAYI: video fotoğraf onaylanmadan üretilmez; istemde il
   await cronlar(o, 8);
   assert.equal(o.hfIstek.length, 0); // fotoğraf onayı bekleniyor
   const fk = o.g.filter((x) => x.govde && x.govde.reply_markup && x.govde.reply_markup.inline_keyboard.flat().some((d) => /^pu:f:/.test(d.callback_data))).at(-1);
-  assert.match(fk.govde.text, /👁 3627: önce ÖN fotoğraf onayı\. Uygunsa diğer açılar \(sağ yan, sol yan, arka, askıda detay ~0,60 \$\) ve video üretilir: Kling 3\.0 4K \(Higgsfield\) ~1,26 \$/);
+  assert.match(fk.govde.text, /👁 3627: önce ÖN fotoğraf onayı\. Uygunsa diğer açılar \(sağ yan, sol yan, arka ~0,45 \$; askı = sizin gerçek fotoğrafınız, ücretsiz\) ve video üretilir: Kling 3\.0 4K \(Higgsfield\) ~1,26 \$/);
   assert.ok(o.g.some((x) => x.metod === "sendPhoto" && /videonun başlangıç fotoğrafı/.test(x.govde.caption || "")));
   const foto = o.falIstek.find((x) => x.uc === "fal-ai/nano-banana-pro/edit");
   assert.match(foto.govde.prompt, /MODEL RULES[\s\S]*OPAQUE lining fabric of the SAME color \(dark burgundy\)[\s\S]*black camisole lining under sheer chiffon/);
@@ -1234,15 +1242,13 @@ test("MARKA: Sami'nin deposundan (Vegawin köprüleri) — sadece Black Rose →
   await yazi(o, MURAT, "3900 üret");
   assert.equal(JSON.parse(o.depo.get("pelinboy:3900")).marka, "BLACKROSE");
   const kart = o.g.at(-1).govde;
-  assert.match(kart.text, /^🏷 Marka: 3900 = BLACK ROSE \(son karede bu yazar\)/);
+  assert.match(kart.text, /^🏷 Marka: 3900 = BLACK ROSE \(videonun tamamında sağ altta, fotoğraflarda sağ altta\)/);
   await onayla(o, kartId(kart), "hf_kling4", "siyahaltin");
   o.yaziCevap.kod = "3900";
   o.claude.cevaplar = Array.from({ length: 4 }, () => K2());
   await cronlar(o, 10);
   const v = o.hfIstek.find((x) => /kling-video/.test(x.yol));
-  assert.match(v.govde.prompt, /SILVER-WHITE text "BLACK ROSE"[\s\S]*model code "3900"/);
-  assert.ok(!/"VOLONTE"/.test(v.govde.prompt));
-  assert.ok(o.claude.some((x) => JSON.stringify(x.messages).includes('\\"BLACK ROSE\\" yazısı doğru yazılmış')));
+  assert.ok(!/"VOLONTE"|"BLACK ROSE"/.test(v.govde.prompt)); // yazı sonradan basılır (paket: BLACK ROSE · 3900)
   // belirsiz: Patron'a sorulur
   await yazi(o, MURAT, "3901 üret");
   const soru = o.g.at(-1).govde;
@@ -1257,26 +1263,26 @@ test("FOTOĞRAF SETİ + yere 2-3 cm boy + akıcı geçiş; kötü video KENDİ K
   o.depo.set("pelin:secim", SECIM_ROLLU());
   o.site.push({ kod: "3627", bedenler: "38-50", fotolar: ["galeri/3627/1.jpg", "galeri/3627/2.jpg"] });
   o.depo.set("pelinboy:3627", JSON.stringify({ boy: "yerustu", seri: "buyuk", renk: "koyu bordo", marka: "BLACKROSE", anlama: { "koyu bordo": { ust: "seffaf", alt: "opak", iclik: "siyah", onay: 1 } } }));
+  o.depo.set("pelin:urunfoto:3627", JSON.stringify([{ anahtar: "e".repeat(32), rol: "on", etiket: "aski", renk: null, zaman: 5 }, { anahtar: "f".repeat(32), rol: "on", etiket: "manken", renk: null, zaman: 4 }]));
   await yazi(o, MURAT, "3627 üret");
   assert.match(o.g.at(-1).govde.text, /Boy: 3627 yere 2-3 cm \(yerden 2-3 cm yukarıda, bilekleri örter, sadece ayakkabı uçları görünür, yere asla değmez\)/);
   const kid = kartId(o.g.at(-1).govde);
   await bas(o, MURAT, `pc:a:${kid}:hf_kling4`);
-  assert.match(o.g.filter((x) => x.metod === "editMessageText").at(-1).govde.text, /Fotoğraf seti: sağ yan, sol yan, arka, askıda detay \(ön onaylanınca\): 0,60 \$/);
+  assert.match(o.g.filter((x) => x.metod === "editMessageText").at(-1).govde.text, /Fotoğraf seti: sağ yan, sol yan, arka \(ön onaylanınca\) \+ gerçek askı fotoğrafı \(ücretsiz\): 0,45 \$/);
   await onayla(o, kid, null, "siyahaltin");
   o.yaziCevap.kod = "3627";
   o.claude.cevaplar = [K2(), K2({ renk_buyuk_fark: true, puan: 4, buyuk_sorunlar: ["model kuralı: etek şeffaf"] })];
   await cronlar(o, 16);
   const on = uretimEdit(o)[0];
   assert.match(on.govde.prompt, /^LENGTH RULE[\s\S]*the hem ends 2-3 cm above the floor, covering the ankles, only the shoe tips visible; the dress NEVER touches the floor/);
-  const set = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit" && /now photographed from|hanging on an elegant wooden hanger/.test(x.govde.prompt));
-  assert.equal(set.length, 4);
+  const set = o.falIstek.filter((x) => x.uc === "fal-ai/nano-banana-pro/edit" && /now photographed from|elegant wooden hanger/.test(x.govde.prompt));
+  assert.equal(set.length, 3); // askı YAPAY ZEKÂYLA ÜRETİLMEZ
   assert.ok(set.some((x) => /RIGHT side/.test(x.govde.prompt)) && set.some((x) => /LEFT side/.test(x.govde.prompt)) && set.some((x) => /from BEHIND/.test(x.govde.prompt)));
-  const aski = set.find((x) => /hanger/.test(x.govde.prompt));
-  assert.ok(!aski.govde.image_urls.some((u) => /dosya\/c{32}/.test(u))); // askıda detayda yüz yok
-  assert.ok(o.g.some((x) => x.metod === "sendMediaGroup" && x.govde.media.map((m) => m.caption).join("|") === "3627 · ön|3627 · sağ yan|3627 · sol yan|3627 · arka|3627 · askıda detay"));
+  assert.ok(o.g.some((x) => x.metod === "sendMediaGroup" && x.govde.media.map((m) => m.caption).join("|") === "3627 · ön|3627 · sağ yan|3627 · sol yan|3627 · arka|3627 · askı (gerçek fotoğraf)"));
+  assert.ok(o.g.some((x) => x.metod === "sendMediaGroup" && x.govde.media.some((m) => m.media === `https://pelin.test/dosya/${"e".repeat(32)}`))); // Patron'un gerçek askı fotoğrafı
   const v = o.hfIstek.filter((x) => /kling-video/.test(x.yol));
   assert.equal(v.length, 1); // kontrol geçmedi ama YENİDEN ÜRETİLMEDİ
-  assert.match(v[0].govde.prompt, /shoe tips peek out below the hem and the hem never touches the floor[\s\S]*SILVER-WHITE text "BLACK ROSE"[\s\S]*Stable, consistent, no morphing, smooth natural motion/);
+  assert.match(v[0].govde.prompt, /shoe tips peek out below the hem and the hem never touches the floor[\s\S]*No text\.[\s\S]*Stable, consistent, no morphing, smooth natural motion/);
   assert.match(v[0].govde.prompt, /Avoid: [^.]*morphing, warping, melting fabric/);
   const uyari = o.g.find((x) => /⚠️ 3627/.test(x.govde.text || ""));
   assert.match(uyari.govde.text, /model kuralı: etek şeffaf/);
@@ -1317,4 +1323,44 @@ test("DENEME videosunda '✅ Yine de onayla' hata vermez: beğenildi olarak sakl
   assert.equal(JSON.parse(o.depo.get("pelin:is:3627-d")).durum, "deneme_begenildi");
   assert.equal((await teslim(o)).length, 0);
   assert.ok(!o.depo.get("pelin:hata"));
+});
+
+test("SANAL GİYDİRME denemesi (tek seferlik): bütçe tavanı, gerçek giysi + bugünkü foto, sonuç Patron'a; PAKET YENİLE: gerçek askı + yazı videonun tamamına, kontrol modunda Patron'a gitmez, 'paketBitir' ile gider", async () => {
+  const o = uretimOrtami();
+  o.depo.set("pelin:is:3627-z", JSON.stringify({ id: "3627-z", kod: "3627", marka: "BLACKROSE", durum: "onaylandi", foto: "https://img/bugun.jpg", video: "https://vid/eski.mp4", set: { sag: "https://img/sag.jpg", aski: "https://img/yapay-aski.jpg" }, gecmis: [] }));
+  o.depo.set("pelinboy:3627", JSON.stringify({ marka: "BLACKROSE" }));
+  o.depo.set("venom:pelinGiydirme", JSON.stringify({ kod: "3627", isId: "3627-z", giysi: "d".repeat(32), araclar: ["fashn", "kolors"], butce: 0.1 }));
+  await cronlar(o, 1);
+  assert.equal(o.falIstek.filter((x) => /tryon|try-on/.test(x.uc)).length, 0); // 0,145 $ > 0,10 $ → hiç gönderilmez
+  assert.match(o.depo.get("venom:pelinGiydirmeSonuc"), /bütçesi aşılır/);
+  o.depo.set("venom:pelinGiydirme", JSON.stringify({ kod: "3627", isId: "3627-z", giysi: "d".repeat(32), araclar: ["fashn", "kolors"], butce: 0.3 }));
+  await cronlar(o, 3);
+  const f = o.falIstek.find((x) => x.uc === "fal-ai/fashn/tryon/v1.6");
+  assert.deepEqual([f.govde.model_image, f.govde.garment_image, f.govde.category], ["https://img/bugun.jpg", `https://pelin.test/dosya/${"d".repeat(32)}`, "one-pieces"]);
+  assert.ok(o.falIstek.some((x) => x.uc === "fal-ai/kling/v1-5/kolors-virtual-try-on" && x.govde.human_image_url === "https://img/bugun.jpg"));
+  const grup = o.g.filter((x) => x.metod === "sendMediaGroup").at(-1);
+  assert.equal(grup.govde.media.length, 4);
+  assert.match(o.g.filter((x) => x.metod === "sendMessage").at(-1).govde.text, /SANAL GİYDİRME[\s\S]*Harcanan ~0,1[45] \$/);
+  // Paket yenileme: askı = gerçek fotoğraf, kontrol modunda önce Claude Code bakar
+  o.depo.set("pelindosya:" + "e".repeat(32), JSON.stringify({ file_id: "A1", tur: "image/jpeg" }));
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).includes("api.telegram.org/file/") ? new Response("ASKIFOTO") : String(url).endsWith("/getFile") ? Response.json({ ok: true, result: { file_path: "photos/a.jpg" } }) : asil(url, istek));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-z", islem: "paketYenile", aski: "e".repeat(32), kontrol: true }));
+  const n = o.g.length;
+  await cronlar(o, 6);
+  const x = JSON.parse(o.depo.get("pelin:is:3627-z"));
+  assert.equal(x.durum, "paket_kontrol", JSON.stringify([x.sorunlar, x.hamHata]));
+  assert.equal(x.set.aski, `https://pelin.test/dosya/${"e".repeat(32)}`);
+  assert.match(x.paket.video, /^https:\/\/vid\/markali/);
+  assert.ok(!o.g.slice(n).some((m) => m.metod === "sendVideo")); // kontrol bitmeden Patron'a gitmez
+  assert.equal((await teslim(o)).length, 0);
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-z", islem: "paketBitir" }));
+  await cronlar(o, 1);
+  assert.ok(o.g.some((m) => m.metod === "sendVideo" && /damgalı video \("BLACK ROSE · 3627" baştan sona sağ altta\)/.test(m.govde.caption || "")));
+  assert.ok(o.g.some((m) => m.metod === "sendPhoto" && /gerçek askı fotoğrafınız, boydan/.test(m.govde.caption || "")));
+  const t = await teslim(o);
+  assert.equal(t.length, 1, o.depo.get("pelin:hata"));
+  assert.equal(t[0].set.find((y) => /askı/.test(y.ad)).url.startsWith("https://pelin.test/medya/"), true);
+  assert.match(o.g.filter((m) => m.metod === "sendMessage").at(-1).govde.text, /YENİ SON YAYIN ONAYI kartını getirecek; eski kart geçersiz/);
+  globalThis.fetch = asil;
 });

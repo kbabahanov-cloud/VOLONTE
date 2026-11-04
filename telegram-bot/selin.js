@@ -1579,6 +1579,27 @@ export async function pelinSiteAdimi(env, simdi) {
     const n = liste.filter((u) => "fiyat" in u).length;
     if (n) { await siteyeYaz(env, [], liste, `Selin: fiyatlar açık depodan çıkarıldı (${n} model; fiyatın kaynağı Vegawin)`); await notEkle(env, `Fiyatlar açık depodan çıkarıldı (${n} model).`); }
   }
+  // Tek seferlik (4 Kasım, Patron: "sitedeki eski markasız 3627 medyasını kaldır"): KV "venom:siteMedyaKaldir" =
+  // [{ kod, fotolar: ["galeri/..."], videolar: ["kanal/mesaj"] }] → sadece listelenen medya modelden çıkar (model sitede kalır)
+  const km = (await env.KAYIT.get("venom:siteMedyaKaldir", "json")) || [];
+  if (km.length) {
+    await env.KAYIT.delete("venom:siteMedyaKaldir");
+    const { liste } = await siteVerisi(env);
+    const yeni = [...liste], dosyalar = [], notlar = [];
+    for (const x of km) {
+      const i = yeni.findIndex((u) => String(u.kod) === String(x.kod));
+      if (i < 0) { notlar.push(`${x.kod}: sitede yok`); continue; }
+      const u = { ...yeni[i] }, fs = new Set(x.fotolar || []), vs = new Set(x.videolar || []);
+      const f0 = (u.fotolar || []).length, v0 = (u.videolar || []).length;
+      u.fotolar = (u.fotolar || []).filter((f) => !fs.has(f));
+      u.videolar = (u.videolar || []).filter((v) => !vs.has(v));
+      for (const f of fs) if (/^galeri\/\d+\/pelin-[a-z0-9]+\.jpg$/.test(f) && f0 !== u.fotolar.length) dosyalar.push({ yol: f, b64: null }); // sadece Pelin dosyası silinir
+      yeni[i] = u;
+      notlar.push(`${x.kod}: ${f0 - u.fotolar.length} fotoğraf, ${v0 - u.videolar.length} video kaldırıldı`);
+    }
+    if (dosyalar.length || notlar.some((n) => !/0 fotoğraf, 0 video|sitede yok/.test(n))) await siteyeYaz(env, dosyalar, yeni, `Selin: eski markasız medya kaldırıldı (${notlar.join("; ")})`);
+    await yazKV(env, "venom:siteMedyaKaldirSonuc", { zaman: simdi, notlar }, 3 * 86400);
+  }
 }
 
 export async function siteSilAdimi(env, simdi) {

@@ -1871,10 +1871,13 @@ test("Pelin teslim (4 Kasım): ÖNCE Patron'a SON YAYIN ONAY kartı (video + fot
   assert.ok(patron.some((t) => /8888: Pelin videosu kanala paylaşılmadı — model sitede yok/.test(t)));
   assert.equal((await kuyruguAl(o.env, "pelinSite")).length, 0);
   const bas = (data, kim = 999) => guncellemeIsle({ callback_query: { id: "c", from: { id: kim, first_name: "P" }, data, message: { chat: { id: kim }, message_id: 5 } } }, o.env);
-  await bas("py:o:3403-a", 111); // Patron değil
+  const kartlar = cagrilar(o.gonderilen, "sendMessage").filter((m) => /SON YAYIN ONAYI — 3403/.test(m.govde.text)).map((m) => m.govde.reply_markup.inline_keyboard[0][0].callback_data.slice(5));
+  const [A, B] = kartlar;
+  assert.match(A, /^3403-a\./);
+  await bas(`py:o:${A}`, 111); // Patron değil
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0);
-  await bas("py:x:3403-b"); // reddedildi
-  await bas("py:o:3403-a");
+  await bas(`py:x:${B}`); // reddedildi
+  await bas(`py:o:${A}`);
   const kanal = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
   assert.equal(kanal.length, 1);
   assert.deepEqual(kanal[0].govde.media.map((m) => [m.type, m.media]), [["video", "https://vid/markali.mp4"], ["photo", "https://img/foto.jpg"], ["photo", "https://img/sag.jpg"], ["photo", "https://img/arka.jpg"]]);
@@ -1882,8 +1885,23 @@ test("Pelin teslim (4 Kasım): ÖNCE Patron'a SON YAYIN ONAY kartı (video + fot
   assert.ok(!JSON.stringify(o.gonderilen).includes("b.mp4\"") || !cagrilar(o.gonderilen, "sendMediaGroup").some((m) => m.govde.chat_id === -100 && JSON.stringify(m).includes("vid/b.mp4")));
   const site = await kuyruguAl(o.env, "pelinSite");
   assert.deepEqual(site.map((x) => [x.kod, x.kanal, typeof x.videoMesaj]), [["3403", "Volonteroseoffical", "number"]]);
-  await bas("py:o:3403-a"); // ikinci kez paylaşılmaz
+  await bas(`py:o:${A}`); // ikinci kez paylaşılmaz
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+  // Aynı işe düzeltilmiş paket gelirse ESKİ kart geçersiz (yeni kart no; eski mesaj kapatılır)
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, yayinOnayi: true, id: "3403-c", kod: "3403", marka: "BLACKROSE", video: "https://vid/v1.mp4", foto: "https://img/foto.jpg", deneme: false, zaman: 100 });
+  await pelinKanalAdimi(o.env, ist(11));
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, yayinOnayi: true, id: "3403-c", kod: "3403", marka: "BLACKROSE", video: "https://vid/v2.mp4", foto: "https://img/foto.jpg", deneme: false, zaman: 200 });
+  o.gonderilen.length = 0;
+  await pelinKanalAdimi(o.env, ist(11));
+  assert.ok(cagrilar(o.gonderilen, "editMessageText").some((m) => /geçersiz — düzeltilmiş paketle yeni kart/.test(m.govde.text)));
+  const yeni = cagrilar(o.gonderilen, "sendMessage").find((m) => /SON YAYIN ONAYI — 3403/.test(m.govde.text)).govde.reply_markup.inline_keyboard[0][0].callback_data.slice(5);
+  o.gonderilen.length = 0;
+  await bas(`py:o:3403-c.${(100).toString(36)}`); // eski kart
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0);
+  await bas(`py:o:${yeni}`);
+  const k2 = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
+  assert.equal(k2.length, 1);
+  assert.equal(k2[0].govde.media[0].media, "https://vid/v2.mp4");
 });
 
 test("Kemal doğal silme komutları: '3627'yi sil', 'sil 3627', '3627 kaldır' → silme onay kartı", async () => {
