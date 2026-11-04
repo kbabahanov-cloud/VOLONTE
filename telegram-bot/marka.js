@@ -24,25 +24,30 @@ function alfa(ch) {
   return alfalar[ch];
 }
 
-export function etiketMetni(kod) {
-  return kod && !String(kod).startsWith("~") ? `VOLONTE · ${String(kod).toUpperCase()}` : "VOLONTE";
+// 4 Kasım (Patron): marka model kartından — "VOLONTE · kod" ya da "BLACK ROSE · kod" (iki ayrı mağaza, karıştırılmaz)
+export const MARKA_ETIKET = { VOLONTE: "VOLONTE", BLACKROSE: "BLACK ROSE" };
+export function etiketMetni(kod, marka = "VOLONTE") {
+  const m = MARKA_ETIKET[marka] || MARKA_ETIKET.VOLONTE;
+  return kod && !String(kod).startsWith("~") ? `${m} · ${String(kod).toUpperCase()}` : m;
 }
 
 // "VOLONTE" harfleri arası daha açık (marka görünümü), kod sıkı.
 function dizilim(metin) {
   const harfler = [];
   let x = 0;
+  const markaSonu = metin.indexOf(" ·") >= 0 ? metin.indexOf(" ·") : metin.length; // marka harfleri arası açık, kod sıkı
   [...metin].forEach((ch, i) => {
+    if (ch === " ") { if (i < markaSonu) x += 16; return; } // boşluk glifi yok (VOLONTE etiketi eskisiyle aynı kalır)
     const g = alfa(ch);
     if (!g) return;
     harfler.push({ g, x });
-    x += g.w + (i < 7 ? 4 : 1);
+    x += g.w + (i < markaSonu ? 4 : 1);
   });
   return { harfler, genislik: Math.max(1, x - 1) };
 }
 
-export function etiketPng(kod) {
-  const { harfler, genislik } = dizilim(etiketMetni(kod));
+export function etiketPng(kod, marka = "VOLONTE") {
+  const { harfler, genislik } = dizilim(etiketMetni(kod, marka));
   const W = genislik + 2 * DOLGU_X;
   const H = GLIF_YUKSEKLIK + 2 * DOLGU_Y;
   const metinAlfa = new Float32Array(W * H);
@@ -122,8 +127,8 @@ export function pngYaz(W, H, rgba) {
 }
 
 // Fotoğrafın (JPEG baytları) sağ alt köşesine etiketi basar → JPEG baytları.
-export async function markaBas(env, foto, genislik, kod) {
-  const png = etiketPng(kod);
+export async function markaBas(env, foto, genislik, kod, marka = "VOLONTE") {
+  const png = etiketPng(kod, marka);
   const hedef = Math.max(140, Math.round(genislik * ETIKET_ORANI));
   const kenar = Math.max(12, Math.round(genislik * 0.03));
   const etiket = env.IMAGES.input(new Blob([png]).stream()).transform({ width: hedef });

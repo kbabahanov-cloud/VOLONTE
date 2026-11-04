@@ -1847,29 +1847,52 @@ test("görselli istek (3319): indirme zaman aşımında 3 kez adresle dener, son
   } finally { globalThis.fetch = asil; }
 });
 
-test("Pelin teslim (4 Kasım): onaylı Pelin videosu kanala (video ilk, fiyat yok) → Selin'e site için; DENEME hiç gitmez; sitede olmayan paylaşılmaz", async () => {
+test("Pelin teslim (4 Kasım): ÖNCE Patron'a SON YAYIN ONAY kartı (video + fotoğraflar + yazı); onaylanınca kanala (video ilk, fiyat yok) → Selin'e site; reddedilirse hiçbir yere gitmez; DENEME hiç gitmez; renk model kartından", async () => {
   const o = await yeniOrtam();
   Object.assign(o.env, { MURAT_ID: "999" });
+  await o.env.KAYIT.put("pelinboy:3403", JSON.stringify({ renk: "koyu bordo", marka: "BLACKROSE" }));
   const { pelinKanalAdimi } = await import("./worker.js");
   const { kuyrugaEkle, kuyruguAl } = await import("./venom-kopru.js");
-  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "3403-a", kod: "3403", video: "https://vid/pelin.mp4", foto: "https://img/foto.jpg", kapak: "https://img/kapak.jpg", deneme: false });
-  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "3403-d", kod: "3403", video: "https://vid/deneme.mp4", deneme: true });
-  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "8888-a", kod: "8888", video: "https://vid/x.mp4", deneme: false });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, yayinOnayi: true, id: "3403-a", kod: "3403", marka: "BLACKROSE", video: "https://vid/markali.mp4", foto: "https://img/foto.jpg", set: [{ ad: "sağ yan", url: "https://img/sag.jpg" }, { ad: "arka", url: "https://img/arka.jpg" }], deneme: false });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, id: "3403-d", kod: "3403", video: "https://vid/deneme.mp4", deneme: true });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, id: "8888-a", kod: "8888", video: "https://vid/x.mp4", deneme: false });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, id: "3403-b", kod: "3403", video: "https://vid/b.mp4", foto: "https://img/b.jpg", deneme: false });
   o.gonderilen.length = 0;
   await pelinKanalAdimi(o.env, ist(11));
-  const kanal = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
-  assert.equal(kanal.length, 1);
-  assert.deepEqual(kanal[0].govde.media.map((m) => [m.type, m.media]), [["video", "https://vid/pelin.mp4"], ["photo", "https://img/kapak.jpg"]]);
-  assert.ok(!/\$|price|prix/i.test(JSON.stringify(kanal)));
-  assert.ok(!JSON.stringify(o.gonderilen).includes("deneme.mp4"));
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0); // onaysız kanala HİÇBİR ŞEY
+  assert.ok(cagrilar(o.gonderilen, "sendVideo").some((m) => m.govde.chat_id === "999" && m.govde.video === "https://vid/markali.mp4" && /BLACK ROSE · 3403/.test(m.govde.caption)));
+  assert.ok(cagrilar(o.gonderilen, "sendMediaGroup").some((m) => m.govde.chat_id === "999" && m.govde.media.length === 3));
+  const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "999" && /SON YAYIN ONAYI — 3403 · BLACK ROSE/.test(m.govde.text));
+  assert.ok(kart);
+  assert.match(kart.govde.text, /dark burgundy/i); // renk model kartından (black değil)
+  assert.ok(!/\bblack\b(?! rose)/i.test(kart.govde.text.replace(/BLACK ROSE/g, "")));
   const patron = cagrilar(o.gonderilen, "sendMessage").filter((m) => m.govde.chat_id === "999").map((m) => m.govde.text);
-  assert.ok(patron.some((t) => /📣 3403: Pelin videosu kanalda/.test(t)));
   assert.ok(patron.some((t) => /🧪 3403: deneme video kanala\/siteye gönderilmedi/.test(t)));
   assert.ok(patron.some((t) => /8888: Pelin videosu kanala paylaşılmadı — model sitede yok/.test(t)));
+  assert.equal((await kuyruguAl(o.env, "pelinSite")).length, 0);
+  const bas = (data, kim = 999) => guncellemeIsle({ callback_query: { id: "c", from: { id: kim, first_name: "P" }, data, message: { chat: { id: kim }, message_id: 5 } } }, o.env);
+  await bas("py:o:3403-a", 111); // Patron değil
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0);
+  await bas("py:x:3403-b"); // reddedildi
+  await bas("py:o:3403-a");
+  const kanal = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
+  assert.equal(kanal.length, 1);
+  assert.deepEqual(kanal[0].govde.media.map((m) => [m.type, m.media]), [["video", "https://vid/markali.mp4"], ["photo", "https://img/foto.jpg"], ["photo", "https://img/sag.jpg"], ["photo", "https://img/arka.jpg"]]);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(kanal)));
+  assert.ok(!JSON.stringify(o.gonderilen).includes("b.mp4\"") || !cagrilar(o.gonderilen, "sendMediaGroup").some((m) => m.govde.chat_id === -100 && JSON.stringify(m).includes("vid/b.mp4")));
   const site = await kuyruguAl(o.env, "pelinSite");
   assert.deepEqual(site.map((x) => [x.kod, x.kanal, typeof x.videoMesaj]), [["3403", "Volonteroseoffical", "number"]]);
-  assert.equal((await kuyruguAl(o.env, "pelinKanal")).length, 0); // iki kez paylaşılmaz
+  await bas("py:o:3403-a"); // ikinci kez paylaşılmaz
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
 });
+
+test("Kemal doğal silme komutları: '3627'yi sil', 'sil 3627', '3627 kaldır' → silme onay kartı", async () => {
+  const { silKomutu } = await import("./worker.js");
+  for (const t of ["3627'yi sil", "3627 sil", "sil 3627", "3627 kaldır", "3627’ü sil", "удали 3627"]) assert.equal(silKomutu(t), "3627");
+  assert.equal(silKomutu("3627 bilgisi"), null);
+  assert.equal(silKomutu("dün 3627 sildik mi"), null);
+});
+
 
 // ---------- Ofis sesli konuşma ucu (4 Kasım) ----------
 test("ofis konuşma ucu: anahtarsız 401; Patron adına Kemal'in beyni (Sonnet) cevap verir, cevap ofise döner (Telegram'a gitmez), maliyet hesaplanır; onay düğmesi yine Telegram'a", async () => {

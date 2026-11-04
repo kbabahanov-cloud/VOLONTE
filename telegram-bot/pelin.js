@@ -22,6 +22,7 @@ import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
 import { venomPelinAdimi, hataEkle, kuyrugaEkle } from "./venom-kopru.js";
 import { stokIste } from "./stokbot.js";
+import { markaBas } from "./marka.js";
 import { gorselBase64, gecici } from "./duzen.js";
 
 export const AYLIK_SINIR_USD = 150;
@@ -300,7 +301,7 @@ async function falSor(env) {
     try {
       const r = await fetch(`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${encodeURIComponent(uc)}`);
       const j = await r.json().catch(() => null);
-      const sema = j && j.components && j.components.schemas ? Object.fromEntries(Object.entries(j.components.schemas).filter(([n, v]) => /Input/.test(n) && v.properties).map(([n, v]) => [n, { required: v.required, properties: Object.fromEntries(Object.entries(v.properties).map(([pk, pv]) => [pk, { type: pv.type || (pv.anyOf || []).map((y) => y.type), enum: pv.enum, default: pv.default, aciklama: String(pv.description || "").slice(0, 160) }])) }])) : null;
+      const sema = j && j.components && j.components.schemas ? Object.fromEntries(Object.entries(j.components.schemas).filter(([n, v]) => /Input|Image|Frame|Track|Keyframe/.test(n) && !/Output/.test(n) && v.properties).map(([n, v]) => [n, { required: v.required, properties: Object.fromEntries(Object.entries(v.properties).map(([pk, pv]) => [pk, { type: pv.type || (pv.anyOf || []).map((y) => y.type), enum: pv.enum, default: pv.default, aciklama: String(pv.description || "").slice(0, 160) }])) }])) : null;
       c.sonuc[x] = { durum: r.status, sema };
     } catch (e) { c.sonuc[x] = { hata: String(e.message) }; }
   }
@@ -439,7 +440,7 @@ export async function pelinCron(env, simdi) {
   try { const sc = await env.KAYIT.get("pelin:secim"); if (sc && sc !== (await env.KAYIT.get("pelin:secimAyna"))) { await env.KAYIT.put("venom:pelinSecim", sc); await env.KAYIT.put("pelin:secimAyna", sc); } } catch { /* sonra */ }
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinIsKomut" = { isId, islem: "katalogdan", muzik: { url, ad }, deneme } →
   // o işin ONAYLI katalog fotoğrafından yeni video işi + maliyet kartı (Patron onaylarsa başlar)
-  try { const ik = await env.KAYIT.get("venom:pelinIsKomut", "json"); if (ik && ik.isId) { await env.KAYIT.delete("venom:pelinIsKomut"); if (ik.islem === "bildir") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && ["onay", "uyari"].includes(x.durum)) { if (ik.onEk) await yaz(env, murat(env), ik.onEk); await isBildir(env, x); await kaydet(env, `pelin:is:${x.id}`, x); } } else await katalogdanVideoKarti(env, ik, simdi); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinIsKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  try { const ik = await env.KAYIT.get("venom:pelinIsKomut", "json"); if (ik && ik.isId) { await env.KAYIT.delete("venom:pelinIsKomut"); if (ik.islem === "setVePaket") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.video) { await paketeAl(env, x, simdi); await yaz(env, murat(env), `📸 ${x.kod}: eksik fotoğraf seti üretiliyor (~${para(SET_FIYAT)}); ardından marka yazısı basılıp Kemal son yayın onay kartını getirecek. Video yeniden üretilmez.`); } } else if (ik.islem === "bildir") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && ["onay", "uyari"].includes(x.durum)) { if (ik.onEk) await yaz(env, murat(env), ik.onEk); await isBildir(env, x); await kaydet(env, `pelin:is:${x.id}`, x); } } else await katalogdanVideoKarti(env, ik, simdi); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinIsKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinKomut" = { metin } → Patron yazmış gibi kart hazırlanır (kart yine Patron onayı ister)
   try { const pk = await env.KAYIT.get("venom:pelinKomut", "json"); if (pk && /^\/(uret|maliyettesti)\b/.test(String(pk.metin))) { await env.KAYIT.delete("venom:pelinKomut"); const p = murat(env); await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: pk.metin, sonSenaryo: Boolean(pk.sonSenaryo) }, simdi, /^\/maliyettesti/.test(pk.metin)); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   if (env.STOK) { try { await eskiTeslimSor(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "eskiTeslim", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
@@ -800,6 +801,7 @@ export default {
       return new Response("ok");
     }
     if (istek.method === "GET" && /^\/dosya\/[a-f0-9]{32}$/.test(url.pathname)) return dosyaVer(env, url.pathname.split("/")[2]);
+    if (istek.method === "GET" && /^\/medya\/[a-f0-9]{32}$/.test(url.pathname)) return medyaVer(env, url.pathname.split("/")[2]);
     return new Response("Pelin çalışıyor.");
   },
   async scheduled(olay, env) {
@@ -1517,6 +1519,73 @@ export const SET_FIYAT = ACILAR.length * 0.15;
 const aciIstemi = (a, is) => (a.aski
   ? `Close-up product detail photo of EXACTLY the same garment as in the product images, hanging on an elegant wooden hanger against a soft neutral background, no person. Show the fabric texture, the lace, embroidery and sequins sharply; identical colors${is.renk ? ` (${renkEn(is.renk)} only)` : ""}, no redesign. No text, no logo.`
   : `${boyBasi(is.boy, 0)}The SAME woman wearing EXACTLY the same garment in the same setting and light as in the first image, now photographed ${a.en}. Full body from head to shoes, natural elegant pose. Identical garment: same color${is.renk ? ` (${renkEn(is.renk)} only)` : ""}, cut, length, sleeves, collar and every detail; the back of the garment must match the product photos.${detayIstemi(is.modelKaydi)}${MAKYAJ} Photorealistic, sharp. No text, no logo, no watermark.`);
+// ---------- PAKETLEME (4 Kasım, Patron): "MARKA · kod" yazısı SONRADAN, yeniden üretim YOK ----------
+// Fotoğraflar (ön, kapak, set): Cloudflare Images ile sağ alt köşeye etiket (Kemal'in marka.js'i, marka model kartından).
+// Video: son kare → etiket → 2 sn kapanış karesi (fal ffmpeg images-to-video) → videonun sonuna eklenir (merge-videos). Kuruşluk.
+// Damgalı dosyalar KV "pelinmedya:<anahtar>" (30 gün) → /medya/<anahtar>.
+async function medyaKaydet(env, bayt, tur = "image/jpeg") {
+  const anahtar = crypto.randomUUID().replace(/-/g, "");
+  await env.KAYIT.put(`pelinmedya:${anahtar}`, bayt, { expirationTtl: 30 * 86400, metadata: { tur } });
+  return `${env.SELF_URL || "https://volonte-pelin.volonte.workers.dev"}/medya/${anahtar}`;
+}
+async function medyaVer(env, anahtar) {
+  const r = await env.KAYIT.getWithMetadata(`pelinmedya:${anahtar}`, "arrayBuffer");
+  if (!r || !r.value) return new Response("yok", { status: 404 });
+  return new Response(r.value, { headers: { "content-type": (r.metadata && r.metadata.tur) || "image/jpeg", "cache-control": "public, max-age=86400" } });
+}
+export async function damgala(env, url, kod, marka) {
+  if (!env.IMAGES) throw new Error("IMAGES bağlantısı yok");
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`görsel indirilemedi (${r.status})`);
+  const bayt = new Uint8Array(await r.arrayBuffer());
+  const bilgi = await env.IMAGES.info(new Blob([bayt]).stream()).catch(() => ({ width: 1080 }));
+  const damgali = await markaBas(env, bayt, bilgi.width || 1080, kod, marka);
+  return medyaKaydet(env, damgali);
+}
+async function paketeAl(env, is, simdi) {
+  Object.assign(is, { durum: !is.setTamam && !is.setYok && !is.kaynakIs ? "set_gonder" : "paket_gonder", paket: null, onayZaman: simdi });
+  is.gecmis = [...(is.gecmis || []), [simdi, "Patron üretimi onayladı → marka yazısı basılıyor (paketleme)"]];
+  await kaydet(env, `pelin:is:${is.id}`, is);
+  const liste = await oku(env, "pelin:isler", []); if (!liste.includes(is.id)) { liste.push(is.id); await kaydet(env, "pelin:isler", liste.slice(-200)); }
+}
+async function paketAdimi(env, is, simdi) {
+  const b = (await boyOku(env, is.kod)) || {};
+  const marka = MARKALAR[b.marka] ? b.marka : null;
+  if (!marka) { is.durum = "uyari"; is.sorunlar = [`${is.kod} markası model kartında yok — paketlenmedi`]; return; }
+  if (is.durum === "paket_gonder") {
+    const p = { marka, set: {} };
+    p.foto = await damgala(env, is.sahne || is.foto, is.kod, marka);
+    if (is.kapak) p.kapak = await damgala(env, is.kapak, is.kod, marka);
+    for (const [k, u] of Object.entries(is.set || {})) if (u && u !== "yok") p.set[k] = await damgala(env, u, is.kod, marka);
+    is.paket = p;
+    is.paketFal = await falGonder(env, KARE.uc, { video_url: is.video, frame_type: "last" });
+    is.durum = "paket_kare"; is.bekleZaman = simdi; return;
+  }
+  const bekle = async () => { const r = await falDurum(env, is.paketFal).catch(() => ({ bitti: false })); if (!r.bitti && simdi - is.bekleZaman > 3600) return { bitti: true, hata: "1 saatte bitmedi" }; return r.bitti ? r : null; };
+  if (is.durum === "paket_kare") {
+    const r = await bekle(); if (!r) return;
+    if (r.hata || !(r.resimler || [])[0]) throw new Error(`son kare alınamadı: ${r.hata || "yok"}`);
+    is.paket.kapanisKare = await damgala(env, r.resimler[0], is.kod, marka);
+    is.paketFal = await falGonder(env, "fal-ai/ffmpeg-api/images-to-video", { images: [{ url: is.paket.kapanisKare, frames: 48 }], fps: 24 });
+    is.durum = "paket_kapanis"; is.bekleZaman = simdi; return;
+  }
+  if (is.durum === "paket_kapanis") {
+    const r = await bekle(); if (!r) return;
+    if (r.hata || !r.video) throw new Error(`kapanış karesi videoya çevrilemedi: ${r.hata || "yok"}`);
+    is.paketFal = await falGonder(env, "fal-ai/ffmpeg-api/merge-videos", { video_urls: [is.video, r.video], resolution_aspect_ratio_video_index: 0 });
+    is.durum = "paket_birlestir"; is.bekleZaman = simdi; return;
+  }
+  if (is.durum === "paket_birlestir") {
+    const r = await bekle(); if (!r) return;
+    if (r.hata || !r.video) throw new Error(`video birleştirilemedi: ${r.hata || "yok"}`);
+    is.paket.video = r.video;
+    is.maliyet = yuvarla((is.maliyet || 0) + 0.01); await harcamaYaz(env, 0.01, simdi);
+    is.gecmis.push([simdi, `paket hazır: ${MARKALAR[marka].ad} · ${is.kod} (fotoğraflar + video sonu)`]);
+    await teslimEt(env, is, simdi);
+    await yaz(env, murat(env), `📦 ${is.kod}: "${MARKALAR[marka].ad} · ${is.kod}" yazısı basıldı (fotoğraflar + videonun son 2 saniyesi). Kemal şimdi SON YAYIN ONAY kartını getirecek; siz onaylamadan kanala/siteye gitmez.`);
+  }
+}
+
 // 4 Kasım (Patron): video üretilmeden önce başlangıç fotoğrafı Patron'a gösterilir; onaylarsa video
 const fotoOnayiGerek = (is) => !is.fotoOnaylandi && !is.kaynakIs;
 async function fotoOnayKarti(env, is) {
@@ -1610,9 +1679,10 @@ async function uretimAdimi(env, is, simdi) {
     const media = [{ type: "photo", media: is.sahne || is.foto, caption: `${is.kod} · ön` }, ...ACILAR.filter((a) => is.set[a.k] && is.set[a.k] !== "yok").map((a) => ({ type: "photo", media: is.set[a.k], caption: `${is.kod} · ${a.ad}` }))];
     await tg(env, "sendMediaGroup", { chat_id: murat(env), media });
     const eksik = ACILAR.filter((a) => !is.set[a.k] || is.set[a.k] === "yok").map((a) => a.ad);
-    await yaz(env, murat(env), `📸 ${is.kod} fotoğraf seti: ön + ${ACILAR.length - eksik.length} açı${eksik.length ? ` (üretilemedi: ${eksik.join(", ")})` : ""}. Video üretiliyor.`);
+    await yaz(env, murat(env), `📸 ${is.kod} fotoğraf seti: ön + ${ACILAR.length - eksik.length} açı${eksik.length ? ` (üretilemedi: ${eksik.join(", ")})` : ""}. ${is.video ? "Şimdi marka yazısı basılıyor; ardından Kemal son yayın onay kartını getirecek." : "Video üretiliyor."}`);
     is.gecmis.push([simdi, `fotoğraf seti: ${media.length} kare`]);
-    is.durum = "video_gonder"; return;
+    is.setTamam = true;
+    is.durum = is.video ? "paket_gonder" : "video_gonder"; return; // video zaten varsa (sonradan set): paketlemeye
   }
   // Müzik (deneme): sessiz videonun üstüne müzik (fal ffmpeg merge-audio-video); sessiz hali saklanır → müzik sonra değiştirilebilir
   if (is.durum === "muzik_gonder") {
@@ -1627,6 +1697,8 @@ async function uretimAdimi(env, is, simdi) {
     is.video = s.video; is.muzikEklendi = true; is.gecmis.push([simdi, `müzik eklendi: ${is.muzik.ad}`]); is.durum = "onay"; return;
   }
   // Nora: video yeni işlerde ancak Patron senaryoyu onaylayınca üretilir
+  // 4 Kasım (Patron): HER YOLDA önce fotoğraf seti, sonra video ("Yine de onayla" yolu seti atlıyordu)
+  if (is.durum === "video_gonder" && !is.video && !is.setYok && !is.setTamam && !is.kaynakIs && !is.lider) { is.durum = "set_gonder"; return; }
   if (is.durum === "video_gonder" && is.sahneAyar && !is.senaryo) { is.durum = "senaryo_yaz"; return; }
   if (is.durum === "senaryo_yaz") {
     is.senaryo = await noraYaz(env, is, simdi);
@@ -1711,7 +1783,8 @@ async function teslimEt(env, is, simdi) {
   if (engel) throw new Error(engel);
   is.durum = "onaylandi"; is.onayZaman = simdi;
   await kaydet(env, `pelin:is:${is.id}`, is);
-  await kuyrugaEkle(env, "pelinKanal", { v: 2, id: is.id, kod: is.kod, foto: is.foto, video: is.video, kapak: is.kapak || null, renk: is.renk || null, ortam: is.ortam ? is.ortam.ad : null, deneme: false, onay: "patron", zaman: simdi });
+  const p = is.paket || {};
+  await kuyrugaEkle(env, "pelinKanal", { v: 3, yayinOnayi: true, id: is.id, kod: is.kod, marka: p.marka || is.marka || null, foto: p.foto || is.foto, video: p.video || is.video, kapak: p.kapak || is.kapak || null, set: ACILAR.map((a) => p.set && p.set[a.k] ? { ad: a.ad, url: p.set[a.k] } : null).filter(Boolean), renk: is.renk || null, ortam: is.ortam ? is.ortam.ad : null, deneme: false, onay: "patron-uretim", zaman: simdi });
 }
 // Eski teslim kayıtları (KV "venom:pelinTeslim", okuyucu kod yokken birikti): OTOMATİK GÖNDERİLMEZ, Patron'a sorulur
 async function eskiTeslimSor(env, simdi) {
@@ -1781,7 +1854,7 @@ async function isBildirIc(env, is, tgK, sonuc) {
   const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `💵 Bu iş: ~${para(is.maliyet || 0)} · bugün Pelin: ${para(gunlukH)} / ${await gunlukSinir(env, Math.floor(Date.now() / 1000)).catch(() => GUNLUK_SINIR_USD)} $`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.sablonKey && SABLON_SECENEK[is.sablonKey] ? ` · şablon: ${SABLON_SECENEK[is.sablonKey].ad}` : ""}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
     ...(is.aracYedek && (is.gecmis || []).some((g) => /işleyemedi .*→ aynı kareyle Kling 4\.0/.test(String(g[1]))) ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
     ...(is.hfYedek ? [`↪️ ${ARACLAR[is.hfYedek.from].ad} çalışmadı (${is.hfYedek.neden}); aynı fotoğrafla fal.ai ${ARACLAR[is.arac].ad} kullanıldı.`] : []),
-    is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok && !is.grup ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
+    is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "✅ Onayla = ÜRETİM onayı (yayın değil): fotoğraf seti + marka yazısı eklenir, sonra Kemal SON YAYIN onay kartını getirir. Beğendiyseniz ayarları şablon olarak kaydedin."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok && !is.grup ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
   sonuc.push(["metin", Boolean(metinSonuc && metinSonuc.ok), metinSonuc && metinSonuc.ok ? null : String((metinSonuc && metinSonuc.description) || "?").slice(0, 120)]);
   return metinSonuc;
 }
@@ -1791,10 +1864,10 @@ export async function uretimCron(env, simdi) {
   for (const id of liste) {
     if (islenen >= 8) break;
     const is = await oku(env, `pelin:is:${id}`, null);
-    if (!is || !["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz"].includes(is.durum)) continue;
+    if (!is || !["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz", "paket_gonder", "paket_kare", "paket_kapanis", "paket_birlestir"].includes(is.durum)) continue;
     islenen++;
     const once = is.durum;
-    try { await uretimAdimi(env, is, simdi); } catch (e) { is.durum = "uyari"; is.hamHata = String(e && e.message).slice(0, 400); is.sorunlar = [`hata: ${falHataTr(e && e.message)}`]; }
+    try { if (/^paket_/.test(is.durum)) await paketAdimi(env, is, simdi); else await uretimAdimi(env, is, simdi); } catch (e) { is.durum = "uyari"; is.hamHata = String(e && e.message).slice(0, 400); is.sorunlar = [`hata: ${falHataTr(e && e.message)}`]; }
     const yeniBitti = ["onay", "uyari"].includes(is.durum) && !["onay", "uyari"].includes(once);
     if (yeniBitti) await isBildir(env, is);
     if (is.durum === "foto_onay" && once !== "foto_onay") await fotoOnayKarti(env, is);
@@ -1846,7 +1919,7 @@ export async function sablonDenemesi(env, p, simdi) {
   ].join("\n"));
 }
 // ---------- AYNA (4 Kasım, Patron onaylı): Pelin'in işleri ofiste CANLI → KV "venom:pelinDurum" (sadece değişince yazılır) ----------
-const CALISAN = ["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz"];
+const CALISAN = ["foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz", "paket_gonder", "paket_kare", "paket_kapanis", "paket_birlestir"];
 const BEKLEYEN = ["foto_onay", "senaryo_onay", "onay", "uyari", "kart"];
 export async function aynaYaz(env, simdi) {
   const liste = await oku(env, "pelin:isler", []);
@@ -1919,7 +1992,7 @@ export async function takipcileriBirak(env, lider, simdi) {
     const x = await oku(env, `pelin:is:${tid}`, null);
     if (!x || x.durum !== "grup_bekle") continue;
     if (iptal) Object.assign(x, { durum: "iptal" });
-    else Object.assign(x, { durum: "video_gonder", foto: lider.foto, sahne: lider.sahne || null, videoOrtam: lider.videoOrtam, ortam: lider.ortam, fotoKontrol: lider.fotoKontrol, sahneKontrol: lider.sahneKontrol || null, senaryo: x.kendiSenaryo ? x.senaryo : lider.senaryo, notlar: lider.notlar || [], fotoDeneme: lider.fotoDeneme, sahneDeneme: lider.sahneDeneme || 0, stil: lider.stil, patronOnay: lider.patronOnay || [] });
+    else Object.assign(x, { durum: "video_gonder", set: lider.set || {}, setTamam: Boolean(lider.setTamam), foto: lider.foto, sahne: lider.sahne || null, videoOrtam: lider.videoOrtam, ortam: lider.ortam, fotoKontrol: lider.fotoKontrol, sahneKontrol: lider.sahneKontrol || null, senaryo: x.kendiSenaryo ? x.senaryo : lider.senaryo, notlar: lider.notlar || [], fotoDeneme: lider.fotoDeneme, sahneDeneme: lider.sahneDeneme || 0, stil: lider.stil, patronOnay: lider.patronOnay || [] });
     x.gecmis = [...(x.gecmis || []), [simdi, iptal ? "lider iptal → iptal" : `liderin fotoğrafı alındı → ${ARACLAR[x.arac].ad}${x.sablonKey ? ` · ${SABLON_SECENEK[x.sablonKey].ad}` : ""} ile video`]];
     await kaydet(env, `pelin:is:${tid}`, x);
     if (!liste.includes(tid)) liste.push(tid);
@@ -2051,7 +2124,7 @@ async function uretimDugmesi(env, cq, simdi) {
       await cevap("Kaydedildi");
       return kapat(`💾 ${is.kod} denemesi beğenildi ve saklandı — DENEME olduğu için kanala/siteye gitmez.`);
     }
-    if (devam === "teslim") { const engel = await markaEngeli(env, is); if (engel) { await cevap("Marka yanlış"); return yaz(env, cq.message.chat.id, `⛔ ${engel}`); } await teslimEt(env, is, simdi); await cevap("Onaylandı"); return kapat(`✅ ${is.kod} Patron onayıyla teslim kuyruğuna alındı (Selin site, Kemal kanal).`); }
+    if (devam === "teslim") { const engel = await markaEngeli(env, is); if (engel) { await cevap("Marka yanlış"); return yaz(env, cq.message.chat.id, `⛔ ${engel}`); } await paketeAl(env, is, simdi); await cevap("Onaylandı"); return kapat(`✅ ${is.kod} üretim onaylandı — ${is.setTamam ? "" : "önce fotoğraf seti, sonra "}marka yazısı basılıyor; ardından Kemal SON YAYIN onayınızı isteyecek.`); }
     Object.assign(is, { durum: devam, sorunlar: [], fotoOnaylandi: is.fotoOnaylandi || simdi, ...(devam === "sahne_gonder" ? { sahneDeneme: 0 } : { videoDeneme: 0 }) });
     await kaydet(env, `pelin:is:${id}`, is);
     await cevap("Devam ediyorum");
@@ -2071,10 +2144,10 @@ async function uretimDugmesi(env, cq, simdi) {
     }
     const engel = await markaEngeli(env, is);
     if (engel) { await cevap("Marka yanlış"); return yaz(env, cq.message.chat.id, `⛔ ${engel}`); }
-    await teslimEt(env, is, simdi);
+    await paketeAl(env, is, simdi);
     await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "onay", farklar: [], notlar: (is.notlar || []).slice(0, 4) });
     await cevap("Onaylandı");
-    return kapat(`✅ ${is.kod} onaylandı — teslim kuyruğuna alındı (Selin site, Kemal kanal).`);
+    return kapat(`✅ ${is.kod} üretim onaylandı (yayın değil) — marka yazısı basılıyor; ardından Kemal SON YAYIN onayınızı isteyecek.`);
   }
   return cevap("Bu düğme artık geçerli değil.");
 }

@@ -121,6 +121,11 @@ function uretimOrtami() {
     return asil(url, istek);
   };
   o.falSonuc["fal-ai/veo3.1/image-to-video"] = (n) => ({ video: { url: `https://vid/${n}.mp4` } });
+  // Paketleme (marka yazısı): sahte Cloudflare Images + fal ffmpeg
+  const zincir = { transform() { return zincir; }, draw() { return zincir; }, output() { return { response: () => new Response("DAMGALI") }; } };
+  o.env.IMAGES = { input: () => zincir, info: async () => ({ width: 1080, height: 1920 }) };
+  o.falSonuc["fal-ai/ffmpeg-api/images-to-video"] = (n) => ({ video: { url: `https://vid/kapanis${n}.mp4` } });
+  o.falSonuc["fal-ai/ffmpeg-api/merge-videos"] = (n) => ({ video: { url: `https://vid/markali${n}.mp4` } });
   return o;
 }
 const GECTI = { renk_ayni: true, desen_ayni: true, kesim_ayni: true, sorunlar: [] };
@@ -194,7 +199,14 @@ test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden ü
   await bas(o, HEMRA, `pu:a:${isId}`);
   assert.equal((await teslim(o)).length, 0);
   await bas(o, MURAT, `pu:a:${isId}`);
-  assert.deepEqual((await teslim(o)).map((x) => [x.kod, x.v, x.deneme]), [["3557", 2, false]]);
+  assert.match(o.g.at(-1).govde.text, /üretim onaylandı \(yayın değil\) — marka yazısı basılıyor; ardından Kemal SON YAYIN onayınızı isteyecek/);
+  assert.equal((await teslim(o)).length, 0); // önce paketleme (marka yazısı)
+  await cronlar(o, 6);
+  const t = await teslim(o);
+  assert.deepEqual(t.map((x) => [x.kod, x.v, x.deneme, x.yayinOnayi, x.marka]), [["3557", 3, false, true, "VOLONTE"]]);
+  assert.match(t[0].video, /^https:\/\/vid\/markali/); // videonun sonuna damgalı kapanış karesi eklendi
+  assert.match(t[0].foto, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/); // damgalı fotoğraf
+  assert.ok(o.falIstek.some((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video" && x.govde.images[0].frames === 48));
 });
 
 test("üretim: 2 denemede kontrolden geçmezse Patron'a ⚠️ (sorunlarla); maliyet testi bitince model başı maliyet raporu", async () => {
@@ -465,7 +477,8 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   assert.equal(sb.sahne.sonYazi, true);
   assert.match(o.g.at(-1).govde.text, /"3627 şablonu" kaydedildi/);
   await bas(o, MURAT, dugmeler[0].callback_data);
-  assert.equal((await teslim(o))[0].kapak, is.kapak || JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3627-"))[1]).kapak);
+  await cronlar(o, 6);
+  assert.match((await teslim(o))[0].kapak, /^https:\/\/pelin\.test\/medya\//); // damgalı kapak
   // şablonla yeni model
   await yazi(o, MURAT, "/uret 3630 şablon:3627");
   assert.match(o.g.at(-1).govde.text, /kayıtlı şablon: 3627/);
@@ -614,8 +627,13 @@ test("kontrol: makyajsız yüz ve kadraj büyük sorun; video aşamasında kalan
   assert.equal((await teslim(o)).length, 0);
   const x = JSON.parse(o.depo.get("pelin:is:3627-x")); x.marka = "BLACKROSE"; o.depo.set("pelin:is:3627-x", JSON.stringify(x));
   await bas(o, MURAT, "pu:a:3627-x");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3627-x")).durum, "set_gonder"); // set eksik → önce set (her yolda)
+  JSON.parse(o.depo.get("pelin:is:3627-x"));
+  const xx = JSON.parse(o.depo.get("pelin:is:3627-x")); xx.urunler = ["https://u/on.jpg"]; xx.boy = { boy: "bilekalti" }; o.depo.set("pelin:is:3627-x", JSON.stringify(xx)); o.depo.set("pelin:secim", SECIM_ROLLU());
+  await cronlar(o, 8);
   assert.equal(JSON.parse(o.depo.get("pelin:is:3627-x")).durum, "onaylandi");
   assert.equal((await teslim(o))[0].kod, "3627");
+  assert.equal((await teslim(o))[0].set.length, 4);
 });
 
 test("örnek video 'bunun gibi yap, büyük 3627 koyu bordo' → tarif → ▶️ üret: seri + renk + şablon kartta", async () => {
