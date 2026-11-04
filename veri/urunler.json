@@ -1,5 +1,28 @@
 [
  {
+  "kod": "907",
+  "baslik": "Piped Bib Pleated Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A long-sleeve midi dress with a fitted waist and a finely pleated skirt that falls to a handkerchief hem. A contrast-piped bib collar, a tie-bow neckline and a 3D floral appliqué at the waist define the look, finished with puff sleeves and buttoned cuffs. Polished enough for the office, church or daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Robe midi à manches longues, taille ajustée et jupe finement plissée terminée par un ourlet mouchoir. Le plastron bordé d'un passepoil contrasté, le col à nœud et l'applique florale en relief à la taille lui donnent tout son caractère, avec des manches bouffantes et des poignets boutonnés. Idéale pour le bureau, l'église ou les événements de journée. Fabriquée à Istanbul avec soin.",
+   "pt": "Vestido midi de manga comprida, com cintura ajustada e saia plissada que termina numa bainha assimétrica em pontas. O peitilho com debrum contrastante, a gola com laço e o aplique floral em relevo na cintura marcam o modelo, completado por mangas bufantes e punhos abotoados. Elegante para o escritório, a igreja ou eventos de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/907/1.jpg",
+   "galeri/907/2.jpg",
+   "galeri/907/3.jpg",
+   "galeri/907/4.jpg",
+   "galeri/907/5.jpg",
+   "galeri/907/6.jpg",
+   "galeri/907/7.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3187",
   "baslik": "Two-Tone Pleated Skirt Set",
   "kategori": "sets",
