@@ -1501,6 +1501,7 @@ async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null 
     const en = renkCevir([r]) || (ton && renkCevir([ton[2]]) ? renkCevir([ton[2]]).map((x) => `${ton[1] === "koyu" ? "dark" : "light"} ${x}`) : null);
     if (en) yazi = { ...yazi, renkler: en, renkEmin: true, renkNotu: "" };
   }
+  if (kart && kart.kumas && !yazi.kumas) yazi = { ...yazi, kumas: String(kart.kumas) }; // 4 Kasım: kumaş etiketi (Pelin okur) kanal yazısına
   const st = baglam.stok[u.kod] || {};
   return {
     kod: String(u.kod),
@@ -2043,14 +2044,20 @@ async function yayinOnayKarti(env, x, u, simdi) {
     await env.KAYIT.delete(k);
   }
   const marka = x.marka === "BLACKROSE" ? "BLACK ROSE" : x.marka || "?";
-  const v = await telegram(env, "sendVideo", { chat_id: patron, video: x.video, caption: `🎬 ${x.kod} · ${marka} — yayın önizlemesi ("${marka} · ${x.kod}" videonun tamamında, sağ alt köşede)`, supports_streaming: true });
-  if (!v.ok) await telegram(env, "sendMessage", { chat_id: patron, text: `⚠️ ${x.kod}: önizleme videosu gösterilemedi (${v.description || "?"}).` });
-  const fotolar = [x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, 10);
-  if (fotolar.length > 1) await telegram(env, "sendMediaGroup", { chat_id: patron, media: fotolar.map((f, i) => ({ type: "photo", media: f, ...(i === 0 ? { caption: `📸 ${x.kod} — ön${(x.set || []).length ? ` + ${(x.set || []).map((y) => y.ad).join(", ")}` : ""}` } : {}) })) });
-  else if (fotolar.length) await telegram(env, "sendPhoto", { chat_id: patron, photo: fotolar[0], caption: `📸 ${x.kod}` });
-  const yazi = duzMetinYazi(altYazi(paket));
+  // 4 Kasım (Patron önerisi 10): TÜM PAKET TEK ALBÜMDE (video + foto seti + askı ön/arka + detay kolajları), kanal yazısı albümün
+  // yazısı olarak — kanala aynen böyle gider; altında TEK onay kartı
+  const medya = pelinMedya(x);
+  const altyazi = altYazi(paket);
+  let g = await telegram(env, "sendMediaGroup", { chat_id: patron, media: medya.map((m, i) => (i === 0 ? { ...m, caption: altyazi, parse_mode: "HTML" } : m)) });
+  if (!g.ok) {
+    await telegram(env, "sendMessage", { chat_id: patron, text: `⚠️ ${x.kod}: albüm tek parça gösterilemedi (${g.description || "?"}); video ve fotoğraflar ayrı geliyor.` });
+    await telegram(env, "sendVideo", { chat_id: patron, video: x.video, caption: `🎬 ${x.kod} · ${marka}`, supports_streaming: true });
+    const fotolar = medya.filter((m) => m.type === "photo");
+    if (fotolar.length > 1) await telegram(env, "sendMediaGroup", { chat_id: patron, media: fotolar });
+  }
+  const yazi = duzMetinYazi(altyazi);
   const kart = await telegram(env, "sendMessage", { chat_id: patron, disable_web_page_preview: true,
-    text: [`📣 SON YAYIN ONAYI — ${x.kod} · ${marka}`, "Pelin'deki onay üretim onayıydı. Bu kart onaylanmadan hiçbir şey kanala/siteye gitmez.", "", "Kanala bu yazıyla gidecek:", "───", yazi.slice(0, 1500), "───", "Onaylarsanız Kemal kanala koyar, Selin siteye ekler."].join("\n"),
+    text: [`📣 SON YAYIN ONAYI — ${x.kod} · ${marka}`, `Yukarıdaki albüm kanala AYNEN böyle gider: video ("${marka} · ${x.kod}" sağ altta) + ${medya.filter((m) => m.type === "photo").length} fotoğraf (${["ön", ...(x.set || []).map((y) => y.ad)].join(", ")}) + kanal yazısı.`, "Bu kart onaylanmadan hiçbir şey kanala/siteye gitmez.", "", "Kanal yazısı:", "───", yazi.slice(0, 1500), "───", "Tek onay: Kemal kanala koyar, Selin siteye ekler."].join("\n"),
     reply_markup: { inline_keyboard: [[{ text: "📣 Kanala ve siteye gönder", callback_data: `py:o:${kartNo}` }, { text: "❌ Gönderme", callback_data: `py:x:${kartNo}` }]] } });
   await env.KAYIT.put(`kemal:pelinYayin:${kartNo}`, JSON.stringify({ x, zaman: simdi, mid: kart && kart.ok ? kart.result.message_id : null }), { expirationTtl: 14 * 86400 });
   return kart;

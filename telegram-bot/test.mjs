@@ -1860,8 +1860,12 @@ test("Pelin teslim (4 Kasım): ÖNCE Patron'a SON YAYIN ONAY kartı (video + fot
   o.gonderilen.length = 0;
   await pelinKanalAdimi(o.env, ist(11));
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0); // onaysız kanala HİÇBİR ŞEY
-  assert.ok(cagrilar(o.gonderilen, "sendVideo").some((m) => m.govde.chat_id === "999" && m.govde.video === "https://vid/markali.mp4" && /BLACK ROSE · 3403/.test(m.govde.caption)));
-  assert.ok(cagrilar(o.gonderilen, "sendMediaGroup").some((m) => m.govde.chat_id === "999" && m.govde.media.length === 3));
+  // TEK ALBÜM: video + fotoğraflar, kanal yazısı albümün yazısı (kanala aynen böyle gider)
+  const alb = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "999" && m.govde.media[0].media === "https://vid/markali.mp4");
+  assert.ok(alb);
+  assert.deepEqual(alb.govde.media.map((m) => m.type), ["video", "photo", "photo", "photo"]);
+  assert.match(alb.govde.media[0].caption, /CODE: 3403/);
+  assert.equal(cagrilar(o.gonderilen, "sendVideo").filter((m) => m.govde.chat_id === "999").length, 0);
   const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "999" && /SON YAYIN ONAYI — 3403 · BLACK ROSE/.test(m.govde.text));
   assert.ok(kart);
   assert.match(kart.govde.text, /dark burgundy/i); // renk model kartından (black değil)

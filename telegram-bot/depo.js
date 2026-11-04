@@ -32,6 +32,11 @@ export function karmaDepo(kv, storage, { anahtarlar = [], onekler = [], haric = 
       const v = await oku(k);
       return v == null ? null : tur === "json" ? JSON.parse(v) : v;
     },
+    async getWithMetadata(k, tur) {
+      if (!yerel(k)) return kv.getWithMetadata(k, tur);
+      const v = await this.get(k, tur);
+      return { value: v, metadata: null };
+    },
     async put(k, v, secenek = {}) {
       if (!yerel(k)) return kv.put(k, v, secenek);
       const e = secenek.expirationTtl ? simdi() + secenek.expirationTtl : secenek.expiration || null;

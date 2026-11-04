@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 FONT = "/usr/share/fonts/opentype/inter/InterDisplay-SemiBold.otf"
 BOYUT = 40
-KARAKTERLER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-./·~ "
+KARAKTERLER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-./·~ %:,()+&ÇĞİÖŞÜÉÈÀ"
 font = ImageFont.truetype(FONT, BOYUT)
 yukari, asagi = font.getmetrics()
 H = yukari + asagi

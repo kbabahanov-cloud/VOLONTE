@@ -111,13 +111,14 @@ export async function katmanPng(w, h, kod, marka = "VOLONTE", oran = VIDEO_ETIKE
       rgb[k] = rgb[k + 1] = rgb[k + 2] = v;
     }
   }
-  return pngRgbSikistir(w, h, rgb);
+  return pngSikistir(w, h, rgb, 3);
 }
-// Büyük görsel için sıkıştırılmış PNG (RGB, zlib = CompressionStream "deflate")
-async function pngRgbSikistir(W, H, rgb) {
-  const satir = W * 3 + 1;
+export const pngRgbaSikistir = (W, H, rgba) => pngSikistir(W, H, rgba, 4);
+// Büyük görsel için sıkıştırılmış PNG (RGB ya da RGBA, zlib = CompressionStream "deflate")
+async function pngSikistir(W, H, px, kanal = 3) {
+  const satir = W * kanal + 1;
   const ham = new Uint8Array(H * satir);
-  for (let y = 0; y < H; y++) ham.set(rgb.subarray(y * W * 3, (y + 1) * W * 3), y * satir + 1);
+  for (let y = 0; y < H; y++) ham.set(px.subarray(y * W * kanal, (y + 1) * W * kanal), y * satir + 1);
   const zlib = new Uint8Array(await new Response(new Blob([ham]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
   const parcaB = (tur, veri) => {
     const govde = new Uint8Array(4 + veri.length);
@@ -127,7 +128,7 @@ async function pngRgbSikistir(W, H, rgb) {
     out.set(u32(veri.length), 0); out.set(govde, 4); out.set(u32(crc32(govde)), 8 + veri.length);
     return out;
   };
-  const ihdr = new Uint8Array([...u32(W), ...u32(H), 8, 2, 0, 0, 0]);
+  const ihdr = new Uint8Array([...u32(W), ...u32(H), 8, kanal === 4 ? 6 : 2, 0, 0, 0]);
   const parcalar = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), parcaB("IHDR", ihdr), parcaB("IDAT", zlib), parcaB("IEND", new Uint8Array(0))];
   const out = new Uint8Array(parcalar.reduce((t, x) => t + x.length, 0));
   let o = 0; for (const x of parcalar) { out.set(x, o); o += x.length; }
