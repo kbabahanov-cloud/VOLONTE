@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3226",
+  "baslik": "Pinstripe Vest Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted pinstripe vest with high-waisted wide-leg trousers. The vest features an oversized white contrast collar, a button front and a pointed hem finished with white trim, while the trousers have a pleated front and side pockets. Easy to wear to the office or for polished daytime plans. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un gilet ajusté à fines rayures et un pantalon large taille haute. Le gilet se distingue par un grand col blanc contrasté, un boutonnage devant et un bas en pointe souligné de blanc ; le pantalon offre des plis devant et des poches latérales. Idéal au bureau comme pour une journée élégante. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um colete ajustado risca de giz com calça de cintura alta e pernas largas. O colete tem gola branca ampla em contraste, abotoamento frontal e barra em ponta com acabamento branco; a calça traz pregas na frente e bolsos laterais. Perfeito para o escritório ou compromissos elegantes de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3226/1.jpg",
+   "galeri/3226/2.jpg",
+   "galeri/3226/3.jpg",
+   "galeri/3226/4.jpg",
+   "galeri/3226/5.jpg"
+  ],
+  "videolar": [
+   "selin/3226/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3244",
   "baslik": "Lace Shirt Trouser Set",
   "kategori": "sets",
