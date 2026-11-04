@@ -4,8 +4,9 @@
 # Kilitler: (1) her sorgu SadeceOku() denetiminden geçer, SELECT dışı her şey reddedilir;
 # (2) bağlantı ApplicationIntent=ReadOnly ile açılır; (3) her sorgu bir işlem (transaction)
 # içinde çalışır ve sonunda geri alınır (Rollback); (4) veritabanı kullanıcısı zaten sadece okuma.
-# Okunan alanlar SADECE: STOKKODU, MALINCINSI, adet (ENVANTER toplamı) ve SATISFIYATI1.
-# Alış fiyatı, maliyet, kâr oranı, vergi no, TC kimlik no okunmaz.
+# Stok: STOKKODU, MALINCINSI, adet (ENVANTER toplamı) ve SATISFIYATI1. Vergi no, TC kimlik no okunmaz.
+# 3 Kasım (Patron onayı): ciro, gider ve kâr raporu için alış/satış fiyatı ve giderler de okunur — SADECE Patron'un
+# Sami raporlarına gider; başka hiçbir bota, kanala, siteye, Fuat'a/Nuri'ye gitmez.
 #
 # Kullanım (çift tıklanan .bat dosyaları bunu çağırır):
 #   sami.ps1 kurulum   şifreyi sorar (Windows kasasında şifreli saklanır), köprü anahtarı üretir
@@ -43,6 +44,8 @@ $T_DEPO = "$($Ayar.firma)$($Ayar.donem)TBLDEPOENVANTER"
 $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
+# Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
+$SURUM = "2026110304"
 
 function Gunluge([string]$m) {
   try {
@@ -163,6 +166,335 @@ function SatisGonder([string]$anahtar, [hashtable]$satis, [datetime]$gun) {
     -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
 }
 
+# ---- Cari hesap bakiyeleri (cuma mutabakatı, 31 Ekim; bağ düzeltmesi 2 Kasım) — SADECE SELECT ----
+# Black Rose hesapları (adında BLACK ROSE / BLACKROSE geçen cari kartlar): kart BAKIYE sütunu + her dönemin cari hareket
+# tablolarındaki BORC/ALACAK toplamları ayrı ayrı okunur; hangisinin doğru kaynak olduğu karşılaştırılarak seçilir.
+# Hesap eşleştirme anahtarı: sondaki sayı (000 → 00, 15, 20, 25). Özel kodunda BLACK geçen hareketler (ör. ödemeler) ayrıca.
+# 2 Kasım: Black Rose Vegawin'de kart BAKIYE hep 0 ve hareket tablolarında CARIIND yok (FIRMANO var). Bağ artık
+# denenerek bulunur: hareket sütunu (FIRMANO …) × kart sütunu (IND, FIRMAKODU …) çiftlerinden Black Rose hesaplarına en çok
+# hareket eşleşen seçilir; tek değerli sütun (ör. firma numarası) bağ sayılmaz. Para birimi dolar.
+$CARI_BAG = @("CARIIND", "CARINO", "CARIID", "CARI_IND", "CARIKARTIND", "CARIKARTNO", "CARIKART", "CARI", "FIRMAIND", "FIRMANO", "FIRMAID", "FIRMA_IND", "HESAPIND", "HESAPNO")
+# Hareket satırında (varsa) okunan ek sütunlar: özel kod, açıklama, evrak/belge türü (ödeme ↔ mal ayrımı için)
+$HAREKET_EK = @("OZELKOD", "ACIKLAMA", "EVRAKNO", "BELGENO", "BELGEIND", "ISLEMIND", "BELGETIPI", "ISLEMTIPI")
+$KART_ANAHTAR = @("IND", "FIRMANO", "FIRMAKODU", "CARIKODU", "CARINO", "KOD", "HESAPKODU")
+function HesapAnahtari([string]$ad) {
+  $a = $ad.ToUpperInvariant() -replace '\s', ''
+  if ($a -notmatch 'BLACKROSE') { return $null }
+  if ($a -match '(\d+)$') { return ('{0:D2}' -f [int]$Matches[1]) }
+  return $null
+}
+function TarihYaz($v) { if ($null -eq $v -or $v -is [DBNull]) { return $null } return ([datetime]$v).ToString("yyyy-MM-dd") }
+function Deger($v) { if ($null -eq $v -or $v -is [DBNull]) { return $null } $s = ([string]$v).Trim(); if ($s) { return $s } return $null }
+# Hareket tablosunu cari karta bağlayan sütun çifti: { hareket = "FIRMANO"; kart = "IND"; n = eşleşen hareket; farkli = farklı değer }
+function CariBagBul([string]$sifre, [string]$tablo, [string[]]$sut, $hesaplar) {
+  $en = $null
+  foreach ($a in $CARI_BAG) {
+    if ($sut -notcontains $a) { continue }
+    try { $farkli = [int]((Sorgu $sifre "SELECT COUNT(DISTINCT [$a]) AS D FROM [$tablo]").Rows[0].D) } catch { continue }
+    if ($farkli -lt 2) { continue }
+    foreach ($ks in $KART_ANAHTAR) {
+      $degerler = @($hesaplar | ForEach-Object { $_.anahtarlar[$ks] } | Where-Object { $_ })
+      if (-not $degerler.Count) { continue }
+      $n = 0
+      foreach ($d in $degerler) { try { $n += [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$tablo] WHERE [$a] = @i" @{ i = $d }).Rows[0].N) } catch { } }
+      if ($n -gt 0 -and ($null -eq $en -or $n -gt $en.n)) { $en = @{ hareket = $a; kart = $ks; n = $n; farkli = $farkli } }
+    }
+  }
+  return $en
+}
+function CariBakiyeleri([string]$sifre) {
+  $T_CARI = "$($Ayar.firma)TBLCARI"
+  $kartSutun = Sutunlar $sifre $T_CARI
+  if ($kartSutun -notcontains "IND") { throw "$T_CARI tablosunda IND sütunu yok. Sütunlar: $($kartSutun -join ', ')" }
+  $metinler = Sorgu $sifre "SELECT COLUMN_NAME AS C FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t AND DATA_TYPE IN ('varchar','nvarchar','char','nchar')" @{ t = $T_CARI }
+  $adSutun = $null
+  foreach ($c in $metinler.Rows) {
+    $sutun = [string]$c.C
+    try { $n = (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$T_CARI] WHERE REPLACE([$sutun], ' ', '') LIKE @b" @{ b = "%BLACKROSE%" }).Rows[0].N } catch { $n = 0 }
+    if ($n -gt 0) { $adSutun = $sutun; break }
+  }
+  if (-not $adSutun) { throw "$T_CARI tablosunda BLACK ROSE adlı hesap bulunamadı." }
+  $bakiyeVar = $kartSutun -contains "BAKIYE"
+  $kartAnahtar = @($KART_ANAHTAR | Where-Object { $kartSutun -contains $_ })
+  $ekler = ($kartAnahtar | ForEach-Object { ", [$_] AS [K_$_]" }) -join ""
+  $sec = "SELECT [$adSutun] AS AD$ekler" + $(if ($bakiyeVar) { ", BAKIYE" } else { "" }) + " FROM [$T_CARI] WHERE REPLACE([$adSutun], ' ', '') LIKE @b"
+  $sonuc = @{}
+  foreach ($k in (Sorgu $sifre $sec @{ b = "%BLACKROSE%" }).Rows) {
+    $an = HesapAnahtari ([string]$k.AD)
+    if (-not $an) { continue }
+    $anahtarlar = @{}
+    foreach ($s in $kartAnahtar) { $v = Deger $k["K_$s"]; if ($v) { $anahtarlar[$s] = $v } }
+    $sonuc[$an] = @{ anahtar = $an; ad = ([string]$k.AD).Trim(); ind = $anahtarlar["IND"]; anahtarlar = $anahtarlar; kart = $(if ($bakiyeVar) { Num $k.BAKIYE } else { $null }); donemler = @{} }
+  }
+  $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLCARI%HAREKET%" }
+  $notlar = @()
+  $hareketler = @()
+  $baglar = @()
+  $ozel = @()
+  foreach ($t in $tablolar.Rows) {
+    $ad = [string]$t.AD
+    $sut = Sutunlar $sifre $ad
+    if (($sut -notcontains "BORC") -or ($sut -notcontains "ALACAK")) { $notlar += "${ad}: BORC/ALACAK sütunu yok (sütunlar: $($sut -join ', '))"; continue }
+    $bag = CariBagBul $sifre $ad $sut @($sonuc.Values)
+    if (-not $bag) {
+      # Teşhis (sadece ekrana): aday sütunların kaç farklı değeri var, örnekler neler
+      $ipucu = @()
+      foreach ($a in $CARI_BAG) {
+        if ($sut -notcontains $a) { continue }
+        try {
+          $farkli = [int]((Sorgu $sifre "SELECT COUNT(DISTINCT [$a]) AS D FROM [$ad]").Rows[0].D)
+          $ornek = ((Sorgu $sifre "SELECT DISTINCT TOP 5 [$a] AS V FROM [$ad]").Rows | ForEach-Object { ([string]$_.V).Trim() }) -join ", "
+          $ipucu += "$a $farkli farklı değer (örnek: $ornek)"
+        } catch { $ipucu += "$a okunamadı" }
+      }
+      $notlar += "${ad}: Black Rose hesaplarına bağlanan hareket yok. $($ipucu -join '; ') · sütunlar: $($sut -join ', ')"
+      continue
+    }
+    $etiket = $ad.Substring($Ayar.firma.Length)   # ör. D0005TBLCARIGENELHAREKET
+    $baglar += @{ tablo = $etiket; hareket = $bag.hareket; kart = $bag.kart; n = $bag.n; farkli = $bag.farkli }
+    $tarih = $null; foreach ($a in $TARIH_ADAYLARI) { if ($sut -contains $a) { $tarih = $a; break } }
+    $sira = @(); if ($tarih) { $sira += "[$tarih] DESC" }; if ($sut -contains "IND") { $sira += "IND DESC" }
+    foreach ($h in $sonuc.Values) {
+      $d = $h.anahtarlar[$bag.kart]
+      if (-not $d) { continue }
+      $q = "SELECT COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A" + $(if ($tarih) { ", MIN([$tarih]) AS ILK, MAX([$tarih]) AS SON" } else { "" }) + " FROM [$ad] WHERE [$($bag.hareket)] = @i"
+      $r = (Sorgu $sifre $q @{ i = $d }).Rows[0]
+      $don = @{ n = [int]$r.N; borc = (Num $r.B); alacak = (Num $r.A); ilk = $(if ($tarih) { TarihYaz $r.ILK } else { $null }); son = $(if ($tarih) { TarihYaz $r.SON } else { $null }) }
+      # Hareket satırında yürüyen BAKIYE varsa son satırınki (karşılaştırma için)
+      if ($sut -contains "BAKIYE" -and $sira.Count -and $don.n -gt 0) {
+        try { $don.sonBakiye = Num (Sorgu $sifre "SELECT TOP 1 BAKIYE AS K FROM [$ad] WHERE [$($bag.hareket)] = @i ORDER BY $($sira -join ', ')" @{ i = $d }).Rows[0].K } catch { }
+      }
+      # Yıl yıl toplamlar (2 Kasım, Fuat'a "yapılan işin özeti"): sadece GENEL tablo; ödeme (özel kod/açıklama "BORC VERD")
+      # ayrı toplanır; hesabın bu tablodaki ilk günü (devir kaydı) ayrıca gönderilir ki yıl toplamından düşülebilsin.
+      if ($ad -like "*TBLCARIGENELHAREKET" -and $tarih -and $don.n -gt 0) {
+        $kosul = @(); foreach ($s in @("OZELKOD", "ACIKLAMA")) { if ($sut -contains $s) { $kosul += "[$s] LIKE @o" } }
+        $odeme = if ($kosul.Count) { $kosul -join " OR " } else { "1 = 0" }
+        $yq = "SELECT YEAR([$tarih]) AS Y, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A, SUM(CASE WHEN $odeme THEN BORC ELSE 0 END) AS OB, SUM(CASE WHEN $odeme THEN ALACAK ELSE 0 END) AS OA FROM [$ad] WHERE [$($bag.hareket)] = @i GROUP BY YEAR([$tarih])"
+        $don.yillar = @{}
+        foreach ($y in (Sorgu $sifre $yq @{ i = $d; o = "%BOR_ VERD%" }).Rows) { $don.yillar[[string]$y.Y] = @{ n = [int]$y.N; b = (Num $y.B); a = (Num $y.A); ob = (Num $y.OB); oa = (Num $y.OA) } }
+        $ilkG = (Sorgu $sifre "SELECT MIN([$tarih]) AS T FROM [$ad] WHERE [$($bag.hareket)] = @i" @{ i = $d }).Rows[0].T
+        if ($ilkG -isnot [DBNull]) {
+          $g0 = ([datetime]$ilkG).Date
+          $ig = (Sorgu $sifre "SELECT COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$ad] WHERE [$($bag.hareket)] = @i AND [$tarih] >= @t1 AND [$tarih] < @t2" @{ i = $d; t1 = $g0; t2 = $g0.AddDays(1) }).Rows[0]
+          $don.ilkGun = @{ tarih = $g0.ToString("yyyy-MM-dd"); n = [int]$ig.N; b = (Num $ig.B); a = (Num $ig.A) }
+        }
+      }
+      $h.donemler[$etiket] = $don
+    }
+    # Son 60 günün tek tek hareketleri (2 Kasım): ödemeleri, gelen malı ve iki defter farkının sebebini Sami kendisi bulsun.
+    # Sadece GENEL hareket tablosundan (HAREKETLERI ile birebir aynı); sadece Black Rose hesapları; sadece SELECT.
+    if ($ad -like "*TBLCARIGENELHAREKET" -and $tarih) {
+      $ek = @($HAREKET_EK | Where-Object { $sut -contains $_ })
+      $secim = "IND, [$tarih] AS TARIH, BORC, ALACAK" + (($ek | ForEach-Object { ", [$_] AS [$_]" }) -join "")
+      foreach ($h in $sonuc.Values) {
+        $d = $h.anahtarlar[$bag.kart]
+        if (-not $d) { continue }
+        foreach ($x in (Sorgu $sifre "SELECT TOP 500 $secim FROM [$ad] WHERE [$($bag.hareket)] = @i AND [$tarih] >= @t ORDER BY [$tarih]" @{ i = $d; t = (Get-Date).Date.AddDays(-60) }).Rows) {
+          $kayit = @{ hesap = $h.anahtar; tablo = $etiket; ind = [string]$x.IND; tarih = (TarihYaz $x.TARIH); borc = (Num $x.BORC); alacak = (Num $x.ALACAK) }
+          foreach ($s in $ek) { $v = Deger $x[$s]; if ($v) { $kayit[$s.ToLowerInvariant()] = $v } }
+          $hareketler += $kayit
+        }
+      }
+    }
+    if ($sut -contains "OZELKOD") {
+      foreach ($x in (Sorgu $sifre "SELECT OZELKOD AS K, [$($bag.hareket)] AS C, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$ad] WHERE OZELKOD LIKE @b GROUP BY OZELKOD, [$($bag.hareket)]" @{ b = "%BLACK%" }).Rows) {
+        $cariAd = ""
+        try { $cariAd = ([string](Sorgu $sifre "SELECT [$adSutun] AS AD FROM [$T_CARI] WHERE [$($bag.kart)] = @i" @{ i = [string]$x.C }).Rows[0].AD).Trim() } catch { }
+        $ozel += @{ tablo = $etiket; kod = ([string]$x.K).Trim(); cari = $cariAd; n = [int]$x.N; borc = (Num $x.B); alacak = (Num $x.A) }
+      }
+    }
+  }
+  $liste = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { @{ anahtar = $_.anahtar; ad = $_.ad; ind = $_.ind; kart = $_.kart; donemler = $_.donemler } })
+  $kartlar = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { $x = $_; "$($x.ad): " + (($x.anahtarlar.Keys | Sort-Object | ForEach-Object { "$_=$($x.anahtarlar[$_])" }) -join " ") })
+  return @{ hesaplar = $liste; ozel = $ozel; notlar = $notlar; baglar = $baglar; kartlar = $kartlar; adSutun = $adSutun; kartBakiye = $bakiyeVar; hareketler = $hareketler }
+}
+# ---- Yıllık ciro (2 Kasım; Patron: her mağaza AYRI, toplam yok, sadece Patron görür) — SADECE SELECT ----
+# Satış fatura başlıkları (adında SATFAT + BASLIK, tüm dönemler), iptaller hariç: yıl × belge türü × para birimi → adet, TUTAR,
+# ARATOPLAM. Alış (ALF), fatura satırları, maliyet/alış fiyatı/kâr ASLA okunmaz. Türlerin anlamı (satış/iade) Venom'da belirlenir.
+function CiroOku([string]$sifre) {
+  $ciroTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFAT%BASLIK%" }
+  $ciroSatir = @()
+  foreach ($ct in $ciroTablolar.Rows) {
+    $ctAd = [string]$ct.AD
+    $ctSut = @(Sutunlar $sifre $ctAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($ctSut -notcontains "TARIH") -or ($ctSut -notcontains "BELGETIPI")) { continue }
+    $ctTutar = @(@("TUTAR", "ARATOPLAM") | Where-Object { $ctSut -contains $_ })
+    if (-not $ctTutar.Count) { continue }
+    $ctDoviz = if ($ctSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $ctTopla = ($ctTutar | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
+    # Sadece satış faturası (21); satış tablosundaki diğer türler (ör. 23 alıştan iade) alış tarafıdır → okunmaz
+    $ctNerede = " WHERE BELGETIPI = 21" + $(if ($ctSut -contains "IPTAL") { " AND ISNULL(IPTAL, 0) = 0" } else { "" })
+    $ctSorgu = "SELECT YEAR(TARIH) AS Y, BELGETIPI AS T" + $(if ($ctDoviz) { ", [$ctDoviz] AS D" } else { "" }) + ", COUNT(*) AS N$ctTopla FROM [$ctAd]$ctNerede GROUP BY YEAR(TARIH), BELGETIPI" + $(if ($ctDoviz) { ", [$ctDoviz]" } else { "" })
+    foreach ($cx in (Sorgu $sifre $ctSorgu).Rows) {
+      $ciroSatir += @{ tablo = $ctAd.Substring($Ayar.firma.Length); yil = [int]$cx.Y; tur = [string]$cx.T; doviz = $(if ($ctDoviz) { ([string]$cx.D).Trim() } else { "" }); n = [int]$cx.N
+        tutar = $(if ($ctTutar -contains "TUTAR") { Num $cx.TUTAR } else { $null }); aratoplam = $(if ($ctTutar -contains "ARATOPLAM") { Num $cx.ARATOPLAM } else { $null }) }
+    }
+  }
+  # Satıştan iade (2 Kasım): Vega iadeyi alış fatura tablosunda BELGETIPI 22 olarak tutar. SADECE 22 okunur;
+  # alış faturaları (20), alış fiyatı ve maliyet ASLA okunmaz.
+  $iadeTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLALFAT%BASLIK%" }
+  foreach ($it in $iadeTablolar.Rows) {
+    $itAd = [string]$it.AD
+    $itSut = @(Sutunlar $sifre $itAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($itSut -notcontains "TARIH") -or ($itSut -notcontains "BELGETIPI") -or ($itSut -notcontains "TUTAR")) { continue }
+    $itDoviz = if ($itSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $itIptal = if ($itSut -contains "IPTAL") { " AND ISNULL(IPTAL, 0) = 0" } else { "" }
+    $itSorgu = "SELECT YEAR(TARIH) AS Y" + $(if ($itDoviz) { ", [$itDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(TUTAR AS FLOAT)) AS TUTAR FROM [$itAd] WHERE BELGETIPI = 22$itIptal GROUP BY YEAR(TARIH)" + $(if ($itDoviz) { ", [$itDoviz]" } else { "" })
+    foreach ($ix in (Sorgu $sifre $itSorgu).Rows) {
+      $ciroSatir += @{ tablo = $itAd.Substring($Ayar.firma.Length); yil = [int]$ix.Y; tur = "22"; kaynak = "iade"; doviz = $(if ($itDoviz) { ([string]$ix.D).Trim() } else { "" }); n = [int]$ix.N; tutar = (Num $ix.TUTAR); aratoplam = $null }
+    }
+  }
+  return $ciroSatir
+}
+# ---- Gider keşfi (3 Kasım, Patron: giderler nerede?) — SADECE SELECT, sürüm başına bir kez ----
+# Adında MASRAF/KASA/GIDER/BANKA/MUHASEBE/PERSONEL/MAAS/HESAP/ODEME/TEDIYE geçen tablolar: satır sayısı, sütun ADLARI, son 13
+# ayın ay ay adet + tutar toplamları ve kısa kod sütunlarının (KOD/TIP/TUR/GRUP) dağılımı. Kişi adı, ünvan, açıklama, TC,
+# telefon, adres sütunlarının İÇERİĞİ okunmaz; adında PERSONEL/MAAS geçen tablolarda hiçbir metin değeri okunmaz.
+function GiderKesif([string]$sifre) {
+  $gkDesen = @("%MASRAF%", "%KASA%", "%GIDER%", "%BANKA%", "%MUHASEBE%", "%PERSONEL%", "%MAAS%", "%HESAP%", "%ODEME%", "%TEDIYE%")
+  $gkKosul = ($gkDesen | ForEach-Object { "TABLE_NAME LIKE '$($Ayar.firma)$_'" }) -join " OR "
+  $gkTablolar = Sorgu $sifre "SELECT TOP 80 TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE $gkKosul ORDER BY TABLE_NAME"
+  $gkTarihAday = @("TARIH", "ISLEMTARIHI", "BELGETARIHI", "FISTARIHI", "EVRAKTARIHI", "KAYITTARIHI")
+  $gkTutarAday = @("TUTAR", "BORC", "ALACAK", "GIRIS", "CIKIS", "NETTUTAR", "TOPLAM", "DOVIZTUTAR")
+  $gkYasak = '(AD|ADI|UNVAN|ACIKLAMA|ISIM|PERSONEL|TC|TEL|ADRES|MAIL|IBAN|SOYAD|NOT)'
+  $gkSonuc = @()
+  foreach ($gt in $gkTablolar.Rows) {
+    $gtAd = [string]$gt.AD
+    $gtKayit = @{ tablo = $gtAd.Substring($Ayar.firma.Length); satir = $null; sutunlar = @(); aylar = @(); kodlar = @() }
+    try {
+      $gtSut = @(Sutunlar $sifre $gtAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+      $gtKayit.sutunlar = $gtSut
+      $gtKayit.satir = [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$gtAd]").Rows[0].N)
+      $gtTarih = $gkTarihAday | Where-Object { $gtSut -contains $_ } | Select-Object -First 1
+      $gtTutar = @($gkTutarAday | Where-Object { $gtSut -contains $_ })
+      if ($gtKayit.satir -gt 0 -and $gtTarih) {
+        $gtTopla = ($gtTutar | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
+        foreach ($gx in (Sorgu $sifre "SELECT YEAR([$gtTarih]) AS Y, MONTH([$gtTarih]) AS M, COUNT(*) AS N$gtTopla FROM [$gtAd] WHERE [$gtTarih] >= @t GROUP BY YEAR([$gtTarih]), MONTH([$gtTarih]) ORDER BY YEAR([$gtTarih]), MONTH([$gtTarih])" @{ t = (Get-Date).Date.AddMonths(-13) }).Rows) {
+          $gxKayit = @{ ay = ("{0}-{1:D2}" -f $gx.Y, [int]$gx.M); n = [int]$gx.N }
+          foreach ($s in $gtTutar) { $gxKayit[$s.ToLowerInvariant()] = (Num $gx[$s]) }
+          $gtKayit.aylar += $gxKayit
+        }
+        if ($gtAd -notmatch 'PERSONEL|MAAS') {
+          $gtKod = @($gtSut | Where-Object { ($_ -match 'KOD|TIP|TUR|GRUP') -and ($_ -notmatch $gkYasak) } | Select-Object -First 6)
+          foreach ($gk in $gtKod) {
+            try {
+              $gkSay = [int]((Sorgu $sifre "SELECT COUNT(DISTINCT [$gk]) AS D FROM [$gtAd] WHERE [$gtTarih] >= @t" @{ t = (Get-Date).Date.AddMonths(-13) }).Rows[0].D)
+              if ($gkSay -lt 1 -or $gkSay -gt 40) { continue }
+              $gkToplaSql = $(if ($gtTutar.Count) { ", SUM(CAST([$($gtTutar[0])] AS FLOAT)) AS T" } else { "" })
+              $gkDeger = @()
+              foreach ($gv in (Sorgu $sifre "SELECT [$gk] AS V, COUNT(*) AS N$gkToplaSql FROM [$gtAd] WHERE [$gtTarih] >= @t GROUP BY [$gk] ORDER BY COUNT(*) DESC" @{ t = (Get-Date).Date.AddMonths(-13) }).Rows) {
+                $gkDeger += @{ v = ([string]$gv.V).Trim(); n = [int]$gv.N; t = $(if ($gtTutar.Count) { Num $gv.T } else { $null }) }
+              }
+              $gtKayit.kodlar += @{ sutun = $gk; tutarSutunu = $(if ($gtTutar.Count) { $gtTutar[0] } else { $null }); degerler = $gkDeger }
+            } catch { }
+          }
+        }
+      }
+    } catch { $gtKayit.hata = $_.Exception.Message.Substring(0, [Math]::Min(150, $_.Exception.Message.Length)) }
+    $gkSonuc += $gtKayit
+  }
+  return $gkSonuc
+}
+# ---- Mali keşif (3 Kasım, Patron onayı: alış fiyatı + satış fiyatı + gider → SADECE Patron'un /kar raporu) ----
+# Stok kartı ve birim tablolarının sütun ADLARI + fiyat sütunlarının dolu kart sayısı/ortalaması (kart kart değer okunmaz);
+# satış/alış fatura satırlarının başlığa hangi sütunla bağlandığı (eşleşme sayısı) ve yıllık miktar/tutar/alış-fiyatlı tutar.
+function MaliKesif([string]$sifre) {
+  $mk = @{ stokKart = @(); hareket = @() }
+  foreach ($mt in @($T_STOK, $T_BIRIM)) {
+    try {
+      $mtSut = @(Sutunlar $sifre $mt | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+      $mtFiyat = @()
+      foreach ($fs in @($mtSut | Where-Object { $_ -match 'ALIS|MALIYET|FIYAT|AFIYAT|MLYT' } | Select-Object -First 12)) {
+        try { $fr = (Sorgu $sifre "SELECT COUNT(*) AS N, AVG(CAST([$fs] AS FLOAT)) AS O FROM [$mt] WHERE ISNULL([$fs], 0) <> 0").Rows[0]; $mtFiyat += @{ sutun = $fs; dolu = [int]$fr.N; ortalama = (Num $fr.O) } } catch { }
+      }
+      $mk.stokKart += @{ tablo = $mt.Substring($Ayar.firma.Length); sutunlar = $mtSut; fiyatSutunlari = $mtFiyat }
+    } catch { }
+  }
+  $mhTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a OR TABLE_NAME LIKE @b ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFATHAREKET"; b = "$($Ayar.firma)D____TBLALFATHAREKET" }
+  foreach ($mh in $mhTablolar.Rows) {
+    $mhAd = [string]$mh.AD
+    $mhBas = $mhAd -replace 'HAREKET$', 'BASLIK'
+    $mhKayit = @{ tablo = $mhAd.Substring($Ayar.firma.Length); baglar = @(); yillar = @() }
+    try {
+      $mhSut = @(Sutunlar $sifre $mhAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+      $mhKayit.satir = [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$mhAd]").Rows[0].N)
+      if ($mhKayit.satir -eq 0) { $mk.hareket += $mhKayit; continue }
+      foreach ($mb in @("EVRAKNO", "BELGEIND", "BASLIKIND", "FATURAIND", "FISIND", "DETAY", "BELGENO")) {
+        if ($mhSut -notcontains $mb) { continue }
+        try { $mkEs = [int]((Sorgu $sifre "SELECT COUNT(*) AS N FROM [$mhAd] H WHERE H.[$mb] IN (SELECT B.IND FROM [$mhBas] B)").Rows[0].N); $mhKayit.baglar += @{ sutun = $mb; eslesen = $mkEs } } catch { }
+      }
+      $mhPara = if ($mhSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+      $mhSec = "SELECT YEAR(TARIH) AS Y" + $(if ($mhPara) { ", [$mhPara] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(MIKTAR AS FLOAT)) AS MIKTAR" +
+        $(if ($mhSut -contains "GERCEKTOPLAM") { ", SUM(CAST(GERCEKTOPLAM AS FLOAT)) AS GERCEKTOPLAM" } else { "" }) +
+        $(if ($mhSut -contains "FIYATI") { ", SUM(CAST(MIKTAR AS FLOAT) * CAST(FIYATI AS FLOAT)) AS MFIYATI" } else { "" }) +
+        $(if ($mhSut -contains "AFIYATI") { ", SUM(CAST(MIKTAR AS FLOAT) * CAST(AFIYATI AS FLOAT)) AS MAFIYATI, SUM(CASE WHEN ISNULL(AFIYATI, 0) <> 0 THEN 1 ELSE 0 END) AS AFDOLU" } else { "" }) +
+        " FROM [$mhAd] GROUP BY YEAR(TARIH)" + $(if ($mhPara) { ", [$mhPara]" } else { "" })
+      foreach ($my in (Sorgu $sifre $mhSec).Rows) {
+        $myK = @{ yil = [int]$my.Y; n = [int]$my.N; miktar = (Num $my.MIKTAR) }
+        if ($mhPara) { $myK.doviz = ([string]$my.D).Trim() }
+        foreach ($s in @("GERCEKTOPLAM", "MFIYATI", "MAFIYATI", "AFDOLU")) { if ($my.Table.Columns.Contains($s)) { $myK[$s.ToLowerInvariant()] = (Num $my[$s]) } }
+        $mhKayit.yillar += $myK
+      }
+    } catch { $mhKayit.hata = $_.Exception.Message.Substring(0, [Math]::Min(150, $_.Exception.Message.Length)) }
+    $mk.hareket += $mhKayit
+  }
+  return $mk
+}
+function GiderKesifGonder([string]$anahtar, $tablolar, $mali) {
+  $gkGovde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); surum = $SURUM; tablolar = [object[]]$tablolar; mali = $mali } | ConvertTo-Json -Depth 8 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/gider-kesif" -TimeoutSec 90 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($gkGovde)) | Out-Null
+}
+
+function CiroGonder([string]$anahtar, $satirlar) {
+  $ciroGovde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); satirlar = [object[]]$satirlar } | ConvertTo-Json -Depth 5 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/ciro" -TimeoutSec 60 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($ciroGovde)) | Out-Null
+}
+
+function CariGonder([string]$anahtar, $c) {
+  $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; baglar = [object[]]$c.baglar; hareketler = [object[]]$c.hareketler; kartBakiye = $c.kartBakiye; birim = "USD" } | ConvertTo-Json -Depth 8 -Compress
+  Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/cari" -TimeoutSec 60 `
+    -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
+    -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null
+}
+
+# ---- Kendini güncelleme (2 Kasım, Patron: "bir daha zip açılmasın") ----
+# Saatte bir Venom'a (Cloudflare) "yeni sürüm var mı" diye sorar (köprü anahtarıyla, HTTPS). Varsa listedeki dosyaları indirir;
+# her dosyanın SHA-256 özeti listedekiyle tutmazsa, dosya adı beklenmedikse ya da yeni sami.ps1'de yazım hatası varsa HİÇBİR
+# şeyi değiştirmez. Kurulumda eski dosya ".eski" olarak saklanır. ayar.json ve şifre kaydına asla dokunmaz.
+function KendiniGuncelle([string]$anahtar) {
+  $basliklar = @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" }
+  $govde = [Text.Encoding]::UTF8.GetBytes((@{ surum = $SURUM } | ConvertTo-Json -Compress))
+  $liste = Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/surum" -TimeoutSec 30 -Headers $basliklar -ContentType "application/json; charset=utf-8" -Body $govde
+  if (-not $liste -or -not $liste.surum -or [string]$liste.surum -le $SURUM) { return $null }
+  $indirilen = @{}
+  foreach ($dosya in $liste.dosyalar.PSObject.Properties) {
+    $dad = [string]$dosya.Name
+    if ($dad -notmatch '^[A-Za-z0-9._-]+\.(ps1|bat|vbs)$' -or $dad -like "ayar*") { throw "beklenmeyen dosya adı: $dad" }
+    $istek = [Text.Encoding]::UTF8.GetBytes((@{ ad = $dad } | ConvertTo-Json -Compress))
+    $cevap = Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/dosya" -TimeoutSec 60 -Headers $basliklar -ContentType "application/json; charset=utf-8" -Body $istek
+    $bayt = [Convert]::FromBase64String([string]$cevap.b64)
+    $ozet = -join ((New-Object Security.Cryptography.SHA256Managed).ComputeHash($bayt) | ForEach-Object { $_.ToString("x2") })
+    if ($ozet -ne [string]$dosya.Value) { throw "özet tutmadı: $dad" }
+    $indirilen[$dad] = $bayt
+  }
+  if ($indirilen.ContainsKey("sami.ps1")) {
+    $yeniMetin = [Text.Encoding]::UTF8.GetString($indirilen["sami.ps1"]); $yHata = $null; $yParca = $null
+    [void][System.Management.Automation.Language.Parser]::ParseInput($yeniMetin, [ref]$yParca, [ref]$yHata)
+    if ($yHata.Count) { throw "yeni sami.ps1 yazım hatası içeriyor, kurulmadı" }
+  }
+  foreach ($dad in $indirilen.Keys) {
+    $hedef = Join-Path $Klasor $dad
+    if (Test-Path $hedef) { Copy-Item $hedef "$hedef.eski" -Force }
+    [IO.File]::WriteAllBytes("$hedef.yeni", $indirilen[$dad])
+    Move-Item "$hedef.yeni" $hedef -Force
+  }
+  return [string]$liste.surum
+}
+
 # Vegawin kodundaki ek (ör. "3194B20" → "3194") iç bilgidir, dışarı gitmez.
 function ModelKodu([string]$kod) {
   $k = "$kod".Trim().ToUpperInvariant()
@@ -253,6 +585,26 @@ function Esitle([switch]$Zorla) {
   $satisNot = ""
   try { $sat = Satislar (Duz $g.Sifre) (Get-Date); SatisGonder (Duz $g.Anahtar) $sat (Get-Date); $satisNot = ", bugün satılan $($sat.Count) model" }
   catch { $satisNot = ", satış okunamadı: $($_.Exception.Message)" }
+  # Cari bakiyeler (cuma mutabakatı): saatte bir; hata olursa stok ve satış etkilenmez
+  $cariDosya = Join-Path $VeriKlasoru "cari-son-$($Ayar.magaza).txt"
+  $cariSon = if (Test-Path $cariDosya) { [datetime]::Parse((Get-Content $cariDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
+  if ($Zorla -or ((Get-Date) - $cariSon).TotalMinutes -ge 60) {
+    try { CariGonder (Duz $g.Anahtar) (CariBakiyeleri (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $cariDosya; $satisNot += ", cari bakiyeler gönderildi" }
+    catch { $satisNot += ", cari okunamadı: $($_.Exception.Message)" }
+  }
+  # Gider keşfi: bu sürümde bir kez (Patron'un gider raporu için hangi tabloda olduğunu bulmak)
+  $gkDosya = Join-Path $VeriKlasoru "gider-kesif-$($Ayar.magaza)-$SURUM.txt"
+  if (-not (Test-Path $gkDosya)) {
+    try { GiderKesifGonder (Duz $g.Anahtar) @(GiderKesif (Duz $g.Sifre)) (MaliKesif (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $gkDosya; $satisNot += ", mali keşif gönderildi" }
+    catch { $satisNot += ", gider keşfi yapılamadı: $($_.Exception.Message)" }
+  }
+  # Yıllık ciro: 6 saatte bir (sadece Patron'un raporu için); hata olursa diğer işler etkilenmez
+  $ciroDosya = Join-Path $VeriKlasoru "ciro-son-$($Ayar.magaza).txt"
+  $ciroSon = if (Test-Path $ciroDosya) { [datetime]::Parse((Get-Content $ciroDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
+  if ($Zorla -or ((Get-Date) - $ciroSon).TotalMinutes -ge 360) {
+    try { CiroGonder (Duz $g.Anahtar) @(CiroOku (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $ciroDosya; $satisNot += ", ciro gönderildi" }
+    catch { $satisNot += ", ciro okunamadı: $($_.Exception.Message)" }
+  }
   return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi$satisNot"
 }
 
@@ -403,6 +755,127 @@ switch ($Mod) {
     Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
     Bekle
   }
+  "cari-bakiye" {
+    # Black Rose hesaplarının bakiyesi: kart BAKIYE ve dönem dönem hareket toplamları (SADECE SELECT, hiçbir şey gönderilmez)
+    Write-Host "=== Sayım Sami cari bakiye ($($Ayar.magaza)) — sadece okuma, hiçbir şey gönderilmez ===" -ForegroundColor Cyan
+    try {
+      $g = Gizliler
+      $c = CariBakiyeleri (Duz $g.Sifre)
+      Write-Host "Hesap adı sütunu: $($c.adSutun) · kartta BAKIYE sütunu: $(if ($c.kartBakiye) { 'var' } else { 'yok' }) · para birimi: dolar"
+      foreach ($b in $c.baglar) { Write-Host ("  bağ: {0} → hareket.{1} = kart.{2}  ({3} Black Rose hareketi, sütunda {4} farklı hesap)" -f $b.tablo, $b.hareket, $b.kart, $b.n, $b.farkli) -ForegroundColor Green }
+      foreach ($h in $c.hesaplar) {
+        Write-Host ""
+        Write-Host ("■ {0}  (anahtar {1})   KART BAKIYE: {2:N2} $" -f $h.ad, $h.anahtar, $h.kart) -ForegroundColor Yellow
+        if (-not @($h.donemler.Values | Where-Object { $_.n -gt 0 }).Count) { Write-Host "  (hiçbir hareket tablosunda bu hesaba bağlı hareket bulunamadı)" }
+        foreach ($d in ($h.donemler.Keys | Sort-Object)) {
+          $x = $h.donemler[$d]
+          if ($x.n -eq 0) { continue }
+          Write-Host ("  {0}: {1} hareket · borç {2:N2} $ · alacak {3:N2} $ · borç−alacak {4:N2} $ · {5} → {6}{7}" -f $d, $x.n, $x.borc, $x.alacak, ([double]$x.borc - [double]$x.alacak), $x.ilk, $x.son, $(if ($null -ne $x.sonBakiye) { " · son satır BAKIYE {0:N2} $" -f $x.sonBakiye } else { "" }))
+          if ($x.yillar) { foreach ($yy in ($x.yillar.Keys | Sort-Object)) { $v = $x.yillar[$yy]; Write-Host ("      {0}: borç {1:N2} $ · alacak {2:N2} $ · ödeme borç {3:N2} $ / alacak {4:N2} $ · {5} kayıt" -f $yy, $v.b, $v.a, $v.ob, $v.oa, $v.n) } }
+          if ($x.ilkGun) { Write-Host ("      ilk gün {0}: borç {1:N2} $ · alacak {2:N2} $ ({3} kayıt; devir olabilir)" -f $x.ilkGun.tarih, $x.ilkGun.b, $x.ilkGun.a, $x.ilkGun.n) }
+        }
+      }
+      if ($c.ozel.Count) {
+        Write-Host ""
+        Write-Host "Özel kodunda BLACK geçen hareketler:" -ForegroundColor Yellow
+        foreach ($o in $c.ozel) { Write-Host ("  {0} · '{1}' · hesap: {2} · {3} hareket · borç {4:N2} $ · alacak {5:N2} $" -f $o.tablo, $o.kod, $o.cari, $o.n, $o.borc, $o.alacak) }
+      }
+      # Teşhis (2 Kasım): ödeme ↔ mal ↔ iade ayrımı için hareket türünü gösteren sütunu bul. Son dönemin GENEL tablosunda,
+      # Black Rose hesaplarının hareketlerinde az sayıda farklı değeri olan her sütunun dağılımı (borç/alacak toplamıyla). Sadece ekrana.
+      try {
+        $son = @($c.baglar | Where-Object { $_.tablo -like "*TBLCARIGENELHAREKET" } | Sort-Object { $_.tablo } | Select-Object -Last 1)[0]
+        if ($son -and $son.kart -eq "IND") {
+          $tab = "$($Ayar.firma)$($son.tablo)"
+          $kimlik = @($c.hesaplar | ForEach-Object { $_.ind } | Where-Object { $_ } | ForEach-Object { [int]$_ })
+          $liste = ($kimlik -join ", ")
+          $hs = @(Sutunlar (Duz $g.Sifre) $tab)
+          Write-Host ""
+          Write-Host "Hareket tablosu ($($son.tablo)) sütunları: $($hs -join ', ')" -ForegroundColor Yellow
+          foreach ($s in $hs) {
+            if (@("IND", "TARIH", "VADE", "BORC", "ALACAK", "BAKIYE", "EVRAKNO", "BELGEIND", "ISLEMIND", $son.hareket) -contains $s) { continue }
+            try {
+              $dg = Sorgu (Duz $g.Sifre) "SELECT TOP 25 [$s] AS V, COUNT(*) AS N, SUM(BORC) AS B, SUM(ALACAK) AS A FROM [$tab] WHERE [$($son.hareket)] IN ($liste) GROUP BY [$s] ORDER BY COUNT(*) DESC"
+              if ($dg.Rows.Count -ge 2 -and $dg.Rows.Count -le 20) {
+                Write-Host ("  {0}: {1}" -f $s, (($dg.Rows | ForEach-Object { "{0}={1} (borç {2:N0} / alacak {3:N0})" -f ([string]$_.V).Trim(), $_.N, (Num $_.B), (Num $_.A) }) -join " · "))
+              }
+            } catch { }
+          }
+        }
+      } catch { Write-Host "  (tür teşhisi yapılamadı: $($_.Exception.Message))" }
+      Write-Host ""
+      Write-Host "Son 60 günün hareketleri: $($c.hareketler.Count) (son 8 tanesi):" -ForegroundColor Yellow
+      foreach ($x in @($c.hareketler | Sort-Object { $_.tarih } | Select-Object -Last 8)) { Write-Host ("  {0} · Black Rose {1} · borç {2:N2} $ · alacak {3:N2} $ · {4} {5}" -f $x.tarih, $x.hesap, $x.borc, $x.alacak, $x.ozelkod, $x.aciklama) }
+      foreach ($n in $c.notlar) { Write-Host "  not: $n" }
+      if (-not $c.baglar.Count) { Write-Host ""; Write-Host "Hesap kartları (bağ bulunamadı, karşılaştırma için):"; foreach ($k in $c.kartlar) { Write-Host "  $k" } }
+      Write-Host ""
+      Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi, Vegawin'e hiçbir şey yazılmadı)." -ForegroundColor Green
+    } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını Claude'a gönderin."
+    Bekle
+  }
+  "ciro-deneme" {
+    # Yıllık ciro (2 Kasım, düzeltme): SADECE satış fatura başlıkları (adında SATFAT + BASLIK geçen tablolar, tüm dönemler).
+    # Alış faturaları (ALF), fatura satırları ve depo hareketleri okunmaz. Alış fiyatı, maliyet, kâr sütunları ASLA okunmaz.
+    # Not: PowerShell'de değişken adları büyük/küçük harf ayırmaz ($tip = $TIP); önceki sürümdeki tanıma hatası buydu.
+    Write-Host "=== Sayım Sami ciro denemesi ($($Ayar.magaza)) — sadece okuma, hiçbir şey gönderilmez ===" -ForegroundColor Cyan
+    try {
+      $g = Gizliler; $sifre = Duz $g.Sifre
+      $ADAY_TUR = @("BELGETIPI", "FATURATIPI", "FISTIPI", "BELGETURU", "ISLEMTIPI", "TIP")
+      $ADAY_TUTAR = @("GENELTOPLAM", "NETTOPLAM", "TOPLAM", "ARATOPLAM", "TOPLAMTUTAR", "TUTAR", "NETTUTAR", "FATURATUTARI", "DOVIZGENELTOPLAM", "DOVIZTOPLAM", "DOVIZTUTAR", "SATISTUTARI")
+      $ADAY_DOVIZ = @("DOVIZCINSI", "DOVIZKODU", "DOVIZ", "PARABIRIMI", "DOVIZTIPI", "DOVIZIND")
+      $ADAY_TARIH = @("TARIH", "FATURATARIHI", "BELGETARIHI", "FISTARIHI", "EVRAKTARIHI", "ISLEMTARIHI", "KAYITTARIHI")
+      $bul = { param($liste, $sutunlar) foreach ($a in $liste) { if ($sutunlar -contains $a) { return $a } } return $null }
+      $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFAT%BASLIK%" }
+      Write-Host "Satış fatura başlık tabloları: $($tablolar.Rows.Count) (her dönem ayrı tablo)"
+      $ozet = @{}   # yıl|tür|döviz → { n, tutarlar }
+      $kullanilan = $null
+      foreach ($tb in $tablolar.Rows) {
+        $ad = [string]$tb.AD
+        $sut = @(Sutunlar $sifre $ad | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+        $turS = & $bul $ADAY_TUR $sut
+        $tarS = & $bul $ADAY_TARIH $sut
+        $dovS = & $bul $ADAY_DOVIZ $sut
+        $tutS = @($ADAY_TUTAR | Where-Object { $sut -contains $_ })
+        try { $n = (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$ad]").Rows[0].N } catch { $n = "?" }
+        Write-Host ""
+        Write-Host "■ $ad  ($n satır)" -ForegroundColor Yellow
+        Write-Host "  tür: $turS · tarih: $tarS · döviz: $dovS · tutar sütunları: $($tutS -join ', ')"
+        if (-not $turS -or -not $tarS -or -not $tutS.Count) { Write-Host "  Sütunlar: $($sut -join ', ')"; Write-Host "  (tür/tarih/tutar sütunu bulunamadı, atlandı)"; continue }
+        $kullanilan = $tutS
+        $topla = ($tutS | ForEach-Object { ", SUM(CAST([$_] AS FLOAT)) AS [$_]" }) -join ""
+        # İptal edilmiş faturalar ciroya girmez (IPTAL sütunu varsa); kaç tane olduğu ayrıca yazılır
+        $iptalVar = $sut -contains "IPTAL"
+        if ($iptalVar) { try { Write-Host ("  iptal edilmiş fatura: {0} (ciroya katılmadı)" -f (Sorgu $sifre "SELECT COUNT(*) AS N FROM [$ad] WHERE IPTAL = 1").Rows[0].N) } catch { Write-Host "  IPTAL okunamadı: $($_.Exception.Message)" } }
+        $nerede = if ($iptalVar) { " WHERE ISNULL(IPTAL, 0) = 0" } else { "" }
+        $sec = "SELECT YEAR([$tarS]) AS Y, [$turS] AS T" + $(if ($dovS) { ", [$dovS] AS D" } else { "" }) + ", COUNT(*) AS N$topla FROM [$ad]$nerede GROUP BY YEAR([$tarS]), [$turS]" + $(if ($dovS) { ", [$dovS]" } else { "" }) + " ORDER BY YEAR([$tarS]), [$turS]"
+        try {
+          foreach ($x in (Sorgu $sifre $sec).Rows) {
+            $deger = ($tutS | ForEach-Object { "{0} {1:N2}" -f $_, (Num $x[$_]) }) -join " · "
+            Write-Host ("  {0} · tür {1}{2} · {3} fatura · {4}" -f $x.Y, $x.T, $(if ($dovS) { " · döviz $($x.D)" } else { "" }), $x.N, $deger)
+            $k = "$($x.Y)|$($x.T)|$(if ($dovS) { $x.D } else { '-' })"
+            if (-not $ozet.ContainsKey($k)) { $ozet[$k] = @{ n = 0; t = @{}; donem = @() } }
+            $ozet[$k].n += [int]$x.N; $ozet[$k].donem += $ad.Substring($Ayar.firma.Length, 5)
+            foreach ($s in $tutS) { $ozet[$k].t[$s] = [double]$ozet[$k].t[$s] + [double](Num $x[$s]) }
+          }
+        } catch { Write-Host "  toplam okunamadı: $($_.Exception.Message)" }
+      }
+      # Tüm dönemler birlikte: yıl yıl, tür tür (aynı yıl iki dönemde görünürse işaretlenir → çift sayım kontrolü)
+      Write-Host ""
+      Write-Host "=== TÜM DÖNEMLER — yıl · tür · döviz ===" -ForegroundColor Cyan
+      foreach ($k in ($ozet.Keys | Sort-Object)) {
+        $p = $k.Split("|"); $o = $ozet[$k]
+        $iki = if (@($o.donem | Sort-Object -Unique).Count -gt 1) { "  ⚠ iki dönemde: $((@($o.donem | Sort-Object -Unique)) -join '+')" } else { "" }
+        Write-Host ("  {0} · tür {1} · döviz {2} · {3} fatura · {4}{5}" -f $p[0], $p[1], $p[2], $o.n, (($o.t.Keys | Sort-Object | ForEach-Object { "{0} {1:N2}" -f $_, $o.t[$_] }) -join " · "), $iki)
+      }
+      Write-Host ""
+      Write-Host "Tür numaralarını fotoğrafa göre belirleyeceğiz (Vegawin'de alış 20 / alıştan iade 22 ise büyük olasılıkla satış 21, satıştan iade 23)."
+      Write-Host "✓ Okuma tamam (hiçbir şey gönderilmedi, Vegawin'e hiçbir şey yazılmadı)." -ForegroundColor Green
+    } catch { Write-Host "✗ Hata: $($_.Exception.Message)" -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "Bu ekranın fotoğrafını (gerekirse birkaç parça) Claude'a gönderin."
+    Bekle
+  }
   "cari-deneme" {
     # Cuma mutabakatı (31 Ekim): Black Rose cari hesaplarının bakiyesi okunabiliyor mu? SADECE SELECT, hiçbir şey gönderilmez.
     Write-Host "=== Sayım Sami cari hesap denemesi ($($Ayar.magaza)) — sadece okuma, Venom'a hiçbir şey gönderilmez ===" -ForegroundColor Cyan
@@ -435,7 +908,7 @@ switch ($Mod) {
     Bekle
   }
   "durum" {
-    Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) ===" -ForegroundColor Cyan
+    Write-Host "=== Sayım Sami durumu ($($Ayar.magaza)) · sürüm $SURUM ===" -ForegroundColor Cyan
     try {
       $gorev = Get-ScheduledTask -TaskName $GorevAdi -ErrorAction Stop
       $bilgi = Get-ScheduledTaskInfo -TaskName $GorevAdi
@@ -453,6 +926,16 @@ switch ($Mod) {
     # Aynı anda iki kopya çalışmasın; hata olursa sessizce günlüğe yazılır (bilgisayar kapalı/ağ yok vb.).
     $kilit = New-Object System.Threading.Mutex($false, "Local\SamiKopru-$($Ayar.magaza)")
     if (-not $kilit.WaitOne(0)) { exit 0 }
+    # Saatte bir yeni sürüm kontrolü (hata olursa stok/satış/cari etkilenmez; bir sonraki saatte tekrar dener)
+    try {
+      $gDosya = Join-Path $VeriKlasoru "guncelleme-son-$($Ayar.magaza).txt"
+      $gSon = if (Test-Path $gDosya) { [datetime]::Parse((Get-Content $gDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
+      if (((Get-Date) - $gSon).TotalMinutes -ge 60) {
+        (Get-Date).ToString("o") | Set-Content $gDosya
+        $yeniSurum = KendiniGuncelle (Duz (Gizliler).Anahtar)
+        if ($yeniSurum) { Gunluge "kendini güncelledi: $SURUM → $yeniSurum (bir sonraki çalışmada yeni sürüm)" }
+      }
+    } catch { Gunluge "güncelleme denenemedi: $($_.Exception.Message)" }
     try { $r = Esitle; if ($r -ne "saat dışı") { Gunluge $r } }
     catch { Gunluge "HATA: $($_.Exception.Message)" }
     finally { $kilit.ReleaseMutex() }

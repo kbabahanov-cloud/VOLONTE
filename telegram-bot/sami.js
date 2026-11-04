@@ -17,15 +17,19 @@
 import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
-import { gunDokumu, raporTekrar } from "./gun-dokum.js";
+import { gunDokumu, raporTekrar, cariDokumu } from "./gun-dokum.js";
 import { paylasimTakip } from "./paylasim-takip.js";
 import { indirimliMi } from "./stok.js";
-import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster } from "./stokbot.js";
+import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster, kisiAdi } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu, brSayKomutu } from "./stoksorgu.js";
-import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi } from "./mutabakat.js";
+import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi, adetKomutu, adetDugmesi, nuriStokKomutu } from "./mutabakat.js";
+import { borcLimitKomutu } from "./cari-takip.js";
+import { patronMu, geriKuyrugu } from "./sil.js";
+import { ciroKomutu } from "./ciro.js";
+import { venomGidenAdimi } from "./venom-kopru.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -74,11 +78,12 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
-    const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); };
+    const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); await cariDokumu(e, tg); };
     const paylasilmamis = (e, t) => paylasimTakip(e, t, tg);
     const mutabakat = (e, t) => mutabakatAdimi(e, t, tg);
+    const venomGiden = (e, t) => venomGidenAdimi(e, t, tg); // Venom'un onaylanan dış mesajları (3 Kasım)
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis, mutabakat } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -119,6 +124,8 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
+    if (String(cq.data || "").startsWith("oz:")) return isOzetiDugmesi(env, cq, tg, simdiD); // Fuat'a iş özeti (sadece Patron)
+    if (String(cq.data || "").startsWith("ad:")) return adetDugmesi(env, cq, tg, simdiD); // Fuat'a adet listesi (sadece Patron)
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
     if (String(cq.data || "").startsWith("sq:")) return stokSorguDugmesi(env, cq, tg, simdiD);
@@ -130,6 +137,7 @@ export async function guncelleme(u, env) {
   if (u.channel_post) return kanalPaylasimi(u.channel_post, env);
   const m = u.message;
   if (!m || !m.from || m.chat.type !== "private") return;
+  if (await odemeMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Patron: /odeme + dekont (sadece Patron)
   if (!izinli(m.from.id, env)) {
     if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması
     if (await stokSorguMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat/Nuri: Black Rose stok sorgusu (Hemra onaylı)
@@ -142,6 +150,13 @@ export async function guncelleme(u, env) {
   if (komut === "/tablo") return tabloKomutu(m, env);
   if (komut === "/stokyetki") return stokYetkiKomutu(env, m, tg);
   if (komut === "/mutabakat") return mutabakatKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/ciro") return ciroKomutu(env, m, tg);
+  if (komut === "/geri") return geriKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/nuristok") return nuriStokKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/adet") return adetKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/isozeti") return isOzetiKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/bakiye") return bakiyeKomutu(env, m, tg, Math.floor(Date.now() / 1000));
+  if (komut === "/borclimit") return borcLimitKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/brsay") return brSayKomutu(env, m, tg);
   if (komut === "/sorgular") return sorgularKomutu(env, m, tg, Math.floor(Date.now() / 1000));
   if (komut === "/eksik") return eksikKomutu(env, m, tg, Math.floor(Date.now() / 1000));
@@ -411,4 +426,13 @@ async function tabloKomutu(m, env) {
     "",
     "Bağlamak için: /tablo stok <link> · /tablo harcama <link>",
   ].join("\n"));
+}
+
+// /geri <kod> (Patron): "Sil" ile kaldırılan modeli siteye (Selin) ve kanala (Kemal, arşivdeki kopyalardan) geri koyar.
+async function geriKomutu(env, m, tg, simdi) {
+  if (!patronMu(env, m.from.id)) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Bu komut sadece Patron'da." });
+  const kod = String((m.text || "").trim().split(/\s+/)[1] || "").replace(/[^0-9A-Za-z~]/g, "");
+  if (!kod) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Kullanım: /geri 3608" });
+  const yeni = await geriKuyrugu(env, kod, kisiAdi(m.from), simdi);
+  return tg(env, "sendMessage", { chat_id: m.chat.id, text: yeni ? `↩️ ${kod} geri konuyor: önce siteye (Selin), sonra arşivdeki paylaşımlar VOLONTE kanalına (Kemal). Bitince haber veririm.` : `${kod} zaten geri konma sırasında.` });
 }

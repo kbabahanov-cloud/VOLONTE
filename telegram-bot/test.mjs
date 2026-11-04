@@ -1665,3 +1665,208 @@ test("Kemal günlük seçim: hiç paylaşılmamışlardan günde en fazla 2 (bir
   // hiç paylaşılmamış kalmadıysa 10'u da normal
   assert.deepEqual(gunlukSecim((a, d = []) => sirali.slice(4).filter((k) => !d.includes(k)).slice(0, a), son, 10), sirali.slice(4, 14));
 });
+
+test("köprü cari: anahtarlı köprü Black Rose hesap bakiyelerini gönderir; Sami'nin deposunda cari:<MAĞAZA>", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  const gonder = (govde, anahtar = "kopru-anahtari-123") => worker.fetch(new Request("https://x/kopru/cari", { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: `Bearer ${anahtar}` }, body: JSON.stringify(govde) }), o.env);
+  assert.equal((await gonder({ hesaplar: [] }, "yanlis")).status, 401);
+  const r = await gonder({ hesaplar: [{ anahtar: "15", ad: "BLACKROSE 15", kart: -1000, donemler: { D0005TBLCARIGENELHAREKET: { n: 2, borc: 0, alacak: 1000, ilk: "2026-01-02", son: "2026-10-30" } } }, { anahtar: "x", ad: "kötü" }], ozel: [{ tablo: "D0001TBLCARIHAREKETLERI", kod: "BLACK ROSE BORC VERDIM", cari: "KASA", n: 5, borc: 5000, alacak: 0 }] });
+  assert.deepEqual(await r.json(), { ok: true, hesap: 1 });
+  const v = JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "cari:VOLONTE" }) })).json()).v);
+  assert.equal(v.hesaplar[0].kart, -1000);
+  assert.equal(v.ozel[0].kod, "BLACK ROSE BORC VERDIM");
+});
+
+test("yeni model: Selin siteye ekleyince Kemal önizlemeyi SADECE Patron'a (🆕 YENİ MODEL); Patron ✅ → hemen kanala, günlük 10'a sayılmaz, tarih güncellenir; Hemra basamaz; 2000 yok", async () => {
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "999,111", ALLOWED_IDS: "999,111,222", EKIP_IDS: "333" });
+  const { yeniModelIsleri } = await import("./worker.js");
+  await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]); // Vegawin'de stok henüz 0 → uyarı (engel değil)
+  o.depo.set("venom:yeniModel", JSON.stringify([{ kod: "3403", kim: "MURAT BABAHANOV", zaman: 1 }, { kod: "2000", kim: "x", zaman: 1 }, { kod: "7777", kim: "x", zaman: 1 }]));
+  o.gonderilen.length = 0;
+  await yeniModelIsleri(o.env, ist(10));
+  const albumler = cagrilar(o.gonderilen, "sendMediaGroup");
+  assert.deepEqual(albumler.map((m) => m.govde.chat_id), ["999"]); // sadece Patron
+  assert.match(albumler[0].govde.media[0].caption, /^🆕 NEW \/ NOUVEAU\n<b>✅ CODE: 3403<\/b>/);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(o.gonderilen)));
+  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => /^🆕 YENİ MODEL — 3403 \(siteye ekleyen: MURAT BABAHANOV\)/.test(m.govde.text));
+  assert.equal(kontrol.govde.chat_id, "999");
+  assert.match(kontrol.govde.text, /⚠️ Vegawin'de .*paylaşım engellenmez/);
+  assert.ok(!cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === "333"));
+  assert.deepEqual(JSON.parse(o.depo.get("venom:yeniModel")), [{ kod: "7777", kim: "x", zaman: 1, deneme: 1 }]); // sitede henüz yok → tekrar denenecek; 2000 çıkarıldı
+  const onay = kontrol.govde.reply_markup.inline_keyboard[0][0].callback_data;
+  o.gonderilen.length = 0;
+  await bas(o.env, 333, onay); // Hemra basamaz
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
+  const gun = gunAnahtari(ist(10));
+  o.depo.set(`sayac:${gun}`, "10");
+  const gercek = Date.now; Date.now = () => ist(10) * 1000;
+  try { await bas(o.env, 111, onay); } finally { Date.now = gercek; } // Murat'ın eski hesabı da Patron yetkisinde
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+  assert.equal(o.depo.get(`sayac:${gun}`), "10");
+  const { stokIste } = await import("./stokbot.js");
+  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3403"], ist(10));
+});
+
+test("köprü kendini güncelleme: /kopru/surum ve /kopru/dosya sadece anahtarla; sadece listedeki dosyalar; köprünün sürümü kaydedilir", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  o.env.KOPRU_VOLONTE = "kopru-anahtari-123";
+  const iste = (yol, govde, anahtar = "kopru-anahtari-123") => worker.fetch(new Request(`https://x${yol}`, { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: `Bearer ${anahtar}` }, body: JSON.stringify(govde) }), o.env);
+  assert.equal((await iste("/kopru/surum", {}, "yanlis")).status, 401);
+  assert.deepEqual(await (await iste("/kopru/surum", { surum: "2026110301" })).json(), { surum: "0", dosyalar: {} }); // yayın yoksa "0"
+  await o.env.KAYIT.put("kopru:surum", JSON.stringify({ surum: "2026110302", dosyalar: { "sami.ps1": "abc" } }));
+  await o.env.KAYIT.put("kopru:dosya:sami.ps1", "QUJD");
+  await o.env.KAYIT.put("kopru:dosya:ayar.json", "GIZLI");
+  assert.equal((await (await iste("/kopru/surum", { surum: "2026110301" })).json()).surum, "2026110302");
+  const kayit = JSON.parse(await o.env.KAYIT.get("venom:kopruSurum:VOLONTE"));
+  assert.equal(kayit.surum, "2026110301");
+  assert.deepEqual(await (await iste("/kopru/dosya", { ad: "sami.ps1" })).json(), { ad: "sami.ps1", b64: "QUJD" });
+  assert.equal((await iste("/kopru/dosya", { ad: "ayar.json" })).status, 404); // listede olmayan dosya verilmez
+  assert.equal((await iste("/kopru/dosya", { ad: "sami.ps1" }, "yanlis")).status, 401);
+});
+
+test("SİL kuralı (Kemal): Selin'den gelen iş → kodlu + fotoğrafla emin eşleşen kodsuz paylaşımlar arşive kopyalanır ve silinir; emin olunmayan silinmez; Patron'a tek mesaj; /geri arşivden kanala geri koyar", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  Object.assign(o.env, { ANTHROPIC_API_KEY: "test-anahtar", MURAT_ID: "999,111" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kodsuz", JSON.stringify({ "~200": { ids: [200, 201], tarih: o.simdi - 120 * GUN, album: null }, "~600": { ids: [600], tarih: o.simdi - 300 * GUN, album: null }, "~700": { ids: [700], tarih: o.simdi - 30 * GUN, album: null } }));
+  o.depo.set("tarifler", JSON.stringify({ "3100": { t: "siyah saten takım", f: "F3100" }, "~200": { t: "siyah saten takım", f: "F200" }, "~600": { t: "siyah takım", f: "F600" }, "~700": { t: "kırmızı elbise", f: "F700" } }));
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3100", kim: "Murat", zaman: o.simdi, site: "kaldirildi" }]));
+  const cevaplar = [
+    { adaylar: ["~200", "~600"] },
+    { ayni: true, guven: "yuksek", aciklama: "aynı model" },
+    { ayni: true, guven: "orta", aciklama: "benziyor ama emin değilim" },
+  ];
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.startsWith("https://api.anthropic.com")) return new Response(JSON.stringify({ id: "m", type: "message", role: "assistant", model: "x", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(cevaplar.shift()) }], usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (adres.includes("/file/bot")) return new Response(new Uint8Array([1, 2, 3]));
+    if (adres.endsWith("/getFile")) return new Response(JSON.stringify({ ok: true, result: { file_path: "p.jpg" } }));
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  // önce arşive kopya (kodlu 300-302 + emin eşleşen kodsuz 200-201), sonra silme; ~600 (orta) ve ~700 dokunulmaz
+  const kopya = cagrilar(o.gonderilen, "copyMessages");
+  assert.deepEqual(kopya[0].govde, { chat_id: -200, from_chat_id: -100, message_ids: [200, 201, 300, 301, 302], disable_notification: true });
+  assert.deepEqual(cagrilar(o.gonderilen, "deleteMessage").map((x) => x.govde.message_id), [200, 201, 300, 301, 302]);
+  const patron = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999");
+  assert.equal(patron.length, 1); // tek mesaj, sadece Patron
+  assert.match(patron[0].govde.text, /^✅ 3100 siteden ve kanaldan kaldırıldı \(2 paylaşım silindi, 5 mesaj\)\./);
+  assert.match(patron[0].govde.text, /emin olmadığım 1 paylaşım SİLİNMEDİ[\s\S]*t\.me\/Volonteroseoffical\/600 \(orta: benziyor ama emin değilim\)/);
+  assert.match(patron[0].govde.text, /\/geri 3100/);
+  const kayit = JSON.parse(o.depo.get("silinen:3100"));
+  assert.deepEqual(kayit.kopya.map((x) => x.kanal), [200, 201, 300, 301, 302]);
+  assert.ok(JSON.parse(o.depo.get("hicgelmeyecek"))["~200"]);
+  assert.ok(!JSON.parse(o.depo.get("hicgelmeyecek"))["~600"]);
+  // /geri: Selin siteye koyduktan sonra Kemal arşivden kanala geri koyar
+  o.gonderilen.length = 0;
+  o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Murat", site: "geri kondu" }]));
+  await fabrikaIsleri(o.env, o.simdi + 600);
+  const geri = cagrilar(o.gonderilen, "copyMessages");
+  assert.deepEqual(geri[0].govde, { chat_id: -100, from_chat_id: -200, message_ids: kayit.kopya.map((x) => x.arsiv) });
+  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /^↩️ 3100 geri kondu: site geri kondu; kanala 5 mesaj geri kondu \(yeni tarihle\)\./);
+  assert.ok(!JSON.parse(o.depo.get("hicgelmeyecek"))["3100"] && !JSON.parse(o.depo.get("hicgelmeyecek"))["~200"]);
+});
+
+test("SİL kuralı güvenliği: arşive kopyalanamayan mesaj SİLİNMEZ; Telegram eski mesajı silmezse ⚠️ ve elle silme linkleri", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3200", kim: "Murat", zaman: o.simdi, site: "kaldirildi" }, { kod: "3100", kim: "Murat", zaman: o.simdi, site: "hata: GitHub 500" }]));
+  const tg = globalThis.fetch;
+  let kopyaHatasi = true;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.endsWith("/copyMessages") && kopyaHatasi) { kopyaHatasi = false; return new Response(JSON.stringify({ ok: false, description: "Bad Request" })); }
+    if (adres.endsWith("/deleteMessage") && JSON.parse(istek.body).message_id === 301) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be deleted" }));
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  const silinen = cagrilar(o.gonderilen, "deleteMessage").map((x) => x.govde.message_id);
+  assert.ok(!silinen.includes(400)); // 3200: kopyalanamadı → silinmedi
+  const mesajlar = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999").map((x) => x.govde.text);
+  assert.match(mesajlar.find((m) => m.includes("3200")), /^⚠️ 3200: siteden kaldırıldı; kanaldan 0 mesaj silindi, 1 mesaj SİLİNEMEDİ \(arşive kopyalanamadı \(silinmedi\)\)/);
+  assert.match(mesajlar.find((m) => m.includes("3100")), /^⚠️ 3100: siteden KALDIRILAMADI \(hata: GitHub 500\); kanaldan 2 mesaj silindi, 1 mesaj SİLİNEMEDİ[\s\S]*elle silebilirsiniz[\s\S]*t\.me\/Volonteroseoffical\/301/);
+});
+
+test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyle gizlenir, alt yazı kaldırılır, orijinal arşivde; Patron'a link; /geri sonrası SOLD OUT linki hatırlatılır", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kemal:soldout:b64", Buffer.from([0xff, 0xd8, 0xff]).toString("base64"));
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3100", kim: "Patron", zaman: o.simdi, site: "kaldirildi" }]));
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.endsWith("/sendPhoto")) { o.gonderilen.push({ url: adres, govde: { chat_id: istek.body.get("chat_id") } }); return new Response(JSON.stringify({ ok: true, result: { message_id: 5, photo: [{ file_id: "kucuk" }, { file_id: "SOLDOUT" }] } })); }
+    if (adres.endsWith("/deleteMessage") && JSON.parse(istek.body).message_id === 300) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be deleted" }));
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  const duz = cagrilar(o.gonderilen, "editMessageMedia");
+  assert.deepEqual(duz.map((x) => x.govde), [{ chat_id: -100, message_id: 300, media: { type: "photo", media: "SOLDOUT", caption: "" } }]);
+  assert.equal(cagrilar(o.gonderilen, "sendPhoto")[0].govde.chat_id, "-200"); // görsel bir kez arşiv kanalına yüklendi
+  assert.equal(o.depo.get("kemal:soldout:fileId"), "SOLDOUT");
+  const p = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999");
+  assert.equal(p.length, 1);
+  assert.match(p[0].govde.text, /^✅ 3100 siteden ve kanaldan kaldırıldı \(1 paylaşım: 2 mesaj silindi, 1 eski mesaj SOLD OUT ile gizlendi\)\./);
+  assert.match(p[0].govde.text, /SOLD OUT görseliyle gizlendi[\s\S]*t\.me\/Volonteroseoffical\/300/);
+  const k = JSON.parse(o.depo.get("silinen:3100"));
+  assert.deepEqual(k.kopya.filter((x) => x.gizlendi).map((x) => x.kanal), [300]);
+  // /geri: orijinal arşivden geri konur, SOLD OUT paylaşımının linki hatırlatılır
+  o.gonderilen.length = 0;
+  o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Patron", site: "geri kondu" }]));
+  await fabrikaIsleri(o.env, o.simdi + 600);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.message_ids.length, 3);
+  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Kanalda SOLD OUT görselli 1 eski paylaşım duruyor[\s\S]*\/300/);
+});
+
+test("görselli istek (3319): indirme zaman aşımında 3 kez adresle dener, sonra kendisi indirip base64 gönderir; hata kısa Türkçe", async () => {
+  const { gorselliIstek, kisaHata, gecici } = await import("./duzen.js");
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url) => (String(url).startsWith("https://site/") ? new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/jpeg" } }) : asil(url));
+  const hata = new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"request timed out while trying to download the file"}}');
+  const gelen = [];
+  const istek = async (g) => { gelen.push(g[0].source.type); if (g[0].source.type === "url") throw hata; return { ok: true }; };
+  try {
+    assert.deepEqual(await gorselliIstek({}, ["https://site/a.jpg"], istek, { beklemeMs: [0] }), { ok: true });
+    assert.deepEqual(gelen, ["url", "url", "url", "base64"]);
+    assert.equal(kisaHata(hata), "fotoğraf indirilemedi (zaman aşımı); birkaç kez denendi");
+    assert.equal(kisaHata(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"bad schema"}}')), "yapay zekâ hatası: bad schema");
+    assert.ok(gecici(hata) && !gecici(new Error("bad schema")));
+    // kalıcı hata: yeniden denenmez
+    let n = 0;
+    await assert.rejects(gorselliIstek({}, ["https://site/a.jpg"], async () => { n++; throw new Error("400 invalid schema"); }, { beklemeMs: [0] }));
+    assert.equal(n, 1);
+  } finally { globalThis.fetch = asil; }
+});
+
+test("Pelin teslim (4 Kasım): onaylı Pelin videosu kanala (video ilk, fiyat yok) → Selin'e site için; DENEME hiç gitmez; sitede olmayan paylaşılmaz", async () => {
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  const { pelinKanalAdimi } = await import("./worker.js");
+  const { kuyrugaEkle, kuyruguAl } = await import("./venom-kopru.js");
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "3403-a", kod: "3403", video: "https://vid/pelin.mp4", foto: "https://img/foto.jpg", kapak: "https://img/kapak.jpg", deneme: false });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "3403-d", kod: "3403", video: "https://vid/deneme.mp4", deneme: true });
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 2, id: "8888-a", kod: "8888", video: "https://vid/x.mp4", deneme: false });
+  o.gonderilen.length = 0;
+  await pelinKanalAdimi(o.env, ist(11));
+  const kanal = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
+  assert.equal(kanal.length, 1);
+  assert.deepEqual(kanal[0].govde.media.map((m) => [m.type, m.media]), [["video", "https://vid/pelin.mp4"], ["photo", "https://img/kapak.jpg"]]);
+  assert.ok(!/\$|price|prix/i.test(JSON.stringify(kanal)));
+  assert.ok(!JSON.stringify(o.gonderilen).includes("deneme.mp4"));
+  const patron = cagrilar(o.gonderilen, "sendMessage").filter((m) => m.govde.chat_id === "999").map((m) => m.govde.text);
+  assert.ok(patron.some((t) => /📣 3403: Pelin videosu kanalda/.test(t)));
+  assert.ok(patron.some((t) => /🧪 3403: deneme video kanala\/siteye gönderilmedi/.test(t)));
+  assert.ok(patron.some((t) => /8888: Pelin videosu kanala paylaşılmadı — model sitede yok/.test(t)));
+  const site = await kuyruguAl(o.env, "pelinSite");
+  assert.deepEqual(site.map((x) => [x.kod, x.kanal, typeof x.videoMesaj]), [["3403", "Volonteroseoffical", "number"]]);
+  assert.equal((await kuyruguAl(o.env, "pelinKanal")).length, 0); // iki kez paylaşılmaz
+});

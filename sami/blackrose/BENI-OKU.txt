@@ -21,3 +21,7 @@ KURULUM (VOLONTE bilgisayarında, tek seferlik):
 6) Claude onay verince baslat.bat'a çift tıklayın. Bundan sonra kendisi çalışır (5 dakikada bir).
 
 DURUM: durum.bat · DURDURMAK: durdur.bat · GÜNLÜK: %LOCALAPPDATA%\Sami\gunluk-BLACKROSE.txt
+
+KENDİNİ GÜNCELLER (3 Kasım 2026 sürümünden itibaren): Köprü saatte bir Venom'a yeni sürüm var mı diye bakar;
+varsa kendisi indirip kurar (dosya özetleri kontrol edilir, eski sürüm .eski olarak saklanır, ayar.json'a dokunulmaz).
+Bundan sonra yeni zip açmanız gerekmez. Sürümü görmek için: durum.bat

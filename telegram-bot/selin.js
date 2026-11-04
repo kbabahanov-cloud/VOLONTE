@@ -12,6 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
+import { kuyruguAl } from "./venom-kopru.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -202,7 +203,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -752,7 +753,10 @@ async function siteVerisi(env) {
 const b64Metin = (s) => btoa(unescape(encodeURIComponent(s)));
 
 // dosyalar: [{ yol, b64 }] (null b64 = sil) + yeni ürün listesi → tek commit
+// 4 Kasım (Patron): FİYAT açık depoya YAZILMAZ (depo herkese açık); fiyatın tek kaynağı Vegawin (Sami'nin deposu, gizli).
+export const fiyatsiz = (liste) => (liste || []).map(({ fiyat, ...u }) => u);
 export async function siteyeYaz(env, dosyalar, liste, mesaj) {
+  liste = fiyatsiz(liste);
   const ref = await gh(env, "/git/ref/heads/main");
   const sonCommit = await gh(env, `/git/commits/${ref.object.sha}`);
   const agac = [];
@@ -786,14 +790,14 @@ export async function siteStokEsitle(env, simdi) {
   const yeni = liste.map((u) => {
     const st = stok[u.kod];
     if (!st) return u; // Vegawin'de yok: dokunulmaz
-    const fiyat = st.fiyat ?? u.fiyat ?? null;
     const gizli = Boolean(st.gizli);
-    if (fiyat === (u.fiyat ?? null) && gizli === Boolean(u.gizli)) return u;
-    degisen.push(`${u.kod}${gizli !== Boolean(u.gizli) ? (gizli ? " gizlendi" : " yeniden görünür") : ""}${fiyat !== (u.fiyat ?? null) ? ` ${fiyat} $` : ""}`);
-    return { ...u, fiyat, gizli };
+    if (gizli === Boolean(u.gizli) && !("fiyat" in u)) return u;
+    degisen.push(`${u.kod}${gizli !== Boolean(u.gizli) ? (gizli ? " gizlendi" : " yeniden görünür") : " (fiyat alanı kaldırıldı)"}`);
+    const { fiyat, ...temiz } = u; // fiyat açık depoya yazılmaz (4 Kasım)
+    return { ...temiz, gizli };
   });
   if (!degisen.length) return;
-  await siteyeYaz(env, [], yeni, `Selin: Vegawin stok/fiyat güncellemesi (${degisen.length} model)`);
+  await siteyeYaz(env, [], yeni, `Selin: Vegawin stok güncellemesi (${degisen.length} model)`);
   await notEkle(env, `Site güncellendi (Vegawin): ${degisen.slice(0, 10).join(", ")}${degisen.length > 10 ? " …" : ""}`);
 }
 
@@ -825,7 +829,6 @@ async function siteyeYukle(env, kod, kim, simdi) {
     kod, baslik: t.baslik, kategori: t.kategori, aciklama: { en: t.aciklama.en, fr: t.aciklama.fr, pt: t.aciklama.pt },
     bedenler: t.bedenler, fotolar: dosyalar.map((d) => d.yol),
     videolar: t.kaynak === "ozel" ? t.videolar.filter((v) => !(v.boyut > VIDEO_SINIR)).map((v) => `selin/${kod}/${v.id}`) : t.videolar.map((v) => `${bilgi.kanal.kullanici}/${v.id}`),
-    fiyat: st ? st.fiyat : t.fiyat ?? null, // Vegawin satış fiyatı ($)
     gizli: Boolean(st && st.gizli),        // stoğu bitince sitede görünmez (kayıt silinmez)
     eklenme: gunAnahtari(simdi),
   };
@@ -836,11 +839,21 @@ async function siteyeYukle(env, kod, kim, simdi) {
   return `${env.SITE_URL}/#model/${encodeURIComponent(kod)}`;
 }
 
+// Kemal'e haber (kullanıcı kararı 31 Ekim): siteye yeni eklenen model sıra beklemeden "🆕 YENİ MODEL" önizlemesiyle
+// SADECE Patron'a gider; ✅ ile hemen kanala (günlük 10'a sayılmaz). Kuyruk ortak KV'de: "venom:yeniModel".
+async function yeniModelBildir(env, kod, kim, simdi) {
+  const s = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+  if (!s.some((x) => x.kod === kod)) s.push({ kod, kim, zaman: simdi });
+  await env.KAYIT.put("venom:yeniModel", JSON.stringify(s.slice(-30)));
+}
+
 async function sitedenKaldir(env, kod, kim, simdi) {
   const { liste } = await siteVerisi(env);
   const urun = liste.find((u) => u.kod === kod);
   if (!urun) return false;
-  await siteyeYaz(env, urun.fotolar.map((yol) => ({ yol, b64: null })), liste.filter((u) => u.kod !== kod), `Selin: ${kod} siteden kaldırıldı (${kim})`);
+  // 2 Kasım ("Sil" kuralı): kayıt saklanır ve fotoğraf dosyaları depoda kalır → "/geri <kod>" ile siteye aynen geri konabilir
+  await yazKV(env, `selin:silinen:${kod}`, { urun, kim, zaman: simdi });
+  await siteyeYaz(env, [], liste.filter((u) => u.kod !== kod), `Selin: ${kod} siteden kaldırıldı (${kim})`);
   const modeller = await oku(env, "selin:modeller", {});
   modeller[kod] = { ...(modeller[kod] || {}), durum: "kaldirildi", zaman: simdi };
   await yazKV(env, "selin:modeller", modeller);
@@ -1186,10 +1199,16 @@ const BEDEN_KELIME = [[/k[üu][çc][üu]k/i, "k"], [/b[üu]y[üu]k/i, "b"], [/ik
 const sahipler = async (env) => [...new Set([...kimlikler(env.SAHIP_IDS), ...kimlikler(await env.KAYIT.get("selin:sahip"))])];
 const ozelMi = (m) => Boolean(m && m.kaynak === "ozel");
 
-export async function istekAdaylari(env, modeller) {
+// Sitede olan modeller (hangi yolla yüklenmiş olursa olsun) fotoğraf isteğine GİRMEZ (2 Kasım düzeltmesi: eski yolla —
+// kanaldan — siteye girenler tekrar isteniyordu ve kayıtları "istendi"ye dönüyordu). Gizli (stoğu bitmiş) olanlar da sitede sayılır.
+async function sitedekiKodlar(env) {
+  const { liste } = await siteVerisi(env);
+  return new Set(liste.map((u) => String(u.kod)));
+}
+export async function istekAdaylari(env, modeller, sitede = new Set()) {
   const stok = await stokIste2(env, "/stoktakiler");
   const kodlar = stok.map((r) => String(r.kod));
-  const uygun = (k) => !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
+  const uygun = (k) => !sitede.has(k) && !(modeller[k] && modeller[k].durum === "sitede") && !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
   const oncelik = ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k));
   const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
   // Celal'in modelleri (Vegawin kodu "CELAL" ile biten; köprü sadece işaret gönderir): listede EN SONA (kullanıcı kararı 30 Ekim).
@@ -1209,6 +1228,7 @@ async function stokIste2(env, yol, govde = {}) {
 
 // 10:00 — günün istek listesi (bir kez). Sahiplere (0091 hesabı + Merdan: SAHIP_IDS) gider; Celal'in modelleri en sonda.
 export async function istekAdimi(env, simdi) {
+  if (await istekDuzeltAdimi(env, simdi)) return;
   const s = saat(simdi);
   if (s < ISTEK_SAATI || s >= GUN_SONU_SAATI) return;
   const gun = gunAnahtari(simdi);
@@ -1217,13 +1237,48 @@ export async function istekAdimi(env, simdi) {
   const kime = await sahipler(env);
   if (!kime.length) return; // sahip (0091) tanımlanmadan istek gitmez
   const modeller = await oku(env, "selin:modeller", {});
-  const { kodlar, celal } = await istekAdaylari(env, modeller);
+  let sitede;
+  try { sitede = await sitedekiKodlar(env); } catch { return; } // site listesi okunamazsa yanlış istek yerine sonraki turda tekrar
+  const { kodlar, celal } = await istekAdaylari(env, modeller, sitede);
   // Günün 30 modeli normal sırayla seçilir; liste içinde Celal'in modelleri en sona konur.
   const ilk = kodlar.slice(0, GUNLUK_ISTEK);
   const secilen = [...ilk.filter((k) => !celal.has(k)), ...ilk.filter((k) => celal.has(k))];
   await yazKV(env, `selin:istek:${gun}`, { kodlar: secilen, zaman: simdi }, 30 * 86400);
   if (!secilen.length) return;
   return istekGonder(env, kime, modeller, secilen, celal, simdi, `🌸 Günaydın! Bugün ${secilen.length} model istiyorum (Vegawin'de stokta):`);
+}
+
+// Bir kerelik onarım (2 Kasım; KV "venom:selinIstekDuzelt"): son 4 günün isteklerinde sitede zaten olan modeller bulunur,
+// kayıtları "istendi"den "sitede"ye döner (fotoğrafları yeniden gelmişse dokunulmaz, sonuçta listelenir), liste sahiplerine
+// "kusura bakmayın" mesajı gider. Sonuç "venom:selinIstekDuzeltSonuc".
+async function istekDuzeltAdimi(env, simdi) {
+  if (!(await env.KAYIT.get("venom:selinIstekDuzelt"))) return false;
+  await env.KAYIT.delete("venom:selinIstekDuzelt");
+  const sitede = await sitedekiKodlar(env);
+  const modeller = await oku(env, "selin:modeller", {});
+  const sonuc = { zaman: simdi, gunler: {}, duzelen: [], dokunulmayan: {} };
+  for (let i = 0; i < 4; i++) {
+    const g = gunAnahtari(simdi - i * 86400);
+    const ist = await oku(env, `selin:istek:${g}`, null);
+    if (!ist) continue;
+    const yanlis = (ist.kodlar || []).filter((k) => sitede.has(k));
+    sonuc.gunler[g] = { istenen: ist.kodlar || [], yanlis };
+    for (const k of yanlis) {
+      const m = modeller[k];
+      if (m && m.durum === "istendi") { modeller[k] = { ...m, durum: "sitede", duzeltme: simdi }; sonuc.duzelen.push(k); }
+      else if (m && m.durum !== "sitede") sonuc.dokunulmayan[k] = m.durum;
+    }
+  }
+  if (sonuc.duzelen.length) await yazKV(env, "selin:modeller", modeller);
+  const tum = [...new Set(Object.values(sonuc.gunler).flatMap((x) => x.yanlis))];
+  sonuc.mesaj = tum;
+  if (tum.length) {
+    for (const kisi of await sahipler(env)) {
+      await tg(env, "sendMessage", { chat_id: kisi, text: `🙏 Kusura bakmayın: şu ${tum.length} model zaten sitede, fotoğraf göndermenize gerek yok:\n${tum.join(", ")}\nBundan sonra sitede olan modeller listeye girmeyecek.` });
+    }
+  }
+  await env.KAYIT.put("venom:selinIstekDuzeltSonuc", JSON.stringify(sonuc), { expirationTtl: 7 * 86400 });
+  return true;
 }
 
 // Bir kerelik ek liste (kullanıcı kararı 30 Ekim): Celal'in modelleri olmadan, istenmemiş/sitede olmayan EK_ISTEK model hemen.
@@ -1233,7 +1288,9 @@ async function ekIstekAdimi(env, gun, simdi) {
   const kime = await sahipler(env);
   if (!kime.length) return true;
   const modeller = await oku(env, "selin:modeller", {});
-  const { kodlar, celal } = await istekAdaylari(env, modeller);
+  let sitede;
+  try { sitede = await sitedekiKodlar(env); } catch { return true; }
+  const { kodlar, celal } = await istekAdaylari(env, modeller, sitede);
   const secilen = kodlar.filter((k) => !celal.has(k)).slice(0, EK_ISTEK);
   const onceki = await oku(env, `selin:istek:${gun}`, { kodlar: [], zaman: simdi });
   await yazKV(env, `selin:istek:${gun}`, { ...onceki, kodlar: [...onceki.kodlar, ...secilen], ek: secilen }, 30 * 86400);
@@ -1471,14 +1528,90 @@ export async function videoKurtarAdimi(env, simdi) {
   }
 }
 
-// Fabrika "Bitti" + Murat/Hemra "Sil" (ikinci onaylı, Sami'den "venom:siteSil"): model siteden kaldırılır.
+// "Sil" (Sami'den "venom:siteSil"; Patron tek onay, 2 Kasım): önce siteden kaldırılır, hemen ardından iş Kemal'e
+// ("venom:kanalSil") geçer; Patron'a tek sonuç mesajını Kemal gönderir (site sonucu da onda). "/geri" ("venom:siteGeri"):
+// saklanan kayıt siteye aynen geri konur, sonra Kemal arşivdeki kopyaları kanala geri koyar ("venom:kanalGeri").
+async function kemaleDevret(env, anahtar, kayit) {
+  const l = (await env.KAYIT.get(anahtar, "json")) || [];
+  l.push(kayit);
+  await env.KAYIT.put(anahtar, JSON.stringify(l.slice(-50)));
+}
+// ---------- PELİN TESLİM → SİTE (4 Kasım): Kemal kanala paylaştı → video (kanal mesajı, sitenin oynatıcısı) + Pelin fotoğrafı ----------
+export async function pelinSiteAdimi(env, simdi) {
+  if (!env.STOK || !env.GITHUB_TOKEN) return;
+  const isler = await kuyruguAl(env, "pelinSite");
+  for (const x of isler) {
+    const bildir = async (text) => { for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text }); };
+    try {
+      const { liste } = await siteVerisi(env);
+      const i = liste.findIndex((u) => String(u.kod) === String(x.kod));
+      if (i < 0) { await bildir(`⚠️ ${x.kod}: Pelin videosu siteye eklenemedi — model sitede yok.`); continue; }
+      const u = { ...liste[i] };
+      const vid = x.kanal && x.videoMesaj ? `${x.kanal}/${x.videoMesaj}` : null;
+      if (vid) u.videolar = [vid, ...(u.videolar || []).filter((v) => v !== vid)];
+      const dosyalar = [];
+      if (x.foto) {
+        try {
+          const r = await fetch(x.foto);
+          if (r.ok) {
+            let bayt = new Uint8Array(await r.arrayBuffer());
+            if (env.IMAGES) { const k = await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: 1600, fit: "scale-down" }).output({ format: "image/jpeg", quality: 88 }); bayt = new Uint8Array(await k.response().arrayBuffer()); }
+            const yol = `galeri/${x.kod}/pelin-${simdi.toString(36)}.jpg`;
+            dosyalar.push({ yol, b64: b64Yap(bayt) });
+            const f = [...(u.fotolar || [])];
+            f.splice(Math.min(1, f.length), 0, yol); // ilk fotoğraf (afiş olabilir) yerinde kalır
+            u.fotolar = f;
+          }
+        } catch { /* fotoğraf olmadan video yine eklenir */ }
+      }
+      const yeni = [...liste]; yeni[i] = u;
+      await siteyeYaz(env, dosyalar, yeni, `Selin: ${x.kod} Pelin videosu${dosyalar.length ? " + fotoğrafı" : ""} siteye eklendi`);
+      await bildir(`🌸 ${x.kod}: Pelin videosu${dosyalar.length ? " ve fotoğrafı" : ""} siteye eklendi (birkaç dakika içinde görünür).`);
+    } catch (e) {
+      await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
+      await bildir(`⚠️ ${x.kod}: Pelin videosu siteye eklenemedi (hata Claude Code'da).`).catch(() => null);
+    }
+  }
+  // Tek seferlik (4 Kasım, Patron): KV "venom:siteFiyatSil" → açık depodaki ürün listesinden fiyatlar hemen çıkarılır
+  if (await env.KAYIT.get("venom:siteFiyatSil")) {
+    await env.KAYIT.delete("venom:siteFiyatSil");
+    const { liste } = await siteVerisi(env);
+    const n = liste.filter((u) => "fiyat" in u).length;
+    if (n) { await siteyeYaz(env, [], liste, `Selin: fiyatlar açık depodan çıkarıldı (${n} model; fiyatın kaynağı Vegawin)`); await notEkle(env, `Fiyatlar açık depodan çıkarıldı (${n} model).`); }
+  }
+}
+
 export async function siteSilAdimi(env, simdi) {
   const l = (await env.KAYIT.get("venom:siteSil", "json")) || [];
-  if (!l.length) return;
-  await env.KAYIT.put("venom:siteSil", "[]");
-  for (const x of l) {
-    const ok = await sitedenKaldir(env, x.kod, `${x.kim} (fabrika bitti)`, simdi);
-    if (ok) for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: `🗑️ ${x.kod} siteden kaldırıldı (fabrika bitti, karar: ${x.kim}).` });
+  if (l.length) {
+    await env.KAYIT.put("venom:siteSil", "[]");
+    for (const x of l) {
+      let site;
+      try { site = (await sitedenKaldir(env, String(x.kod), x.kim, simdi)) ? "kaldirildi" : "yoktu"; } catch (e) { site = `hata: ${String(e && e.message).slice(0, 150)}`; }
+      if (x.kanal === false) continue;
+      await kemaleDevret(env, "venom:kanalSil", { kod: String(x.kod), kim: x.kim, zaman: x.zaman || simdi, site });
+    }
+  }
+  const g = (await env.KAYIT.get("venom:siteGeri", "json")) || [];
+  if (g.length) {
+    await env.KAYIT.put("venom:siteGeri", "[]");
+    for (const x of g) {
+      let site;
+      try {
+        const k = await oku(env, `selin:silinen:${x.kod}`, null);
+        const { liste } = await siteVerisi(env);
+        if (liste.some((u) => u.kod === String(x.kod))) site = "zaten sitede";
+        else if (!k || !k.urun) site = "kayıt yok (eski kural öncesi silinmiş olabilir)";
+        else {
+          await siteyeYaz(env, [], [...liste, k.urun], `Selin: ${x.kod} siteye geri kondu (${x.kim})`);
+          const modeller = await oku(env, "selin:modeller", {});
+          modeller[x.kod] = { ...(modeller[x.kod] || {}), durum: "sitede", zaman: simdi };
+          await yazKV(env, "selin:modeller", modeller);
+          site = "geri kondu";
+        }
+      } catch (e) { site = `hata: ${String(e && e.message).slice(0, 150)}`; }
+      await kemaleDevret(env, "venom:kanalGeri", { kod: String(x.kod), kim: x.kim, zaman: simdi, site });
+    }
   }
 }
 
@@ -2052,6 +2185,7 @@ async function dugme(cq, env) {
     await cevapla("Siteye yükleniyor...");
     try {
       const link = await siteyeYukle(env, kod, kim, simdi);
+      try { await yeniModelBildir(env, kod, kim, simdi); } catch { /* Kemal'e haber gidemezse site yüklemesi yine tamam */ }
       for (const [k, id] of kartlar) await tg(env, "editMessageText", { chat_id: k, message_id: id, text: `✅ ${kod} siteye eklendi (${kim}). Sayfa 1–2 dakikada yayında:\n${link}`, disable_web_page_preview: true });
     } catch (e) {
       const geri = await oku(env, "selin:modeller", {});

@@ -15,6 +15,8 @@
 
 export const BEKLESIN_STOK_GUN = 7;
 
+import { sha256 } from "./sha256.js";
+
 export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
 // İndirimli mal kodları (kullanıcı kararı 30 Ekim): 2000 = CRY'den toplu alınan indirimli malların ortak kodu, gerçek model
 // değil, tekrar alınmaz. SİLİNMEZ: stoğu ve satışı izlenir; ama eksik listesine (Hemra/Merdan/fabrika), stok-bitti
@@ -43,6 +45,11 @@ const TABLOLAR = [
   // Fuat/Nuri Black Rose stok sorguları (30 Ekim): her sorgu kayıtlı (kim, kod, ne zaman, Hemra/Murat kararı).
   `CREATE TABLE IF NOT EXISTS sorgu (id TEXT PRIMARY KEY, kisi TEXT, ad TEXT, kod TEXT, gun TEXT, zaman INTEGER, stok REAL,
      durum TEXT, karar_kim TEXT, karar_zaman INTEGER, murat INTEGER, mesajlar TEXT)`,
+  // Mutabakat arşivi (2 Kasım): SADECE EKLENİR. Her kayıt bir öncekinin mührünü (SHA-256) taşır → arada bir kayıt
+  // değiştirilir/silinirse zincir bozulur ve /arsiv-dogrula yakalar. Silme/değiştirme yolu yok; veritabanı tetikleyicisi de engeller.
+  `CREATE TABLE IF NOT EXISTS arsiv (sira INTEGER PRIMARY KEY AUTOINCREMENT, zaman INTEGER NOT NULL, tur TEXT NOT NULL, mt TEXT,
+     icerik TEXT NOT NULL, onceki TEXT NOT NULL, muhur TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS arsiv_dosya (mt TEXT NOT NULL, tur TEXT NOT NULL, zaman INTEGER NOT NULL, muhur TEXT NOT NULL, veri TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
   `CREATE INDEX IF NOT EXISTS olay_zaman ON olay (zaman)`,
   `CREATE INDEX IF NOT EXISTS paylasim_zaman ON paylasim (zaman)`,
@@ -64,7 +71,37 @@ export class StokDeposu {
     for (const [sutun, tur] of [["tedarikci", "TEXT"], ["ikikart", "INTEGER"], ["bradet", "REAL"]]) {
       try { this.sql.exec(`ALTER TABLE urun ADD COLUMN ${sutun} ${tur}`); } catch { /* zaten var */ }
     }
+    for (const tablo of ["arsiv", "arsiv_dosya"]) for (const islem of ["UPDATE", "DELETE"]) {
+      try { this.sql.exec(`CREATE TRIGGER IF NOT EXISTS ${tablo}_${islem.toLowerCase()}_yok BEFORE ${islem} ON ${tablo} BEGIN SELECT RAISE(ABORT, 'arşiv değiştirilemez'); END`); } catch { /* tetikleyici desteklenmiyorsa kod yine silmez */ }
+    }
   }
+
+  // ---- Mutabakat arşivi (sadece ekleme) ----
+  arsivEkle(tur, mt, icerik, zaman) {
+    const son = this.tek("SELECT muhur FROM arsiv ORDER BY sira DESC LIMIT 1");
+    const onceki = son ? son.muhur : "0".repeat(64);
+    const metin = typeof icerik === "string" ? icerik : JSON.stringify(icerik);
+    const z = Math.floor(Number(zaman) || Date.now() / 1000);
+    const muhur = sha256(`${onceki}|${z}|${tur}|${mt || ""}|${metin}`);
+    this.sql.exec("INSERT INTO arsiv (zaman, tur, mt, icerik, onceki, muhur) VALUES (?, ?, ?, ?, ?, ?)", z, String(tur), mt ? String(mt) : null, metin, onceki, muhur);
+    return { sira: this.tek("SELECT MAX(sira) AS s FROM arsiv").s, muhur };
+  }
+  arsivListe(basla = 0, enFazla = 500) { return this.hepsi("SELECT sira, zaman, tur, mt, icerik, onceki, muhur FROM arsiv WHERE sira > ? ORDER BY sira LIMIT ?", Number(basla) || 0, Math.min(Number(enFazla) || 500, 2000)); }
+  arsivDogrula() {
+    let onceki = "0".repeat(64), n = 0;
+    for (const r of this.hepsi("SELECT sira, zaman, tur, mt, icerik, onceki, muhur FROM arsiv ORDER BY sira")) {
+      if (r.onceki !== onceki || sha256(`${r.onceki}|${r.zaman}|${r.tur}|${r.mt || ""}|${r.icerik}`) !== r.muhur) return { tamam: false, bozuk: r.sira, kayit: n };
+      onceki = r.muhur; n++;
+    }
+    return { tamam: true, kayit: n, son: onceki };
+  }
+  // Dosya (PDF, ödeme dekontu): base64; sadece eklenir
+  arsivDosyaEkle(mt, tur, veri, zaman) {
+    const muhur = sha256(String(veri));
+    this.sql.exec("INSERT INTO arsiv_dosya (mt, tur, zaman, muhur, veri) VALUES (?, ?, ?, ?, ?)", String(mt), String(tur), Math.floor(Number(zaman) || Date.now() / 1000), muhur, String(veri));
+    return { muhur };
+  }
+  arsivDosyalar(mt) { return this.hepsi("SELECT mt, tur, zaman, muhur FROM arsiv_dosya WHERE mt = ? ORDER BY zaman", String(mt)); }
   hepsi(sorgu, ...p) { return this.sql.exec(sorgu, ...p).toArray(); }
   tek(sorgu, ...p) { return this.hepsi(sorgu, ...p)[0] || null; }
 
@@ -367,6 +404,7 @@ export class StokDO {
     if (yol === "/soru-gonderildi") return cevap(d.soruGonderildi(g.kod, g.mesajlar) || { ok: true });
     if (yol === "/karar") return cevap(d.karar(g.kod, g.islem, g.kim, g.simdi));
     if (yol === "/gizliler") return cevap(d.gizliler());
+    if (yol === "/karar-liste") return cevap(d.hepsi("SELECT kod, durum, kim, zaman FROM karar WHERE durum = ? AND zaman >= ? ORDER BY zaman", String(g.durum || "gizli"), Number(g.basla) || 0));
     if (yol === "/stoktakiler") return cevap(d.stoktakiler());
     if (yol === "/olaylar") return cevap(d.olaylar(g.basla, g.bitis));
     if (yol === "/paylasim-kaydet") return cevap(d.paylasimKaydet(g.mesaj, g.kod, g.zaman) || { ok: true });
@@ -381,8 +419,25 @@ export class StokDO {
     if (yol === "/satis-donem") return cevap(d.satisDonem(g.basla, g.bitis));
     if (yol === "/geldiler") return cevap(d.geldiler(g.basla || 0));
     if (yol === "/fs-yaz") return cevap(d.fsYaz(g));
+    if (yol === "/arsiv-ekle") return cevap(d.arsivEkle(g.tur, g.mt, g.icerik, g.zaman));
+    if (yol === "/arsiv-liste") return cevap(d.arsivListe(g.basla, g.enFazla));
+    if (yol === "/arsiv-dogrula") return cevap(d.arsivDogrula());
+    if (yol === "/arsiv-dosya-ekle") return cevap(d.arsivDosyaEkle(g.mt, g.tur, g.veri, g.zaman));
+    if (yol === "/arsiv-dosyalar") return cevap(d.arsivDosyalar(g.mt));
     if (yol === "/ayar-oku") return cevap({ v: d.ayarOku(g.k) });
     if (yol === "/ayar-yaz") return cevap(d.ayarYaz(g.k, g.v) || { ok: true });
+    // Botlar arası iş kuyruğu (3 Kasım, Venom): ekleme ve alma tek adımda (KV gibi gecikmeli değil → iş kaybolmaz, iki kez gitmez)
+    if (yol === "/kuyruk-ekle") {
+      const k = `kuyruk:${g.ad}`, l = JSON.parse(d.ayarOku(k) || "[]");
+      if (g.kayit && g.kayit.id && l.some((x) => x.id === g.kayit.id)) return cevap({ ok: true, ayni: true });
+      l.push(g.kayit); d.ayarYaz(k, JSON.stringify(l.slice(-200)));
+      return cevap({ ok: true, boy: l.length });
+    }
+    if (yol === "/kuyruk-al") {
+      const k = `kuyruk:${g.ad}`, l = JSON.parse(d.ayarOku(k) || "[]");
+      if (l.length) d.ayarYaz(k, "[]");
+      return cevap(l);
+    }
     if (yol === "/toplu") return cevap(d.toplu(g.kodlar || []));
     if (yol === "/br-stok") return cevap({ stok: d.brStok(g.kod), detay: d.brStokDetay(g.kod) });
     if (yol === "/br-stoklar") return cevap(d.brStoklar());

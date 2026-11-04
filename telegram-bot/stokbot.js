@@ -4,6 +4,7 @@
 
 import { stokKodu, BEKLESIN_STOK_GUN } from "./stok.js";
 import { modelSecenekleri } from "./ortak.js";
+import { patronMu, silKuyrugu } from "./sil.js";
 
 const SAAT_FARKI = 3 * 3600;
 const kimlikler = (yazi) => String(yazi || "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -63,8 +64,12 @@ export async function stokKarari(cq, env, tg) {
   if (!env.STOK) return cevapla("Stok köprüsü bağlı değil.");
   const r = await stokIste(env, "/karar", { kod, islem, kim, simdi: Math.floor(Date.now() / 1000) });
   if (!r.ok) return cevapla(r.kim ? `${r.kim} zaten karar verdi.` : "Bu soru artık geçerli değil.");
+  // 2 Kasım (Patron, tek onay): Patron "Sil" derse model siteden (Selin) ve VOLONTE kanalından (Kemal) de kaldırılır.
+  const tamSil = r.durum === "gizli" && patronMu(env, cq.from.id);
+  if (tamSil) await silKuyrugu(env, kod, kim, Math.floor(Date.now() / 1000));
   const ek = r.durum === "repete" ? `🔁 ${kim}: repete olacak — gizli bekliyor, stok gelince geri döner.`
-    : r.durum === "gizli" ? `🗑 ${kim}: sil — siteden ve Telegram turlarından kaldırıldı (kanal ve Vegawin'e dokunulmadı).`
+    : tamSil ? `🗑 ${kim}: sil — önce siteden (Selin), hemen ardından VOLONTE kanalındaki bütün paylaşımlar (Kemal) kaldırılıyor; bitince Patron'a haber gelir. Yanlışsa: /geri ${kod}`
+    : r.durum === "gizli" ? `🗑 ${kim}: sil — Telegram turlarından kaldırıldı (siteden/kanaldan kaldırma Patron'un "Sil"iyle olur).`
     : `⏳ ${kim}: beklesin — ${BEKLESIN_STOK_GUN} gün sonra tekrar sorulacak.`;
   await cevapla("Tamam");
   for (const [kisi, id, tur, metin] of r.mesajlar) {

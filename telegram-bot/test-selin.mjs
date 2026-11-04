@@ -267,11 +267,12 @@ test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülü
   assert.equal(liste[0].kod, "3194");
   assert.deepEqual(liste[0].fotolar, ["galeri/3194/1.jpg"]);
   assert.deepEqual(liste[0].videolar, ["Volonteroseoffical/301"]);
-  assert.deepEqual([liste[0].fiyat, liste[0].gizli], [69, false]);
+  assert.deepEqual([liste[0].fiyat, liste[0].gizli], [undefined, false]); // fiyat açık depoya yazılmaz (4 Kasım)
   assert.ok(o.github.dosyalar.get("galeri/3194/1.jpg").startsWith("blob:"));
   assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH" && y === "/git/refs/heads/main").length, 1);
   const son = cagri(o.g, "editMessageText").at(-1).govde.text;
   assert.match(son, /3194 siteye eklendi \(Murat\)[\s\S]*www\.wearvolonte\.com\/#model\/3194/);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:yeniModel")).map((x) => [x.kod, x.kim]), [["3194", "Murat"]]); // Kemal'e: sıra beklemeden Patron önizlemesi
   assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3194"].durum, "sitede");
 
   // Saatlik eşitleme: stok biterse sitede gizlenir (silinmez), fiyat güncellenir; değişiklik yoksa commit yok
@@ -279,8 +280,8 @@ test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülü
   o.stok["3194"] = { toplam: 0, fiyat: 72, gizli: true };
   await siteStokEsitle(o.env, ist(12));
   let site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
-  assert.deepEqual([site[0].gizli, site[0].fiyat, site[0].fotolar.length], [true, 72, 1]);
-  assert.match(JSON.parse(o.depo.get("selin:notlar")).at(-1), /3194 gizlendi 72 \$/);
+  assert.deepEqual([site[0].gizli, site[0].fiyat, site[0].fotolar.length], [true, undefined, 1]);
+  assert.match(JSON.parse(o.depo.get("selin:notlar")).at(-1), /3194 gizlendi/);
   const commitSayisi = o.github.commitler.length;
   await siteStokEsitle(o.env, ist(13));
   assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH").length, 2); // değişiklik yok → yeni commit yok
@@ -312,7 +313,8 @@ test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazd
   assert.equal(cagri(o.g, "editMessageReplyMarkup")[0].govde.reply_markup.inline_keyboard[0][0].callback_data, "se:3100");
   await bas(o.env, 222, "se:3100");
   assert.equal(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).length, 0);
-  assert.equal(o.github.dosyalar.get("galeri/3100/1.jpg"), undefined);
+  assert.ok(o.github.dosyalar.get("galeri/3100/1.jpg")); // 2 Kasım: fotoğraflar depoda kalır (/geri için)
+  assert.equal(JSON.parse(o.depo.get("selin:silinen:3100")).urun.kod, "3100"); // kayıt saklandı
 });
 
 test("Selin izinsiz kişiye cevap vermez; düğmeleri çalışmaz", async () => {
@@ -421,7 +423,7 @@ test("toplu yükleme: taramadaki fotoğraflı modeller sorulmadan hazırlanır, 
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Merdan zaten onayladı/);
   await topluAdimi(o.env, o.simdi + 300);
   const site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
-  assert.deepEqual(site.map((u) => [u.kod, u.fiyat]), [["3194", 69]]);
+  assert.deepEqual(site.map((u) => [u.kod, u.fiyat]), [["3194", undefined]]);
   assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Toplu yükleme bitti: 1 model siteye eklendi/);
 });
 
@@ -614,7 +616,7 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 30 model sahibe istenir (Celal'i
   assert.match(kart.govde.text, /Fiyat: 55 \$ \(Vegawin\) · Stok: 4 adet[\s\S]*Videolar: 1 \(sitenin kendi oynatıcısında/);
   await bas(o.env, 111, "so:3618"); // yönetici onaylar (sahip de basabilir)
   const site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
-  assert.deepEqual([site[0].kod, site[0].fiyat, site[0].videolar, site[0].fotolar.length], ["3618", 55, ["selin/3618/0"], 1]);
+  assert.deepEqual([site[0].kod, site[0].fiyat, site[0].videolar, site[0].fotolar.length], ["3618", undefined, ["selin/3618/0"], 1]);
   assert.equal((await ozelVideo(o.env, "3618", "0", null)).status, 200);
   assert.equal((await ozelVideo(o.env, "3100", "0", null)).status, 404);
   await gonder({ text: "/yok 5019" });
@@ -727,4 +729,69 @@ test("bir kerelik ek liste: Celal'in modelleri olmadan, bugün istenmemiş 15 mo
   assert.match(ek[0].govde.text, /^🌸 Ek liste: 11 model daha/);
   assert.equal(sabah.length, 29); // 6100 ayrı satırda: "👤 Celal'in modelleri (en son)"
   assert.ok(!o.depo.has("venom:selinEkIstek"));
+});
+
+test("fotoğraf isteği: sitede olan model (eski yolla yüklenmiş olsa da) istenmez; bir kerelik onarım kaydı düzeltir ve 'kusura bakmayın' gönderir", async () => {
+  const { istekAdimi } = await import("./selin.js");
+  const o = ortam();
+  o.env.SAHIP_IDS = "777";
+  const stok = { "3618": { toplam: 4, fiyat: 55 }, "3622": { toplam: 3, fiyat: 40 }, "5001": { toplam: 2, fiyat: 10 } };
+  stokBagla(o, stok);
+  const stokFetch = o.env.STOK.get().fetch;
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
+    ? Response.json(Object.entries(stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat, tedarikci: null })))
+    : stokFetch(url, init) }) };
+  // 3618 eski yolla (kanal) sitede; 3622 Merdan'ın özel yüklemesiyle sitede ama kaydı yanlışlıkla "istendi"ye dönmüş
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", fotolar: ["galeri/3618/1.jpg"] }, { kod: "3622", fotolar: ["galeri/3622/1.jpg"] }]));
+  o.depo.set("selin:modeller", JSON.stringify({ 3618: { kaynak: "kanal", durum: "sitede" }, 3622: { kaynak: "ozel", durum: "istendi" } }));
+  // Onarım: dünkü (yanlış) liste 3618, 3622, 5001
+  const gun = ist(10, 5);
+  o.depo.set(`selin:istek:${new Date((gun - 86400 + 3 * 3600) * 1000).toISOString().slice(0, 10)}`, JSON.stringify({ kodlar: ["3618", "3622", "5001"], zaman: gun - 86400 }));
+  o.depo.set("venom:selinIstekDuzelt", "1");
+  await istekAdimi(o.env, gun);
+  const ozur = cagri(o.g, "sendMessage").find((x) => /Kusura bakmayın/.test(x.govde.text));
+  assert.equal(ozur.govde.chat_id, "777");
+  assert.match(ozur.govde.text, /şu 2 model zaten sitede[\s\S]*3618, 3622/);
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3622"].durum, "sitede"); // kayıt düzeldi
+  assert.deepEqual(JSON.parse(o.depo.get("venom:selinIstekDuzeltSonuc")).duzelen, ["3622"]);
+  // Günün isteği: sitede olanlar (3618, 3622) YOK, sadece 5001
+  o.g.length = 0;
+  await istekAdimi(o.env, gun + 60);
+  const istek = cagri(o.g, "sendMessage")[0];
+  assert.equal(istek.govde.text.split("\n")[1], "5001");
+  assert.equal(JSON.parse(o.depo.get("selin:modeller"))["3618"].durum, "sitede"); // sitedeki kayıt bozulmadı
+});
+
+test("Pelin teslim → site (4 Kasım): kanal videosu ürün videolarının başına, Pelin fotoğrafı galeriye (ilk fotoğrafın arkasına), tek commit; fiyat açık depoya yazılmaz; tek seferlik fiyat temizliği", async () => {
+  const o = ortam();
+  const { DatabaseSync } = await import("node:sqlite");
+  const { StokDO } = await import("./stok.js");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) { if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; } const st = db.prepare(q); const s = /^\s*SELECT/i.test(q) ? st.all(...p).map((x) => ({ ...x })) : (st.run(...p), []); return { toArray: () => s }; } };
+  const stok = new StokDO({ storage: { sql } });
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) };
+  o.env.SAHIP_IDS = "111";
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", baslik: "X", fiyat: 55, fotolar: ["galeri/3618/1.jpg", "galeri/3618/2.jpg"], videolar: ["selin/3618/0"] }, { kod: "3700", fiyat: 40, fotolar: [], videolar: [] }]));
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url) === "https://img/pelin.jpg" ? new Response(new Uint8Array([9, 9, 9])) : asil(url, istek));
+  const { kuyrugaEkle } = await import("./venom-kopru.js");
+  const { pelinSiteAdimi } = await import("./selin.js");
+  await kuyrugaEkle(o.env, "pelinSite", { id: "3618-a", kod: "3618", kanal: "Volonteroseoffical", videoMesaj: 5555, foto: "https://img/pelin.jpg" });
+  await pelinSiteAdimi(o.env, ist(11));
+  globalThis.fetch = asil;
+  const liste = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  const u = liste.find((x) => x.kod === "3618");
+  assert.deepEqual(u.videolar, ["Volonteroseoffical/5555", "selin/3618/0"]);
+  assert.equal(u.fotolar[0], "galeri/3618/1.jpg");
+  assert.match(u.fotolar[1], /^galeri\/3618\/pelin-[a-z0-9]+\.jpg$/);
+  assert.ok(o.github.dosyalar.has(u.fotolar[1]));
+  assert.ok(liste.every((x) => !("fiyat" in x))); // yazılan her listede fiyat yok
+  assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH" && y === "/git/refs/heads/main").length, 1);
+  assert.ok(o.g.some((x) => /🌸 3618: Pelin videosu ve fotoğrafı siteye eklendi/.test(x.govde.text || "")));
+  // tek seferlik fiyat temizliği (Selin dışında yazılmış eski fiyatlar)
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", fiyat: 55 }, { kod: "3700", fiyat: 40 }]));
+  o.depo.set("venom:siteFiyatSil", "1");
+  await pelinSiteAdimi(o.env, ist(12));
+  assert.ok(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).every((x) => !("fiyat" in x)));
+  assert.ok(!o.depo.has("venom:siteFiyatSil"));
 });

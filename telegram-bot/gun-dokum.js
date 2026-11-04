@@ -2,6 +2,8 @@
 // (VOLONTE + Black Rose + ekler), fabrikaya gidenler, stok sorguları, satışlar ve köprü durumu "sami:gunDokumSonuc"a yazılır.
 // KV "sami:raporTekrar" = "YYYY-AA-GG" → o günün otomatik rapor metinleri Patron'a (MURAT_ID'nin ilki) yeniden gönderilir.
 import { stokIste } from "./stokbot.js";
+import { onizlemeGonder, geceYedegi, bilgiOnizleme, eskileriGecersizKil } from "./mutabakat.js";
+import { siteVerisi } from "./depo-oku.js";
 
 const ayar = async (env, k) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
 const SAAT_FARKI = 3 * 3600;
@@ -43,4 +45,59 @@ export async function raporTekrar(env, tg) {
   const sonuc = [];
   for (const m of mesajlar) { const r = await tg(env, "sendMessage", { chat_id: patron, text: m.slice(0, 4000), disable_web_page_preview: true }); sonuc.push(Boolean(r && r.ok)); }
   await env.KAYIT.put("sami:raporTekrarSonuc", JSON.stringify({ gun: g, sonuc }), { expirationTtl: 7 * 86400 });
+}
+
+// TEK SEFERLİK CARİ DÖKÜMÜ (2 Kasım, sadece OKUMA): KV "sami:cariDokum" = "1" → köprülerin gönderdiği cari kayıtları
+// (StokDO "cari:BLACKROSE", "cari:VOLONTE") ve seçili kaynak ("cari:yontem") "sami:cariDokumSonuc"a yazılır (1 gün sonra silinir).
+// KV "sami:cariYontem" = JSON → StokDO "cari:yontem" olarak yazılır (bakiye kaynağı kararı).
+// KV "sami:cariOnizleme" = "1" → mutabakat önizlemesi (gerçek rakamlarla) hemen Patron'a gider (/mutabakat ile aynı).
+export async function cariDokumu(env, tg) {
+  const y = await env.KAYIT.get("sami:cariYontem");
+  if (y) {
+    await env.KAYIT.delete("sami:cariYontem");
+    const v = JSON.parse(y);
+    await stokIste(env, "/ayar-yaz", { k: "cari:yontem", v: JSON.stringify(v) });
+  }
+  if (await env.KAYIT.get("sami:cariOnizleme")) {
+    await env.KAYIT.delete("sami:cariOnizleme");
+    const r = await onizlemeGonder(env, tg, Math.floor(Date.now() / 1000), "elle");
+    await env.KAYIT.put("sami:cariOnizlemeSonuc", JSON.stringify({ id: r.id, gitti: Boolean(r.onizlemeMesaj) }), { expirationTtl: 86400 });
+  }
+  // KV "sami:mtYedek" = "1" → mutabakat arşivi gece yedeği hemen denenir (sonuç "sami:mtYedekSonuc")
+  if (await env.KAYIT.get("sami:mtYedek")) {
+    await env.KAYIT.delete("sami:mtYedek");
+    let s; try { s = { ok: true, kayit: await geceYedegi(env) }; } catch (e) { s = { ok: false, hata: String(e && e.message).slice(0, 300) }; }
+    await env.KAYIT.put("sami:mtYedekSonuc", JSON.stringify(s), { expirationTtl: 86400 });
+  }
+  // KV "sami:silDokum" = "<unix başlangıç>" → o andan beri "Sil" (gizli) kararı verilen modeller + sitede/kanalda hâlâ var mı
+  const silBas = await env.KAYIT.get("sami:silDokum");
+  if (silBas) {
+    await env.KAYIT.delete("sami:silDokum");
+    const kararlar = await stokIste(env, "/karar-liste", { durum: "gizli", basla: Number(silBas) || 0 });
+    let site = []; try { site = (await siteVerisi(env)).liste.map((u) => String(u.kod)); } catch { site = null; }
+    const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+    const hg = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+    const sonuc = kararlar.map((k) => ({ ...k, sitede: site ? site.includes(String(k.kod)) : null, kanalMesaj: [...new Set((kodlar[k.kod] || []).flatMap((g) => g.ids))].length, kanaldanSilindi: Boolean(hg[k.kod]) }));
+    await env.KAYIT.put("sami:silDokumSonuc", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), sonuc }), { expirationTtl: 86400 });
+  }
+  // KV "sami:fuatBilgi" = metin → Fuat'a bilgilendirme önizlemesi Patron'a (onaysız gitmez)
+  const bilgi = await env.KAYIT.get("sami:fuatBilgi");
+  if (bilgi) { await env.KAYIT.delete("sami:fuatBilgi"); const id = await bilgiOnizleme(env, tg, bilgi, Math.floor(Date.now() / 1000)); await env.KAYIT.put("sami:fuatBilgiSonuc", JSON.stringify({ id }), { expirationTtl: 86400 }); }
+  // KV "sami:mtGecersiz" = "<geçerli mt id>" → Fuat'a gitmiş diğer açık mutabakatlar geçersiz (düğmeler kalkar)
+  const gecerli = await env.KAYIT.get("sami:mtGecersiz");
+  if (gecerli) { await env.KAYIT.delete("sami:mtGecersiz"); const k = await eskileriGecersizKil(env, tg, gecerli, Math.floor(Date.now() / 1000)); await env.KAYIT.put("sami:mtGecersizSonuc", JSON.stringify({ gecerli, kapanan: k }), { expirationTtl: 86400 }); }
+  // KV "sami:mtListe" = "1" → son mutabakat kayıtlarının özeti (id, durum, gönderim) "sami:mtListeSonuc"a
+  if (await env.KAYIT.get("sami:mtListe")) {
+    await env.KAYIT.delete("sami:mtListe");
+    const ids = ((await stokIste(env, "/ayar-oku", { k: "mt:liste" })).v ? JSON.parse((await stokIste(env, "/ayar-oku", { k: "mt:liste" })).v) : []).slice(-10);
+    const l = [];
+    for (const id of ids) { const r = await ayar(env, `mt:${id}`); if (r) l.push({ id, durum: r.durum, olusturma: r.olusturma, gonderim: r.gonderim || null, fuatMesaj: r.fuatMesaj || null }); }
+    await env.KAYIT.put("sami:mtListeSonuc", JSON.stringify(l), { expirationTtl: 86400 });
+  }
+  if (!(await env.KAYIT.get("sami:cariDokum"))) return;
+  await env.KAYIT.delete("sami:cariDokum");
+  const oto = await ayar(env, "oz:otomatik");
+  const sonuc = { zaman: Math.floor(Date.now() / 1000), BLACKROSE: await ayar(env, "cari:BLACKROSE"), VOLONTE: await ayar(env, "cari:VOLONTE"), yontem: await ayar(env, "cari:yontem"),
+    ciroBLACKROSE: await ayar(env, "ciro:BLACKROSE"), ciroVOLONTE: await ayar(env, "ciro:VOLONTE"), maliBLACKROSE: await ayar(env, "mali:kesif:BLACKROSE"), maliVOLONTE: await ayar(env, "mali:kesif:VOLONTE"), ozOtomatik: oto, oz: oto ? await ayar(env, `oz:oz-${Number(oto).toString(36)}`) : null, odemeGorulen: await ayar(env, "cari:odemeGorulen") };
+  await env.KAYIT.put("sami:cariDokumSonuc", JSON.stringify(sonuc), { expirationTtl: 86400 });
 }

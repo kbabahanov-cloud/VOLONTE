@@ -163,7 +163,9 @@ export async function yaziHazirla(env, u) {
   const model = env.ANTHROPIC_MODEL || "claude-opus-5-5";
   const fotolar = (u.fotolar || []).slice(0, 6).map((f) => SITE + String(f).replace(/^\//, ""));
   const videoSayisi = (u.videolar || []).length;
-  const response = await client.beta.messages.create({
+  // 3 Kasım (3319 hatası): Anthropic fotoğrafı adresinden indiremezse ("timed out while trying to download the file") 3 kez
+  // yeniden denenir; olmazsa fotoğraflar burada indirilip küçültülür (Cloudflare Images) ve doğrudan gönderilir.
+  const istek = (gorseller) => client.beta.messages.create({
     model,
     max_tokens: 4000,
     betas: ["server-side-fallback-2026-07-01"],
@@ -189,7 +191,7 @@ export async function yaziHazirla(env, u) {
     messages: [{
       role: "user",
       content: [
-        ...fotolar.map((url) => ({ type: "image", source: { type: "url", url } })),
+        ...gorseller,
         {
           type: "text",
           text: `VOLONTE is a quality women's wholesale fashion brand from Istanbul (customers: mostly African women and wholesalers worldwide). These are the website photos of model ${u.kod} ("${u.baslik || ""}").
@@ -205,6 +207,7 @@ Never mention any brand or collection name (e.g. text printed on the photos) in 
       ],
     }],
   });
+  const response = await gorselliIstek(env, fotolar, istek);
   await harcamaEkle(env, model, response.usage);
   if (response.stop_reason === "refusal") throw new Error("model isteği reddetti");
   const d = JSON.parse(response.content.filter((b) => b.type === "text").map((b) => b.text).join(""));
@@ -237,4 +240,56 @@ export function renkCevir(renkler) {
     if (!sonuc.includes(en)) sonuc.push(en);
   }
   return sonuc.length ? sonuc : null;
+}
+
+// ---------- Görselli yapay zekâ isteği: yeniden deneme + kendi indirip küçültme (3 Kasım, 3319) ----------
+const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
+// Yeniden denemeye değer hatalar: fotoğraf indirilemedi / zaman aşımı / servis meşgul / ağ
+export const gecici = (e) => /download|timed? ?out|timeout|overloaded|rate.?limit|529|503|502|500|ECONNRESET|fetch failed|network/i.test(String((e && (e.message || e.error && e.error.message)) || e));
+const indirmeHatasi = (e) => /download|could not (fetch|process) image|invalid image|unable to download/i.test(String((e && e.message) || e));
+export async function gorselBase64(env, url, genislik = 1280) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  if (!r.ok) throw new Error(`fotoğraf indirilemedi (${r.status})`);
+  let bayt = new Uint8Array(await r.arrayBuffer());
+  let tur = (r.headers.get("content-type") || "image/jpeg").split(";")[0];
+  if (env.IMAGES) {
+    const k = await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: genislik, fit: "scale-down" }).output({ format: "image/jpeg", quality: 85 });
+    bayt = new Uint8Array(await k.response().arrayBuffer()); tur = "image/jpeg";
+  }
+  if (bayt.length > 4.5 * 1024 * 1024) throw new Error("fotoğraf çok büyük");
+  let s = "";
+  for (let i = 0; i < bayt.length; i += 0x8000) s += String.fromCharCode(...bayt.subarray(i, i + 0x8000));
+  return { type: "image", source: { type: "base64", media_type: /^image\/(jpeg|png|webp|gif)$/.test(tur) ? tur : "image/jpeg", data: btoa(s) } };
+}
+export async function gorselliIstek(env, urller, istek, { deneme = 3, beklemeMs = [2000, 5000] } = {}) {
+  let son;
+  for (let i = 0; i < deneme; i++) {
+    try { return await istek(urller.map((url) => ({ type: "image", source: { type: "url", url } }))); } catch (e) {
+      son = e;
+      if (!gecici(e)) throw e;
+      if (i < deneme - 1) await bekle(beklemeMs[Math.min(i, beklemeMs.length - 1)]);
+    }
+  }
+  // Adresle olmadı → kendimiz indirip küçültüyoruz (indirilemeyen fotoğraf atlanır; en az biri gerekir)
+  const gorseller = [];
+  for (const u of urller) { try { gorseller.push(await gorselBase64(env, u)); } catch { /* atla */ } }
+  if (!gorseller.length) throw son;
+  try { return await istek(gorseller); } catch (e) {
+    if (!gecici(e) && !indirmeHatasi(e)) throw e;
+    await bekle(beklemeMs[beklemeMs.length - 1]);
+    return istek(gorseller);
+  }
+}
+// Hata → Patron için kısa Türkçe (ham JSON yok)
+export function kisaHata(e) {
+  const m = String((e && e.message) || e || "");
+  if (/download|indirilemedi/i.test(m)) return "fotoğraf indirilemedi (zaman aşımı); birkaç kez denendi";
+  if (/timed? ?out|timeout|zaman aşımı/i.test(m)) return "yapay zekâ zaman aşımına uğradı; birkaç kez denendi";
+  if (/overloaded|529|503|502|rate.?limit/i.test(m)) return "yapay zekâ servisi şu an yoğun; birkaç kez denendi";
+  if (/credit|billing|balance/i.test(m)) return "yapay zekâ hesabında bakiye/ödeme sorunu";
+  if (/401|authentication|api.?key/i.test(m)) return "yapay zekâ anahtarı geçersiz";
+  if (/refus|reddetti/i.test(m)) return "yapay zekâ isteği reddetti";
+  if (/sınır|limit/i.test(m) && !/rate/i.test(m)) return m.slice(0, 160);
+  if (/^\s*\d{3}\s*\{/.test(m) || /"type":\s*"error"/.test(m)) { try { const j = JSON.parse(m.slice(m.indexOf("{"))); return `yapay zekâ hatası: ${String((j.error && j.error.message) || j.message || "bilinmiyor").slice(0, 120)}`; } catch { return "yapay zekâ hatası"; } }
+  return m.replace(/\s+/g, " ").slice(0, 160) || "bilinmeyen hata";
 }

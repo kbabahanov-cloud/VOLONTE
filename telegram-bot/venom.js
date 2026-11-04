@@ -47,7 +47,12 @@ export async function raporuBirak(env, bot, simdi, { ozet, sorunlar = [], yapila
 }
 
 // 09:40 — toplu rapor: üç botun özetleri + kontrollerde yakalananlar + yapay zekâ yorumu.
+// Venom botu açıksa (venom:bot:aktif, 3 Kasım) toplu rapor gruba değil Venom'dan Patron'a gider.
 export async function topluRapor(env, simdi, tgf) {
+  if (await env.KAYIT.get("venom:bot:aktif")) return;
+  await grubaGonder(env, "kemal", await topluRaporMetni(env, simdi), tgf);
+}
+export async function topluRaporMetni(env, simdi) {
   const gun = gunAnahtari(simdi);
   const oku = async (bot) => (await env.KAYIT.get(`venom:rapor:${bot}:${gun}`, "json")) || null;
   const r = { sami: await oku("sami"), kemal: await oku("kemal"), selin: await oku("selin") };
@@ -61,7 +66,7 @@ export async function topluRapor(env, simdi, tgf) {
   if (yapilacak.length) satir.push("", "📋 Bugün yapılacaklar:", ...yapilacak.map((x) => `• ${x}`));
   const yorum = await yapayZekaYorumu(env, simdi, satir.join("\n")).catch(() => null);
   if (yorum) satir.push("", `💬 ${yorum}`);
-  await grubaGonder(env, "kemal", satir.join("\n"), tgf);
+  return satir.join("\n");
 }
 
 async function yapayZekaYorumu(env, simdi, metin) {
