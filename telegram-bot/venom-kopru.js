@@ -56,7 +56,7 @@ export async function venomPelinAdimi(env, simdi, uretimBaslat) {
     try {
       const s = await uretimBaslat(env, { kodlar: is.kodlar, test: Boolean(is.test), sablonAd: null }, simdi);
       const ok = Boolean(s && s.ok);
-      await sonucBildir(env, is.id, ok, ok ? `Pelin ${is.test ? "maliyet testine" : "üretime"} başladı: ${is.kodlar.join(", ")}. Hazır olanlar onayınıza gelecek.` : `Pelin başlamadı: ${(s && s.hata) || "bilinmeyen sorun"}. Para harcanmadı.`);
+      await sonucBildir(env, is.id, ok, ok ? (s.mesaj || `Pelin ${is.test ? "maliyet testine" : "üretime"} başladı: ${is.kodlar.join(", ")}. Hazır olanlar onayınıza gelecek.`) : `Pelin başlamadı: ${(s && s.hata) || "bilinmeyen sorun"}. Para harcanmadı.`);
     } catch (e) {
       await sonucBildir(env, is.id, false, "Pelin üretime başlayamadı; hata Claude Code'a iletildi.").catch(() => null);
       await hataEkle(env, "pelin:venomIs", e);
