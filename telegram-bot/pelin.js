@@ -1035,6 +1035,8 @@ export default {
     }
     if (istek.method === "GET" && /^\/dosya\/[a-f0-9]{32}$/.test(url.pathname)) return dosyaVer(env, url.pathname.split("/")[2]);
     if (istek.method === "GET" && /^\/medya\/[a-f0-9]{32}$/.test(url.pathname)) return medyaVer(env, url.pathname.split("/")[2], istek);
+    // 4 Kasım: gizli test sayfaları (360° görüntüleyici) — KV "pelinsayfa:<ad>"; medyayla aynı adres (CORS derdi yok), arama motoruna kapalı
+    if (istek.method === "GET" && /^\/sayfa\/[a-z0-9-]{3,40}$/.test(url.pathname)) { const h = await env.KAYIT.get(`pelinsayfa:${url.pathname.slice(7)}`); return h ? new Response(h, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex, nofollow" } }) : new Response("Sayfa yok", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } }); }
     return new Response("Pelin çalışıyor.");
   },
   async scheduled(olay, env) {

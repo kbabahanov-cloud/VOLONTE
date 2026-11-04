@@ -1456,3 +1456,20 @@ test("VİDEO DÜZELT (iPhone): var olan video 1080×1920 + sessiz ses izi, YENİ
   const { default: w } = await import("./pelin-worker.js").catch(() => ({ default: null }));
   void w;
 });
+
+test("GİZLİ SAYFA /sayfa/<ad> (360° test) + /medya Range (iPhone video) + CORS", async () => {
+  const o = uretimOrtami();
+  const { default: w } = await import("./pelin.js");
+  o.depo.set("pelinsayfa:360-3627", "<!doctype html><title>t</title>");
+  const r = await w.fetch(new Request("https://pelin.test/sayfa/360-3627"), o.env, { waitUntil() {} });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type"), /text\/html/);
+  assert.equal((await w.fetch(new Request("https://pelin.test/sayfa/yok-sayfa"), o.env, { waitUntil() {} })).status, 404);
+  const veri = new Uint8Array(1000).map((_, i) => i % 256);
+  o.env.KAYIT.getWithMetadata = async (k) => (k === "pelinmedya:" + "a".repeat(32) ? { value: veri.buffer, metadata: { tur: "video/mp4" } } : { value: null });
+  const m = await w.fetch(new Request("https://pelin.test/medya/" + "a".repeat(32), { headers: { range: "bytes=100-199" } }), o.env, { waitUntil() {} });
+  assert.equal(m.status, 206);
+  assert.equal(m.headers.get("content-range"), "bytes 100-199/1000");
+  assert.equal(m.headers.get("access-control-allow-origin"), "*");
+  assert.equal((await m.arrayBuffer()).byteLength, 100);
+});
