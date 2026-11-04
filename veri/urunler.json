@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3194",
+  "baslik": "Piped Shirt Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a relaxed long-sleeve shirt with high-waisted wide-leg trousers. Black contrast piping outlines the placket, flap chest pockets and cuffs, while a black tie belt defines the waist. Easy to wear to the office, daytime meetings or polished weekend plans. Made in Istanbul with careful finishing, offered in beige and green.",
+   "fr": "Un ensemble deux pièces associant une chemise ample à manches longues et un pantalon large taille haute. Un passepoil noir contrasté souligne la patte de boutonnage, les poches à rabat et les poignets, tandis qu'une ceinture noire à nouer marque la taille. Idéal pour le bureau, les rendez-vous en journée ou un week-end élégant. Fabriqué à Istanbul avec soin, en beige et en vert.",
+   "pt": "Um conjunto de duas peças que combina uma camisa solta de manga comprida com calças largas de cintura alta. O debrum preto em contraste destaca a carcela, os bolsos com aba e os punhos, e um cinto preto de atar marca a cintura. Ideal para o escritório, reuniões durante o dia ou um fim de semana elegante. Produzido em Istambul com acabamento cuidado, em bege e verde."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3194/1.jpg",
+   "galeri/3194/2.jpg",
+   "galeri/3194/3.jpg",
+   "galeri/3194/4.jpg",
+   "galeri/3194/5.jpg",
+   "galeri/3194/6.jpg",
+   "galeri/3194/7.jpg"
+  ],
+  "videolar": [
+   "selin/3194/0",
+   "selin/3194/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3162",
   "baslik": "Eyelet Crop Top Skirt Set",
   "kategori": "sets",
