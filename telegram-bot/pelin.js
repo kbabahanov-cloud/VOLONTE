@@ -576,6 +576,25 @@ async function donusAdimi(env, simdi) {
   await env.KAYIT.put("venom:pelin360Sonuc", JSON.stringify(d), { expirationTtl: 7 * 86400 });
 }
 
+// Zamanlı işler (Claude Code, Patron isteğiyle): KV "venom:pelinZamanli" = [{ zaman, islem: "teslim", isId }] → zamanı gelince
+// hazır paket (video + mankenli foto seti; askı/360 YOK) Kemal'e: SON YAYIN ONAYI kartı. Yeni üretim yok, para yok.
+async function zamanliIsler(env, simdi) {
+  const l = (await env.KAYIT.get("venom:pelinZamanli", "json")) || [];
+  if (!l.length) return;
+  const kalan = [];
+  for (const z of l) {
+    if (simdi < Number(z.zaman)) { kalan.push(z); continue; }
+    const x = await oku(env, `pelin:is:${z.isId}`, null);
+    if (z.islem === "teslim" && x && x.paket && x.paket.video) {
+      x.paket.ekler = []; x.paket.set = Object.fromEntries(Object.entries(x.paket.set || {}).filter(([k]) => ["sag", "sol", "arka"].includes(k)));
+      x.yayinYok = false; x.paketOnayIste = false;
+      x.gecmis = [...(x.gecmis || []), [simdi, "zamanlı: Kemal SON YAYIN kartı (video + mankenli foto seti)"]];
+      await teslimEt(env, x, simdi);
+    } else await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "zamanli", hata: `iş/paket yok: ${z.isId}` }), { expirationTtl: 7 * 86400 });
+  }
+  await env.KAYIT.put("venom:pelinZamanli", JSON.stringify(kalan));
+}
+
 // ---------- SANAL GİYDİRME (virtual try-on) DENEMESİ (4 Kasım, Patron: "elbiseyi yeniden çizme, giydir") ----------
 // fal üzerinde: FASHN v1.6 (0,075 $/görsel, "one-pieces" = elbise) ve Kling Kolors Virtual Try-On v1.5 (0,07 $/görsel).
 // Higgsfield API'de giydirme aracı YOK (sadece video + Soul). Model görseli = bugünkü onaylı ön fotoğraf (3 numaralı manken),
@@ -672,6 +691,8 @@ export async function pelinCron(env, simdi) {
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinKomut" = { metin } → Patron yazmış gibi kart hazırlanır (kart yine Patron onayı ister)
   try { const pk = await env.KAYIT.get("venom:pelinKomut", "json"); if (pk && /^\/(uret|maliyettesti)\b/.test(String(pk.metin))) { await env.KAYIT.delete("venom:pelinKomut"); const p = murat(env); await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: pk.metin, sonSenaryo: Boolean(pk.sonSenaryo) }, simdi, /^\/maliyettesti/.test(pk.metin)); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   if (env.STOK) { try { await eskiTeslimSor(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "eskiTeslim", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
+  try { await urunFotoUrlAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoUrl", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  try { await zamanliIsler(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "zamanli", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await urunFotoAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoAktar", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { const yk = await env.KAYIT.get("venom:pelinYuzKart", "json"); if (Array.isArray(yk) && yk.length) { await env.KAYIT.delete("venom:pelinYuzKart"); for (const k of yk) await yuzDuzenleKarti(env, murat(env), k.seri, k.talimat, k.istem, simdi, k.onEk || ""); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKart", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await yuzKaydiUygula(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKaydi", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
@@ -1285,7 +1306,7 @@ async function urunFotoSecimi(env, kod, renk = null) {
   if (elle.length) {
     const ayni = renk ? elle.filter((x) => x.renk === renk) : [];
     const l = (ayni.length ? ayni : elle).slice(0, 4);
-    return { urller: l.map((x) => dosyaAdresi(env, x.anahtar)), roller: l.map((x) => x.rol), etiketler: l.map((x) => x.etiket || null), kaynak: "patron" };
+    return { urller: l.map((x) => x.url || dosyaAdresi(env, x.anahtar)), roller: l.map((x) => x.rol), etiketler: l.map((x) => x.etiket || null), kaynak: "patron" };
   }
   const u = await siteUrunu(env, kod);
   const urller = u ? (u.fotolar || []).filter((f) => /^galeri\//.test(f)).slice(0, 3).map((f) => `${SITE}/${f}`) : [];
@@ -1899,6 +1920,7 @@ async function paketeAl(env, is, simdi) {
 // 1) son kare → boyut  2) video 1080 genişliğe indirilir (Telegram/site için hafif) + videonun boyunda nötr gri "yazı katmanı"
 // 3) fal workflow-utilities/blend-video ("overlay": gri = değişmez, köşede beyaz yazı + yarı saydam siyah zemin) → kuruşluk.
 // Sonuç ÖNCE Patron'a ayrı gönderilir (damgalı video + gerçek askı fotoğrafı), sonra Kemal SON YAYIN ONAYI kartını getirir.
+export const ASKI_PAKETTE = false; // 4 Kasım: Patron askı fotoğraflarını sonra kendisi hazırlayacak
 export const VIDEO_YAZI = { olcek: "fal-ai/workflow-utilities/scale-video", karisim: "fal-ai/workflow-utilities/blend-video", mod: "overlay", genislik: 1080, katmanSn: 20, fiyat: 0.03, sonradan: true };
 const cift = (n) => Math.max(2, Math.round(n / 2) * 2);
 async function paketAdimi(env, is, simdi) {
@@ -1912,6 +1934,8 @@ async function paketAdimi(env, is, simdi) {
     for (const [k, u] of Object.entries(is.set || {})) if (u && u !== "yok" && k !== "aski") p.set[k] = await damgala(env, u, is.kod, marka);
     p.formatlar = await instagramKirp(env, is.sahne || is.foto, is.kod, marka).catch(() => null);
     is.paket = p;
+    // 4 Kasım (Patron): askı/360 ŞİMDİLİK YOK — paket = mankenli video + mankenli foto seti (ön, sağ, sol, arka)
+    if (!ASKI_PAKETTE) { is.ad = { yok: "kapalı (Patron kararı)" }; is.paket.ekler = []; is.paketFal = await falGonder(env, KARE.uc, { video_url: is.video, frame_type: "last" }); is.durum = "paket_kare"; is.bekleZaman = simdi; return; }
     await askiDetayBaslat(env, is, simdi);
     is.durum = "paket_aski"; is.bekleZaman = simdi; return;
   }
@@ -2893,6 +2917,14 @@ async function fotoUyarisi(env, m) {
 }
 // Tek seferlik (Claude Code hazırlar, KV "venom:pelinUrunFoto" = { kod, fotolar: [{ anahtar, rol, renk }] }): eski akışa düşmüş
 // ürün fotoğraflarını üretim kaydına aktarır
+// Tek seferlik (Claude Code): KV "venom:pelinUrunFotoUrl" = { kod, fotolar: [{ url, rol, renk, etiket }] } → site fotoğrafı (renk etiketli)
+// ürün fotoğrafı olarak (ör. 3627 beyaz: Patron'un fotoğrafları bordo; beyaz için sitedeki beyaz fotoğraflar)
+async function urunFotoUrlAktar(env) {
+  const p = await env.KAYIT.get("venom:pelinUrunFotoUrl", "json");
+  if (!p || !p.kod || !Array.isArray(p.fotolar)) return;
+  await env.KAYIT.delete("venom:pelinUrunFotoUrl");
+  for (const f of p.fotolar) if (/^https:\/\//.test(String(f.url))) await urunFotoKaydet(env, p.kod, { anahtar: `u${crypto.randomUUID().replace(/-/g, "").slice(0, 31)}`, url: f.url, rol: f.rol || "on", etiket: f.etiket || null, renk: f.renk || null, album: null, mid: 0, zaman: f.zaman || 1, site: true });
+}
 async function urunFotoAktar(env) {
   const p = await env.KAYIT.get("venom:pelinUrunFoto", "json");
   if (!p || !p.kod || !Array.isArray(p.fotolar)) return;

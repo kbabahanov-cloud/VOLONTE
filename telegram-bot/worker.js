@@ -1488,7 +1488,7 @@ async function durumBaglami(env, kodlar, simdi) {
 }
 
 // Bir modelin paylaşım paketi: yazı (renkler + EN/FR; yapay zekâ bir kez, Düzelt ile değişir) + durum + medya.
-async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null } = {}) {
+async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null, renk = null } = {}) {
   let yazi = await env.KAYIT.get(`yazi:${u.kod}`, "json");
   if (!yazi) {
     yazi = await yaziHazirla(env, u);
@@ -1496,8 +1496,10 @@ async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null 
   }
   // 4 Kasım (Patron): renk MODEL KARTINDAN (3627 = koyu bordo, "black" değil); kart yoksa eski yazı
   const kart = await env.KAYIT.get(`pelinboy:${u.kod}`, "json").catch(() => null);
-  if (kart && kart.renk) {
-    const r = String(kart.renk).toLocaleLowerCase("tr").trim(), ton = r.match(/^(koyu|açık|acik)\s+(.+)$/);
+  // 4 Kasım: Pelin işinin KENDİ rengi önce (aynı modelin başka rengi üretilirken model kartı değişebilir: 3627 bordo ↔ beyaz)
+  const kartRenk = renk || (kart && kart.renk);
+  if (kartRenk) {
+    const r = String(kartRenk).toLocaleLowerCase("tr").trim(), ton = r.match(/^(koyu|açık|acik)\s+(.+)$/);
     const en = renkCevir([r]) || (ton && renkCevir([ton[2]]) ? renkCevir([ton[2]]).map((x) => `${ton[1] === "koyu" ? "dark" : "light"} ${x}`) : null);
     if (en) yazi = { ...yazi, renkler: en, renkEmin: true, renkNotu: "" };
   }
@@ -2034,7 +2036,7 @@ export async function pelinKanalAdimi(env, simdi) {
 const pelinMedya = (x) => [{ type: "video", media: x.video }, ...[x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, 9).map((m) => ({ type: "photo", media: m }))];
 async function yayinOnayKarti(env, x, u, simdi) {
   const patron = String(env.MURAT_ID || "").split(",")[0].trim();
-  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x) });
+  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
   // 4 Kasım (Patron): aynı işe yeni paket gelirse ESKİ kart geçersiz (kart no her pakette yeni; eski mesaj "geçersiz" diye kapatılır)
   const kartNo = `${x.id}.${Number(x.zaman || simdi).toString(36).slice(-5)}`;
   const eskiler = ((await env.KAYIT.list({ prefix: `kemal:pelinYayin:${x.id}` }).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
@@ -2076,7 +2078,7 @@ async function yayinOnayDugmesi(cq, env) {
   await cevapla("Paylaşıyorum");
   const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
   if (!u) return kapat(`⚠️ ${x.kod}: model sitede yok ya da gizli — paylaşılmadı.`);
-  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x) });
+  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
   const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false });
   if (!g.ok) return kapat(`⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`);
   await kuyrugaEkle(env, "pelinSite", { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: g.ids[0], foto: x.foto || null, zaman: simdi });

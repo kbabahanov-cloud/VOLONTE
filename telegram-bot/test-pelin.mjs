@@ -1473,3 +1473,24 @@ test("GİZLİ SAYFA /sayfa/<ad> (360° test) + /medya Range (iPhone video) + COR
   assert.equal(m.headers.get("access-control-allow-origin"), "*");
   assert.equal((await m.arrayBuffer()).byteLength, 100);
 });
+
+test("ZAMANLI TESLİM (09:00): hazır paket Kemal'e, askı/ekler YOK, yeni üretim YOK; site fotoğrafı (renk etiketli) beyaz üretimde kullanılır", async () => {
+  const o = uretimOrtami();
+  o.depo.set("pelinboy:3627", JSON.stringify({ marka: "BLACKROSE", renk: "beyaz" }));
+  o.depo.set("pelin:is:3627-z", JSON.stringify({ id: "3627-z", kod: "3627", marka: "BLACKROSE", renk: "koyu bordo", durum: "onaylandi", video: "https://vid/v.mp4", paket: { marka: "BLACKROSE", video: "https://vid/sesli.mp4", foto: "https://pelin.test/medya/f", set: { sag: "s", sol: "l", arka: "a", aski: "x" }, ekler: [{ ad: "askı ön", url: "y" }] }, gecmis: [] }));
+  const simdi = Math.floor(Date.now() / 1000);
+  o.depo.set("venom:pelinZamanli", JSON.stringify([{ zaman: simdi + 3600, islem: "teslim", isId: "3627-z" }]));
+  await cronlar(o, 1);
+  assert.equal((await teslim(o)).length, 0); // zamanı gelmedi
+  o.depo.set("venom:pelinZamanli", JSON.stringify([{ zaman: simdi - 5, islem: "teslim", isId: "3627-z" }]));
+  await cronlar(o, 1);
+  const t = await teslim(o);
+  assert.equal(t.length, 1);
+  assert.deepEqual([t[0].video, t[0].renk, t[0].set.map((y) => y.ad)], ["https://vid/sesli.mp4", "koyu bordo", ["sağ yan", "sol yan", "arka"]]);
+  assert.equal(o.hfIstek.length, 0);
+  assert.equal(JSON.parse(o.depo.get("venom:pelinZamanli")).length, 0);
+  o.depo.set("venom:pelinUrunFotoUrl", JSON.stringify({ kod: "3627", fotolar: [{ url: "https://site/galeri/3627/3.jpg", rol: "on", renk: "beyaz" }] }));
+  await cronlar(o, 1);
+  const l = JSON.parse(o.depo.get("pelin:urunfoto:3627"));
+  assert.equal(l[0].url, "https://site/galeri/3627/3.jpg");
+});
