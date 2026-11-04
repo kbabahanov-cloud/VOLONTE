@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3244",
+  "baslik": "Lace Shirt Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a relaxed lace shirt with matching wide-leg trousers. The shirt features a smooth contrast collar, placket and cuffs with jewel-style buttons, while the trousers sit on an elasticated waist with a softly scalloped hem. Wear it as a set for daytime events or style the pieces separately. Made in Istanbul with careful attention to finish.",
+   "fr": "Un ensemble deux pièces associant une chemise ample en dentelle à un pantalon large assorti. La chemise se distingue par son col, sa patte et ses poignets unis, ornés de boutons bijoux, tandis que le pantalon offre une taille élastique et un ourlet légèrement festonné. À porter en ensemble pour vos sorties de jour ou à dissocier. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina uma camisa solta de renda com calça pantalona no mesmo tom. A camisa tem gola, carcela e punhos lisos com botões tipo joia, e a calça traz cintura elástica e barra levemente ondulada. Use o conjunto completo em eventos diurnos ou combine as peças separadamente. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3244/1.jpg",
+   "galeri/3244/2.jpg",
+   "galeri/3244/3.jpg",
+   "galeri/3244/4.jpg",
+   "galeri/3244/5.jpg",
+   "galeri/3244/6.jpg",
+   "galeri/3244/7.jpg"
+  ],
+  "videolar": [
+   "selin/3244/0",
+   "selin/3244/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3246",
   "baslik": "Printed Satin Vest Set",
   "kategori": "sets",
