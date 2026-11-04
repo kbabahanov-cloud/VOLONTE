@@ -16,9 +16,12 @@ pathlib.Path("ofis.js").write_text(w, encoding="utf-8")
 print("derlendi:", len(w.encode()), "bayt")
 PY
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
+# Şifre ZATEN kayıtlıysa asla yeniden üretilmez (yeniden yüklemede Patron'un şifresi değişmesin)
+VAR=$(curl -sS "$API/secrets" | python3 -c 'import sys,json;d=json.load(sys.stdin);print("evet" if d.get("success") and any(x["name"]=="OFIS_SIFRE" for x in d["result"]) else "hayir")' 2>/dev/null || echo hayir)
+[ "$VAR" = "evet" ] && ILK_SIFRE=hayir || ILK_SIFRE=$ILK
 GIZLI=""
 SIFRE=""
-if [ "$ILK" = "evet" ]; then
+if [ "$ILK_SIFRE" = "evet" ]; then
   SIFRE=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-HJ-NP-Z2-9' | head -c 8)
   GIZLI=",{\"type\":\"secret_text\",\"name\":\"OFIS_SIFRE\",\"text\":\"$SIFRE\"}"
 fi

@@ -204,7 +204,9 @@ export default {
       const s = String((f && f.get("sifre")) || "");
       const deneme = sayi(await env.KAYIT.get("ofis:deneme"));
       if (deneme >= 8) return new Response(GIRIS.replace("%HATA%", '<div class="h">Çok deneme; 15 dakika sonra.</div>'), { status: 429, headers: basliklar });
-      if (!env.OFIS_SIFRE || !esit(s, String(env.OFIS_SIFRE))) { await env.KAYIT.put("ofis:deneme", String(deneme + 1), { expirationTtl: 900 }); return new Response(GIRIS.replace("%HATA%", '<div class="h">Şifre yanlış.</div>'), { status: 401, headers: basliklar }); }
+      // 4 Kasım (Patron): büyük/küçük harf ve boşluk farkı önemsenmez
+      const sade = (x) => String(x || "").replace(/\s+/g, "").toLocaleUpperCase("tr").replace(/İ/g, "I");
+      if (!env.OFIS_SIFRE || !esit(sade(s), sade(env.OFIS_SIFRE))) { await env.KAYIT.put("ofis:deneme", String(deneme + 1), { expirationTtl: 900 }); return new Response(GIRIS.replace("%HATA%", '<div class="h">Şifre yanlış.</div>'), { status: 401, headers: basliklar }); }
       const c = await imza(env, "ofis-giris-v1");
       return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `ofis=${c}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax` } });
     }
