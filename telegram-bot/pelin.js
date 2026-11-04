@@ -352,6 +352,7 @@ export async function hfHatirlat(env, simdi) {
 export async function pelinCron(env, simdi) {
   await webhookKur(env);
   if (hfYetki(env)) { try { await hfSor(env); } catch (e) { await env.KAYIT.put("venom:pelinHfSonuc", JSON.stringify({ hata: String(e && e.message) })); } }
+  try { const sd = await env.KAYIT.get("venom:pelinSablonDeneme", "json"); if (sd && sd.kod) { await env.KAYIT.delete("venom:pelinSablonDeneme"); await sablonDenemesi(env, sd, simdi); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "sablonDenemesi", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   // Tek seferlik HEIC çevirme denemesi (Claude Code; KV "venom:pelinHeicDeneme" = base64 HEIC) → "venom:pelinHeicSonuc"
   try { const hb = await env.KAYIT.get("venom:pelinHeicDeneme"); if (hb) { await env.KAYIT.delete("venom:pelinHeicDeneme"); let sonuc; try { const bayt = Uint8Array.from(atob(hb), (c) => c.charCodeAt(0)); const c = await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: 2400, fit: "scale-down" }).output({ format: "image/jpeg", quality: 92 }); const j = new Uint8Array(await c.response().arrayBuffer()); sonuc = { ok: j[0] === 0xff && j[1] === 0xd8, boyut: j.length, tur: c.contentType ? c.contentType() : null }; } catch (e) { sonuc = { ok: false, hata: String(e && e.message).slice(0, 300) }; } await env.KAYIT.put("venom:pelinHeicSonuc", JSON.stringify({ zaman: simdi, ...sonuc }), { expirationTtl: 86400 }); } } catch { /* sonra */ }
   try { await hfHatirlat(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "hfHatirlat", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
@@ -735,6 +736,7 @@ export default {
 // =====================================================================================================================
 const URETIM_SN = 6;
 const URETIM_DENEME = 2;
+const denemeSiniri = (is) => (is && is.denemeSiniri) || URETIM_DENEME;
 const OPENAI_TAHMIN = 0.01; // görsel karşılaştırma başına (yaklaşık)
 const KONTROL_TAHMIN = 0.03; // Claude görsel karşılaştırma başına (yaklaşık; gerçek harcama kullanımdan yazılır)
 const ORTAM_ONERI = "retro 80'ler; siyah-altın (VOLONTE marka renkleri); \"Live your life\" (özgür, şehirde yaşayan kadın); mutluluk/neşe";
@@ -755,6 +757,7 @@ export function falHataTr(h) {
   if (/rate.?limit|429|overloaded|unavailable|50[0-9]/i.test(m)) return "araç şu an yoğun";
   if (/download|fetch|image_url|video_url|url/i.test(m) && /fail|could not|unable|invalid/i.test(m)) return "araç görseli indiremedi";
   if (/422|unprocessable|validation|invalid/i.test(m)) return "araç girdiyi kabul etmedi";
+  if (/^BÜTÇE:/.test(m)) return m;
   if (/[çğıöşüÇĞİÖŞÜ]/.test(m) && m.length < 160) return m; // zaten Türkçe kısa mesaj
   return "araç hatası (ayrıntı Claude Code'da)";
 }
@@ -1085,28 +1088,34 @@ const rolIstemi = (roller, etiketler = []) => (roller && roller.length ? ` Produ
 export const VIDEO_ISTEM_SINIRI = 1700;
 // Örnek video tarifinden EŞYA/DEKOR cümleleri atılır (romantik şablon: "küçük kâğıt zarf", kadife fiyonk, uzun eldiven, şapka)
 const DEKOR = /envelope|card|letter|glove|hat\b|hats\b|brim|bow\b|ribbon|prop|flower bouquet|bouquet|umbrella|book|cup|glass of/i;
-export const temizOrtam = (x) => `${(String(x || "").split(/(?<=[.;])\s+/).filter((c) => !DEKOR.test(c)).join(" ").replace(/,?\s*(with|and)\s+[^,.;]*(envelope|glove|hat|bow|ribbon)[^,.;]*/gi, "").trim() || "Elegant minimal studio").replace(/[.;\s]*$/, ".")} No props: no envelope, card, letter, gloves, hat or bow.`;
+// 4 Kasım: cümleyi tümden atmak yerine sadece eşya geçen yan cümle atılır (romantik: "plain muted green backdrop" korunur)
+const DEKOR_PARCA = /(?:,\s*|\s+(?:and|with)\s+)(?:no props beyond\s+)?(?:(?!\b(?:and|with)\b)[^,.;])*?\b(?:envelope|card|letter|gloves?|hats?|brim|bow|ribbon|props?|bouquet|umbrella)\b[^,.;]*/gi;
+export const temizOrtam = (x) => `${(String(x || "").split(/(?<=[.;])\s+/).map((c) => (DEKOR.test(c) || /\bprops?\b/i.test(c) ? c.replace(DEKOR_PARCA, "").replace(/\s+([.;])/g, "$1").trim() : c)).filter((c) => c && !DEKOR.test(c) && /[a-z]{3}/i.test(c.replace(/[.;]/g, ""))).join(" ").trim() || "Elegant minimal studio").replace(/[.;\s,]*$/, ".")} No props: no envelope, card, letter, gloves, hat or bow.`;
 const kisalt = (x, n) => { const t = String(x || "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n).replace(/[,;:\s]+\S*$/, "")}` : t; };
 export function yeniVideoIstemi(is) {
-  const a = is.sahneAyar || SAHNE_VARSAYILAN, o = is.videoOrtam || is.ortam, t = is.sablon && is.sablon.kamera ? is.sablon : null;
+  const a = is.sahneAyar || SAHNE_VARSAYILAN, o = is.videoSahne || is.videoOrtam || is.ortam;
+  const t = is.videoSablon && is.videoSablon.isik ? is.videoSablon : is.sablon && is.sablon.kamera ? is.sablon : null;
   const b = is.boy && BOYLAR[is.boy.boy] ? BOYLAR[is.boy.boy] : null;
   const parca = [
     b ? `LENGTH RULE (highest priority): ${b.kisa}; in every wide shot both shoes are fully visible below the hem.` : "",
     `Vertical 9:16, ${URETIM_SN}-second fashion video of the same woman in exactly the same garment as in the first frame${is.renk ? ` (${renkEn(is.renk)} only)` : ""}.`,
-    o ? `Setting and atmosphere: ${kisalt(o.sahne, 260).replace(/\.?\s*$/, ".")}` : "Setting: elegant studio.",
+    o ? `${is.videoSahne ? "Setting and atmosphere of this video (she is in this setting): " : "Setting and atmosphere: "}${kisalt(o.sahne, 260).replace(/\.?\s*$/, ".")}` : "Setting: elegant studio.",
     t ? `Style reference: use ONLY its light, color grade, mood and tempo — NOT its framing, props or accessories such as hats, gloves or envelopes: ${kisalt(t.isik, 150)}; ${kisalt(t.hiz, 80)}.` : "",
     is.senaryo && is.senaryo.hareketEn ? `Motion (approved scenario): ${kisalt(is.senaryo.hareketEn, 380)}` : HAREKET_VARSAYILAN,
     HAREKET_KURALI, "The fabric flows and sways naturally with her steps.",
     b ? "Wide shots show her full body with the shoes visible." : "",
     a.detay ? "Include one brief close-up of the neckline/collar and stitching detail, with artistic close-ups of the lace, sequins and fabric texture." : "",
-    "Gentle natural movement of the skirt and her hair. Warm cinematic light, rich colors, glowing skin. A poised, confident, elegant woman with professional makeup.",
+    `Gentle natural movement of the skirt and her hair. ${is.videoSablon ? "Light and color grade as in the style reference" : "Warm cinematic light, rich colors"}, glowing skin. A poised, confident, elegant woman with professional makeup.`,
     is.stil && is.stil.aksesuarEn ? `Accessories: ${kisalt(is.stil.aksesuarEn, 110)}.` : "",
     a.sonYazi ? `The last second ends on an elegant frame with a small, tasteful gold text "VOLONTE" and directly below it the model code "${is.kod}" in a corner; no other text, no price.` : "No text.",
     "Her face and the dress color, print, cut and collar stay exactly as in the first frame. Natural motion, no morphing, no logo, no music.",
   ].filter(Boolean);
+  // Veo uzun istemi reddediyordu (1.700); Higgsfield Kling/Seedance 2.500'e kadar alır (Avoid listesi için pay bırakılır)
+  const sinir = is.arac && ARACLAR[is.arac] && ARACLAR[is.arac].hf ? 2150 : VIDEO_ISTEM_SINIRI;
   let metin = parca.join(" ");
-  if (metin.length > VIDEO_ISTEM_SINIRI) metin = parca.filter((x) => !/^(Accessories|Style reference)/.test(x)).join(" ");
-  return metin.slice(0, VIDEO_ISTEM_SINIRI + 200);
+  if (metin.length > sinir) metin = parca.filter((x) => !/^Accessories/.test(x)).join(" ");
+  if (metin.length > sinir) metin = parca.filter((x) => !/^(Accessories|Style reference)/.test(x)).join(" ");
+  return metin.slice(0, sinir + 200);
 }
 const uretimFotoIstemi = (ortam, sablon, is = {}) => `${boyBasi(is.boy, (is.boyRef || []).length)}${FOTO_ISTEMI.replace("clean light studio background, soft natural light", "")} Setting: ${ortam ? ortam.sahne : "clean light studio background, soft natural light"}.${sablon && sablon.isik ? ` Mood and lighting reference (do not copy any real person, logo, text or props): ${sablon.isik}; ${temizOrtam(sablon.ortam_havasi)}` : ""}${rolIstemi(is.urunRoller, is.urunEtiketler)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${is.sahneAyar ? `${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}` : ""}${refIstemi((is.boyRef || []).length)} Realistic natural skin, flawless natural hands. The garment is the most important thing: keep it 100% identical to the product photos.`;
 const sahneIstemi = (ortam, is = {}) => `${boyBasi(is.boy, (is.boyRef || []).length)}Vertical (9:16) photo of the SAME woman as in the first image (same face, skin tone, hair and body), wearing EXACTLY the garment shown in the other image(s) — identical colors, print, motif size and placement, fabric, cut, length and every detail; do not redesign or recolor anything. Setting: ${ortam.sahne}. Natural pose as the first frame of a short fashion video: she is walking and about to turn to the camera, full body, photorealistic, natural skin, natural light, sharp.${rolIstemi(is.urunRoller, is.urunEtiketler)}${renkIstemi(is.renk)}${boyIstemi(is.boy)}${is.boy ? KADRAJ_ISTEMI : ""}${YAKA_DETAY}${detayIstemi(is.modelKaydi)}${MAKYAJ}${VOLONTE_KADINI}${POZ}${SINEMA}${aksesuarIstemi(is.stil)}${refIstemi((is.boyRef || []).length)} No text, no logo, no watermark.`;
@@ -1118,7 +1127,8 @@ const KART_ARAC_AD = { hf_seedance25: "Seedance 2.5", hf_kling3: "Kling 3.0 4K",
 export const SABLON_SECENEK = {
   siyahaltin: { ad: "Siyah-Altın", ortamAd: /siyah\s*alt/i },
   sehir: { ad: "Şehir", ortamAd: /şehir|sehir|city/i },
-  parilti: { ad: "Parıltı", ortam: { id: "parilti", ad: "Parıltı", sahne: "An elegant evening gala setting with soft sparkling golden bokeh lights and a subtle shimmer in the air, a dark warm background with glints of gold, a polished floor softly reflecting the lights; glamorous and festive yet calm and refined. No text, no logos." } },
+  // 4 Kasım 16:00 (Patron): örnek podyum videosundan "Şablon olarak kaydet" → "parıltı". Kayıt yoksa aynı tarif yedek olarak:
+  parilti: { ad: "Parıltı", sablonAd: "parıltı", ortam: { id: "parilti", ad: "Parıltı (podyum)", sahne: "A minimal high-fashion runway in a clean, bright studio with plain cool pale lavender-gray walls and a glossy white floor, soft even diffused studio light, seated guests along the edge of the runway watching, filmed vertically from the front row. No text, no logos." } },
   romantik: { ad: "Romantik", sablonAd: "romantik", ortam: { id: "romantik", ad: "Romantik", sahne: "A soft romantic setting with diffused warm light, muted pastel tones, gentle glow and an intimate calm mood. No props, no text, no logos." } },
 };
 // Şablonun video ortamı (katalog ortamından farklıysa ayrı başlangıç karesi üretilir)
@@ -1328,7 +1338,16 @@ async function uretimBaslat(env, onay, simdi) {
   if (testId) await kaydet(env, `pelin:test:${testId}`, { kodlar: onay.kodlar, zaman: simdi });
 }
 
+async function grupHarcamasi(env, gid) {
+  const g = await oku(env, `pelin:grup:${gid}`, null);
+  let t = 0; for (const id of (g && g.ids) || []) { const x = await oku(env, `pelin:is:${id}`, null); t += (x && x.maliyet) || 0; }
+  return { g, t: yuvarla(t) };
+}
 async function falIsle(env, is, uc, girdi, fiyat, simdi, hf = false) {
+  if (is.grup && is.butce) {
+    const { t } = await grupHarcamasi(env, is.grup);
+    if (t + fiyat > is.butce) throw new Error(`BÜTÇE: şimdiye kadar ~${para(t)}, bu adım ${para(fiyat)} → ${is.butce} $ sınırı aşılır; durdum, Patron'a soruyorum`);
+  }
   is.fal = hf ? await hfGonder(env, uc, girdi) : await falGonder(env, uc, girdi);
   is.falFiyat = fiyat; is.falTur = hf ? "hf" : "fal"; is.maliyet = yuvarla(is.maliyet + fiyat); is.bekleZaman = simdi;
   await harcamaYaz(env, fiyat, simdi, is.falTur);
@@ -1336,7 +1355,7 @@ async function falIsle(env, is, uc, girdi, fiyat, simdi, hf = false) {
 // Higgsfield aracı çalışmazsa aynı kareyle fal.ai yedeği (bir kez; deneme sayılmaz)
 function hfYedegeGec(is, arac, neden, simdi) {
   const y = ARACLAR[arac] && ARACLAR[arac].yedek;
-  if (!y || !ARACLAR[y] || is.hfYedek) return false;
+  if (!y || !ARACLAR[y] || is.hfYedek || is.hfYedekYok) return false;
   is.gecmis.push([simdi, `${ARACLAR[arac].ad} çalışmadı (${neden}) → aynı kareyle fal.ai ${ARACLAR[y].ad}`]);
   Object.assign(is, { arac: y, hfYedek: { from: arac, neden }, videoDeneme: Math.max(0, is.videoDeneme - 1), durum: "video_gonder" });
   return true;
@@ -1358,14 +1377,14 @@ async function uretimAdimi(env, is, simdi) {
   }
   if (is.durum === "foto_bekle") {
     const s = await bekle(); if (!s) return;
-    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = is.fotoDeneme < URETIM_DENEME ? "foto_gonder" : "uyari"; is.sorunlar = [`fotoğraf üretilemedi: ${falHataTr(s.hata)}`]; return; }
+    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = is.fotoDeneme < denemeSiniri(is) ? "foto_gonder" : "uyari"; is.sorunlar = [`fotoğraf üretilemedi: ${falHataTr(s.hata)}`]; return; }
     is.foto = s.resimler[0];
     const k = await kaliteKontrol(env, is.urunler, [is.foto], simdi, { renk: is.renk, boy: is.boy, yuz: Boolean(is.sahneAyar), astar: is.modelKaydi && is.modelKaydi.astarTr });
     notEkle(is, k);
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     is.fotoKontrol = k; is.gecmis.push([simdi, `foto ${is.fotoDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
     if (k.gecti) { is.durum = is.videoOrtam && (is.sahneAyar || !is.sablon) ? "sahne_gonder" : "video_gonder"; return; }
-    is.sorunlar = k.sorunlar; is.durum = is.fotoDeneme < URETIM_DENEME ? "foto_gonder" : "uyari"; return;
+    is.sorunlar = k.sorunlar; is.durum = is.fotoDeneme < denemeSiniri(is) ? "foto_gonder" : "uyari"; return;
   }
   // Video başlangıç karesi (video ortamı, ör. "Live Your Life Şehir"): katalog fotoğrafından ayrı, aynı yüz + aynı kıyafet
   if (is.durum === "sahne_gonder") {
@@ -1375,14 +1394,14 @@ async function uretimAdimi(env, is, simdi) {
   }
   if (is.durum === "sahne_bekle") {
     const s = await bekle(); if (!s) return;
-    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = is.sahneDeneme < URETIM_DENEME ? "sahne_gonder" : "uyari"; is.sorunlar = [`video karesi üretilemedi: ${falHataTr(s.hata)}`]; return; }
+    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = is.sahneDeneme < denemeSiniri(is) ? "sahne_gonder" : "uyari"; is.sorunlar = [`video karesi üretilemedi: ${falHataTr(s.hata)}`]; return; }
     is.sahne = s.resimler[0];
     const k = await kaliteKontrol(env, is.urunler, [is.sahne], simdi, { renk: is.renk, boy: is.boy, yuz: true, astar: is.modelKaydi && is.modelKaydi.astarTr });
     notEkle(is, k);
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     is.sahneKontrol = k; is.gecmis.push([simdi, `video karesi ${is.sahneDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
     if (k.gecti) { is.durum = "video_gonder"; return; }
-    is.sorunlar = k.sorunlar; is.durum = is.sahneDeneme < URETIM_DENEME ? "sahne_gonder" : "uyari"; return;
+    is.sorunlar = k.sorunlar; is.durum = is.sahneDeneme < denemeSiniri(is) ? "sahne_gonder" : "uyari"; return;
   }
   // Müzik (deneme): sessiz videonun üstüne müzik (fal ffmpeg merge-audio-video); sessiz hali saklanır → müzik sonra değiştirilebilir
   if (is.durum === "muzik_gonder") {
@@ -1428,7 +1447,7 @@ async function uretimAdimi(env, is, simdi) {
         Object.assign(is, { arac: "kling4", aracYedek: true, videoDeneme: Math.max(0, is.videoDeneme - 1), durum: "video_gonder" });
         return;
       }
-      is.durum = is.videoDeneme < URETIM_DENEME ? "video_gonder" : "uyari"; is.sorunlar = [`video üretilemedi: ${falHataTr(s.hata)}`]; return;
+      is.durum = is.videoDeneme < denemeSiniri(is) ? "video_gonder" : "uyari"; is.sorunlar = [`video üretilemedi: ${falHataTr(s.hata)}`]; return;
     }
     is.video = s.video; is.kareler = []; is.kareFal = [];
     for (const f of ["first", "middle", "last"]) { is.kareFal.push(await falGonder(env, KARE.uc, { video_url: is.video, frame_type: f })); }
@@ -1455,7 +1474,7 @@ async function uretimAdimi(env, is, simdi) {
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     is.videoKontrol = k; is.gecmis.push([simdi, `video ${is.videoDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
     if (k.gecti) { is.durum = is.muzik && !is.muzikEklendi ? "muzik_gonder" : "onay"; return; }
-    is.sorunlar = k.sorunlar; is.durum = is.videoDeneme < URETIM_DENEME ? "video_gonder" : "uyari"; return;
+    is.sorunlar = k.sorunlar; is.durum = is.videoDeneme < denemeSiniri(is) ? "video_gonder" : "uyari"; return;
   }
 }
 const isKlavye = (id, sablon = false, uyari = false, digerAraclar = [], deneme = false) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : deneme ? "💾 Beğendim (yayına gitmez)" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : []),
@@ -1529,7 +1548,7 @@ async function isBildir(env, is) {
 async function isBildirIc(env, is, tgK, sonuc) {
   const ust = `${is.kod} · ${is.seri === "buyuk" ? "büyük seri" : "küçük seri"} · ${is.ortam ? is.ortam.ad : "stüdyo"}${is.videoOrtam ? ` / video ${is.videoOrtam.ad}` : ""}${is.sablon ? ` · şablon ${is.sablon.ad}` : ""} · foto ${is.fotoDeneme}. deneme, video ${is.videoDeneme}. deneme`;
   if (is.durum === "uyari") {
-    if (is.foto) await tgK("sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `⚠️ ${is.kod}: ${URETIM_DENEME} denemede kalite kontrolünden geçmedi.` }, "foto");
+    if (is.foto) await tgK("sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `⚠️ ${is.kod}: ${denemeSiniri(is)} denemede kalite kontrolünden geçmedi.` }, "foto");
     if (is.sahne) await tgK("sendPhoto", { chat_id: murat(env), photo: is.sahne, caption: `🎞 ${is.kod} (video karesi)` }, "sahne");
     if (is.video) { const v = await videoGonder(env, is, `🎬 ${is.kod}`); sonuc.push(["video", Boolean(v && v.ok), v && v.ok ? null : "gönderilemedi"]); }
     const devam = devamAsamasi(is);
@@ -1545,7 +1564,7 @@ async function isBildirIc(env, is, tgK, sonuc) {
     if (is.video) await tg(env, "sendVideo", { chat_id: hemra(env), video: is.video, caption: `🎬 ${is.kod} — Pelin önizlemesi` });
     await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi. Uygunsa ✅ Onayla (Patron da görüyor).`, { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${is.id}` }]] } });
   }
-  const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
+  const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.sablonKey && SABLON_SECENEK[is.sablonKey] ? ` · şablon: ${SABLON_SECENEK[is.sablonKey].ad}` : ""}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
     ...(is.aracYedek && (is.gecmis || []).some((g) => /işleyemedi .*→ aynı kareyle Kling 4\.0/.test(String(g[1]))) ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
     ...(is.hfYedek ? [`↪️ ${ARACLAR[is.hfYedek.from].ad} çalışmadı (${is.hfYedek.neden}); aynı fotoğrafla fal.ai ${ARACLAR[is.arac].ad} kullanıldı.`] : []),
     is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "Onaylarsanız Selin siteye, Kemal kanala alır. Beğendiyseniz ayarları şablon olarak kaydedin. Karşılaştırmak için aynı kareyle başka araçla da üretebilirim."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok && !is.grup ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
@@ -1570,6 +1589,47 @@ export async function uretimCron(env, simdi) {
   }
   await testRaporu(env, liste);
 }
+// ŞABLON DENEMESİ (4 Kasım, Patron onaylı; KV "venom:pelinSablonDeneme" = { kod, arac, sablonlar: [...], butce, senaryolar: { sablon: { tr, hareketEn } } }):
+// TEK fotoğraf (başlangıç karesi de o) + aynı araçla her şablona bir video; şablon sadece videonun ortamını/ışığını/temposunu belirler.
+// Kalite kontrol yeniden üretmez (deneme 1), Higgsfield hata verirse fal'a geçmez, grup bütçesi aşılacaksa durur ve sorar, DENEME: yayına gitmez.
+export async function sablonDenemesi(env, p, simdi) {
+  const secim = await oku(env, "pelin:secim", null), sablonlar = await oku(env, "pelin:sablonlar", {});
+  const kod = String(p.kod), arac = p.arac, anahtarlar = (p.sablonlar || []).filter((k) => SABLON_SECENEK[k]);
+  if (!secim || !ARACLAR[arac] || !anahtarlar.length) return yaz(env, murat(env), `⚠️ Şablon denemesi başlamadı (kurulum/araç/şablon eksik).`);
+  const b = (await boyOku(env, kod)) || {};
+  const renk = b.renk || null;
+  const stil = (b.stil && (b.stil[renk || "genel"] || b.stil.genel)) || null;
+  const son = await sonSenaryo(env, kod);
+  const liste0 = (await oku(env, "pelin:isler", [])).length;
+  await uretimBaslat(env, { kodlar: [kod], arac, sablonKey: null, seriler: { [kod]: b.seri || "buyuk" }, renkler: renk ? { [kod]: renk } : {}, stiller: { [kod]: stil }, senaryolar: {}, seviye: "standart" }, simdi);
+  const liste = await oku(env, "pelin:isler", []);
+  const liderId = liste[liste.length - 1];
+  const lider = liste.length > liste0 ? await oku(env, `pelin:is:${liderId}`, null) : null;
+  if (!lider || lider.durum === "hata") return yaz(env, murat(env), `⚠️ ${kod} şablon denemesi başlamadı: ${(lider && lider.hata) || "iş oluşturulamadı"}. Para harcanmadı.`);
+  const gid = `g-${kisaId()}`;
+  const sablonIsi = (x, k) => {
+    const sb = SABLON_SECENEK[k].sablonAd && sablonlar[SABLON_SECENEK[k].sablonAd] ? sablonlar[SABLON_SECENEK[k].sablonAd] : null;
+    const sen = (p.senaryolar && p.senaryolar[k]) || son;
+    return Object.assign(x, { sablonKey: k, videoSahne: sablonOrtami(secim, k, sablonlar), videoSablon: sb ? { ad: sb.ad, isik: sb.isik, hiz: sb.hiz } : null, videoOrtam: null, sablon: null, senaryo: sen ? { tr: sen.tr, hareketEn: sen.hareketEn } : null, kendiSenaryo: true, denemeSiniri: 1, hfYedekYok: true, yayinYok: true, butce: Number(p.butce) || 5, grup: gid });
+  };
+  sablonIsi(lider, anahtarlar[0]);
+  const takip = anahtarlar.slice(1).map((k) => sablonIsi({ ...lider, id: `${kod}-${kisaId()}`, durum: "grup_bekle", lider: lider.id, maliyet: 0, gecmis: [[simdi, `şablon denemesi: ${SABLON_SECENEK[k].ad}, liderin fotoğrafını bekliyor`]] }, k));
+  lider.takipciler = takip.map((x) => x.id);
+  lider.gecmis = [...(lider.gecmis || []), [simdi, `şablon denemesi (${anahtarlar.map((k) => SABLON_SECENEK[k].ad).join(", ")}) · tek fotoğraf · ${ARACLAR[arac].ad} · bütçe ${lider.butce} $`]];
+  for (const x of takip) await kaydet(env, `pelin:is:${x.id}`, x);
+  await kaydet(env, `pelin:is:${lider.id}`, lider);
+  await kaydet(env, `pelin:grup:${gid}`, { ids: [lider.id, ...takip.map((x) => x.id)], zaman: simdi, tur: "sablon", butce: lider.butce }, 14 * 86400);
+  await kaydet(env, "pelin:isler", [...liste, ...takip.map((x) => x.id)].slice(-200));
+  const kontrol = KONTROL_TAHMIN + OPENAI_TAHMIN;
+  const tahmin = yuvarla(GORSEL.fiyat + kontrol + anahtarlar.length * (ARACLAR[arac].saniye * URETIM_SN + kontrol + KONTROL_TAHMIN + 3 * KARE.saniye * URETIM_SN));
+  return yaz(env, murat(env), [
+    `🎬 ${kod} ŞABLON DENEMESİ başladı (onayınızla): ${ARACLAR[arac].ad} × ${anahtarlar.map((k) => SABLON_SECENEK[k].ad).join(" · ")}`,
+    `Tek katalog fotoğrafı (başlangıç karesi de o) → ${anahtarlar.length} video; şablon her videonun ortamını, ışığını ve temposunu belirler.`,
+    `Model kartı: ${SERILER[lider.seri].ad} · ${renk || "renk kayıtlı değil"} · boy ${boyYazi(b)} · astar: ${b.astarTr || "—"}`,
+    `Tahmini toplam ~${para(tahmin)} · sınır ${lider.butce} $ (aşılacaksa durur, size sorarım) · kalite kontrol yeniden üretim YAPMAZ`,
+    "🧪 DENEME: hiçbiri kanala/siteye gitmez. Videolar önizleme olarak gelir, sonunda yan yana karşılaştırma kartı.",
+  ].join("\n"));
+}
 // HEPSİNİ DENE: lider video aşamasına geçince (fotoğraf/kare kontrolden geçti + senaryo onaylı) takipçiler AYNI fotoğraf,
 // kare ve senaryoyla kendi araçlarında videoya başlar. Lider iptal edilirse takipçiler de iptal.
 const VIDEO_ASAMASI = ["video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "onay", "onaylandi"];
@@ -1582,8 +1642,8 @@ export async function takipcileriBirak(env, lider, simdi) {
     const x = await oku(env, `pelin:is:${tid}`, null);
     if (!x || x.durum !== "grup_bekle") continue;
     if (iptal) Object.assign(x, { durum: "iptal" });
-    else Object.assign(x, { durum: "video_gonder", foto: lider.foto, sahne: lider.sahne || null, videoOrtam: lider.videoOrtam, ortam: lider.ortam, fotoKontrol: lider.fotoKontrol, sahneKontrol: lider.sahneKontrol || null, senaryo: lider.senaryo, notlar: lider.notlar || [], fotoDeneme: lider.fotoDeneme, sahneDeneme: lider.sahneDeneme || 0, stil: lider.stil, patronOnay: lider.patronOnay || [] });
-    x.gecmis = [...(x.gecmis || []), [simdi, iptal ? "lider iptal → iptal" : `liderin fotoğrafı ve senaryosu alındı → ${ARACLAR[x.arac].ad} ile video`]];
+    else Object.assign(x, { durum: "video_gonder", foto: lider.foto, sahne: lider.sahne || null, videoOrtam: lider.videoOrtam, ortam: lider.ortam, fotoKontrol: lider.fotoKontrol, sahneKontrol: lider.sahneKontrol || null, senaryo: x.kendiSenaryo ? x.senaryo : lider.senaryo, notlar: lider.notlar || [], fotoDeneme: lider.fotoDeneme, sahneDeneme: lider.sahneDeneme || 0, stil: lider.stil, patronOnay: lider.patronOnay || [] });
+    x.gecmis = [...(x.gecmis || []), [simdi, iptal ? "lider iptal → iptal" : `liderin fotoğrafı alındı → ${ARACLAR[x.arac].ad}${x.sablonKey ? ` · ${SABLON_SECENEK[x.sablonKey].ad}` : ""} ile video`]];
     await kaydet(env, `pelin:is:${tid}`, x);
     if (!liste.includes(tid)) liste.push(tid);
   }
@@ -1592,6 +1652,7 @@ export async function takipcileriBirak(env, lider, simdi) {
 }
 // Karşılaştırma grubu (aynı fotoğraf + aynı senaryo, farklı araç): hepsi bitince tek kart — Patron en gerçekçisini 🏆 ile seçer
 const BITMIS = ["onay", "uyari", "onaylandi", "iptal", "hata", "deneme_begenildi"];
+const grupEtiket = (x) => `${ARACLAR[x.arac].ad}${x.sablonKey && SABLON_SECENEK[x.sablonKey] ? ` · ${SABLON_SECENEK[x.sablonKey].ad}` : ""}`;
 async function grupOzeti(env, gid, simdi) {
   const g = await oku(env, `pelin:grup:${gid}`, null);
   if (!g || g.ozet) return;
@@ -1603,25 +1664,27 @@ async function grupOzeti(env, gid, simdi) {
   const videolu = isler.filter((x) => x.video);
   await yaz(env, murat(env), [
     `🏁 ${isler[0].kod} KARŞILAŞTIRMA — aynı fotoğraf, aynı senaryo, ${isler.length} araç:`,
-    ...isler.map((x, i) => `${harf[i]}) ${ARACLAR[x.arac].ad}${x.hfYedek ? ` (Higgsfield yerine fal yedeği)` : ""} — ${x.video ? `kontrol puanı ${puan(x)}${x.durum === "uyari" ? " ⚠️" : ""} · ${para(x.maliyet || 0)}` : "video üretilemedi"}`),
+    ...isler.map((x, i) => `${harf[i]}) ${grupEtiket(x)}${x.hfYedek ? ` (Higgsfield yerine fal yedeği)` : ""} — ${x.video ? `kontrol puanı ${puan(x)}${x.durum === "uyari" ? " ⚠️" : ""} · ${para(x.maliyet || 0)}` : "video üretilemedi"}`),
     `Toplam: ${para(isler.reduce((t, x) => t + (x.maliyet || 0), 0))}`,
     videolu.length ? "Videolar yukarıda ayrı ayrı geldi. En gerçekçisini 🏆 ile seçin (not edilir; varsayılan araç olmaz). Kanala/siteye göndermek ayrı: o videonun ✅ Onayla düğmesi." : "Hiçbir araç video üretemedi.",
-  ].join("\n"), videolu.length ? { reply_markup: { inline_keyboard: [...videolu.map((x) => [{ text: `🏆 ${harf[isler.indexOf(x)]}) ${ARACLAR[x.arac].ad}`, callback_data: `pg:${gid}:${x.arac}` }]), [{ text: "Hiçbiri olmadı", callback_data: `pg:${gid}:-` }]] } } : {});
+  ].join("\n"), videolu.length ? { reply_markup: { inline_keyboard: [...videolu.map((x) => [{ text: `🏆 ${harf[isler.indexOf(x)]}) ${grupEtiket(x)}`.slice(0, 60), callback_data: `pg:${gid}:${isler.indexOf(x)}` }]), [{ text: "Hiçbiri olmadı", callback_data: `pg:${gid}:-` }]] } } : {});
 }
 async function grupSecimDugmesi(env, cq, simdi) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   if (!muratMi(env, cq.from.id)) return cevap("Sadece Patron.");
-  const [, gid, arac] = cq.data.split(":");
+  const [, gid, deger] = cq.data.split(":");
   const g = await oku(env, `pelin:grup:${gid}`, null);
   if (!g || g.secim) return cevap("Bu seçim yapıldı ya da geçersiz.");
   const isler = await noraIsleri(env, gid);
+  const secilen = /^\d+$/.test(deger) ? isler[Number(deger)] : isler.find((x) => x.arac === deger);
+  const arac = deger === "-" ? "-" : secilen ? secilen.arac : deger;
   g.secim = { arac, zaman: simdi }; await kaydet(env, `pelin:grup:${gid}`, g, 30 * 86400);
   const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "pg:-" }]] } });
   await kaydet(env, "pelin:aracKarsilastirma", [...(await oku(env, "pelin:aracKarsilastirma", [])), { kod: isler[0] && isler[0].kod, grup: gid, araclar: isler.map((x) => x.arac), secilen: arac, zaman: simdi }].slice(-30));
   if (arac === "-" || !ARACLAR[arac]) { await cevap("Not edildi"); await kapat("Hiçbiri seçilmedi"); return yaz(env, murat(env), "Not ettim: bu karşılaştırmada hiçbiri yeterince gerçekçi değil. Varsayılan araç değişmedi. Ne eksikti, kısaca yazarsanız sonraki denemede düzeltirim."); }
-  if (isler[0]) await boyYaz(env, isler[0].kod, { enIyiArac: arac });
-  await cevap("Seçildi"); await kapat(`🏆 ${ARACLAR[arac].ad} seçildi`);
-  return yaz(env, murat(env), `🏆 ${ARACLAR[arac].ad} en gerçekçi olarak not edildi${isler[0] ? ` (${isler[0].kod} kartına)` : ""}. Varsayılan araç yok: her üretim kartında yine siz seçersiniz. Bu videoyu yayına göndermek için kendi ✅ Onayla düğmesi.`);
+  if (isler[0]) await boyYaz(env, isler[0].kod, { enIyiArac: arac, ...(secilen && secilen.sablonKey ? { enIyiSablon: secilen.sablonKey } : {}) });
+  await cevap("Seçildi"); await kapat(`🏆 ${secilen ? grupEtiket(secilen) : ARACLAR[arac].ad} seçildi`);
+  return yaz(env, murat(env), `🏆 ${secilen ? grupEtiket(secilen) : ARACLAR[arac].ad} en gerçekçi olarak not edildi${isler[0] ? ` (${isler[0].kod} kartına)` : ""}. Varsayılan araç yok: her üretim kartında yine siz seçersiniz. Bu videoyu yayına göndermek için kendi ✅ Onayla düğmesi.`);
 }
 async function testRaporu(env, liste) {
   const testler = new Set();
