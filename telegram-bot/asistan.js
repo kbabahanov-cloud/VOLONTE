@@ -83,7 +83,8 @@ const ARACLAR = [
 ].map((t) => ({ ...t, strict: true }));
 
 // yardimci: worker.js'in verdiği, araçları gerçekten çalıştıran fonksiyonlar.
-export async function asistanCevapla(msg, env, yardimci, simdi) {
+// secenek (4 Kasım, ofis sesli konuşma): { model } beyin seçimi (ofis: Sonnet), { kullanim(model, usage) } maliyet takibi
+export async function asistanCevapla(msg, env, yardimci, simdi, secenek = {}) {
   const sohbet = msg.chat.id;
   const yaz = (text) => yardimci.gonder(sohbet, text);
   if (!env.ANTHROPIC_API_KEY) {
@@ -107,7 +108,7 @@ export async function asistanCevapla(msg, env, yardimci, simdi) {
   let cevap = "";
   try {
     for (let tur = 0; tur < EN_FAZLA_TUR; tur++) {
-      const model = env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;
+      const model = secenek.model || env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;
       const response = await client.beta.messages.create({
         model,
         max_tokens: 4000,
@@ -119,6 +120,7 @@ export async function asistanCevapla(msg, env, yardimci, simdi) {
         messages,
       });
       await harcamaEkle(env, model, response.usage, simdi);
+      if (secenek.kullanim) secenek.kullanim(model, response.usage || {});
 
       if (response.stop_reason === "refusal") {
         cevap = "Bu isteğe cevap veremiyorum. Başka türlü sorabilir misiniz?";

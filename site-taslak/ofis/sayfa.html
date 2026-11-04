@@ -98,6 +98,15 @@ text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill
 .kutuM .alt{color:var(--sol);font-size:11px;letter-spacing:.2em;margin-bottom:14px}
 .kutuM .satir{justify-content:flex-end}
 .kutuM.acilK{border-color:#ff4d4d}
+.sohbetK{display:flex;flex-direction:column;height:min(78dvh,640px)}
+.sohbetL{flex:1;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:8px}
+.msj{max-width:85%;padding:9px 12px;border-radius:10px;font-size:14px;line-height:1.45;white-space:pre-wrap}
+.msj.ben{align-self:flex-end;background:#2a2113;border:1px solid #5a4620}
+.msj.bot{align-self:flex-start;background:#0f1418;border:1px solid #1d3a4a}
+.msj small{display:block;color:var(--sol);font-size:10.5px;margin-top:4px}
+.sohbetG{display:flex;gap:6px;margin-top:10px}
+.sohbetG input{flex:1;background:#000;border:1px solid var(--cizgi);color:var(--yazi);padding:10px;font-size:15px}
+.mik.dinliyor{background:#5a1010;border-color:#ff4d4d;color:#fff;animation:nefes 1s infinite}
 .kutuM.acilK h2{color:#ff6b6b}
 @media (max-width:900px){
   body{grid-template-rows:48px 1fr}
@@ -492,11 +501,64 @@ function ayrintiAc(id) {
     <h3 style="font:400 10px Georgia,serif;letter-spacing:.25em;color:var(--altin);margin:10px 0 4px">SON 5 İŞ</h3>
     ${((veri.son5 || {})[id] || []).map((x) => `<div class="sayi"><span style="max-width:75%">${kacir(x.metin)}</span><b style="font-weight:400">${x.zaman ? saatYaz(x.zaman) : ""}</b></div>`).join("") || '<div class="bos">kayıt yok</div>'}
     ${link ? `<p><a href="${link}" target="_blank" rel="noopener">Telegram'da ${KAR[id].ad} ile konuş →</a></p>` : ""}
-    <p class="not">Sesli/yazılı konuşma (Aşama 2) henüz bağlı değil — ayrı onayla eklenecek.</p>`;
+    ${(veri.sohbet && veri.sohbet.acik || []).includes(id) ? `<p><button class="b" style="border-color:var(--altin);color:var(--altin2)" onclick="sohbetAc('${id}')">💬 ${KAR[id].ad} ile konuş (sesli / yazılı)</button></p>` : `<p class="not">Sesli/yazılı konuşma: önce Kemal'le deneniyor; ${KAR[id].ad} için yakında.</p>`}`;
   $("#ayrinti").style.display = "block";
 }
 $("#ayrintiKapat").onclick = () => { $("#ayrinti").style.display = "none"; aktifAyrinti = null; };
 $("#odaPatron").addEventListener("click", () => sekme("onaylar"));
+// --- SESLİ / YAZILI KONUŞMA (Kemal ile başlıyor) ---
+const sohbetGecmis = {};
+let sohbetBot = null, sesAcik = true, tanima = null;
+function sohbetAc(id) {
+  sohbetBot = id; sohbetGecmis[id] = sohbetGecmis[id] || [];
+  const s = veri && veri.sohbet ? veri.sohbet : { bugun: 0, sinir: 2 };
+  modal(`<div class="sohbetK"><h2>${KAR[id].ad.toUpperCase()}</h2><div class="alt">SESLİ / YAZILI · BEYİN SONNET · HARCAYAN İŞLER TELEGRAM KARTINA DÜŞER</div>
+    <div class="sohbetL" id="sohbetL"></div>
+    <div class="not" id="sohbetMaliyet">Bugün konuşma: ${para(s.bugun)} / ${s.sinir} $</div>
+    <div class="sohbetG"><button class="b mik" id="bMik" title="Basılı değil: tıkla, konuş">🎤</button><input id="sohbetYazi" placeholder="Yazın ya da 🎤 ile konuşun…" autocomplete="off"><button class="b" id="bGonder">Gönder</button><button class="b" id="bSes" title="Cevabı sesli oku">${sesAcik ? "🔊" : "🔇"}</button><button class="b" onclick="modalKapat()">×</button></div></div>`);
+  sohbetCiz();
+  $("#bGonder").onclick = () => sohbetGonder($("#sohbetYazi").value);
+  $("#sohbetYazi").onkeydown = (e) => { if (e.key === "Enter") sohbetGonder(e.target.value); };
+  $("#bSes").onclick = () => { sesAcik = !sesAcik; $("#bSes").textContent = sesAcik ? "🔊" : "🔇"; if (!sesAcik) speechSynthesis.cancel(); };
+  $("#bMik").onclick = dinle;
+  setTimeout(() => $("#sohbetYazi").focus(), 50);
+}
+function sohbetCiz() {
+  const l = $("#sohbetL"); if (!l) return;
+  l.innerHTML = (sohbetGecmis[sohbetBot] || []).map((m) => `<div class="msj ${m.kim}">${kacir(m.metin)}${m.not ? `<small>${kacir(m.not)}</small>` : ""}</div>`).join("") || `<div class="bos">${KAR[sohbetBot].ad}'e bir şey sorun: "bugün kaç paylaşım var?", "sırada ne var?", "3627'yi paylaşmak için önizleme gönder"</div>`;
+  l.scrollTop = l.scrollHeight;
+}
+async function sohbetGonder(metin) {
+  metin = String(metin || "").trim(); if (!metin || !sohbetBot) return;
+  const g = sohbetGecmis[sohbetBot]; g.push({ kim: "ben", metin }); g.push({ kim: "bot", metin: "…", not: "düşünüyor" });
+  if ($("#sohbetYazi")) $("#sohbetYazi").value = ""; sohbetCiz();
+  const r = await fetch("/api/sohbet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bot: sohbetBot, metin }) }).then((x) => x.json()).catch(() => ({ hata: "bağlantı yok" }));
+  g.pop();
+  if (r.hata) g.push({ kim: "bot", metin: `⚠️ ${r.hata}` });
+  else { g.push({ kim: "bot", metin: r.cevap, not: `bu mesaj ${para(r.maliyet)} · bugün ${para(r.bugun)} / ${r.sinir} $` }); konus(r.cevap); }
+  if (r.bugun != null && $("#sohbetMaliyet")) $("#sohbetMaliyet").textContent = `Bugün konuşma: ${para(r.bugun)} / ${r.sinir} $`;
+  sohbetCiz();
+}
+function konus(metin) {
+  if (!sesAcik || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(String(metin).replace(/[*_#>`]/g, "").slice(0, 900));
+  u.lang = "tr-TR"; const v = speechSynthesis.getVoices().find((x) => /^tr/i.test(x.lang)); if (v) u.voice = v; u.rate = 1.02;
+  speechSynthesis.speak(u);
+}
+function dinle() {
+  const T = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!T) { alert("Bu tarayıcı sesli girişi desteklemiyor (Chrome önerilir). Yazarak konuşabilirsiniz."); return; }
+  if (tanima) { tanima.stop(); return; }
+  speechSynthesis.cancel();
+  tanima = new T(); tanima.lang = "tr-TR"; tanima.interimResults = true; tanima.maxAlternatives = 1;
+  $("#bMik").classList.add("dinliyor");
+  let son = "";
+  tanima.onresult = (e) => { son = [...e.results].map((x) => x[0].transcript).join(" "); $("#sohbetYazi").value = son; };
+  tanima.onend = () => { $("#bMik") && $("#bMik").classList.remove("dinliyor"); tanima = null; if (son.trim()) sohbetGonder(son); };
+  tanima.onerror = () => { $("#bMik") && $("#bMik").classList.remove("dinliyor"); };
+  tanima.start();
+}
 // --- sekmeler ---
 function sekme(ad) { document.querySelectorAll(".sekmeler button").forEach((b) => b.classList.toggle("acik", b.dataset.s === ad)); document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("acik", p.id === `p-${ad}`)); }
 document.querySelectorAll(".sekmeler button").forEach((b) => (b.onclick = () => sekme(b.dataset.s)));

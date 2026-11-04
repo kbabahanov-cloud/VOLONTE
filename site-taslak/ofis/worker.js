@@ -40,7 +40,7 @@ async function stok(env, yol, g = {}) {
 }
 const kuyruk = async (env, ad) => { const r = await stok(env, "/ayar-oku", { k: `kuyruk:${ad}` }); try { const l = JSON.parse((r && r.v) || "[]"); return Array.isArray(l) ? l : []; } catch { return []; } };
 const hataKaydi = (h, simdi) => (h && h.zaman && simdi - h.zaman < 2 * 3600 ? { zaman: h.zaman, metin: String(h.hata || h.metin || "").replace(/\d{9,}/g, "•••").slice(0, 160) } : null);
-const temiz = (s) => String(s || "").replace(/\d{9,}/g, "•••").replace(/\+?\d[\d ]{8,}\d/g, "•••").slice(0, 200); // kimlik/numara sızmasın
+const temiz = (s, n = 200) => String(s || "").replace(/\d{9,}/g, "•••").replace(/\+?\d[\d ]{8,}\d/g, "•••").slice(0, n); // kimlik/numara sızmasın
 
 // ---------- Canlı durum ----------
 async function durum(env, simdi) {
@@ -169,6 +169,7 @@ async function durum(env, simdi) {
       venom: { isler: venomIsler, harcama: sayi(venomHarcama), sinir: sayi(venomSinir) || 30 },
     },
     raporlar: { kemal: rKemal, sami: rSami, selin: rSelin },
+    sohbet: { bugun: sayi(await env.KAYIT.get(`ofis:sohbetUsd:${bugun}`)), sinir: SOHBET_GUNLUK_USD, acik: Object.keys(SOHBET_BOTLARI) },
     acil: { bagli: false, not: "Aşama 1: ACİL DURDUR bağlı değil (sadece izleme). Aşama 2'de botlar bu düğmeyle duraklatılacak." },
   };
 }
@@ -200,6 +201,30 @@ async function gecmis(env, g, simdi) {
   return { gun: g, olaylar: liste, satis: { volonte: Array.isArray(satisV) ? satisV.reduce((t, x) => t + x.satilan, 0) : null, blackrose: Array.isArray(satisB) ? satisB.reduce((t, x) => t + x.satilan, 0) : null }, raporlar };
 }
 
+// ---------- SESLİ/YAZILI KONUŞMA (4 Kasım, Patron onaylı) ----------
+// Bot ucuna servis bağlantısıyla (internete açık değil) + gizli OFIS_KOPRU anahtarıyla gidilir; Patron çerezi şart.
+// Sadece bilgi ve komut: para harcayan / kanala giden işler botun Telegram onay kartına düşer. Günlük konuşma sınırı 2 $.
+const SOHBET_GUNLUK_USD = 2;
+const SOHBET_BOTLARI = { kemal: { baglanti: "KEMAL", yol: "https://kemal/ofis-sohbet" } }; // önce Kemal; çalışınca diğerleri
+async function sohbetEt(istek, env, simdi) {
+  const g = await istek.json().catch(() => ({}));
+  const bot = String(g.bot || ""), metin = String(g.metin || "").trim().slice(0, 2000);
+  const b = SOHBET_BOTLARI[bot];
+  if (!b) return json({ hata: "Bu botla konuşma henüz açılmadı (önce Kemal deneniyor)." });
+  if (!metin) return json({ hata: "Boş mesaj." });
+  if (!env[b.baglanti] || !env.OFIS_KOPRU) return json({ hata: "Bot bağlantısı kurulmamış." });
+  const gk = `ofis:sohbetUsd:${gun(simdi)}`;
+  const bugun = sayi(await env.KAYIT.get(gk));
+  if (bugun >= SOHBET_GUNLUK_USD) return json({ hata: `Bugünkü konuşma sınırı (${SOHBET_GUNLUK_USD} $) doldu. Telegram'dan devam edebilirsiniz.`, bugun, sinir: SOHBET_GUNLUK_USD });
+  const r = await env[b.baglanti].fetch(b.yol, { method: "POST", headers: { "content-type": "application/json", "X-Ofis-Anahtar": String(env.OFIS_KOPRU) }, body: JSON.stringify({ metin }) }).catch((e) => ({ ok: false, status: 0, hata: String(e.message) }));
+  if (!r.ok) return json({ hata: `Bot cevap vermedi (${r.status || r.hata}).` });
+  const c = await r.json().catch(() => ({}));
+  const maliyet = sayi(c.maliyet);
+  const yeni = Math.round((bugun + maliyet) * 10000) / 10000;
+  await env.KAYIT.put(gk, String(yeni), { expirationTtl: 3 * 86400 });
+  return json({ cevap: temiz(String(c.cevap || c.hata || "…"), 3000) || "…", maliyet, bugun: yeni, sinir: SOHBET_GUNLUK_USD, model: c.model || null });
+}
+
 const GIRIS = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>VOLONTE Ofis</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#050505;color:#e8dcc0;font-family:Georgia,"Times New Roman",serif}form{width:min(92vw,360px);padding:36px 28px;border:1px solid #6b5a2a;background:linear-gradient(180deg,#0d0b07,#070604);box-shadow:0 0 60px rgba(201,162,74,.15)}h1{font-weight:400;letter-spacing:.35em;text-align:center;margin:0 0 4px;color:#c9a24a;font-size:22px}p{text-align:center;margin:0 0 24px;font-size:12px;letter-spacing:.2em;color:#8a7a52}input{width:100%;box-sizing:border-box;padding:12px;background:#000;border:1px solid #3d3417;color:#f3e9d2;font-size:18px;letter-spacing:.3em;text-align:center}button{width:100%;margin-top:14px;padding:12px;background:#c9a24a;border:0;color:#120e05;font-weight:700;letter-spacing:.2em;cursor:pointer}.h{color:#d66;text-align:center;font-size:13px;margin-top:10px}</style></head>
 <body><form method="post" action="/giris"><h1>VOLONTE</h1><p>SANAL OFİS · SADECE PATRON</p><input name="sifre" type="password" autocomplete="current-password" placeholder="şifre" autofocus required><button>GİRİŞ</button>%HATA%</form></body></html>`;
@@ -219,6 +244,12 @@ export default {
       if (!env.OFIS_SIFRE || !esit(sade(s), sade(env.OFIS_SIFRE))) { await env.KAYIT.put("ofis:deneme", String(deneme + 1), { expirationTtl: 900 }); return new Response(GIRIS.replace("%HATA%", '<div class="h">Şifre yanlış.</div>'), { status: 401, headers: basliklar }); }
       const c = await imza(env, "ofis-giris-v1");
       return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `ofis=${c}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax` } });
+    }
+    if (url.pathname === "/api/sohbet" && istek.method === "POST") {
+      if (!(await girisli(istek, env))) return new Response(JSON.stringify({ hata: "giriş gerekli" }), { status: 401, headers: { "content-type": "application/json; charset=utf-8" } });
+      const kaynak = istek.headers.get("origin");
+      if (kaynak && kaynak !== url.origin) return new Response(JSON.stringify({ hata: "izin yok" }), { status: 403, headers: { "content-type": "application/json; charset=utf-8" } });
+      try { return await sohbetEt(istek, env, simdi); } catch (e) { return json({ hata: String(e && e.message).slice(0, 200) }); }
     }
     if (url.pathname === "/cikis") return new Response(null, { status: 303, headers: { location: "/", "set-cookie": "ofis=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax" } });
     if (istek.method !== "GET") return new Response("yok", { status: 405 });

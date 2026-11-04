@@ -1870,3 +1870,25 @@ test("Pelin teslim (4 Kasım): onaylı Pelin videosu kanala (video ilk, fiyat yo
   assert.deepEqual(site.map((x) => [x.kod, x.kanal, typeof x.videoMesaj]), [["3403", "Volonteroseoffical", "number"]]);
   assert.equal((await kuyruguAl(o.env, "pelinKanal")).length, 0); // iki kez paylaşılmaz
 });
+
+// ---------- Ofis sesli konuşma ucu (4 Kasım) ----------
+test("ofis konuşma ucu: anahtarsız 401; Patron adına Kemal'in beyni (Sonnet) cevap verir, cevap ofise döner (Telegram'a gitmez), maliyet hesaplanır; onay düğmesi yine Telegram'a", async () => {
+  const o = asistanOrtami([
+    { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "durum_ozeti", input: {} }], usage: { input_tokens: 1000, output_tokens: 100 } },
+    { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", content: [{ type: "text", text: "Bugün **3** paylaşım yaptık." }], usage: { input_tokens: 2000, output_tokens: 200 } },
+  ]);
+  o.env.OFIS_KOPRU = "kopru-anahtar";
+  o.env.MURAT_ID = "999,111";
+  const iste = (anahtar) => worker.fetch(new Request("https://x/ofis-sohbet", { method: "POST", headers: anahtar ? { "X-Ofis-Anahtar": anahtar } : {}, body: JSON.stringify({ metin: "bugün kaç paylaşım var?" }) }), o.env);
+  assert.equal((await iste(null)).status, 401);
+  assert.equal((await iste("yanlis")).status, 401);
+  const once = cagrilar(o.gonderilen, "sendMessage").length;
+  const r = await (await iste("kopru-anahtar")).json();
+  assert.equal(r.cevap, "Bugün 3 paylaşım yaptık."); // düz metin (sesli okumaya uygun)
+  assert.equal(r.model, "claude-sonnet-5-5");
+  assert.equal(r.maliyet, 0.009); // (3000×2 + 300×10) / 1e6
+  assert.equal(o.istekler[0].model, "claude-sonnet-5-5");
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").length, once); // cevap Telegram'a gitmedi
+  assert.match(JSON.stringify(o.istekler[0].messages), /Ofisten, sesli\/yazılı konuşma/);
+  assert.ok(!o.istekler[0].tools.some((t) => /paylas$|^sil$/.test(t.name))); // kanala doğrudan paylaşma/silme aracı yok
+});

@@ -30,6 +30,7 @@ cat > "$META" <<JSON
 {"main_module":"ofis.js","compatibility_date":"2026-10-01","keep_bindings":["secret_text"],
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"$KV"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
+             {"type":"service","name":"KEMAL","service":"volonte-asistan"},
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-ofis.volonte.workers.dev"}$GIZLI]}
 JSON
 for bekle in 0 4 8; do

@@ -101,6 +101,13 @@ export default {
       else await guncellemeIsle(update, env);
       return new Response("ok");
     }
+    // OFİS SESLİ KONUŞMA (4 Kasım, Patron): sadece volonte-ofis çağırır (gizli OFIS_KOPRU; ofis Patron şifresini kontrol eder)
+    if (request.method === "POST" && url.pathname === "/ofis-sohbet") {
+      if (!env.OFIS_KOPRU || !gizliEsit(request.headers.get("X-Ofis-Anahtar") || "", String(env.OFIS_KOPRU))) return new Response("yetkisiz", { status: 401 });
+      const govde = await request.text();
+      if (env.KATALOG) return kemalNesne(env).fetch("https://kemal/kemal/ofis-sohbet", { method: "POST", body: govde });
+      return Response.json(await ofisSohbet(env, JSON.parse(govde), Math.floor(Date.now() / 1000)));
+    }
     if (request.method === "POST" && url.pathname === "/kopru") return kopruAl(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/satis") return kopruSatis(request, env);
     if (request.method === "POST" && url.pathname === "/kopru/cari") return kopruCari(request, env);
@@ -2312,6 +2319,7 @@ export class KatalogDO {
     await gocBirKez(this.state, this.env.KAYIT, KEMAL_YEREL, "kemal"); // ilk seferde KV'den kopyala + kontrol (silmez)
     const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, KEMAL_YEREL), KEMAL_ICERDE: true };
     const simdi = Math.floor(Date.now() / 1000);
+    if (yol === "/kemal/ofis-sohbet") return Response.json(await ofisSohbet(env, await istek.json(), simdi));
     if (yol === "/kemal/guncelleme") await guncellemeIsle(await istek.json(), env);
     else if (yol === "/kemal/cron") {
       await durumKontrol(env);
@@ -2328,6 +2336,21 @@ export class KatalogDO {
   }
 }
 
+// Ofisten (Patron) Kemal'le konuşma: Kemal'in aynı beyni ve araçları; cevap ofise döner. Araçların onay düğmeleri (paylaşım,
+// silme, alt yazı) yine Patron'un TELEGRAM sohbetine gider — ofisten doğrudan kanal işlemi/harcama yok. Beyin: Sonnet.
+const OFIS_MODEL = "claude-sonnet-5-5";
+const OFIS_FIYAT = { giris: 2, cikis: 10, okuma: 0.2 }; // $/milyon token (Sonnet)
+export async function ofisSohbet(env, g, simdi) {
+  const metin = String((g && g.metin) || "").trim().slice(0, 2000);
+  if (!metin) return { hata: "boş mesaj" };
+  const patron = String(env.MURAT_ID || "").split(",")[0].trim();
+  if (!patron) return { hata: "Patron kimliği yok" };
+  let cevap = "", usd = 0;
+  const y = { ...asistanYardimcilari(env), gonder: async (_s, text) => { cevap = String(text); return { ok: true }; }, gonderBicimli: async (_s, _html, duz) => { cevap = String(duz); return { ok: true }; }, yaziyor: async () => ({ ok: true }) };
+  const msg = { chat: { id: patron }, from: { id: patron, first_name: "Patron" }, text: `${metin}\n(Ofisten, sesli/yazılı konuşma)` };
+  await asistanCevapla(msg, env, y, simdi, { model: OFIS_MODEL, kullanim: (_m, u) => { usd += ((u.input_tokens || 0) * OFIS_FIYAT.giris + (u.cache_creation_input_tokens || 0) * OFIS_FIYAT.giris * 1.25 + (u.cache_read_input_tokens || 0) * OFIS_FIYAT.okuma + (u.output_tokens || 0) * OFIS_FIYAT.cikis) / 1e6; } });
+  return { cevap: cevap || "Tamam.", maliyet: Math.round(usd * 10000) / 10000, model: OFIS_MODEL };
+}
 const kemalNesne = (env) => env.KATALOG.get(env.KATALOG.idFromName("kemal"), { locationHint: "enam" });
 
 const sabitNesne = (env) => env.KATALOG.get(env.KATALOG.idFromName("katalog"), { locationHint: "enam" });
