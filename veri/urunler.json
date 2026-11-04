@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3205",
+  "baslik": "Crystal Button Batwing Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a relaxed, oversized V-neck top with a floor-length mermaid skirt. Wide batwing sleeves and three crystal statement buttons down the front give the look its quiet drama, while the skirt follows the body before softly flaring at the hem. Made for evening events, celebrations and special occasions. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut ample à col en V et une jupe longue sirène. Les larges manches chauve-souris et les trois boutons bijoux en cristal sur le devant apportent une élégance affirmée, tandis que la jupe épouse la silhouette avant de s'évaser doucement en bas. Idéal pour les soirées, les cérémonies et les grandes occasions. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa ampla com decote em V e uma saia longa sereia. As mangas morcego largas e os três botões de cristal na frente trazem um toque marcante, enquanto a saia acompanha o corpo e abre suavemente na barra. Perfeito para eventos noturnos, celebrações e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3205/1.jpg",
+   "galeri/3205/2.jpg",
+   "galeri/3205/3.jpg",
+   "galeri/3205/4.jpg"
+  ],
+  "videolar": [
+   "selin/3205/0",
+   "selin/3205/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3194",
   "baslik": "Piped Shirt Trouser Set",
   "kategori": "sets",
