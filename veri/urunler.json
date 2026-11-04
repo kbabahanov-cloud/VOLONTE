@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3199",
+  "baslik": "Belted Vest Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a longline sleeveless vest with slim straight-leg trousers. The vest has a stand collar, an asymmetric line of metal eyelet buttons, a belt with D-ring that starts beneath a button, a flap pocket and a front slit. Wear it over a crisp shirt for the office or alone for a polished evening look. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces qui associe un gilet long sans manches à un pantalon droit et ajusté. Le gilet se distingue par son col montant, sa ligne asymétrique de boutons à œillets métalliques, sa ceinture à boucle en D partant sous un bouton, sa poche à rabat et sa fente devant. À porter sur une chemise au bureau ou seul pour une allure soignée en soirée. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que combina um colete comprido sem mangas com calça reta e ajustada. O colete tem gola alta, uma linha assimétrica de botões com ilhós metálicos, cinto com fivela em D que sai debaixo de um botão, bolso com pala e abertura frontal. Use sobre uma camisa no escritório ou sozinho para um visual elegante à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3199/1.jpg",
+   "galeri/3199/2.jpg",
+   "galeri/3199/3.jpg",
+   "galeri/3199/4.jpg",
+   "galeri/3199/5.jpg",
+   "galeri/3199/6.jpg"
+  ],
+  "videolar": [
+   "selin/3199/0",
+   "selin/3199/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3222",
   "baslik": "Fringe Trim Belted Suit",
   "kategori": "sets",
