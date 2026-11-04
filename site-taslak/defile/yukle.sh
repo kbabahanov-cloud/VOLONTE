@@ -17,6 +17,8 @@ fi
 python3 - <<'PY'
 import json, pathlib
 h = pathlib.Path("sayfa.html").read_text(encoding="utf-8")
+m = pathlib.Path("mankenler.json").read_text(encoding="utf-8") if pathlib.Path("mankenler.json").exists() else "[]"
+h = h.replace("/*MANKENLER*/[]", "/*MANKENLER*/" + json.dumps(json.loads(m), ensure_ascii=False))
 w = pathlib.Path("worker.js").read_text(encoding="utf-8").replace('import SAYFA from "./sayfa.html";', "const SAYFA = " + json.dumps(h, ensure_ascii=False) + ";")
 pathlib.Path("defile.js").write_text(w, encoding="utf-8")
 print("derlendi:", len(w.encode()), "bayt")
