@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3044",
+  "baslik": "Belted Floral Mermaid Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A fitted midi dress with a softly flared mermaid hem, cut from a smooth satin-finish fabric in a blush floral print. A high mock neck, fluttering ruffle sleeves and a matching belt with a round buckle define the silhouette. Suited to daytime events, ceremonies and elegant gatherings. Made in Istanbul with careful finishing.",
+   "fr": "Robe midi ajustée à l'ourlet sirène légèrement évasé, dans une matière à l'aspect satiné et un imprimé floral rose poudré. Col montant, manches volantées et ceinture assortie à boucle ronde dessinent une silhouette soignée. Idéale pour les cérémonies, les réceptions de journée et les occasions élégantes. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Vestido midi ajustado com barra sereia levemente evasê, em tecido de toque acetinado e estampa floral em tom rosado. Gola alta, mangas com babado e cinto do mesmo tecido com fivela redonda valorizam a silhueta. Perfeito para cerimônias, eventos diurnos e encontros elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3044/1.jpg",
+   "galeri/3044/2.jpg",
+   "galeri/3044/3.jpg",
+   "galeri/3044/4.jpg",
+   "galeri/3044/5.jpg"
+  ],
+  "videolar": [
+   "selin/3044/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3612",
   "baslik": "One-Shoulder Embellished Gown",
   "kategori": "evening",
