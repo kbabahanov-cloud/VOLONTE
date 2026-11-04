@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3187",
+  "baslik": "Two-Tone Pleated Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a two-tone black and white blouse with a high-waisted pleated midi skirt. The blouse features a pointed collar, full sleeves gathered into buttoned cuffs, and a gold chain with pearl drops at the neckline. Easy to wear to the office, meetings or daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un chemisier bicolore noir et blanc à une jupe midi plissée taille haute. Le chemisier se distingue par son col pointu, ses manches amples resserrées aux poignets boutonnés et sa chaîne dorée ornée de perles. Idéal pour le bureau, les rendez-vous ou les événements de journée. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa bicolor preta e branca com uma saia midi plissada de cintura alta. A blusa tem gola pontiaguda, mangas amplas com punhos abotoados e uma corrente dourada com pérolas no decote. Perfeito para o escritório, reuniões ou eventos durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3187/1.jpg",
+   "galeri/3187/2.jpg",
+   "galeri/3187/3.jpg",
+   "galeri/3187/4.jpg",
+   "galeri/3187/5.jpg",
+   "galeri/3187/6.jpg"
+  ],
+  "videolar": [
+   "selin/3187/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-04"
+ },
+ {
   "kod": "3052",
   "baslik": "Side Stripe Trouser Set",
   "kategori": "sets",
