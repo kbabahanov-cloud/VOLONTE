@@ -12,3 +12,21 @@ export function openaiFetch(env, yol, init = {}) {
   if (env.ANAHTAR) return env.ANAHTAR.fetch(`https://kopru/openai${yol}`, init);
   return Promise.resolve(new Response("anahtar yok", { status: 503 }));
 }
+// 6 Kasım (Venom "Invalid signature in thinking block" 400'ü): araç döngüsünde Claude'un düşünme blokları konuşmaya bağlıdır;
+// sistem metni/geçmiş istekler arasında değişirse API isteği REDDEDİYORDU → Patron'un mesajı cevapsız kalıyordu.
+// Artık: (1) eşleşmeyen düşünme bloğu hata yerine düşürülür (drop_block), (2) yine de imza hatası gelirse düşünme blokları
+// çıkarılıp bir kez daha denenir. Böylece mesaj asla bu sebeple cevapsız kalmaz.
+export const DUSUNME_BETA = "thinking-binding-controls-2026-08-01";
+const imzaHatasi = (e) => e && e.status === 400 && /signature/i.test(String(e.message || "")) && /thinking/i.test(String(e.message || ""));
+const betaYok = (e) => e && e.status === 400 && /thinking-binding-controls|block_binding|anthropic-beta|unexpected beta|unknown beta/i.test(String(e.message || "")) && !/signature/i.test(String(e.message || ""));
+export const dusunmesiz = (mesajlar) => mesajlar.map((m) => (Array.isArray(m.content) && m.role === "assistant" ? { ...m, content: m.content.filter((b) => b.type !== "thinking" && b.type !== "redacted_thinking") } : m));
+export async function claudeTur(client, istek) {
+  const beta = () => client.beta.messages.create({ ...istek, betas: [DUSUNME_BETA], thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } } });
+  try { return await beta(); } catch (e) {
+    if (betaYok(e)) { // beta kapalıysa eski çağrı, imza hatasında düşünmesiz tekrar
+      try { return await client.messages.create(istek); } catch (e2) { if (imzaHatasi(e2)) return client.messages.create({ ...istek, messages: dusunmesiz(istek.messages) }); throw e2; }
+    }
+    if (imzaHatasi(e)) return client.beta.messages.create({ ...istek, betas: [DUSUNME_BETA], messages: dusunmesiz(istek.messages) });
+    throw e;
+  }
+}

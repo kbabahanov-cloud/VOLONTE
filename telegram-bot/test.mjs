@@ -2053,3 +2053,47 @@ test("YENİ RENK (6 Kasım): modelin rengi sitede ve kanal geçmişinde yoksa ba
   assert.equal(await yeniRenkMi(o.env, "3627", "beyaz"), false);
   assert.match(altYazi({ kod: "3627", durum: "yenirenk", renkler: ["white"], renkEmin: true, bedenler: "38-40-42-44", en: "Dress.", fr: "Robe.", marka: "BLACKROSE" }), /^🎨 NEW COLOR \/ NOUVELLE COULEUR/);
 });
+
+test("6 Kasım: Black Rose imzası düzeltme — sadece imza değişir, biçim kaymaz, imza yoksa null", async () => {
+  const { imzaDegistir } = await import("./worker.js");
+  const yazi = "👗 Code 3627\nColors: Black\n\nVOLONTE – Premium Women's Fashion\n#new";
+  const ent = [{ type: "bold", offset: 0, length: 12 }, { type: "italic", offset: 28, length: 33 }, { type: "hashtag", offset: 62, length: 4 }];
+  const d = imzaDegistir(yazi, ent);
+  assert.equal(d.yazi, "👗 Code 3627\nColors: Black\n\nBLACK ROSE – Premium Women's Fashion\n#new");
+  assert.deepEqual(d.entities, [{ type: "bold", offset: 0, length: 12 }, { type: "italic", offset: 28, length: 36 }, { type: "hashtag", offset: 65, length: 4 }]);
+  assert.equal(d.yazi.slice(65, 69), "#new");
+  assert.equal(d.yazi.slice(28, 64), "BLACK ROSE – Premium Women's Fashion");
+  assert.equal(imzaDegistir("BLACK ROSE – Premium Women's Fashion", null), null);
+  assert.equal(imzaDegistir("VOLONTE – Premium", undefined).entities, null);
+});
+
+test("6 Kasım: imza düzeltme turu — caption düzenlenir (medya yok), silinmez; düzenlenemeyen listelenir", async () => {
+  const { fabrikaIsleri } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  Object.assign(o.env, { MURAT_ID: "999" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("venom:kanalImzaDuzelt", JSON.stringify({ liste: [{ kod: "3627", id: 501, link: "t.me/x/501" }, { kod: "3148", id: 502, link: "t.me/x/502" }, { kod: "3246", id: 503, link: "t.me/x/503" }] }));
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url), g = istek && typeof istek.body === "string" ? JSON.parse(istek.body) : {};
+    if (adres.endsWith("/forwardMessage")) {
+      if (g.message_id === 503) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message to forward not found" }));
+      o.gonderilen.push({ url: adres, govde: g });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 9000 + g.message_id, caption: "Code 3627\nVOLONTE – Premium Women's Fashion", caption_entities: [{ type: "bold", offset: 0, length: 9 }, { type: "italic", offset: 10, length: 33 }] } }));
+    }
+    if (adres.endsWith("/editMessageCaption") && g.message_id === 502) { o.gonderilen.push({ url: adres, govde: g }); return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be edited" })); }
+    return tg(url, istek);
+  };
+  await fabrikaIsleri(o.env, o.simdi);
+  const duz = cagrilar(o.gonderilen, "editMessageCaption").map((x) => x.govde);
+  assert.equal(duz.length, 2);
+  assert.deepEqual(duz[0], { chat_id: -100, message_id: 501, caption: "Code 3627\nBLACK ROSE – Premium Women's Fashion", caption_entities: [{ type: "bold", offset: 0, length: 9 }, { type: "italic", offset: 10, length: 36 }] });
+  assert.ok(!cagrilar(o.gonderilen, "deleteMessage").some((x) => x.govde.chat_id === -100)); // kanaldan HİÇBİR ŞEY silinmez
+  assert.ok(!cagrilar(o.gonderilen, "editMessageMedia").length);
+  assert.ok(!o.depo.has("venom:kanalImzaDuzelt"));
+  const { kuyruguAl } = await import("./venom-kopru.js");
+  const s = (await kuyruguAl(o.env, "sonuc")).find((x) => String(x.id).startsWith("kid-"));
+  assert.match(s.aciklama, /^🖋 İmza düzeltme bitti: 1 gönderi "BLACK ROSE – Premium Women's Fashion" yapıldı \(hiçbiri silinmedi\)\./);
+  assert.match(s.aciklama, /❌ Düzenlenemeyen 2:\n1\. 3148 t\.me\/x\/502 — Telegram: Bad Request: message can't be edited\n2\. 3246 t\.me\/x\/503 — kanalda bulunamadı/);
+});

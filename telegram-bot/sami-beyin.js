@@ -8,6 +8,7 @@
 
 import { ORTAK_KURALLAR } from "./kurallar.js";
 import Anthropic from "@anthropic-ai/sdk";
+import { claudeTur } from "./ai-istemci.js";
 import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
@@ -131,7 +132,7 @@ export async function beyinCevapla(env, m, tg, simdi, { cikti = false } = {}) {
   let cevap = "";
   try {
     for (let t = 0; t < EN_FAZLA_TUR; t++) {
-      const r = await client.messages.create({ model: env.SAMI_MODEL || BEYIN_MODEL, max_tokens: 2000, system: sistem, tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
+      const r = await claudeTur(client, { model: env.SAMI_MODEL || BEYIN_MODEL, max_tokens: 2000, system: sistem, tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
       await harcamaEkle(env, r.usage || {}, simdi, tg);
       if (r.stop_reason === "refusal") { cevap = "Bunu yapamıyorum."; break; }
       const metin = r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();

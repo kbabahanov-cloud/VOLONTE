@@ -20,6 +20,7 @@ import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { ORTAK_KURALLAR } from "./kurallar.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
+import { claudeTur } from "./ai-istemci.js";
 import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
@@ -850,7 +851,7 @@ async function sohbet(env, m, simdi) {
   const sistem = [{ type: "text", text: SISTEM, cache_control: { type: "ephemeral" } }, { type: "text", text: `Şu anki durum: ${await durumMetni(env, simdi)}\nKonuşan: ${m.from.first_name || ""} (${yonetici(env, m.from.id) ? "yönetici" : "ekip"}).${kartBolumu}` }];
   let cevapMetni = "";
   for (let tur = 0; tur < 4; tur++) {
-    const r = await client.messages.create({ model, max_tokens: 2000, system: sistem, tools: SOHBET_ARACLARI, output_config: { effort: "low" }, messages: mesajlar });
+    const r = await claudeTur(client, { model, max_tokens: 2000, system: sistem, tools: SOHBET_ARACLARI, output_config: { effort: "low" }, messages: mesajlar });
     await claudeHarcama(env, model, r.usage || {}, simdi);
     const metin = r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     const araclar = r.content.filter((b) => b.type === "tool_use");

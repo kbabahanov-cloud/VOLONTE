@@ -681,3 +681,29 @@ test("DEFTER + TABLO (6 Kasım): Telegram'da tablo düz numaralı listeye döner
   assert.ok(!/\?/.test(v.replace(/eklenme \?/g, "")));
   assert.match(await defterMetni(o.env, { kod: "3627" }), /3627 — BLACK ROSE · renk: siyah, koyu bordo, beyaz · 12 foto · 4 video/);
 });
+
+test("6 Kasım: düşünme imzası hatası — drop_block beta, yine de hata gelirse düşünmesiz tekrar (mesaj cevapsız kalmaz)", async () => {
+  const { claudeTur, DUSUNME_BETA } = await import("./ai-istemci.js");
+  const istekler = [];
+  const hata = (m) => Object.assign(new Error(m), { status: 400 });
+  const msj = [{ role: "user", content: "a" }, { role: "assistant", content: [{ type: "thinking", thinking: "x", signature: "s" }, { type: "tool_use", id: "t1", name: "n", input: {} }] }, { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] }];
+  const client = (sira) => ({ beta: { messages: { create: async (p) => { istekler.push({ beta: true, p }); const s = sira.shift(); if (s) throw s; return { content: [{ type: "text", text: "tamam" }] }; } } }, messages: { create: async (p) => { istekler.push({ beta: false, p }); const s = sira.shift(); if (s) throw s; return { content: [{ type: "text", text: "tamam" }] }; } } });
+  // normal: beta + drop_block
+  let r = await claudeTur(client([]), { model: "m", messages: msj });
+  assert.equal(r.content[0].text, "tamam");
+  assert.deepEqual(istekler[0].p.betas, [DUSUNME_BETA]);
+  assert.equal(istekler[0].p.thinking.block_binding.prefix_mismatch_behavior, "drop_block");
+  // imza hatası → düşünme blokları çıkarılıp tekrar
+  istekler.length = 0;
+  r = await claudeTur(client([hata("messages.3.content.0: Invalid `signature` in `thinking` block.")]), { model: "m", messages: msj });
+  assert.equal(r.content[0].text, "tamam");
+  assert.equal(istekler.length, 2);
+  assert.ok(!istekler[1].p.messages[1].content.some((b) => b.type === "thinking"));
+  assert.equal(istekler[1].p.messages[1].content[0].type, "tool_use");
+  // beta kabul edilmezse eski çağrı
+  istekler.length = 0;
+  r = await claudeTur(client([hata("unexpected beta header thinking-binding-controls-2026-08-01")]), { model: "m", messages: msj });
+  assert.equal(istekler[1].beta, false);
+  // başka 400 aynen fırlatılır
+  await assert.rejects(claudeTur(client([hata("max_tokens çok büyük")]), { model: "m", messages: msj }), /max_tokens/);
+});

@@ -47,7 +47,7 @@ import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } f
 
 export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
-import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici } from "./duzen.js";
+import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici, IMZA_MARKA } from "./duzen.js";
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
@@ -2416,31 +2416,64 @@ export async function fabrikaIsleri(env, simdi) {
   if (await env.KAYIT.get("venom:kanalImzaHazirla")) {
     const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
     const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
-    const yanlis = [], kanalSil = [];
+    const yanlis = [], kanalDuzelt = [];
     for (const [kod, l] of Object.entries(kodlar)) {
       const son = l.filter((g) => simdi - g.tarih < 30 * 86400);
       if (!son.length || !kanal || !arsiv) continue;
       const mk = await markaKesin(env, kod).catch(() => ({}));
       if (mk.marka !== "BLACKROSE") continue;
       for (const g of son) {
-        let yazi = "";
+        let yazi = "", imzaId = null;
         for (const id of g.ids.slice(0, 8)) { // albümde yazı ilk mesajda; "👆 CODE" mesajı da olabilir
           const r = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true }).catch(() => null);
           if (!r || !r.ok) continue;
           await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: r.result.message_id }).catch(() => null);
           yazi += `\n${r.result.caption || r.result.text || ""}`;
-          if (/Premium/i.test(yazi)) break;
+          if (/Premium/i.test(yazi)) { imzaId = id; break; }
         }
         if (/VOLONTE\s*[–-]\s*Premium/i.test(yazi) && !/BLACK\s*ROSE\s*[–-]\s*Premium/i.test(yazi)) {
           const t = new Date((g.tarih + 3 * 3600) * 1000).toISOString().slice(5, 16).replace("T", " ");
           yanlis.push(`• ${kod} — ${t} t.me/${kanal.kullanici || "kanal"}/${g.ids[0]}`);
-          kanalSil.push({ kod, ids: g.ids, not: `yanlış imza (VOLONTE), ${t}` });
+          kanalDuzelt.push({ kod, id: imzaId, link: `t.me/${kanal.kullanici || "kanal"}/${g.ids[0]}`, not: t });
         }
       }
     }
     const metin = [`🖋 KANAL — BLACK ROSE modeli ama VOLONTE imzasıyla duran gönderiler (son 30 gün): ${yanlis.length}`, ...(yanlis.length ? yanlis : ["• Yok."]), "",
-      yanlis.length ? `✅ Onaylarsanız bu ${yanlis.length} gönderi kanaldan silinir. (İsterseniz sonra doğru imzayla yeniden paylaşılır: Venom'a "3148 paylaş" deyin.)` : "Silinecek bir şey yok."].join("\n");
-    if ((await env.KAYIT.put("venom:temizlikKart", JSON.stringify({ metin: metin.slice(0, 3800), kanalSil, siteKaldir: [] })).then(() => true).catch(() => false))) await env.KAYIT.delete("venom:kanalImzaHazirla").catch(() => null);
+      yanlis.length ? `✅ Onaylarsanız bu ${yanlis.length} gönderinin SADECE imzası "${IMZA_MARKA.BLACKROSE}" olarak düzeltilir. Hiçbiri SİLİNMEZ; fotoğraf/video ve yazının geri kalanı aynen kalır.` : "Düzeltilecek bir şey yok."].join("\n");
+    if ((await env.KAYIT.put("venom:temizlikKart", JSON.stringify({ metin: metin.slice(0, 3800), kanalDuzelt, kanalSil: [], siteKaldir: [] })).then(() => true).catch(() => false))) await env.KAYIT.delete("venom:kanalImzaHazirla").catch(() => null);
+  }
+  // 6 Kasım (Patron: "SİLİNMESİN, sadece yazısı düzenlensin"): Venom onayından sonra "venom:kanalImzaDuzelt" listesi →
+  // her gönderinin yazısı arşive iletilerek okunur, imza BLACK ROSE yapılır (biçim/kalın yazılar korunur), medya dokunulmaz.
+  // Her turda en çok 15 gönderi; bitince Patron'a tek sonuç (düzenlenemeyenler listesiyle).
+  const imzaIs = await env.KAYIT.get("venom:kanalImzaDuzelt", "json").catch(() => null);
+  if (imzaIs && (imzaIs.liste || []).length) {
+    const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
+    const parca = imzaIs.liste.slice(0, 15), kalan = imzaIs.liste.slice(15);
+    const sonuc = imzaIs.sonuc || { ok: [], olmadi: [] };
+    for (const x of parca) {
+      const neden = await (async () => {
+        if (!kanal || !arsiv) return "kanal/arşiv kaydı yok";
+        if (!x.id) return "imzalı mesaj bulunamadı";
+        const r = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(x.id), disable_notification: true }).catch(() => null);
+        if (!r || !r.ok) return "kanalda bulunamadı (silinmiş olabilir)";
+        await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: r.result.message_id }).catch(() => null);
+        const yaziMi = r.result.caption == null && r.result.text != null;
+        const d = imzaDegistir(yaziMi ? r.result.text : r.result.caption, yaziMi ? r.result.entities : r.result.caption_entities);
+        if (!d) return /BLACK\s*ROSE\s*[–-]\s*Premium/i.test(String(r.result.caption || r.result.text || "")) ? null : "yazıda VOLONTE imzası yok";
+        const e = yaziMi
+          ? await telegram(env, "editMessageText", { chat_id: kanal.id, message_id: Number(x.id), text: d.yazi, ...(d.entities ? { entities: d.entities } : {}), ...(r.result.link_preview_options ? { link_preview_options: r.result.link_preview_options } : {}) }).catch((h) => ({ ok: false, description: String(h) }))
+          : await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: Number(x.id), caption: d.yazi, ...(d.entities ? { caption_entities: d.entities } : {}) }).catch((h) => ({ ok: false, description: String(h) }));
+        if (e && e.ok) return null;
+        if (/not modified/i.test(String(e && e.description))) return null;
+        return `Telegram: ${String((e && e.description) || "cevap yok").slice(0, 80)}`;
+      })();
+      if (neden) sonuc.olmadi.push(`${x.kod} ${x.link || `#${x.id}`} — ${neden}`); else sonuc.ok.push(x.kod);
+    }
+    if (kalan.length) await env.KAYIT.put("venom:kanalImzaDuzelt", JSON.stringify({ ...imzaIs, liste: kalan, sonuc }));
+    else {
+      await env.KAYIT.delete("venom:kanalImzaDuzelt").catch(() => null);
+      await kuyrugaEkle(env, "sonuc", { id: `kid-${simdi}`, ok: !sonuc.olmadi.length, aciklama: [`🖋 İmza düzeltme bitti: ${sonuc.ok.length} gönderi "${IMZA_MARKA.BLACKROSE}" yapıldı (hiçbiri silinmedi).`, ...(sonuc.olmadi.length ? [``, `❌ Düzenlenemeyen ${sonuc.olmadi.length}:`, ...sonuc.olmadi.map((y, i) => `${i + 1}. ${y}`)] : [`Düzenlenemeyen yok.`])].join("\n").slice(0, 3800) }).catch(() => null);
+    }
   }
   // 6 Kasım (temizlik, Patron onayıyla Venom'dan): belirli kanal mesajları silinir (tekrar paylaşımın fazlası); dizinden de çıkar
   const mesajSil = (await env.KAYIT.get("venom:kanalMesajSil", "json")) || [];
@@ -2463,6 +2496,24 @@ export async function fabrikaIsleri(env, simdi) {
     await env.KAYIT.put("venom:kanalGeri", "[]");
     for (const s of geri) await kanalaGeriKoy(env, s.kod, s.kim, s.site, simdi);
   }
+}
+
+// 6 Kasım: yazıdaki "VOLONTE – Premium…" imzasını "BLACK ROSE – Premium…" yapar; Telegram biçim işaretlerinin (kalın, link…)
+// yerini kaydırır (Telegram UTF-16 sayar = JS dizini). İmza yoksa null.
+export function imzaDegistir(yazi, entities) {
+  const t = String(yazi || ""), re = /VOLONTE(?=\s*[–-]\s*Premium)/g, yerler = [];
+  let m; while ((m = re.exec(t))) yerler.push(m.index);
+  if (!yerler.length) return null;
+  const ESKI = 7, YENI = "BLACK ROSE", fark = YENI.length - ESKI;
+  let yeni = t, ent = entities ? entities.map((e) => ({ ...e })) : null;
+  for (const p of [...yerler].reverse()) {
+    yeni = yeni.slice(0, p) + YENI + yeni.slice(p + ESKI);
+    if (ent) for (const e of ent) {
+      if (e.offset >= p + ESKI) e.offset += fark;
+      else if (e.offset <= p && e.offset + e.length >= p + ESKI) e.length += fark;
+    }
+  }
+  return { yazi: yeni, entities: ent && ent.length ? ent : null };
 }
 
 // Repete paylaşım paketi: renkler repete bildiriminden (İngilizceye çevrilebiliyorsa), yazı sitedeki kayıttan.
