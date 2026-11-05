@@ -50,6 +50,7 @@ import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, a
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
+import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, tekKapiAcik } from "./tek-kapi.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
@@ -84,6 +85,14 @@ const ARALIK_DK = [50, 60]; // tur paylaşımları arası (~saatte bir; 08–20 
 const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim) sıradakiler
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
+
+// TEK KAPI: Patron Venom'da Kemal'in düğmesine bastı → aynı yol (sahte callback, Patron'dan). İç giriş: kemal-giris.js
+export async function venomDugme(env, data, rid) {
+  const update = sahteDugme(env, data, rid);
+  if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
+  else await guncellemeIsle(update, env);
+  return true;
+}
 
 export default {
   async fetch(request, env) {
@@ -686,6 +695,7 @@ export async function kanaldaPaylas(env, kod, ids, simdi, beden = null) {
 }
 
 async function telegramForm(env, metod, form) {
+  if (await patronaGider(env, form.get("chat_id"))) return formAktar(env, "kemal", metod, form, (m, g) => telegramGercek(env, m, g));
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", body: form });
   return r.json();
 }
@@ -1506,7 +1516,9 @@ async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null,
   }
   if (kart && kart.kumas && !yazi.kumas) yazi = { ...yazi, kumas: String(kart.kumas) }; // 4 Kasım: kumaş etiketi (Pelin okur) kanal yazısına
   const st = baglam.stok[u.kod] || {};
+  const marka = await modelMarkasi(env, String(u.kod)).catch(() => "VOLONTE"); // imza markaya göre (5 Kasım)
   return {
+    marka,
     kod: String(u.kod),
     baslik: u.baslik || "",
     durum: durum || yazi.durum || durumSec({ kod: String(u.kod), ilkPaylasim: baglam.tarih.ilk[u.kod], toplam: st.toplam, bedenler: u.bedenler, geldiZaman: baglam.geldi[u.kod], satislar: baglam.satislar, simdi }),
@@ -2064,7 +2076,7 @@ async function yayinOnayKarti(env, x, u, simdi) {
     reply_markup: { inline_keyboard: [[{ text: "📣 Kanala ve siteye gönder", callback_data: `py:o:${kartNo}` }, { text: "❌ Gönderme", callback_data: `py:x:${kartNo}` }]] } });
   await env.KAYIT.put(`kemal:pelinYayin:${kartNo}`, JSON.stringify({ x, zaman: simdi, mid: kart && kart.ok ? kart.result.message_id : null }), { expirationTtl: 14 * 86400 });
   // 5 Kasım (Patron: "tek muhatap Venom"): kart Venom'a da gider; Patron Venom'dan onaylarsa Kemal uygular (önce basılan geçerli)
-  if (env.STOK) await kuyrugaEkle(env, "venomOnay", { id: `ky-${kartNo}`, tur: "kemalYayin", kartNo, kod: x.kod, marka, yazi: yazi.slice(0, 700), medya: pelinMedya(x).filter((m) => /^https?:\/\//.test(m.media)).slice(0, 10), venomMedya: x.venomMedya || null, zaman: simdi }).catch(() => null);
+  if (env.STOK && !(await tekKapiAcik(env))) await kuyrugaEkle(env, "venomOnay", { id: `ky-${kartNo}`, tur: "kemalYayin", kartNo, kod: x.kod, marka, yazi: yazi.slice(0, 700), medya: pelinMedya(x).filter((m) => /^https?:\/\//.test(m.media)).slice(0, 10), venomMedya: x.venomMedya || null, zaman: simdi }).catch(() => null);
   return kart;
 }
 const duzMetinYazi = (html) => String(html || "").replace(/<br\s*\/?>/g, "\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
@@ -2257,7 +2269,7 @@ async function repetePaketi(env, r, simdi) {
     const medya = ids.length ? await kanalMedyasi(env, ids) : [];
     if (!medya.length) throw new Error("sitede yok, kanalda da medya bulunamadı");
     const yazi = (await env.KAYIT.get(`yazi:${r.kod}`, "json")) || {};
-    paket = { kod: String(r.kod), baslik: "", durum: "donus", renkler: [], renkEmin: false, renkNotu: "", kumas: yazi.kumas || null, en: yazi.en || "", fr: yazi.fr || "", bedenler: "", medya, video: 0, tgSon: baglam.tarih.son[r.kod] || null, kaynak: "kanal" };
+    paket = { marka: await modelMarkasi(env, String(r.kod)).catch(() => "VOLONTE"), kod: String(r.kod), baslik: "", durum: "donus", renkler: [], renkEmin: false, renkNotu: "", kumas: yazi.kumas || null, en: yazi.en || "", fr: yazi.fr || "", bedenler: "", medya, video: 0, tgSon: baglam.tarih.son[r.kod] || null, kaynak: "kanal" };
   }
   if (renkler) Object.assign(paket, { renkler, renkEmin: true, renkNotu: "" });
   else if (!u) paket.renkEmin = false;
@@ -2990,7 +3002,13 @@ function asistanYardimcilari(env) {
 
 // ---------- Yardımcılar ----------
 
+// 5 Kasım (Patron): TEK KAPI — Patron'un kişisel hesabına giden her şey Venom'a aktarılır (tek-kapi.js)
 async function telegram(env, metod, govde) {
+  if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "kemal", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
+  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "kemal", metod, govde, (m, g) => telegramGercek(env, m, g));
+  return telegramGercek(env, metod, govde);
+}
+async function telegramGercek(env, metod, govde) {
   const token = String(env.BOT_TOKEN || "").trim();
   const r = await fetch(`https://api.telegram.org/bot${token}/${metod}`, {
     method: "POST",

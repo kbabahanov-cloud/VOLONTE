@@ -14,6 +14,7 @@
 // Ayarlar: BOT_TOKEN, WEBHOOK_SECRET (secret) · ALLOWED_IDS, EKIP_IDS, SELF_URL, GITHUB_REPO (düz metin) ·
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
+import { patronaGider, venomaAktar, venomCevabi, sahteDugme } from "./tek-kapi.js";
 import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
@@ -42,6 +43,11 @@ const yoneticiMi = (id, env) => kimlikler(env.ALLOWED_IDS).includes(String(id));
 const izinli = (id, env) => kisiler(env).includes(String(id));
 
 async function tg(env, metod, govde) {
+  if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "sami", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
+  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g));
+  return tgGercek(env, metod, govde);
+}
+async function tgGercek(env, metod, govde) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde),
   });
@@ -54,6 +60,9 @@ function gizliEsit(a, b) {
   for (let i = 0; i < a.length; i++) f |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return f === 0;
 }
+
+// TEK KAPI (5 Kasım): Venom'dan Sami düğmesi (sami-giris.js "VenomKapisi")
+export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
 
 export default {
   async fetch(istek, env) {

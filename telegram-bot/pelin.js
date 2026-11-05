@@ -16,6 +16,7 @@
 // Ayarlar (Cloudflare volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY (secret, kullanıcı girer), WEBHOOK_SECRET (kurulumda
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
+import { patronaGider, venomaAktar, venomCevabi, sahteDugme, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
@@ -227,6 +228,11 @@ const yonetici = (env, id) => muratMi(env, id) || kimlikler(env.ALLOWED_IDS).inc
 
 // ---------- Telegram ----------
 export async function tg(env, metod, govde) {
+  if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "pelin", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
+  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "pelin", metod, govde, (m, g) => tgGercek(env, m, g));
+  return tgGercek(env, metod, govde);
+}
+async function tgGercek(env, metod, govde) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde) });
   return r.json().catch(() => ({ ok: false }));
 }
@@ -1028,6 +1034,12 @@ function gizliEsit(a, b) {
   return f === 0;
 }
 const nesne = (env) => env.PELIN.get(env.PELIN.idFromName("pelin"), { locationHint: "enam" });
+// TEK KAPI (5 Kasım): Patron Venom'da Pelin/Nora düğmesine bastı → aynı yol (pelin-giris.js "VenomKapisi")
+export async function venomDugme(env, data, rid) {
+  const u = JSON.stringify(sahteDugme(env, data, rid));
+  if (env.PELIN) await nesne(env).fetch("https://pelin/guncelleme", { method: "POST", body: u }); else await guncelleme(JSON.parse(u), env);
+  return true;
+}
 
 export class PelinDO {
   constructor(state, env) { this.state = state; this.env = env; }
@@ -1700,6 +1712,11 @@ async function uretKomutu(env, m, simdi, test = false) {
   }
   onay.arsiv = [];
   for (const k of kodlar) { const a = await env.KAYIT.get(`pelinarsiv:${k}`, "json").catch(() => null); if (a) { onay.arsiv.push(k); onay.ust.push(`📦 Arşivde hazır paket var (${k}, ${tarihSaatYaz(a.zaman)}): yeniden üretmeye gerek yok → "Arşivden kullan" (0 $)`); } }
+  if (!test && (await tekKapiAcik(env))) { // 5 Kasım: Venom kartında küçük resimler
+    const kr = kodlar.flatMap((k) => (foto[k].urller || []).slice(0, kodlar.length > 3 ? 1 : 3)).slice(0, 10);
+    if (kr.length > 1) await tg(env, "sendMediaGroup", { chat_id: m.chat.id, media: kr.map((u, i) => ({ type: "photo", media: u, ...(i === 0 ? { caption: `📷 ${kodlar.join(", ")} — ürün fotoğrafları` } : {}) })) }).catch(() => null);
+    else if (kr.length === 1) await tg(env, "sendPhoto", { chat_id: m.chat.id, photo: kr[0], caption: `📷 ${kodlar[0]}` }).catch(() => null);
+  }
   await eskiKartlariKapat(env, simdi);
   await kaydet(env, `pelin:uretimOnay:${id}`, onay, 3 * 86400);
   const sablonlarK = await oku(env, "pelin:sablonlar", {});

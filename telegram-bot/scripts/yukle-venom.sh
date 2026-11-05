@@ -22,6 +22,10 @@ cat > "$META" <<JSON
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
              {"type":"service","name":"ANAHTAR","service":"volonte-pelin","entrypoint":"AnahtarKopru"},
+             {"type":"service","name":"KEMAL_W","service":"volonte-asistan","entrypoint":"VenomKapisi"},
+             {"type":"service","name":"SELIN_W","service":"volonte-selin","entrypoint":"VenomKapisi"},
+             {"type":"service","name":"PELIN_W","service":"volonte-pelin","entrypoint":"VenomKapisi"},
+             {"type":"service","name":"SAMI_W","service":"volonte-sami","entrypoint":"VenomKapisi"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-venom.volonte.workers.dev"}$GIZLI]}
 JSON

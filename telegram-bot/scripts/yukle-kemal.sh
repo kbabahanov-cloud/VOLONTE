@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 npm test 2>&1 | grep -E "^# (pass|fail)"
 npm test >/dev/null 2>&1 || { echo "TESTLER GEÇMEDİ, yüklenmedi"; exit 1; }
 npm run build >/dev/null
+npm run build:kemal >/dev/null
 sed 's#from "./worker.js"#from "./dist/worker.js"#; s#import("./worker.js")#import("./dist/worker.js")#' test.mjs > test-dist.mjs
 node --test test-dist.mjs >/dev/null 2>&1 || { rm -f test-dist.mjs; echo "PAKET TESTİ GEÇMEDİ"; exit 1; }
 rm -f test-dist.mjs
@@ -26,6 +27,7 @@ cat > "$META" <<JSON
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO"},
              {"type":"images","name":"IMAGES"},
              {"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"},
+             {"type":"service","name":"VENOM","service":"volonte-venom","entrypoint":"VenomKapi"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-asistan.volonte.workers.dev"},
              {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},
@@ -33,7 +35,7 @@ cat > "$META" <<JSON
 JSON
 for bekle in 0 4 8 16; do
   sleep $bekle
-  sonuc=$(curl -sS -X PUT "$API" -F "metadata=@$META;type=application/json" -F "worker.js=@dist/worker.js;type=application/javascript+module" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["success"],d["errors"])')
+  sonuc=$(curl -sS -X PUT "$API" -F "metadata=@$META;type=application/json" -F "worker.js=@dist/kemal.js;filename=worker.js;type=application/javascript+module" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d["success"],d["errors"])')
   echo "yükleme: $sonuc"
   [[ "$sonuc" == True* ]] && break
 done

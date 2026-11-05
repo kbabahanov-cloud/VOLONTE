@@ -1970,3 +1970,21 @@ test("PATRON PAYLAŞIMI (5 Kasım): Kemal'e '3403 paylaş' yazılı albüm → m
   await venomYayinKararlari(o.env);
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
 });
+
+test("TEK KAPI (Kemal): kapı açıkken SON YAYIN albümü + kartı Patron'un kişisel hesabına doğrudan GİTMEZ, Venom'a gider; Black Rose modelinde Black Rose imzası", async () => {
+  const o = await yeniOrtam();
+  const kapi = await import("./tek-kapi.js"); kapi._bayrakSifirla();
+  const venomaGelen = [];
+  Object.assign(o.env, { MURAT_ID: "999", VENOM: { aktar: async (k) => { venomaGelen.push(k); return true; } } });
+  await o.env.KAYIT.put("venom:tekKapi", "1");
+  await o.env.KAYIT.put("pelinboy:3403", JSON.stringify({ renk: "koyu bordo", marka: "BLACKROSE" }));
+  const { pelinKanalAdimi } = await import("./worker.js");
+  const { kuyrugaEkle } = await import("./venom-kopru.js");
+  await kuyrugaEkle(o.env, "pelinKanal", { v: 3, yayinOnayi: true, id: "3403-t", kod: "3403", marka: "BLACKROSE", video: "https://vid/m.mp4", foto: "https://img/f.jpg", deneme: false });
+  o.gonderilen.length = 0;
+  await pelinKanalAdimi(o.env, ist(11));
+  assert.equal(o.gonderilen.filter((m) => String(m.govde && m.govde.chat_id) === "999").length, 0);
+  assert.ok(venomaGelen.some((k) => k.metod === "sendMediaGroup" && k.medya.length === 2 && /CODE: 3403/.test(k.metin) && /BLACK ROSE – Premium Women's Fashion/.test(k.metin) && !/VOLONTE – Premium/.test(k.metin)));
+  assert.ok(venomaGelen.some((k) => /SON YAYIN ONAYI — 3403 · BLACK ROSE/.test(k.metin) && k.butonlar));
+  kapi._bayrakSifirla();
+});

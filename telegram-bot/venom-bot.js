@@ -54,6 +54,8 @@ const ARACLAR = [
   { name: "kemal_paylas", description: "Patron'un Venom'a son gönderdiği fotoğraf/videolarla Kemal'e kanal paylaşımı hazırlatır (marka yazısı fotoğraflara, renk model kartından, EN/FR alt yazı). YAYINLAMAZ: SON YAYIN ONAYI kartı Patron'a gelir. Model sitede olmalı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "bekleyenler", description: "Bütün botlarda Patron onayı bekleyen işleri (Pelin, Kemal SON YAYIN kartları, Selin taslakları, Venom kartları) ve bugünkü Selin listesini tek listede verir. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "karar_kaydet", description: "Patron yeni bir KALICI karar/kural söylediğinde (ör. 'bundan sonra …', 'her zaman …', 'asla …') Venom'un hafızasına yazar; sonraki her konuşmada uygulanır. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["metin"], properties: { metin: { type: "string" } } } },
+  { name: "selin_durum", description: "Selin'de bir modelin durumu: neden taslak çıkmadı (fotoğraf gelmedi mi, hata mı, onayda mı, sitede mi), bugünkü listede mi, kaç gündür gelmiyor, stok. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
+  { name: "selin_taslak", description: "Selin'e bir model için site taslağı (başlık + EN/FR/PT açıklama) hazırlatır; fotoğrafı Selin'e gelmiş olmalı. Küçük yapay zekâ maliyeti (~0,05 $): önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "yetenek_istegi", description: "Venom'un henüz yapamadığı bir iş için Claude Code'a not bırakır (yeni yetenek isteği).", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string" } } } },
 ];
 
@@ -136,6 +138,16 @@ export async function aracCalistir(env, ad, g, simdi) {
     await kaydet(env, "venom:bot:kararlar", l.slice(-60));
     return "Karar hafızaya yazıldı; bundan sonra uygulanır.";
   }
+  if (ad === "selin_durum") {
+    const d = await botaSor(env, "selin", "durum", String(g.kod));
+    if (!d) return "Selin'e ulaşılamadı.";
+    return [`${d.kod}: ${d.aciklama}`, `Bugünkü listede: ${d.bugunListede ? "evet" : "hayır"}${d.kacirma ? ` · ${d.kacirma} gündür fotoğraf gelmiyor` : ""}`, `Selin'deki dosyalar: ${d.foto} fotoğraf, ${d.video} video${d.hata ? ` · ${d.hata} kez hata` : ""}`, `Sitede: ${d.sitede == null ? "?" : d.sitede ? "evet" : "hayır"} · Vegawin stok: ${d.stok == null ? "?" : d.stok}${d.gizli ? " (gizli/bitmiş)" : ""}`].join("\n");
+  }
+  if (ad === "selin_taslak") {
+    const kod = String(g.kod || "").replace(/\D/g, "");
+    await kartAc(env, { tur: "selinTaslak", kod }, `📝 Selin — ${kod} için site taslağı hazırlansın mı? (başlık + EN/FR/PT açıklama; Selin'in yapay zekâ maliyeti ~0,05 $). Taslak hazır olunca onay kartı buraya gelir; siteye ancak onayınızla çıkar.`, simdi);
+    return "Onay kartı Patron'a gösterildi.";
+  }
   if (ad === "model_boyu") return `${g.kod} boyu: ${boyYazi(await boyOku(env, String(g.kod)))}`;
   if (ad === "yetenek_istegi") {
     const l = await oku(env, "venom:yetenekIstekleri", []);
@@ -153,12 +165,21 @@ async function isCalistir(env, is, simdi) {
   else if (is.tur === "mutabakat") await kuyrugaEkle(env, "giden", { id: is.id, kime: "fuat", tur: "mutabakat", icerik: is.icerik, onaylayan });
   else if (is.tur === "sil") await silKuyrugu(env, is.kod, "Patron (Venom)", simdi);
   else if (is.tur === "pelin") await kuyrugaEkle(env, "pelinIs", { id: is.id, kodlar: is.kodlar, test: is.test });
+  else if (is.tur === "selinTaslak") { const r = await botaSor(env, "selin", "taslak", String(is.kod)); await yaz(env, r ? `${r.ok ? "✅" : "⚠️"} ${r.mesaj}` : "⚠️ Selin'e ulaşılamadı."); }
   const { icerik, ...ozet } = is;
   await arsiv(env, `venom-${is.tur}`, is.id, { ...ozet, onay: tarihSaat(simdi) }, simdi);
 }
 export async function dugme(env, cq, simdi) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   if (!patronMu(env, cq.from.id)) return cevap("Sadece Patron.");
+  if (/^vr:/.test(String(cq.data))) { // TEK KAPI: başka botun düğmesi → o bota "Patron bastı"
+    const rid = String(cq.data).slice(3);
+    const k = await oku(env, `venom:bot:dugme:${rid}`, null);
+    if (!k) return cevap("Bu düğme artık geçerli değil.");
+    const r = await botaSor(env, k.bot, "dugme", k.data, rid);
+    await cevap(r ? `${BOT_AD[k.bot]}'e iletildi` : "İletilemedi");
+    return null;
+  }
   if (/^vy:[ox]:/.test(String(cq.data))) { // Kemal SON YAYIN kararı Venom'dan
     const [, islem, kartNo] = String(cq.data).split(":");
     const k = await oku(env, `venom:bot:yayin:${kartNo}`, null);
@@ -287,6 +308,47 @@ async function hataBildir(env, simdi) {
   if (satir.length) await yaz(env, ["⚠️ Botlarda hata (Claude Code'a da kayıtlı):", ...satir].join("\n"));
 }
 
+// ---------- TEK KAPI (5 Kasım, Patron): diğer botların Patron'a giden her şeyi buradan ----------
+const BOT_BAG = { kemal: "KEMAL_W", selin: "SELIN_W", pelin: "PELIN_W", sami: "SAMI_W" };
+const BOT_AD = { kemal: "Kemal", selin: "Selin", pelin: "Pelin", sami: "Sami" };
+async function botaSor(env, bot, islem, ...arg) {
+  const b = env[BOT_BAG[bot]];
+  if (!b || typeof b[islem] !== "function") return null;
+  try { return await b[islem](...arg); } catch (e) { await hataYaz(env, `kapi:${bot}`, e); return null; }
+}
+async function butonCevir(env, bot, satirlar) {
+  const yeni = [];
+  for (const satir of satirlar || []) {
+    const s2 = [];
+    for (const b of satir) {
+      if (b.callback_data) { const rid = kisaId(); await kaydet(env, `venom:bot:dugme:${rid}`, { bot, data: b.callback_data }, 14 * 86400); s2.push({ text: b.text, callback_data: `vr:${rid}` }); }
+      else if (b.url) s2.push({ text: b.text, url: b.url });
+    }
+    if (s2.length) yeni.push(s2);
+  }
+  return yeni;
+}
+export async function aktarilanGonder(env, k) {
+  const bas = `🤖 ${BOT_AD[k.bot] || k.bot}`;
+  const klavye = k.butonlar ? { inline_keyboard: await butonCevir(env, k.bot, k.butonlar) } : null;
+  const metin = k.metin ? `${bas}\n${k.metin}` : bas;
+  const pm = k.parse_mode ? { parse_mode: k.parse_mode } : {};
+  const medya = (k.medya || []).filter((m) => m && m.media).slice(0, 10);
+  const kisa = metin.length <= 1024;
+  if (medya.length > 1) {
+    const r = await tg(env, "sendMediaGroup", { chat_id: patron(env), media: medya.map((m, i) => (i === 0 ? { ...m, caption: kisa && !klavye ? metin : bas, ...pm } : m)) });
+    if (!r.ok) await yaz(env, `${bas}: (görseller gösterilemedi: ${r.description || "?"})`);
+    if (!kisa || klavye) await yaz(env, kisa || !k.metin ? metin : metin.slice(0, 4000), { ...pm, ...(klavye && klavye.inline_keyboard.length ? { reply_markup: klavye } : {}) });
+    return;
+  }
+  if (medya.length === 1) {
+    const m = medya[0], metod = m.type === "video" ? "sendVideo" : m.type === "document" ? "sendDocument" : "sendPhoto", alan = m.type === "video" ? "video" : m.type === "document" ? "document" : "photo";
+    const r = await tg(env, metod, { chat_id: patron(env), [alan]: m.media, caption: kisa ? metin : bas, ...pm, ...(kisa && klavye && klavye.inline_keyboard.length ? { reply_markup: klavye } : {}), ...(m.type === "video" ? { supports_streaming: true } : {}) });
+    if (r.ok && kisa) return;
+  }
+  return yaz(env, metin, { ...pm, ...(klavye && klavye.inline_keyboard.length ? { reply_markup: klavye } : {}) });
+}
+
 // ---------- Sohbet ----------
 const SISTEM = `Sen VENOM'sun: VOLONTE'nin (İstanbul Laleli, kadın giyim toptan; iki AYRI mağaza: VOLONTE ve BLACK ROSE) komuta merkezi. Sadece Patron'la konuşursun; ona "Patron" diye hitap edersin. Kısa, net, sade Türkçe (Rusça yazarsa Rusça).
 Görevin: Patron'un isteğini anlayıp ilgili bota yaptırmak (araçlarla), sonucu kısa göstermek.
@@ -300,6 +362,8 @@ Kurallar:
 - Sohbeti hatırla ("ona tekrar yaz", "dünkü gibi yap").
 - TEK MUHATAP sensin: Patron diğer botlarla (Pelin, Kemal, Selin, Sami) uğraşmaz. İşi doğru bota ver, takip et, sonucu kısa anlat. Onay bekleyen bir şey sorulursa bekleyenler aracını kullan.
 - Patron yeni bir kalıcı karar söylerse karar_kaydet ile hafızana yaz.
+- Diğer botların Patron'a mesajları ve onay kartları "🤖 Kemal/Selin/Pelin/Sami" başlığıyla buraya gelir; düğmeleri Patron burada basar.
+- Selin'de bir model neden yok/taslak çıkmadı sorulursa selin_durum; taslak istenirse selin_taslak.
 - Patron fotoğraf/video gönderip kanal paylaşımı isterse kemal_paylas kullan (yayın SON YAYIN ONAYI kartıyla, onaysız gitmez).
 - Aşağıdaki HAFIZA, depodaki notlar ve Patron kararlarıdır; her cevapta uygula.`;
 
@@ -332,9 +396,11 @@ export async function sohbet(env, metin, simdi) {
   if (!claudeVar(env)) return yaz(env, "Yapay zekâ anahtarı bağlı değil (Claude Code'a haber verin).");
   const client = claudeIstemci(env, { maxRetries: 1, timeout: 60_000 });
   let cevapMetni = "";
+  // 5 Kasım: sistem metni konuşma boyunca SABİT (araç hafızayı değiştirse bile) — değişirse Claude'un düşünme bloğu geçersiz sayılıyordu (400)
+  const sistem = [{ type: "text", text: SISTEM }, { type: "text", text: await hafizaMetni(env), cache_control: { type: "ephemeral" } }, { type: "text", text: `Şimdi: ${tarihSaat(simdi)} (İstanbul).` }];
   for (let tur = 0; tur < 4; tur++) {
     const model = env.VENOM_MODEL || MODEL;
-    const r = await client.messages.create({ model, max_tokens: 1500, system: [{ type: "text", text: SISTEM }, { type: "text", text: await hafizaMetni(env), cache_control: { type: "ephemeral" } }, { type: "text", text: `Şimdi: ${tarihSaat(simdi)} (İstanbul).` }], tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
+    const r = await client.messages.create({ model, max_tokens: 1500, system: sistem, tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
     await venomHarcamaYaz(env, claudeUsd(model, r.usage), simdi);
     const yazi = r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     if (yazi) cevapMetni = yazi;

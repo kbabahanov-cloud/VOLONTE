@@ -17,6 +17,8 @@ export const VIDEO_SUNUCU = "https://volonte-selin.volonte.workers.dev/v2/";
 export const SIPARIS_WA = "https://wa.me/905362390091";
 export const BILGI_WA = "https://wa.me/905363448488";
 export const IMZA = "VOLONTE – Premium Women's Fashion";
+// 5 Kasım (Patron): imza modelin markasına göre — Black Rose modellerinde VOLONTE imzası YOK
+export const IMZA_MARKA = { VOLONTE: IMZA, BLACKROSE: "BLACK ROSE – Premium Women's Fashion" };
 export const PAYLASIM_ARASI_GUN = 14; // aynı model 14 gün dolmadan tekrar önerilmez
 export const YENI_GUN = 21; // ilk Telegram paylaşımı bu kadar günden yeniyse (ya da hiç yoksa) 🆕
 export const DONUS_GUN = 14; // stok bu kadar gün içinde 0'dan geri geldiyse 🔁
@@ -62,7 +64,7 @@ export function altYazi(p) {
   if (p.kumas) satirlar.push(`🧵 Fabric / Tissu: ${html(p.kumas)}`);
   if (p.en) satirlar.push(`🇬🇧 ${html(p.en)}`);
   if (p.fr) satirlar.push(`🇫🇷 ${html(p.fr)}`);
-  satirlar.push(IMZA);
+  satirlar.push(IMZA_MARKA[p.marka] || IMZA);
   return satirlar.join("\n");
 }
 

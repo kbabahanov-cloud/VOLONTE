@@ -31,6 +31,7 @@ cat > "$META" <<JSON
              {"type":"images","name":"IMAGES"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
              {"type":"service","name":"SELIN_DEPO","service":"volonte-selin","entrypoint":"SelinDepo"},
+             {"type":"service","name":"VENOM","service":"volonte-venom","entrypoint":"VenomKapi"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-pelin.volonte.workers.dev"},
              {"type":"plain_text","name":"KEMAL_URL","text":"https://volonte-asistan.volonte.workers.dev"}$GIZLI]}

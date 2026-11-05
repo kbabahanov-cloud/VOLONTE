@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { StokDO } from "./stok.js";
-import venom, { guncelleme, venomCron, gunOzeti } from "./venom-bot.js";
+import venom, { guncelleme, venomCron, gunOzeti, aktarilanGonder } from "./venom-bot.js";
 import { venomGidenAdimi, venomPelinAdimi, kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { venomUretimi } from "./pelin.js";
 import { topluRapor } from "./venom.js";
@@ -347,4 +347,52 @@ test("VENOM 5 Kasım: hafıza (kurallar + Patron kararları) sistemde; fotoğraf
   const h = patronaGiden(o).filter((x) => /Botlarda hata/.test(x.govde.text));
   assert.equal(h.length, 1);
   assert.match(h[0].govde.text, /Pelin: fal hatası/);
+});
+
+test("TEK KAPI (5 Kasım): bot Patron'un kişisel hesabına yazamaz → Venom'a aktarılır (başlık + küçük resim + tam yazı + düğmeler); Venom'da basılan düğme bota 'Patron bastı' olarak döner; Merdan'a giden aynen gider", async () => {
+  const o = ortam();
+  const kapi = await import("./tek-kapi.js");
+  kapi._bayrakSifirla();
+  const botDepo = new Map([["venom:tekKapi", "1"]]);
+  const botaGelen = [];
+  const venomBag = { aktar: (k) => aktarilanGonder(o.env, k) };
+  const botEnv = { MURAT_ID: `${PATRON},777`, VENOM: venomBag, BOT_TOKEN: "kemal-token",
+    KAYIT: { async get(k) { return botDepo.get(k) ?? null; }, async put(k, v) { botDepo.set(k, v); o.depo.set(k, v); } } };
+  o.env.KEMAL_W = { dugme: async (data, rid) => { botaGelen.push({ data, rid }); return true; } };
+  // Patron'a giden kart → Venom'dan çıkar
+  const r = await kapi.venomaAktar(botEnv, "kemal", "sendMessage", { chat_id: PATRON, text: "📣 SON YAYIN ONAYI — 3627 · BLACK ROSE\nTam yazı burada", reply_markup: { inline_keyboard: [[{ text: "📣 Gönder", callback_data: "py:o:3627-a.b" }, { text: "Site", url: "https://www.wearvolonte.com" }]] } });
+  assert.ok(r.ok && r.aktarildi);
+  const kart = sonKart(o);
+  assert.match(kart.govde.text, /^🤖 Kemal\n📣 SON YAYIN ONAYI — 3627 · BLACK ROSE\nTam yazı burada/);
+  const d = kart.govde.reply_markup.inline_keyboard[0];
+  assert.match(d[0].callback_data, /^vr:/);
+  assert.equal(d[1].url, "https://www.wearvolonte.com");
+  // albüm: URL'ler aynen, yazı albümde
+  await kapi.venomaAktar(botEnv, "pelin", "sendMediaGroup", { chat_id: PATRON, media: [{ type: "video", media: "https://x/v.mp4", caption: "✅ CODE: 3627" }, { type: "photo", media: "https://x/f.jpg" }] });
+  const alb = o.g.filter((x) => x.metod === "sendMediaGroup").at(-1);
+  assert.deepEqual(alb.govde.media.map((m) => m.media), ["https://x/v.mp4", "https://x/f.jpg"]);
+  assert.match(alb.govde.media[0].caption, /🤖 Pelin\n✅ CODE: 3627/);
+  // Venom'da düğmeye basıldı → Kemal'e sahte callback (Patron'dan)
+  await bas(o, d[0].callback_data);
+  assert.equal(botaGelen.length, 1);
+  assert.equal(botaGelen[0].data, "py:o:3627-a.b");
+  const u = kapi.sahteDugme(botEnv, botaGelen[0].data, botaGelen[0].rid);
+  assert.equal(u.callback_query.from.id, PATRON);
+  // Patron'un kişisel hesabı DIŞINDAKİLER (ikinci Murat hesabı, Merdan) etkilenmez
+  assert.equal(await kapi.patronaGider(botEnv, 777), false);
+  assert.equal(await kapi.patronaGider(botEnv, MERDAN), false);
+  assert.equal(await kapi.patronaGider(botEnv, PATRON), true);
+  // iç kapı internetten açık değil: /kapi/aktar diye bir adres yok
+  assert.equal(await (await venom.fetch(new Request("https://venom.test/kapi/aktar", { method: "POST", body: "{}" }), o.env)).text(), "Venom çalışıyor.");
+  // kapı kapalıysa bot normal gönderir
+  botDepo.set("venom:tekKapi", "0"); kapi._bayrakSifirla();
+  assert.equal(await kapi.patronaGider(botEnv, PATRON), false);
+});
+
+test("Venom sohbeti: araç hafızayı değiştirse de aynı mesajdaki Claude çağrılarında sistem metni AYNI kalır (düşünme bloğu hatası olmasın)", async () => {
+  const o = ortam();
+  o.cevaplar.push({ arac: "karar_kaydet", girdi: { metin: "Yeni kural X" } }, { text: "Tamam." });
+  await yazi(o, PATRON, "bundan sonra X");
+  assert.equal(o.claude.length, 2);
+  assert.deepEqual(o.claude[0].system, o.claude[1].system);
 });

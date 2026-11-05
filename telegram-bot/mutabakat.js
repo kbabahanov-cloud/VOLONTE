@@ -11,6 +11,7 @@
 //  • (Perşembe karşılaştırması 2 Kasım'da kaldırıldı: iki mağaza ayrı, defterler karşılaştırılmaz.) Her gece 23:00 arşiv Patron'un
 //    Google tablosuna ("Mutabakat Arşivi" sekmesi; harcama tablosu, paylaşılmaz).
 //  • /odeme 5000$ [hesap] [not] + dekont fotoğrafı (sadece Patron) → kayıt; mutabakatta "son ödemeler" sadece Patron'da.
+import { patronaGider, formAktar } from "./tek-kapi.js";
 import { stokIste } from "./stokbot.js";
 import { murat, muratMi } from "./fabrika.js";
 import { pdfOlustur } from "./pdf.js";
@@ -215,6 +216,7 @@ async function belgeGonder(env, chat, bayt, ad, aciklama, tur = "application/pdf
   f.append("chat_id", String(chat));
   f.append("caption", String(aciklama).slice(0, 1000));
   f.append("document", new Blob([bayt], { type: tur }), ad);
+  if (await patronaGider(env, chat)) return formAktar(env, "sami", "sendDocument", f, null); // TEK KAPI: Patron'a Venom'dan
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/sendDocument`, { method: "POST", body: f });
   return r.json().catch(() => null);
 }

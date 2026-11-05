@@ -22,6 +22,7 @@ cat > "$META" <<JSON
 {"main_module":"selin.js","compatibility_date":"2026-10-01","keep_bindings":["secret_text"],
  "placement":{"region":"aws:us-east-1"}, $GOC
  "bindings":[{"type":"kv_namespace","name":"KAYIT","namespace_id":"cd4cd47b965142c6859bf702510166bb"},
+             {"type":"service","name":"VENOM","service":"volonte-venom","entrypoint":"VenomKapi"},
              {"type":"durable_object_namespace","name":"SELIN","class_name":"SelinDO"},
              {"type":"durable_object_namespace","name":"STOK","class_name":"StokDO","script_name":"volonte-asistan"},
              {"type":"images","name":"IMAGES"},

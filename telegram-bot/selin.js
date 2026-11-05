@@ -12,6 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
+import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl } from "./venom-kopru.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
@@ -55,6 +56,11 @@ const oku = async (env, k, bos) => (await env.KAYIT.get(k, "json")) ?? bos;
 const yazKV = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { expirationTtl: ttl } : undefined);
 
 async function tg(env, metod, govde, deneme = 0) {
+  if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "selin", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
+  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "selin", metod, govde, (m, g) => tgGercek(env, m, g));
+  return tgGercek(env, metod, govde, deneme);
+}
+async function tgGercek(env, metod, govde, deneme = 0) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde),
   });
@@ -98,6 +104,17 @@ const KILIT_MESAJI = "🔒 Siteye yükleme şu an kilitli (fotoğraflar kontrol 
 // Selin'in bütün işleri kendi Durable Object'inde ("selin") çalışır: "selin:*" kayıtları orada
 // (KV günlük yazma sınırı). Hata/durum kayıtları izlenebilsin diye KV'de kalır (depo.js).
 const selinNesne = (env) => env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
+// TEK KAPI (5 Kasım): Venom → Selin iç giriş (selin-giris.js "VenomKapisi"): düğme, model durumu, taslak başlat
+export async function venomDugme(env, data, rid) {
+  const u = sahteDugme(env, data, rid);
+  if (env.SELIN) await selinNesne(env).fetch("https://selin/guncelleme", { method: "POST", body: JSON.stringify(u) }); else await guncelleme(u, env);
+  return true;
+}
+export async function venomSelin(env, yol, kod) {
+  if (env.SELIN) return (await selinNesne(env).fetch(`https://selin${yol}`, { method: "POST", body: JSON.stringify({ kod }) })).json();
+  const simdi = Math.floor(Date.now() / 1000);
+  return yol === "/venom/durum" ? venomModelDurumu(env, kod, simdi) : venomTaslakBaslat(env, kod, simdi);
+}
 
 export default {
   async fetch(istek, env) {
@@ -218,6 +235,8 @@ export class SelinDO {
       case "/video": return videoVer(env, url.searchParams.get("t"));
       case "/sitevideo": return siteVideo(env, url.searchParams.get("id"), istek.headers.get("x-aralik") || null);
       case "/kare-geldi": return kareGeldi(env, await istek.json().catch(() => ({})), simdi);
+      case "/venom/durum": return Response.json(await venomModelDurumu(env, (await istek.json()).kod, simdi));
+      case "/venom/taslak": return Response.json(await venomTaslakBaslat(env, (await istek.json()).kod, simdi));
       default: await hazirlaGuvenli(env, simdi); return new Response("ok");
     }
   }
@@ -1265,6 +1284,30 @@ export async function listeTamamla(env, gun, ist, simdi) {
 // Tek seferlik (5 Kasım, Patron): KV "venom:selinIstekTekrar" = { gun } → o günün istek listesi AYNI BİÇİMDE yeniden gönderilir
 // (sadece /sahip ile kayıtlı hesaplara = 0091; SAHIP_IDS'teki Merdan'a tekrar gitmez). Model durumları DEĞİŞMEZ.
 // Sonuç (kodlar + her modelin durumu) "venom:selinIstekTekrarSonuc".
+// VENOM (5 Kasım): bir model neden taslak çıkmadı / nerede? + taslak başlat (fotoğrafı gelmişse)
+export async function venomModelDurumu(env, kod, simdi) {
+  kod = String(kod || "").replace(/\D/g, "");
+  const modeller = await oku(env, "selin:modeller", {});
+  const m = modeller[kod] || null;
+  const ist = await oku(env, `selin:istek:${gunAnahtari(simdi)}`, null);
+  let sitede = null; try { sitede = (await sitedekiKodlar(env)).has(kod); } catch { /* */ }
+  const st = (await stokBilgisi(env, [kod]))[kod] || null;
+  const foto = m && m.medya ? m.medya.filter((y) => y.tur === "foto").length : 0, video = m && m.medya ? m.medya.filter((y) => y.tur === "video").length : 0;
+  const ACIKLAMA = { istendi: "fotoğraf istendi, henüz gelmedi", bekliyor: "dün fotoğraf gelmedi, bugün tekrar listede", bulunamiyor: "3 gün üst üste fotoğraf gelmedi (bulunamıyor)", gonderilemedi: "eski listede gelmedi (gönderilemedi)", geldi: "fotoğraf geldi, taslak hazırlanıyor/sırada", onayda: "taslak hazır, onay bekliyor", hazirlanamadi: "taslak 3 denemede hazırlanamadı (hata)", sitede: "sitede", yukleniyor: "siteye yükleniyor", eklenmeyecek: "eklenmeyecek denildi" };
+  return { kod, durum: m ? m.durum : null, aciklama: m ? ACIKLAMA[m.durum] || m.durum : "Selin'in kaydında yok (hiç istenmemiş)", bugunListede: Boolean(ist && (ist.kodlar || []).includes(kod)), kacirma: (m && m.kacirma) || 0, foto, video, hata: (m && m.hata) || 0, sitede, stok: st ? Math.max(0, st.toplam || 0) : null, gizli: st ? Boolean(st.gizli) : null };
+}
+export async function venomTaslakBaslat(env, kod, simdi) {
+  kod = String(kod || "").replace(/\D/g, "");
+  const modeller = await oku(env, "selin:modeller", {});
+  const m = modeller[kod];
+  if (!m || !ozelMi(m) || !(m.medya || []).some((y) => y.tur === "foto")) return { ok: false, mesaj: `${kod}: Selin'de bu modelin fotoğrafı yok; önce fotoğraf gelmeli (0091'den "Dosya olarak", yazı "${kod} Küçük/Büyük").` };
+  if (["sitede", "yukleniyor"].includes(m.durum)) return { ok: false, mesaj: `${kod} zaten sitede.` };
+  modeller[kod] = { ...m, durum: "geldi", hata: 0, sonMedya: 0, bildirildi: true };
+  await yazKV(env, "selin:modeller", modeller);
+  try { await ozelHazirla(env, kod, simdi, null); } catch (e) { return { ok: false, mesaj: `${kod}: taslak hazırlanamadı (${String(e && e.message).slice(0, 120)})` }; }
+  const d = (await oku(env, "selin:modeller", {}))[kod] || {};
+  return { ok: d.durum === "onayda", mesaj: d.durum === "onayda" ? `${kod}: taslak hazır; onay kartı Venom'a geldi.` : `${kod}: taslak durumu "${d.durum}".` };
+}
 // Tek seferlik SALT OKUMA (Claude Code): KV "venom:selinDurumDok" → model durumları + bugünkü aday sayısı "venom:selinDurumDokSonuc"
 async function durumDokum(env) {
   if (!(await env.KAYIT.get("venom:selinDurumDok"))) return false;
@@ -1569,6 +1612,7 @@ export async function ozelHazirla(env, kod, simdi, duzeltme) {
     };
     await yazKV(env, "selin:modeller", guncel);
     for (const k of await sahipler(env)) await kartGoster(env, kod, k);
+    if ((await tekKapiAcik(env)) && !(await sahipler(env)).includes(patronKisisel(env))) await kartGoster(env, kod, patronKisisel(env)).catch(() => null); // 5 Kasım: Selin taslak kartı Venom'a da
   } catch (e) {
     const g = await oku(env, "selin:modeller", {});
     g[kod].hata = (g[kod].hata || 0) + 1;
