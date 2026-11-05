@@ -620,6 +620,23 @@ export async function venomCron(env, simdi) {
   }
 }
 // 20:00 günün özeti: bugün arşive düşen işler (tür türüne) + Venom'un yaptırdıkları
+// 5 Kasım (Patron): siteye inmeyen her video akşam raporunda (Selin'in video denetimi + bugün gelen 20 MB üstü + kanal→site)
+const TUR_AD = { buyuk: "20 MB üstü", "sitede-bozuk": "sitede oynamıyor", format: "MOV", "sitede-degil": "model sitede değil", "listede-yok": "sitenin listesinde yok" };
+export async function videoRaporu(env, simdi) {
+  const d = await oku(env, "venom:videoDenetim", null);
+  const gelen = (await oku(env, "venom:videoGelenBuyuk", [])).filter((x) => simdi - x.zaman < 86400);
+  const kv = (await oku(env, "venom:kanalVideoSonuc", [])).filter((x) => simdi - x.zaman < 86400);
+  const sorun = d ? d.sorunlar.filter((x) => x.tur !== "format") : [];
+  const satir = [];
+  if (d) { const bozuk = d.siteVideo - d.calisan - (d.denenemedi || 0); satir.push(`📹 Site videoları: ${d.calisan}/${d.siteVideo} oynuyor${bozuk ? ` · ⚠️ ${bozuk} OYNAMIYOR` : ""}${d.denenemedi ? ` · ${d.denenemedi} denenemedi (sonraki turda)` : ""} (denetim ${tarihSaat(d.zaman).slice(11, 16)})`); }
+  if (d && (d.istenen || []).length) satir.push(`Gönderene "tekrar gönder" dendi: ${[...new Set(d.istenen)].join(", ")}`);
+  if (sorun.length) satir.push(`Siteye inmeyen/oynamayan ${sorun.length} video:`, ...sorun.slice(0, 15).map((x) => `• ${x.kod} — ${TUR_AD[x.tur] || x.tur}: ${x.neden}`), ...(sorun.length > 15 ? [`• … ve ${sorun.length - 15} tane daha`] : []));
+  if (gelen.length) satir.push(`Bugün 20 MB üstü gelen video: ${gelen.length} (${gelen.map((x) => `${x.kod || "kodsuz"} ${(x.boyut / 1048576).toFixed(0)} MB, ${x.kim}`).join("; ")}) — gönderene "normal video olarak tekrar gönder" dendi.`);
+  const eklenen = kv.filter((x) => x.ok).map((x) => x.kod), olmayan = kv.filter((x) => !x.ok);
+  if (eklenen.length) satir.push(`Kanaldan siteye eklenen video: ${[...new Set(eklenen)].join(", ")}`);
+  if (olmayan.length) satir.push(...olmayan.map((x) => `• ${x.kod} — kanal videosu siteye konamadı: ${x.neden}`));
+  return satir.length ? satir.join("\n") : null;
+}
 export async function gunOzeti(env, simdi) {
   const bas = Math.floor(Date.parse(`${gunAnahtari(simdi)}T00:00:00+03:00`) / 1000);
   const kayitlar = [];
@@ -631,7 +648,7 @@ export async function gunOzeti(env, simdi) {
   const pelinBugun = Number((await env.KAYIT.get(`pelin-gun:${gunAnahtari(simdi)}`)) || 0);
   const venomAy = await venomHarcanan(env, simdi);
   const bekleyen = await bekleyenlerMetni(env, simdi);
-  const metin = [`🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, ...(satir.length ? satir : ["• Bugün Venom üzerinden iş yapılmadı."]), `💵 Harcama: Pelin bugün ${pelinBugun.toFixed(2).replace(".", ",")} $ · Venom bu ay ${venomAy.toFixed(2).replace(".", ",")} $ / ${await venomSinir(env)} $`, bekleyen, "İyi akşamlar Patron."].join("\n");
+  const metin = [`🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, ...(satir.length ? satir : ["• Bugün Venom üzerinden iş yapılmadı."]), `💵 Harcama: Pelin bugün ${pelinBugun.toFixed(2).replace(".", ",")} $ · Venom bu ay ${venomAy.toFixed(2).replace(".", ",")} $ / ${await venomSinir(env)} $`, await videoRaporu(env, simdi), bekleyen, "İyi akşamlar Patron."].filter(Boolean).join("\n");
   const g = await oku(env, "venom:bot:gunluk", []);
   await kaydet(env, "venom:bot:gunluk", [...g.filter((x) => x.gun !== gunAnahtari(simdi)), { gun: gunAnahtari(simdi), ozet: [satir.join("; ") || "Venom'la iş yok", `Pelin ${pelinBugun.toFixed(2)} $`].join(" · ").slice(0, 300) }].slice(-30));
   return metin;

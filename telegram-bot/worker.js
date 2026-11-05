@@ -46,7 +46,7 @@ import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } f
 
 export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
-import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici } from "./duzen.js";
+import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici } from "./duzen.js";
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
@@ -697,6 +697,7 @@ export async function kanaldaPaylas(env, kod, ids, simdi, beden = null) {
   await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
 
   const link = kanal.kullanici && yeniIds.length ? `https://t.me/${kanal.kullanici}/${yeniIds[0]}` : null;
+  await siteyeVideoBildir(env, kod, ids, simdi, { sadeceVideosuzsa: true }); // repete: eski kanal videosu, site videosuzsa
   return { ok: true, link, ids: yeniIds, markaNotu };
 }
 
@@ -1827,7 +1828,13 @@ async function duzeltmeIsle(msg, env) {
 
 // Sıradaki yeni düzen paylaşımı: stok hâlâ varsa kanala gönderir; tarih Sami'nin deposuna (tablo) yazılır.
 // sayma: günlük 10 paylaşım sayacına dahil mi (repete paylaşımı dahil değil); stokKontrol: repete'de Vegawin gecikebilir → kapalı.
-export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true } = {}) {
+// 5 Kasım (Patron): Kemal kanala video koyunca aynı video siteye de (Selin, StokDO kuyruğu "kanalVideo"). Videosu zaten siteden
+// gelenler (Selin oynatıcısı) gönderilmez; Selin de aynı videoyu (file_unique_id) iki kez koymaz.
+async function siteyeVideoBildir(env, kod, mesajlar, simdi, ek = {}) {
+  if (!env.STOK || !mesajlar.length) return;
+  await kuyrugaEkle(env, "kanalVideo", { id: `kv-${kod}-${mesajlar[0]}`, kod: String(kod), mesajlar: mesajlar.slice(0, 10), zaman: simdi, ...ek }).catch(() => null);
+}
+export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true } = {}) {
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   if (env.STOK && stokKontrol) {
@@ -1845,6 +1852,10 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
   if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
+  if (siteVideo && !g.not) {
+    const vid = (paket.medya || []).map((m, i) => (m.type === "video" && !String(m.media).startsWith(VIDEO_SUNUCU) ? g.ids[i] : 0)).filter((id) => id > 0);
+    await siteyeVideoBildir(env, paket.kod, vid, simdi);
+  }
   const ilk = g.ids.find((id) => id > 0);
   return { ok: true, ids: g.ids, kanal: kanal.kullanici || null, link: kanal.kullanici && ilk ? `https://t.me/${kanal.kullanici}/${ilk}` : null, markaNotu: g.not || null };
 }
@@ -2104,7 +2115,7 @@ async function yayinOnayUygula(env, id, islem) {
   const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
   if (!u) return `⚠️ ${x.kod}: model sitede yok ya da gizli — paylaşılmadı.`;
   const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
-  const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false });
+  const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false, siteVideo: false }); // site işi aşağıda (pelinSite, dosyadan)
   if (!g.ok) return `⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`;
   // 5 Kasım: Selin videoyu DOSYADAN (videoUrl) koyar; kanal mesajı yedek. Fotoğraflar: ön + set (hepsi).
   const http = (a) => /^https?:\/\//.test(String(a || ""));

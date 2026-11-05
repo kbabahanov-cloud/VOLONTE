@@ -446,3 +446,18 @@ test("PELİN'E FOTOĞRAF (5 Kasım, B5–B7): Patron'un fotoğrafları DOSYA ola
   assert.ok(giden[0].fotolar.every((f) => /\/medya\/[a-f0-9]{32}$/.test(f.url) && o.depo.has(`pelinmedya:${f.url.split("/").pop()}`)));
   assert.deepEqual(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => m.file_id), ["ilgisiz"]); // kullanılanlar listeden çıkar
 });
+
+import { videoRaporu } from "./venom-bot.js";
+test("AKŞAM RAPORU VİDEO (5 Kasım): denetim sonucu, bugün gelen 20 MB üstü video ve kanal→site sonuçları raporda", async () => {
+  const o = ortam();
+  const simdi = 1793900000;
+  o.depo.set("venom:videoDenetim", JSON.stringify({ zaman: simdi - 600, siteVideo: 160, calisan: 158, sorunlar: [{ kod: "3612", tur: "buyuk", neden: "34.0 MB — Telegram botu 20 MB üstünü indiremez" }, { kod: "3500", tur: "sitede-bozuk", neden: "bulunamadı" }] }));
+  o.depo.set("venom:videoGelenBuyuk", JSON.stringify([{ zaman: simdi - 100, kim: "Merdan", kod: "3612", boyut: 34 * 1048576 }]));
+  o.depo.set("venom:kanalVideoSonuc", JSON.stringify([{ kod: "3194", ok: true, zaman: simdi - 50 }]));
+  const r = await videoRaporu(o.env, simdi);
+  assert.match(r, /158\/160 oynuyor · ⚠️ 2 OYNAMIYOR/);
+  assert.match(r, /• 3612 — 20 MB üstü: 34\.0 MB/);
+  assert.match(r, /• 3500 — sitede oynamıyor/);
+  assert.match(r, /20 MB üstü gelen video: 1 \(3612 34 MB, Merdan\)/);
+  assert.match(r, /Kanaldan siteye eklenen video: 3194/);
+});

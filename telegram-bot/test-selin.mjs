@@ -991,3 +991,70 @@ test("SİTE RENK (5 Kasım): Pelin medyası yeni renkle gelince renk satırı g�
   assert.equal(u.aciklama.fr, "Robe. Couleurs : noir, bordeaux foncé, blanc.");
   assert.ok(o.g.some((x) => /açıklamaya renk eklendi \(beyaz\)/.test(x.govde.text || "")));
 });
+
+test("VİDEO DENETİMİ (5 Kasım): sitedeki her video Selin yoluyla denenir; 20 MB üstü / listede yok sınıflanır; gönderene TEK 'tekrar gönder' mesajı (bir kez)", async () => {
+  const o = ortam();
+  const { videoDenetimAdimi } = await import("./selin.js");
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3627", fotolar: [], videolar: ["selin/3627/100", "selin/3627/0"] }, { kod: "3612", fotolar: [], videolar: [] }]));
+  o.depo.set("selin:pelinVid:3627", JSON.stringify([{ n: 100, file_id: "PV", boyut: 2600000, uid: "upv" }]));
+  o.depo.set("selin:modeller", JSON.stringify({
+    "3627": { kaynak: "ozel", durum: "sitede", zaman: ist(9), gonderen: 222, medya: [{ tur: "video", file_id: "V0", boyut: 5e6, uid: "u0" }], taslak: { videolar: [{ id: 0, file_id: "V0", boyut: 5e6 }] } },
+    "3612": { kaynak: "ozel", durum: "sitede", zaman: ist(9), gonderen: 222, medya: [{ tur: "video", file_id: "B", boyut: 34 * 1048576, belge: true, uid: "ub" }], taslak: { videolar: [] } },
+  }));
+  const d = await videoDenetimAdimi(o.env, ist(11), { zorla: true });
+  assert.equal(d.siteVideo, 2);
+  assert.equal(d.calisan, 2);
+  assert.deepEqual(d.sorunlar.map((x) => [x.kod, x.tur]), [["3612", "buyuk"]]);
+  assert.match(d.sorunlar[0].neden, /34\.0 MB/);
+  const msj = o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "222");
+  assert.equal(msj.length, 1);
+  assert.match(msj[0].govde.text, /3612 — 34\.0 MB[\s\S]*NORMAL video/);
+  // 3 saat dolmadan tekrar çalışmaz; zorlansa da aynı video için tekrar mesaj yok
+  assert.equal(await videoDenetimAdimi(o.env, ist(12)), null);
+  await videoDenetimAdimi(o.env, ist(15), { zorla: true });
+  assert.equal(o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "222").length, 1);
+  assert.ok(o.depo.has("venom:videoDenetim"));
+});
+
+test("TEKRAR GÖNDERİM (5 Kasım): sitedeki modele sadece video gelirse yeni taslak açılmaz, video doğrudan siteye eklenir; 20 MB üstü video gelince hemen uyarı", async () => {
+  const o = ortam();
+  const { guncelleme: gun, pelinSiteAdimi, siteVideoEkleAdimi } = await import("./selin.js");
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3612", fotolar: ["galeri/3612/1.jpg"], videolar: [] }]));
+  o.depo.set("selin:modeller", JSON.stringify({ "3612": { kaynak: "ozel", durum: "sitede", gonderen: 222, medya: [{ tur: "foto", file_id: "F", uid: "uf" }, { tur: "video", file_id: "B", boyut: 34 * 1048576, uid: "ub" }], taslak: { videolar: [{ id: 0, file_id: "B", boyut: 34 * 1048576 }] } } }));
+  // büyük video → hemen uyarı
+  await gun({ message: { message_id: 7, chat: { id: 222, type: "private" }, from: { id: 222, first_name: "Merdan" }, caption: "3612", video: { file_id: "B2", file_unique_id: "ub2", file_size: 30 * 1048576, width: 1080 } } }, o.env);
+  assert.ok(o.g.some((x) => /30\.0 MB — Telegram botları 20 MB üstünü indiremez/.test(x.govde.text || "")));
+  // küçük video → siteye eklenir
+  await gun({ message: { message_id: 8, chat: { id: 222, type: "private" }, from: { id: 222, first_name: "Merdan" }, caption: "3612", video: { file_id: "K", file_unique_id: "uk", file_size: 8 * 1048576, width: 1080 } } }, o.env);
+  const m = JSON.parse(o.depo.get("selin:modeller"))["3612"];
+  assert.equal(m.durum, "sitede"); // yeni taslak açılmadı
+  assert.equal(m.taslak.videolar.length, 3);
+  await siteVideoEkleAdimi(o.env, ist(11));
+  const u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.deepEqual(u.videolar, ["selin/3612/2"]); // 30 MB'lık (1) eklenmez
+  assert.deepEqual(u.fotolar, ["galeri/3612/1.jpg"]);
+  assert.ok(o.g.some((x) => /🎬 3612: yeni video siteye eklendi/.test(x.govde.text || "")));
+  void pelinSiteAdimi;
+});
+
+test("KANAL → SİTE VİDEO (5 Kasım): Kemal'in kanala koyduğu video siteye eklenir; aynı video (uid) iki kez eklenmez; video olmayan mesaj atlanır", async () => {
+  const o = ortam();
+  const { DatabaseSync } = await import("node:sqlite");
+  const { StokDO } = await import("./stok.js");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) { if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; } const st = db.prepare(q); const s = /^\s*SELECT/i.test(q) ? st.all(...p).map((x) => ({ ...x })) : (st.run(...p), []); return { toArray: () => s }; } };
+  const stok = new StokDO({ storage: { sql } });
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) };
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3194", fotolar: [], videolar: [] }]));
+  const { kuyrugaEkle } = await import("./venom-kopru.js");
+  const { kanalVideoAdimi } = await import("./selin.js");
+  await kuyrugaEkle(o.env, "kanalVideo", { id: "a", kod: "3194", mesajlar: [300, 301] });
+  await kanalVideoAdimi(o.env, ist(11));
+  let u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.deepEqual(u.videolar, ["Volonteroseoffical/301"]);
+  assert.equal(JSON.parse(o.depo.get("selin:vid:301")).uid, "uv301");
+  await kuyrugaEkle(o.env, "kanalVideo", { id: "b", kod: "3194", mesajlar: [301] });
+  await kanalVideoAdimi(o.env, ist(12));
+  u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.equal(u.videolar.length, 1);
+});

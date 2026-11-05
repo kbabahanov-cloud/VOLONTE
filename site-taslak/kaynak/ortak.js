@@ -322,9 +322,13 @@
       if (!u) return `<section class="bolum"><p class="bos">${esc(t("notFound"))}</p><p style="margin-top:20px"><a class="dugme" href="#new">${esc(t("new"))}</a></p></section>`;
       const g = gruplar(u.bedenler);
       const w = genislik(window.innerWidth >= 900 ? 640 : window.innerWidth);
+      // 5 Kasım: video galerinin 2. sırasında (ilk fotoğraftan hemen sonra) + küçük resimlerde ▶ (önceden en sonda, görünmüyordu)
+      const vids = (u.videolar || []).map((v) => videoEtiketi(u, v, "model-video", true)).filter(Boolean).map((v) => ({ v }));
+      const fts = u.fotolar.map((f, i) => ({ f, i }));
+      const ogeler = [...fts.slice(0, 1), ...vids, ...fts.slice(1)];
       return `<section class="bolum model">
-        <div><div class="galeri" id="galeri">${u.fotolar.map((f, i) => `<div><img src="${esc(img(f, w))}" alt="${esc(u.baslik)} ${i + 1}" ${i ? 'loading="lazy"' : ""} decoding="async" data-buyuk="${esc(img(f, 1600))}"><button class="buyut" data-zoom="${i}" aria-label="Zoom">${IKON.buyut}</button></div>`).join("")}${(u.videolar || []).map((v) => `<div>${videoEtiketi(u, v, "model-video", true)}</div>`).join("")}</div>
-          <div class="kucukler">${u.fotolar.map((f, i) => `<button data-git="${i}" class="${i ? "" : "aktif"}"><img src="${esc(img(f, 120))}" alt="" loading="lazy"></button>`).join("")}</div></div>
+        <div><div class="galeri" id="galeri">${ogeler.map((o) => (o.v ? `<div class="video-kutu">${o.v}</div>` : `<div><img src="${esc(img(o.f, w))}" alt="${esc(u.baslik)} ${o.i + 1}" ${o.i ? 'loading="lazy"' : ""} decoding="async" data-buyuk="${esc(img(o.f, 1600))}"><button class="buyut" data-zoom="${o.i}" aria-label="Zoom">${IKON.buyut}</button></div>`)).join("")}</div>
+          <div class="kucukler">${ogeler.map((o, k) => `<button data-git="${k}" class="${k ? "" : "aktif"}"${o.v ? ' aria-label="Video"' : ""}>${o.v ? '<span class="video-kucuk">▶</span>' : `<img src="${esc(img(o.f, 120))}" alt="" loading="lazy">`}</button>`).join("")}</div></div>
         <div class="model-bilgi"><p class="kod-buyuk">${esc(u.kod)}${u.yeni ? ` · ${esc(t("newBadge"))}` : ""}</p><h1>${esc(u.baslik)}</h1><p>${esc(aciklama(u))}</p>
           <div class="gruplar">${g.g.length ? g.g.map((x) => `<div class="grup"><b>${esc(x.ad)} · ${x.aralik}</b>${esc(t("series"))}</div>`).join("") : `<div class="grup"><b>${esc(t("sizesLbl"))}</b>${esc(g.duz)}</div>`}</div>
           <p class="not">${esc(t("soldBy"))} · <a href="#sizes" style="border-bottom:1px solid var(--cizgi)">${esc(t("sizes"))}</a></p>
@@ -375,7 +379,15 @@
       gal.addEventListener("scroll", () => { const i = Math.round(gal.scrollLeft / gal.clientWidth); $$("[data-git]").forEach((b, j) => b.classList.toggle("aktif", j === i)); }, { passive: true });
       $$("[data-zoom]").forEach((b) => b.addEventListener("click", () => zoomAc($("img", b.parentElement).dataset.buyuk)));
       $$("img[data-buyuk]", gal).forEach((im) => { let son = 0; im.addEventListener("click", () => { const s = Date.now(); if (s - son < 320) zoomAc(im.dataset.buyuk); son = s; }); });
-      $$(".model-video", gal).forEach((v) => { v.controls = true; videoKuyrugu(v); });
+      // 5 Kasım: model sayfasının videosu SIRA BEKLEMEZ (vitrin videoları 25 sn'ye kadar bekletiyordu); iPhone Safari "preload"u
+      // yok saydığı için sessiz + satır içi; görününce oynar, çıkınca durur. Hata olursa poster kalır, kutu silinmez.
+      const izle = "IntersectionObserver" in window ? new IntersectionObserver((l) => l.forEach((g) => { const v = g.target; if (g.isIntersecting) v.play().catch(() => {}); else v.pause(); }), { threshold: 0.5 }) : null;
+      $$(".model-video", gal).forEach((v) => {
+        v.controls = true; v.muted = true; v.defaultMuted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
+        v.preload = "metadata"; v.src = v.dataset.src; v.load();
+        v.addEventListener("loadeddata", () => v.classList.add("hazir"), { once: true });
+        if (izle) izle.observe(v);
+      });
     },
   };
 

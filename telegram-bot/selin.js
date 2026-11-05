@@ -187,6 +187,7 @@ export default {
       // Yeni akış (28 Ekim): kanal tabanlı işler (liste, hazırlık, kare, tarama, toplu) KAPALI.
       await cagir("/cron");
       await cagir("/istek");
+      await cagir("/video");
       await cagir("/uretim");
       return;
     }
@@ -227,6 +228,11 @@ export class SelinDO {
         return new Response("ok");
       case "/istek":
         for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi })) {
+          try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
+        }
+        return new Response("ok");
+      case "/video": // 5 Kasım: video işleri ayrı istekte (Cloudflare'in istek başına 50 dış istek sınırı)
+        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -918,7 +924,7 @@ export async function siteVideo(env, id, aralik) {
     const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(id), disable_notification: true });
     const m = r.ok && (r.result.video || r.result.animation);
     if (!m) return new Response("video değil", { status: 404 });
-    v = { file_id: m.file_id, boyut: m.file_size || 0, w: m.width || 0, h: m.height || 0 };
+    v = { file_id: m.file_id, boyut: m.file_size || 0, w: m.width || 0, h: m.height || 0, uid: m.file_unique_id || null };
     await yazKV(env, `selin:vid:${id}`, v);
   }
   if (v.boyut > VIDEO_SINIR) return new Response("büyük", { status: 413 });
@@ -1503,6 +1509,26 @@ async function dosyalariBagla(env, uid, kod, grup, dosyalar, simdi, { album = nu
   const bekleyen = await oku(env, bekleyenAnahtar(uid), []);
   const modeller = await oku(env, "selin:modeller", {});
   const eski = modeller[kod] || {};
+  // 5 Kasım: sitedeki modele SADECE video gelirse (tekrar gönderim) yeni taslak açılmaz; video doğrudan siteye eklenir
+  const gelen = [...bekleyen, ...dosyalar];
+  if (ozelMi(eski) && eski.durum === "sitede" && eski.taslak && gelen.length && gelen.every((d) => d.tur === "video")) {
+    const x = { ...eski, medya: [...(eski.medya || [])], taslak: { ...eski.taslak, videolar: [...(eski.taslak.videolar || [])] } };
+    const ekle = await oku(env, "selin:videoEkle", []);
+    for (const md of gelen) {
+      if (x.medya.some((y) => y.uid === md.uid)) continue;
+      // taslak video sırası = medyadaki video sırası (sitenin "selin/<kod>/<n>" adresi)
+      const n = x.medya.filter((y) => y.tur === "video").length;
+      x.medya.push({ file_id: md.file_id, tur: "video", belge: md.belge || false, boyut: md.boyut || 0, w: md.w || 0, h: md.h || 0, uid: md.uid });
+      x.taslak.videolar[n] = { id: n, file_id: md.file_id, boyut: md.boyut || 0, w: md.w || 0, belge: Boolean(md.belge) };
+      if (!((md.boyut || 0) > VIDEO_SINIR)) ekle.push({ kod, id: n, kim: uid, zaman: simdi });
+    }
+    modeller[kod] = x;
+    await yazKV(env, "selin:modeller", modeller);
+    await yazKV(env, "selin:videoEkle", ekle.slice(-50));
+    if (bekleyen.length) await env.KAYIT.delete(bekleyenAnahtar(uid));
+    if (album) await env.KAYIT.put(`selin:album:${album}`, kod, { expirationTtl: 3600 });
+    return { ...x, videoEklendi: true };
+  }
   // Aynı koda sonradan gelen dosya (ör. unutulan video) mevcut dosyalara eklenir; taslak yeniden hazırlanır.
   const devam = ozelMi(eski) && ["geldi", "onayda", "hazirlanamadi"].includes(eski.durum);
   const x = devam ? { ...eski, kart: eski.durum === "onayda" ? [] : eski.kart || [], hata: 0 } : { ...eski, kaynak: "ozel", durum: "geldi", medya: [], kart: [], gonderen: uid, hata: 0, bildirildi: false, kacirma: 0 };
@@ -1535,8 +1561,9 @@ async function alindiMetni(env, kod, x) {
   if (!x.bedenGrubu) notlar.push("Beden yazılmadı; taslakta 📏 ile seçebilirsiniz.");
   if (!st) notlar.push("Bu kod Vegawin'de yok; fiyat yoksa sitede \"Ask price\" görünür.");
   else if (!(st.toplam > 0)) notlar.push("Vegawin'de stoğu 0 görünüyor.");
-  if (foto.some((f) => !f.belge)) notlar.push("Bazı fotoğraflar sıkıştırılmış geldi; en iyi kalite için 📎 → Dosya olarak gönderin.");
-  if (video.some((v) => v.boyut > VIDEO_SINIR)) notlar.push("20 MB'tan büyük video sitede gösterilemez (Telegram botları indiremiyor).");
+  if (foto.some((f) => !f.belge)) notlar.push("Bazı fotoğraflar sıkıştırılmış geldi; en iyi kalite için FOTOĞRAFLARI 📎 → Dosya olarak gönderin (videoları DEĞİL).");
+  const buyuk = video.filter((v) => v.boyut > VIDEO_SINIR);
+  if (buyuk.length) notlar.push(`⚠️ ${buyuk.length} video 20 MB'tan büyük (${buyuk.map((v) => MB(v.boyut)).join(", ")}) — sitede OYNAMAZ. Videoyu NORMAL video olarak (dosya olarak değil; Telegram sıkıştırır) tekrar gönderin, yazısına ${kod} yazın.`);
   const grupAd = x.bedenGrubu ? BEDEN_GRUPLARI[x.bedenGrubu] : null;
   return `✅ ${kod} alındı (${foto.length} fotoğraf, ${video.length} video${grupAd ? `, ${grupAd.ad}` : ""})${notlar.length ? "\n• " + notlar.join("\n• ") : ""}${await kalanSatiri(env)}`;
 }
@@ -1548,6 +1575,7 @@ export async function ozelKodMesaji(env, m, kb, simdi, yaz) {
   const bekleyen = await oku(env, bekleyenAnahtar(m.from.id), []);
   if (!bekleyen.length) dosyalar = await sohbettenGeriBul(env, m);
   const x = await dosyalariBagla(env, m.from.id, kb.kod, kb.grup, dosyalar, simdi);
+  if (x.videoEklendi) return yaz(`🎬 ${kb.kod} sitede: video(lar) birkaç dakika içinde siteye eklenir (yeni onay gerekmez).`);
   if (!x.medya.length) return yaz(`⚠️ ${kb.kod} için dosya bulamadım. Fotoğraf ve videoyu gönderip kodu tekrar yazın.`);
   const modeller = await oku(env, "selin:modeller", {});
   modeller[kb.kod].bildirildi = true;
@@ -1718,7 +1746,7 @@ export async function pelinVideoKaydet(env, kod, url, simdi) {
   const v = r && r.ok && (r.result.video || r.result.animation || r.result.document);
   if (!v) return null;
   const n = 100 + l.length;
-  l.push({ n, file_id: v.file_id, boyut: v.file_size || bayt.length, kaynak: url, zaman: simdi });
+  l.push({ n, file_id: v.file_id, boyut: v.file_size || bayt.length, kaynak: url, zaman: simdi, uid: v.file_unique_id || null });
   await yazKV(env, anahtar, l);
   return `selin/${kod}/${n}`;
 }
@@ -1970,6 +1998,159 @@ export async function ozelVideo(env, kod, n, aralik) {
   const h = new Headers({ "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=3600", "access-control-allow-origin": "*" });
   for (const k of ["content-length", "content-range"]) if (r.headers.get(k)) h.set(k, r.headers.get(k));
   return new Response(r.body, { status: r.status, headers: h });
+}
+
+// ---------- VİDEO DENETİMİ (5 Kasım, Patron: "inen/inmeyen videolar", sessiz kayıp yok) ----------
+// Sitedeki her video, sitenin kullandığı yolla (/v2 ya da /v) Selin'in içinden denenir (ilk 1 KB). Ekibin son 14 günde Selin'e
+// gönderdiği videolar tek tek sınıflanır: büyük (Telegram botu 20 MB üstünü indiremez), format (MOV/HEVC), model sitede değil,
+// sitede ama listede yok, adres hata veriyor. Sonuç KV "venom:videoDenetim" (Venom akşam raporu + Patron). 3 saatte bir;
+// KV "venom:videoDenetimSimdi" → hemen. Büyük/inmeyen video için gönderene günde bir kez TEK mesaj: "tekrar gönder".
+const MB = (b) => `${(Number(b || 0) / 1048576).toFixed(1)} MB`;
+const VIDEO_PARCA = 18;
+async function videoDene(env, v, kod) {
+  const yeni = String(v).match(/^selin\/(\d{3,6})\/(\d+)$/);
+  const id = String(v).split("/").pop();
+  let r;
+  try { r = yeni ? await ozelVideo(env, yeni[1], yeni[2], "bytes=0-1023") : /^\d+$/.test(id) ? await siteVideo(env, id, "bytes=0-1023") : null; } catch (e) { return { ok: false, denenemedi: true, neden: `denenemedi: ${String(e && e.message).slice(0, 80)}` }; }
+  if (!r) return { ok: false, neden: "adres biçimi tanınmadı" };
+  const durum = r.status;
+  const bayt = new Uint8Array(await r.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  if (![200, 206].includes(durum)) return { ok: false, durum, neden: durum === 413 ? "büyük (20 MB üstü — Telegram botu indiremez)" : durum === 404 ? "bulunamadı (kayıt yok ya da video değil)" : durum === 502 ? "Telegram'dan indirilemedi" : `HTTP ${durum}` };
+  const marka = bayt.length >= 12 && String.fromCharCode(...bayt.slice(4, 8)) === "ftyp" ? String.fromCharCode(...bayt.slice(8, 12)) : null;
+  const iphone = durum === 206 && Boolean(r.headers.get("content-range")) && r.headers.get("accept-ranges") === "bytes";
+  return { ok: true, durum, marka, mov: marka === "qt  ", iphone, boy: Number((r.headers.get("content-range") || "").split("/")[1]) || null, kod };
+}
+export async function videoDenetimAdimi(env, simdi, { zorla = false } = {}) {
+  // Tek seferlik (5 Kasım): ilk denetim istek sınırına takıldı → "tekrar istendi" işaretleri sıfırlanır
+  if (await env.KAYIT.get("venom:videoTekrarSifirla")) {
+    await env.KAYIT.delete("venom:videoTekrarSifirla");
+    for (const on of ["selin:tekrarIstendi:", "selin:tekrarMesaj:"]) {
+      const ks = ((await Promise.resolve().then(() => env.KAYIT.list({ prefix: on })).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
+      for (const k of ks) await env.KAYIT.delete(k);
+    }
+  }
+  const simdiIste = await env.KAYIT.get("venom:videoDenetimSimdi");
+  if (simdiIste) await env.KAYIT.delete("venom:videoDenetimSimdi");
+  // Cloudflare tek çalışmada en fazla 50 dış istek: her çalışmada PARCA video denenir, kalan sonraki çalışmada (5 dk)
+  let durum = simdiIste || zorla ? null : await oku(env, "selin:videoDenetimDurum", null);
+  if (!durum) {
+    const son = await oku(env, "selin:videoDenetimZaman", 0);
+    if (!zorla && !simdiIste && simdi - son < 3 * 3600) return null;
+    await yazKV(env, "selin:videoDenetimZaman", simdi);
+    durum = { basla: simdi, i: 0, site: [] };
+  }
+  const { liste } = await siteVerisi(env);
+  const hepsi = liste.flatMap((u) => (u.videolar || []).map((v) => ({ kod: String(u.kod), v })));
+  for (const x of hepsi.slice(durum.i, durum.i + VIDEO_PARCA)) {
+    const d = await videoDene(env, x.v, x.kod);
+    durum.site.push({ kod: x.kod, v: x.v, ok: d.ok, neden: d.neden || null, mov: Boolean(d.mov), iphone: Boolean(d.iphone), denenemedi: Boolean(d.denenemedi) });
+    durum.i++;
+  }
+  if (durum.i < hepsi.length) { await yazKV(env, "selin:videoDenetimDurum", durum, 86400); return null; }
+  await env.KAYIT.delete("selin:videoDenetimDurum");
+  const modeller = await oku(env, "selin:modeller", {});
+  const site = durum.site, sorunlar = [];
+  for (const d of site) {
+    if (d.denenemedi) continue; // Selin'in kendi sınırı/ağ hatası: video bozuk sayılmaz, gönderene mesaj gitmez (sonraki turda yeniden)
+    if (!d.ok) sorunlar.push({ kod: d.kod, v: d.v, tur: "sitede-bozuk", neden: d.neden });
+    else if (d.mov) sorunlar.push({ kod: d.kod, v: d.v, tur: "format", neden: "MOV (QuickTime) — bazı tarayıcılarda oynamayabilir" });
+  }
+  const sinir = simdi - 14 * 86400;
+  for (const [kod, x] of Object.entries(modeller)) {
+    if (!ozelMi(x) || Math.max(x.sonMedya || 0, x.zaman || 0) < sinir) continue;
+    const vids = (x.medya || []).filter((y) => y.tur === "video");
+    if (!vids.length) continue;
+    const u = liste.find((y) => String(y.kod) === kod);
+    vids.forEach((y, i) => {
+      const k = { kod, n: i, boyut: y.boyut || 0, belge: Boolean(y.belge), uid: y.uid || null, kim: x.gonderen || null, tarih: Math.max(x.sonMedya || 0, x.zaman || 0) };
+      if ((y.boyut || 0) > VIDEO_SINIR) sorunlar.push({ ...k, tur: "buyuk", neden: `${MB(y.boyut)} — Telegram botu 20 MB üstünü indiremez` });
+      else if (!u) sorunlar.push({ ...k, tur: "sitede-degil", neden: `model sitede değil (Selin durumu: ${x.durum || "?"})` });
+      else if (!(u.videolar || []).includes(`selin/${kod}/${i}`)) sorunlar.push({ ...k, tur: "listede-yok", neden: "model sitede ama bu video sitenin listesinde yok" });
+    });
+  }
+  const sonuc = { zaman: simdi, siteVideo: site.length, denenemedi: site.filter((d) => d.denenemedi).length, calisan: site.filter((d) => d.ok).length, iphoneUygun: site.filter((d) => d.ok && d.iphone).length, sorunlar: sorunlar.slice(0, 200) };
+  // Gönderene "tekrar gönder" (büyük ya da bozuk; günde bir kez, tek mesaj, aynı video bir kez)
+  const kisiye = {};
+  for (const s of sorunlar.filter((y) => ["buyuk", "sitede-bozuk"].includes(y.tur))) {
+    const m = modeller[s.kod];
+    const kim = s.kim || (m && m.gonderen);
+    if (!kim || (m && !["sitede", "onayda", "geldi", "hazirlanamadi"].includes(m.durum))) continue;
+    const isaret = `selin:tekrarIstendi:${s.uid || `${s.kod}-${s.v || s.n}`}`;
+    if (await oku(env, isaret, null)) continue;
+    await yazKV(env, isaret, simdi, 30 * 86400);
+    (kisiye[kim] = kisiye[kim] || []).push(s);
+  }
+  for (const [kim, l] of Object.entries(kisiye)) {
+    if (await oku(env, `selin:tekrarMesaj:${kim}:${gunAnahtari(simdi)}`, null)) continue;
+    const r = await tg(env, "sendMessage", { chat_id: kim, text: [`📹 Bu modellerin videosu siteye KONAMADI, lütfen tekrar gönderin:`, ...l.map((s) => `• ${s.kod} — ${s.neden}`), "",
+      "Nasıl: videoyu NORMAL video olarak gönderin (\"dosya olarak\" DEĞİL; Telegram sıkıştırır), 20 MB altında. Yazısına sadece kodu yazın (ör. 3612). Model sitedeyse video doğrudan siteye eklenir; fotoğrafları tekrar göndermeyin."].join("\n") }).catch(() => null);
+    if (r && r.ok) { await yazKV(env, `selin:tekrarMesaj:${kim}:${gunAnahtari(simdi)}`, 1, 2 * 86400); sonuc.istenen = [...(sonuc.istenen || []), ...l.map((y) => y.kod)]; }
+    else for (const y of l) await env.KAYIT.delete(`selin:tekrarIstendi:${y.uid || `${y.kod}-${y.v || y.n}`}`);
+  }
+  await env.KAYIT.put("venom:videoDenetim", JSON.stringify(sonuc), { expirationTtl: 30 * 86400 });
+  return sonuc;
+}
+// Sitedeki modele SONRADAN gelen video (tekrar gönderim): taslağa eklenir, sitenin listesine doğrudan girer (yeniden onay yok)
+export async function siteVideoEkleAdimi(env, simdi) {
+  const l = await oku(env, "selin:videoEkle", []);
+  if (!l.length) return;
+  await env.KAYIT.delete("selin:videoEkle");
+  const { liste } = await siteVerisi(env);
+  const notlar = [];
+  let degisti = false;
+  for (const y of l) {
+    const u = liste.find((z) => String(z.kod) === String(y.kod));
+    const yol = `selin/${y.kod}/${y.id}`;
+    if (!u) { notlar.push(`⚠️ ${y.kod}: video eklenemedi — model sitede değil`); continue; }
+    if (!(u.videolar || []).includes(yol)) { u.videolar = [yol, ...(u.videolar || [])]; degisti = true; notlar.push(`🎬 ${y.kod}: yeni video siteye eklendi`); }
+  }
+  if (degisti) await siteyeYaz(env, [], liste, `Selin: tekrar gönderilen video siteye eklendi (${notlar.filter((n) => n.startsWith("🎬")).map((n) => n.split(":")[0].slice(3)).join(", ")})`);
+  for (const y of l) if (y.kim) await tg(env, "sendMessage", { chat_id: y.kim, text: notlar.filter((n) => n.includes(` ${y.kod}:`)).join("\n") || `${y.kod}: işlendi` }).catch(() => null);
+}
+// Kemal kanala video koyunca (5 Kasım, Patron): aynı video siteye de. StokDO kuyruğu "kanalVideo" = { kod, mesajlar: [kanal mesaj no],
+// sadeceVideosuzsa }. Mesaj arşive iletilir → video mu, boyut, file_unique_id; sitede aynı video varsa (uid) eklenmez.
+async function siteVideoUidleri(env, u, modeller) {
+  const uidler = new Set();
+  const x = modeller[String(u.kod)];
+  const vids = ((x && x.medya) || []).filter((y) => y.tur === "video");
+  const pv = await oku(env, `selin:pelinVid:${u.kod}`, []);
+  for (const v of u.videolar || []) {
+    const m = String(v).match(/^selin\/(\d{3,6})\/(\d+)$/);
+    if (m && Number(m[2]) >= 100) { const p = pv.find((y) => y.n === Number(m[2])); if (p && p.uid) uidler.add(p.uid); }
+    else if (m) { const y = vids[Number(m[2])]; if (y && y.uid) uidler.add(y.uid); }
+    else { const c = await oku(env, `selin:vid:${String(v).split("/").pop()}`, null); if (c && c.uid) uidler.add(c.uid); }
+  }
+  return uidler;
+}
+export async function kanalVideoAdimi(env, simdi) {
+  const isler = await kuyruguAl(env, "kanalVideo");
+  if (!isler.length) return;
+  const arsiv = await oku(env, "arsiv", null), kanal = await oku(env, "kanal", null);
+  if (!arsiv || !kanal) return;
+  const { liste } = await siteVerisi(env);
+  const modeller = await oku(env, "selin:modeller", {});
+  const notlar = [], sorun = [];
+  for (const x of isler) {
+    const u = liste.find((y) => String(y.kod) === String(x.kod));
+    if (!u || (x.sadeceVideosuzsa && (u.videolar || []).length)) continue;
+    const bilinen = await siteVideoUidleri(env, u, modeller);
+    for (const id of (x.mesajlar || []).filter((n) => Number(n) > 0).slice(0, 10)) {
+      const r = await tg(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(id), disable_notification: true }).catch(() => null);
+      const m = r && r.ok && (r.result.video || r.result.animation);
+      if (!m) continue;
+      if ((m.file_size || 0) > VIDEO_SINIR) { sorun.push({ kod: String(x.kod), v: `kanal/${id}`, tur: "buyuk", neden: `kanaldaki video ${MB(m.file_size)} — Telegram botu 20 MB üstünü indiremez`, zaman: simdi }); continue; }
+      if (bilinen.has(m.file_unique_id)) continue;
+      await yazKV(env, `selin:vid:${id}`, { file_id: m.file_id, boyut: m.file_size || 0, w: m.width || 0, h: m.height || 0, uid: m.file_unique_id });
+      u.videolar = [`${kanal.kullanici || "kanal"}/${id}`, ...(u.videolar || [])];
+      bilinen.add(m.file_unique_id);
+      notlar.push(String(x.kod));
+    }
+  }
+  if (notlar.length) await siteyeYaz(env, [], liste, `Selin: kanaldaki video siteye eklendi (${[...new Set(notlar)].join(", ")})`);
+  if (notlar.length || sorun.length) {
+    const l = await oku(env, "venom:kanalVideoSonuc", []);
+    await env.KAYIT.put("venom:kanalVideoSonuc", JSON.stringify([...l, ...[...new Set(notlar)].map((k) => ({ kod: k, ok: true, zaman: simdi })), ...sorun.map((y) => ({ ...y, ok: false }))].slice(-50)), { expirationTtl: 7 * 86400 });
+  }
 }
 
 // ---------- Toplu yükleme (kullanıcı kararı, 27 Ekim) ----------
@@ -2338,6 +2519,12 @@ export async function guncelleme(u, env) {
       : m.video ? { file_id: m.video.file_id, tur: "video", boyut: m.video.file_size || 0 }
         : belgeVideoMu(m.document) ? { file_id: m.document.file_id, tur: "video", boyut: m.document.file_size || 0, belge: true } : null; // "dosya olarak" video (IMG_4581.MP4)
   if (medya) {
+    // 5 Kasım: 20 MB üstü video hemen söylenir (Telegram botu indiremez → sitede oynamaz); kayıt Venom raporu için
+    if (medya.tur === "video" && (medya.boyut || 0) > VIDEO_SINIR) {
+      const l = await oku(env, "venom:videoGelenBuyuk", []);
+      await env.KAYIT.put("venom:videoGelenBuyuk", JSON.stringify([...l, { zaman: simdi, kim: kisiAdi(m.from), kod: (String(m.caption || "").match(/\b(\d{3,6})\b/) || [])[1] || null, boyut: medya.boyut, belge: Boolean(medya.belge) }].slice(-50)), { expirationTtl: 14 * 86400 });
+      await yaz(`⚠️ Bu video ${MB(medya.boyut)} — Telegram botları 20 MB üstünü indiremez, sitede OYNAMAZ.\nLütfen NORMAL video olarak gönderin (📎 "dosya olarak" DEĞİL; Telegram sıkıştırır) ya da sıkıştırıp tekrar gönderin. Yazısına kodu yazın.`);
+    }
     const r = String(m.caption || "").trim().match(/^(\d{3,6})\s*(ask[ıi]|manken)/i);
     if (!r) return ozelMedya(env, m, { ...medya, uid: (m.document || m.video || (m.photo && m.photo[m.photo.length - 1]) || {}).file_unique_id || medya.file_id, w: (m.photo ? m.photo[m.photo.length - 1].width : m.video ? m.video.width : 0) || 0, h: (m.photo ? m.photo[m.photo.length - 1].height : m.video ? m.video.height : 0) || 0 }, simdi);
     const kod = r[1];

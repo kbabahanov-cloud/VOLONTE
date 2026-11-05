@@ -245,3 +245,6 @@ tr.grup-satir td { text-align: left; font: italic 500 16px/1 var(--serif); color
 .slayt video.hazir { opacity: 1; }
 .slayt-yazi > span { display: block; }
 .giris-metin { text-align: center; } .giris-metin .cizgi { margin-left: auto; margin-right: auto; } .giris-metin .aciklama { margin: 0 auto; }
+
+/* 5 Kasım: küçük resimlerde video işareti */
+.kucukler .video-kucuk { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 48px; background: #111; color: #fff; font-size: 18px; }
