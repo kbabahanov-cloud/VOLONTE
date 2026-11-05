@@ -15,6 +15,7 @@
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
+import { siteKontrol, engelKaydet } from "./yayin-kontrol.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -232,7 +233,7 @@ export class SelinDO {
         }
         return new Response("ok");
       case "/video-isleri": // 5 Kasım: video işleri ayrı istekte (Cloudflare'in istek başına 50 dış istek sınırı)
-        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi })) {
+        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi, siteTekrarBulAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -788,6 +789,10 @@ const b64Metin = (s) => btoa(unescape(encodeURIComponent(s)));
 export const fiyatsiz = (liste) => (liste || []).map(({ fiyat, ...u }) => u);
 export async function siteyeYaz(env, dosyalar, liste, mesaj) {
   liste = fiyatsiz(liste);
+  // 6 Kasım (Patron): VENOM KONTROLÜ — aynı fotoğraf/video iki kez konmaz, kolaj konmaz, açıklamada fiyat varsa site yazılmaz
+  const k = siteKontrol(liste, dosyalar);
+  if (!k.ok) { await engelKaydet(env, "selin", "site", k.sorunlar); throw new Error(`Venom kontrolü: ${k.sorunlar.join("; ")}`); }
+  if (k.notlar.length) { liste = k.liste; dosyalar = k.dosyalar; const l = (await env.KAYIT.get("venom:kontrol:site", "json").catch(() => null)) || []; await env.KAYIT.put("venom:kontrol:site", JSON.stringify([...l, { zaman: Math.floor(Date.now() / 1000), notlar: k.notlar }].slice(-30)), { expirationTtl: 7 * 86400 }).catch(() => null); }
   const ref = await gh(env, "/git/ref/heads/main");
   const sonCommit = await gh(env, `/git/commits/${ref.object.sha}`);
   const agac = [];
@@ -2154,6 +2159,30 @@ async function siteVideoUidleri(env, u, modeller) {
     else { const c = await oku(env, `selin:vid:${String(v).split("/").pop()}`, null); if (c && c.uid) uidler.add(c.uid); }
   }
   return uidler;
+}
+// 6 Kasım (temizlik B2): sitede aynı modelde AYNI video iki kez mi (Telegram dosya kimliği)? KV "venom:siteTekrarBul" → sonuç
+// "venom:siteTekrarSonuc" = [{ kod, videolar: [fazla adresler] }] (Patron onayıyla Venom kartından kaldırılır)
+export async function siteTekrarBulAdimi(env, simdi) {
+  if (!(await env.KAYIT.get("venom:siteTekrarBul"))) return;
+  const { liste } = await siteVerisi(env);
+  const modeller = await oku(env, "selin:modeller", {});
+  const sonuc = [];
+  for (const u of liste) {
+    const x = modeller[String(u.kod)];
+    const vids = ((x && x.medya) || []).filter((y) => y.tur === "video");
+    const pv = await oku(env, `selin:pelinVid:${u.kod}`, []);
+    const gor = new Map(), fazla = [];
+    for (const v of u.videolar || []) {
+      const m = String(v).match(/^selin\/(\d{3,6})\/(\d+)$/);
+      let uid = null;
+      if (m && Number(m[2]) >= 100) { const p2 = pv.find((y) => y.n === Number(m[2])); uid = p2 && (p2.uid || p2.kaynak); }
+      else if (m) { const y = vids[Number(m[2])]; uid = y && y.uid; }
+      else { const c = await oku(env, `selin:vid:${String(v).split("/").pop()}`, null); uid = c && c.uid; }
+      if (uid && gor.has(uid)) fazla.push(v); else if (uid) gor.set(uid, v);
+    }
+    if (fazla.length) sonuc.push({ kod: String(u.kod), videolar: fazla, fotolar: [] });
+  }
+  if (await env.KAYIT.put("venom:siteTekrarSonuc", JSON.stringify({ zaman: simdi, sonuc }), { expirationTtl: 7 * 86400 }).then(() => true).catch(() => false)) await env.KAYIT.delete("venom:siteTekrarBul").catch(() => null);
 }
 export async function kanalVideoAdimi(env, simdi) {
   const isler = await kuyruguAl(env, "kanalVideo");

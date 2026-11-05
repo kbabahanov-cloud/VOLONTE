@@ -322,8 +322,9 @@ test("VENOM 5 Kasım: hafıza (kurallar + Patron kararları) sistemde; fotoğraf
   // fotoğraf + "3627 kanala hazırla" → kemal_paylas → (20 sn sonra) Kemal kuyruğu, Venom /medya adresleriyle
   const orijinal = globalThis.fetch;
   globalThis.fetch = async (url, istek = {}) => { const u = String(url); if (u.endsWith("/getFile")) return Response.json({ ok: true, result: { file_path: "photos/a.jpg" } }); if (u.includes("/file/bot")) return new Response("FOTO"); return orijinal(url, istek); };
-  o.cevaplar.push({ arac: "kemal_paylas", girdi: { kod: "3627" } }, { text: "Kemal hazırlıyor." });
-  await guncelleme({ update_id: uid++, message: { message_id: 2, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: "P1" }], caption: "3627 kanala hazırla" } }, o.env);
+  // 6 Kasım: kod + renk + "kanala" → Claude'suz, soru sormadan; tek satır "Anladım"
+  await guncelleme({ update_id: uid++, message: { message_id: 2, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: "P1" }], caption: "3627 bordo kanala hazırla" } }, o.env);
+  assert.ok(patronaGiden(o).some((x) => /🧭 Anladım: 3627 bordo → Kemal'e paylaşım \(kanal \+ site\), alt yazı burgundy/.test(x.govde.text)));
   o.depo.set("venom:bot:medya", JSON.stringify(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => ({ ...m, zaman: 1 }))));
   await venomCron(o.env, ist(5, 12));
   const pp = await kuyruguAl(o.env, "patronPaylas");
@@ -541,4 +542,38 @@ test("SAĞLAMLAŞTIRMA (6 Kasım) — 'aracım yok' denmez: not alınır; 09:30 
   assert.match(r, /Tekrar paylaşım.*3148 \(2 kez\)/);
   assert.match(r, /ÇIKARILDI: 3570/);
   assert.match(r, /İletilmedi: 3627/);
+});
+
+import { kodRenk, uretNiyeti } from "./venom-bot.js";
+test("ANLAMA (6 Kasım, D8–D10): üretim / paylaş / açıklamasız dosya ayrımı; tek satır 'Anladım'; 'hayır' geri alır ve kaydeder; akşam raporunda anlamadıklarım", async () => {
+  assert.deepEqual(uretNiyeti("3627 beyaz fotoğrafını yap"), { kod: "3627", renk: "beyaz" });
+  assert.deepEqual(uretNiyeti("36 27 beyaz videosunu çek"), { kod: "3627", renk: "beyaz" });
+  assert.equal(uretNiyeti("3627 beyaz paylaş"), null);
+  assert.equal(uretNiyeti("3627 videosu ne zaman gelir?"), null);
+  assert.deepEqual(kodRenk("3627 koyu bordo büyük"), { kod: "3627", renk: "koyu bordo", beden: "b" });
+  const o = ortam();
+  const pelinGiden = [];
+  o.env.PELIN_W = { mesaj: async (m) => { pelinGiden.push(m); return true; } };
+  await yazi(o, PATRON, "3627 beyaz videosunu yap");
+  assert.deepEqual(pelinGiden, ["/uret 3627 beyaz"]);
+  assert.equal(o.claude.length, 0);
+  assert.ok(patronaGiden(o).some((x) => /🧭 Anladım: 3627 beyaz → Pelin'e fotoğraf \+ video üretimi/.test(x.govde.text)));
+  // açıklamasız dosya → 3 düğme
+  const foto = (fid) => guncelleme({ update_id: uid++, message: { message_id: 3, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: fid }] } }, o.env);
+  await foto("Q1");
+  const k = sonKart(o);
+  assert.deepEqual(k.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["🎬 Pelin kullansın", "📣 Paylaş", "💾 Sadece kaydet"]);
+  await bas(o, k.govde.reply_markup.inline_keyboard[1][0].callback_data); // sadece kaydet
+  assert.match(o.depo.get("venom:bot:kayitliMedya"), /Q1/);
+  // Paylaş → kod + renk sorusu → "3627 beyaz" → paylaşım (kapalı: DURAKLATILDI ama anlama satırı var)
+  await foto("Q2");
+  await bas(o, sonKart(o).govde.reply_markup.inline_keyboard[0][1].callback_data);
+  await yazi(o, PATRON, "3627 beyaz");
+  assert.ok(patronaGiden(o).some((x) => /🧭 Anladım: 3627 beyaz → Kemal'e paylaşım/.test(x.govde.text)));
+  // "hayır" → geri al + anlamadıklarım
+  await yazi(o, PATRON, "hayır");
+  assert.ok(patronaGiden(o).some((x) => /yanlış anlamışım/.test(x.govde.text)));
+  const r = await sorunRaporu(o.env, Math.floor(Date.now() / 1000) + 10);
+  assert.match(r, /🤔 Anlamadıklarım \(1\)/);
+  assert.match(r, /"3627 beyaz" — yanlış anladım/);
 });

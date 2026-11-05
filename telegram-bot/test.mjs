@@ -362,7 +362,7 @@ test("videodan kare: sadece videosu olan paylaşımda onaylı kare başa eklenir
   assert.deepEqual(medya.map((m) => [m.type, m.media]), [["photo", "https://raw.githubusercontent.com/x/y/z/kareler/3300/aday-2.jpg"], ["video", "vid302"]]);
   o.depo.set("kare:3300", JSON.stringify({ durum: "onayda" })); // onaylanmamış kare kullanılmaz
   o.gonderilen.length = 0;
-  await kanaldaPaylas(o.env, "3300", [302], o.simdi + 5);
+  await kanaldaPaylas(o.env, "3300", [302], o.simdi + 2 * 86400); // 6 Kasım: aynı gün tekrar Venom kontrolünde durur
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
 });
 
@@ -1129,7 +1129,7 @@ test("marka açıkken Kemal'in kanal paylaşımı markalı yüklenir; görsel ar
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   o.env.IMAGES = { input: () => ({ transform() { return this; }, draw() { return this; }, async output() { throw new Error("9422 limit"); } }) };
   o.gonderilen.length = 0;
-  const r2 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 10);
+  const r2 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 2 * 86400);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
   assert.match(r2.markaNotu, /marka basılamadı \(9422 limit\)/);
 });
@@ -2015,4 +2015,25 @@ test("PATRON PAYLAŞIMI (6 Kasım): Venom'dan renk/beden Patron'un yazdığı (m
   assert.equal(site[0].videoUrl, V + "b".repeat(32));
   assert.equal(site[0].renk, "beyaz");
   assert.ok(site[0].fotolar.length >= 1 && site[0].fotolar.every((f) => /volonte-pelin\.volonte\.workers\.dev\/medya\/[a-f0-9]{32}$/.test(f)), JSON.stringify(site[0]));
+});
+
+test("VENOM KONTROLÜ (6 Kasım): aynı model aynı gün ikinci kez kanala GİTMEZ, Patron'a kısa sebep; Black Rose modeli eski gönderiden kopyalanmaz (yeni düzende BLACK ROSE imzası)", async () => {
+  const o = markaOrtami();
+  Object.assign(o.env, { MURAT_ID: "999" });
+  const r1 = await kanaldaPaylas(o.env, "3300", [302], o.simdi);
+  assert.equal(r1.ok, true);
+  o.gonderilen.length = 0;
+  const r2 = await kanaldaPaylas(o.env, "3300", [302], o.simdi + 3600);
+  assert.equal(r2.ok, false);
+  assert.match(r2.hata, /Venom kontrolü: bugün .* zaten paylaşıldı/);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.ok(o.gonderilen.some((g) => g.url.endsWith("/sendMessage") && /🛑 Venom kontrolü — 3300 kanala GİTMEDİ/.test(JSON.stringify(g.govde))));
+  assert.match(o.depo.get("venom:kontrol:engel"), /3300/);
+  // Black Rose: model kartı BLACKROSE → kopya yok; site yoksa durur
+  o.depo.set("pelinboy:3100", JSON.stringify({ marka: "BLACKROSE" }));
+  o.gonderilen.length = 0;
+  const r3 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 7200);
+  assert.equal(r3.ok, false);
+  assert.match(r3.hata, /Black Rose modeli eski gönderiden KOPYALANAMAZ/);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
