@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3634",
+  "baslik": "Butterfly Print Shirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a relaxed long shirt with wide-leg trousers in a soft satin-look finish. The shirt has a classic pointed collar, black contrast buttons and a large butterfly print that fades from gold into charcoal grey. The trousers repeat the print and have an elastic front waistband for easy comfort. Wear it together for daytime events or style the pieces separately. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces composé d'une chemise longue à la coupe ample et d'un pantalon large, au fini satiné et fluide. La chemise se distingue par son col classique, ses boutons noirs contrastants et un grand imprimé papillon passant du doré au gris anthracite. Le pantalon reprend le motif, avec une taille élastique devant pour plus de confort. À porter en ensemble pour vos sorties de journée ou séparément. Fabriqué à Istanbul avec soin.",
+   "pt": "Conjunto de duas peças com camisa longa de corte solto e calça pantalona, num acabamento acetinado e fluido. A camisa tem gola clássica, botões pretos em contraste e um grande estampado de borboletas que passa do dourado ao cinza-escuro. A calça repete o estampado e tem cós elástico à frente para maior conforto. Use o conjunto completo em eventos de dia ou combine as peças separadamente. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3634/1.jpg",
+   "galeri/3634/2.jpg",
+   "galeri/3634/3.jpg",
+   "galeri/3634/4.jpg"
+  ],
+  "videolar": [
+   "selin/3634/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3627",
   "baslik": "Sheer Sleeve Lace Waist Maxi",
   "kategori": "evening",
@@ -230,28 +252,6 @@
   "videolar": [
    "selin/3162/0",
    "selin/3162/1"
-  ],
-  "gizli": false,
-  "eklenme": "2026-11-04"
- },
- {
-  "kod": "3634",
-  "baslik": "Printed Satin Shirt Set",
-  "kategori": "sets",
-  "aciklama": {
-   "en": "A two-piece set pairing a long, relaxed button-front shirt with matching wide-leg trousers in a soft satin finish. The shirt features a classic pointed collar and contrast black buttons, while a large painterly butterfly print flows over a golden-to-charcoal gradient. The trousers have an elastic front waistband and a smooth back. Easy to wear for daytime events or polished city days, made in Istanbul with careful workmanship.",
-   "fr": "Un ensemble deux pièces composé d'une chemise longue et ample boutonnée devant et d'un pantalon large assorti, au fini satiné et doux. La chemise se distingue par son col classique et ses boutons noirs contrastés, avec un grand imprimé papillon façon aquarelle sur un dégradé doré et anthracite. Le pantalon offre une taille élastique devant et un dos lisse. Idéal pour les événements de journée ou une allure soignée en ville, confectionné à Istanbul avec soin.",
-   "pt": "Um conjunto de duas peças com camisa longa e solta, abotoada à frente, e calça larga combinando, com acabamento acetinado suave. A camisa tem gola clássica e botões pretos em contraste, com um grande estampado de borboleta em estilo aquarela sobre um degradê dourado e grafite. A calça tem cós elástico na frente e costas lisas. Perfeito para eventos diurnos ou um visual elegante na cidade, produzido em Istambul com acabamento cuidadoso."
-  },
-  "bedenler": "38-40-42-44-46-48-50",
-  "fotolar": [
-   "galeri/3634/1.jpg",
-   "galeri/3634/2.jpg",
-   "galeri/3634/3.jpg",
-   "galeri/3634/4.jpg"
-  ],
-  "videolar": [
-   "selin/3634/0"
   ],
   "gizli": false,
   "eklenme": "2026-11-04"
