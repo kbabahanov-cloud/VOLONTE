@@ -938,3 +938,56 @@ test("FOTO YENİLE (5 Kasım): fotoğraflar yeni adla yeniden kaydedilir (önbel
   assert.ok(!o.github.dosyalar.has("galeri/3627/1.jpg"));
   assert.ok(o.github.dosyalar.has(u.fotolar[0]));
 });
+
+import { renkleriUygula, renkDilleri } from "./site-renk.js";
+test("SİTE RENK SATIRI (5 Kasım, Patron kuralı): yeni renk → açıklamadaki renkler güncellenir (EN/FR/PT); bilinmeyen renk uydurulmaz; satır tek kalır", () => {
+  assert.deepEqual(renkDilleri("koyu bordo"), { en: "dark burgundy", fr: "bordeaux foncé", pt: "bordô escuro" });
+  assert.equal(renkDilleri("gökkuşağı"), null);
+  const u = { kod: "3627", aciklama: { en: "A maxi dress. Made in Istanbul.", fr: "Robe longue.", pt: "Vestido longo." } };
+  let r = renkleriUygula(u, ["siyah", "koyu bordo"]);
+  assert.equal(r.urun.aciklama.en, "A maxi dress. Made in Istanbul. Colors: black, dark burgundy.");
+  assert.equal(r.urun.aciklama.fr, "Robe longue. Couleurs : noir, bordeaux foncé.");
+  assert.equal(r.urun.aciklama.pt, "Vestido longo. Cores: preto, bordô escuro.");
+  r = renkleriUygula(r.urun, ["beyaz"]);
+  assert.equal(r.urun.aciklama.en, "A maxi dress. Made in Istanbul. Colors: black, dark burgundy, white.");
+  assert.deepEqual(r.urun.renkler, ["siyah", "koyu bordo", "beyaz"]);
+  assert.equal(renkleriUygula(r.urun, ["beyaz"]).degisti, false); // aynı renk tekrar eklenmez
+  const b = renkleriUygula(r.urun, ["gökkuşağı"]);
+  assert.deepEqual([b.degisti, b.bilinmeyen], [false, ["gökkuşağı"]]);
+});
+
+test("SİTE RENK (5 Kasım): Pelin medyası yeni renkle gelince renk satırı güncellenir; ilk renk bilinmiyorsa yazılmaz + uyarı; tek seferlik venom:siteRenk; yeniden onayda renk korunur", async () => {
+  const o = ortam();
+  const { DatabaseSync } = await import("node:sqlite");
+  const { StokDO } = await import("./stok.js");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) { if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; } const st = db.prepare(q); const s = /^\s*SELECT/i.test(q) ? st.all(...p).map((x) => ({ ...x })) : (st.run(...p), []); return { toArray: () => s }; } };
+  const stok = new StokDO({ storage: { sql } });
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) };
+  o.env.SAHIP_IDS = "111";
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3627", aciklama: { en: "Dress.", fr: "Robe.", pt: "Vestido." }, fotolar: ["galeri/3627/1.jpg"], videolar: [] }]));
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (/^https:\/\/img\//.test(String(url)) ? new Response(new Uint8Array([1])) : asil(url, istek));
+  const { kuyrugaEkle } = await import("./venom-kopru.js");
+  const { pelinSiteAdimi } = await import("./selin.js");
+  // ilk renk kayıtlı değil → açıklamaya dokunulmaz, uyarı
+  await kuyrugaEkle(o.env, "pelinSite", { id: "a", kod: "3627", foto: "https://img/1.jpg", renk: "koyu bordo" });
+  await pelinSiteAdimi(o.env, ist(11));
+  let u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.equal(u.aciklama.en, "Dress.");
+  assert.ok(o.g.some((x) => /ilk rengi kayıtlı değil/.test(x.govde.text || "")));
+  // tek seferlik: renkleri yaz (Venom site_duzelt renkler)
+  o.depo.set("venom:siteRenk", JSON.stringify([{ kod: "3627", renkler: ["siyah", "koyu bordo"], mod: "yaz" }]));
+  await pelinSiteAdimi(o.env, ist(12));
+  u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.equal(u.aciklama.en, "Dress. Colors: black, dark burgundy.");
+  assert.ok(!o.depo.has("venom:siteRenk"));
+  assert.match(o.depo.get("venom:siteRenkSonuc"), /3627: açıklamadaki renkler → siyah, koyu bordo/);
+  // beyaz Pelin'den gelince otomatik eklenir
+  await kuyrugaEkle(o.env, "pelinSite", { id: "b", kod: "3627", foto: "https://img/2.jpg", renk: "beyaz" });
+  await pelinSiteAdimi(o.env, ist(13));
+  globalThis.fetch = asil;
+  u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.equal(u.aciklama.fr, "Robe. Couleurs : noir, bordeaux foncé, blanc.");
+  assert.ok(o.g.some((x) => /açıklamaya renk eklendi \(beyaz\)/.test(x.govde.text || "")));
+});

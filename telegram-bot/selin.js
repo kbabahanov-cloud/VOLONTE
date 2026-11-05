@@ -14,6 +14,7 @@
 
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
+import { renkleriUygula } from "./site-renk.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -863,6 +864,7 @@ async function siteyeYukle(env, kod, kim, simdi) {
     const pv = (eski.videolar || []).filter((v) => new RegExp(`^selin/${kod}/1\\d\\d+$`).test(v) && !urun.videolar.includes(v));
     if (pf.length) urun.fotolar.splice(Math.min(1, urun.fotolar.length), 0, ...pf);
     if (pv.length) urun.videolar = [...pv, ...urun.videolar];
+    if ((eski.renkler || []).length) { const r = renkleriUygula({ ...urun, renkler: [] }, eski.renkler); if (r.degisti) Object.assign(urun, { renkler: r.urun.renkler, aciklama: r.urun.aciklama }); }
   }
   const yeniListe = [urun, ...liste.filter((u) => u.kod !== kod)];
   await siteyeYaz(env, dosyalar, yeniListe, `Selin: ${kod} siteye eklendi (onaylayan: ${kim})`);
@@ -1753,8 +1755,18 @@ export async function pelinSiteAdimi(env, simdi) {
       }
       if (yollar.length) { const f = [...(u.fotolar || [])]; f.splice(Math.min(1, f.length), 0, ...yollar); u.fotolar = f; } // ilk fotoğraf (afiş) yerinde kalır
       const videoTamam = Boolean(vid), istendi = Boolean(x.videoUrl || x.videoMesaj);
-      const ozet = `video ${videoTamam ? (videoVardi ? "✅ (zaten vardı)" : "✅ eklendi") : istendi ? "❌ EKLENEMEDİ" : "— (yok)"}, ${yollar.length}/${adresler.length} fotoğraf`;
-      if (!yollar.length && (!videoTamam || videoVardi)) {
+      // 5 Kasım (Patron kuralı): modele yeni renk eklenince açıklamadaki renkler de güncellenir
+      let renkDegisti = false, renkNot = "";
+      if (x.renk) {
+        if (!(u.renkler || []).length) renkNot = `, ⚠️ açıklamaya renk yazılmadı (modelin ilk rengi kayıtlı değil — Venom: site_duzelt renkler)`;
+        else {
+          const r = renkleriUygula(u, [x.renk]);
+          if (r.degisti) { u.renkler = r.urun.renkler; u.aciklama = r.urun.aciklama; renkDegisti = true; renkNot = `, açıklamaya renk eklendi (${r.eklenen.join(", ")})`; }
+          else if (r.bilinmeyen.length) renkNot = `, ⚠️ "${r.bilinmeyen.join(", ")}" rengi çevrilemedi — açıklama değişmedi`;
+        }
+      }
+      const ozet = `video ${videoTamam ? (videoVardi ? "✅ (zaten vardı)" : "✅ eklendi") : istendi ? "❌ EKLENEMEDİ" : "— (yok)"}, ${yollar.length}/${adresler.length} fotoğraf${renkNot}`;
+      if (!yollar.length && (!videoTamam || videoVardi) && !renkDegisti) {
         await bildir(`⚠️ ${x.kod}: Pelin medyası siteye eklenemedi (${ozet}).`);
         await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: hiçbir şey eklenemedi (${ozet})` }, 7 * 86400);
         continue;
@@ -1770,6 +1782,23 @@ export async function pelinSiteAdimi(env, simdi) {
       if ((x.deneme || 0) < 3) { await kuyrugaEkle(env, "pelinSite", { ...x, id: `${x.id}-t${(x.deneme || 0) + 1}`, deneme: (x.deneme || 0) + 1 }).catch(() => null); continue; }
       await bildir(`⚠️ ${x.kod}: Pelin medyası siteye eklenemedi (hata Claude Code'da).`).catch(() => null);
     }
+  }
+  // Renk satırı (5 Kasım): KV "venom:siteRenk" = [{ kod, renkler: ["siyah", "koyu bordo"], mod: "yaz" | "ekle" }] (Venom site_duzelt renkler)
+  const sr = await env.KAYIT.get("venom:siteRenk", "json").catch(() => null);
+  if (sr) {
+    await env.KAYIT.delete("venom:siteRenk");
+    const { liste } = await siteVerisi(env);
+    const notlar = [];
+    for (const y of [].concat(sr)) {
+      const i = liste.findIndex((u) => String(u.kod) === String(y.kod));
+      if (i < 0) { notlar.push(`⚠️ ${y.kod}: sitede yok`); continue; }
+      const r = renkleriUygula(y.mod === "ekle" ? liste[i] : { ...liste[i], renkler: [] }, y.renkler || []);
+      if (r.bilinmeyen.length) { notlar.push(`⚠️ ${y.kod}: "${r.bilinmeyen.join(", ")}" rengi çevrilemedi — değiştirilmedi`); continue; }
+      if (r.degisti) { liste[i] = r.urun; notlar.push(`🎨 ${y.kod}: açıklamadaki renkler → ${r.urun.renkler.join(", ")}`); } else notlar.push(`${y.kod}: renkler zaten böyle`);
+    }
+    if (notlar.some((n) => n.startsWith("🎨"))) await siteyeYaz(env, [], liste, `Selin: açıklama renkleri güncellendi (${notlar.filter((n) => n.startsWith("🎨")).map((n) => n.split(":")[0].slice(3)).join(", ")})`);
+    await yazKV(env, "venom:siteRenkSonuc", notlar, 7 * 86400);
+    for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: notlar.join("\n") }).catch(() => null);
   }
   // Tek seferlik (4 Kasım, Patron): KV "venom:siteFiyatSil" → açık depodaki ürün listesinden fiyatlar hemen çıkarılır
   if (await env.KAYIT.get("venom:siteFiyatSil")) {
@@ -1825,8 +1854,8 @@ export async function pelinSiteAdimi(env, simdi) {
       const f0 = (u.fotolar || []).length, v0 = (u.videolar || []).length;
       u.fotolar = (u.fotolar || []).filter((f) => !fs.has(f));
       u.videolar = (u.videolar || []).filter((v) => !vs.has(v));
-      for (const f of fs) if (/^galeri\/\d+\/pelin-[a-z0-9]+\.jpg$/.test(f) && f0 !== u.fotolar.length) dosyalar.push({ yol: f, b64: null }); // sadece Pelin dosyası silinir
-      for (const f of x.dosyaSil || []) if (new RegExp(`^galeri/${x.kod}/pelin-[a-z0-9]+\\.jpg$`).test(f) && !u.fotolar.includes(f)) { dosyalar.push({ yol: f, b64: null }); notlar.push(`${x.kod}: sahipsiz dosya silindi (${f.split("/").pop()})`); } // listede olmayan eski Pelin dosyası
+      for (const f of fs) if (/^galeri\/\d+\/pelin-[a-z0-9-]+\.jpg$/.test(f) && f0 !== u.fotolar.length) dosyalar.push({ yol: f, b64: null }); // sadece Pelin dosyası silinir
+      for (const f of x.dosyaSil || []) if (new RegExp(`^galeri/${x.kod}/pelin-[a-z0-9-]+\\.jpg$`).test(f) && !u.fotolar.includes(f)) { dosyalar.push({ yol: f, b64: null }); notlar.push(`${x.kod}: sahipsiz dosya silindi (${f.split("/").pop()})`); } // listede olmayan eski Pelin dosyası
       yeni[i] = u;
       notlar.push(`${x.kod}: ${f0 - u.fotolar.length} fotoğraf, ${v0 - u.videolar.length} video kaldırıldı`);
     }
