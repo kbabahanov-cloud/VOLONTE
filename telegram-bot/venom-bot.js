@@ -940,6 +940,35 @@ export async function venomCron(env, simdi) {
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   try { await hataBildir(env, simdi); } catch (e) { await hataYaz(env, "hataBildir", e); }
   // Tek seferlik (Claude Code): KV "venom:patronaYaz" = metin → Patron'a Venom'dan (ör. kural kitabı özeti)
+  // 6 Kasım (gizlilik): KV "venom:gizliMesaj" = { metin, sure } → Patron'a özel mesaj (iletilemez/kopyalanamaz), sure saniye sonra SİLİNİR.
+  // Anahtar gönderir göndermez silinir (şifre KV'de kalmaz). Silinecekler: "venom:silinecekMesaj" [{ id, sil }]
+  try {
+    const gm = await oku(env, "venom:gizliMesaj", null);
+    if (gm) {
+      await env.KAYIT.delete("venom:gizliMesaj");
+      const r = await yaz(env, gm.metin, { protect_content: true });
+      if (r && r.ok) { const l = await oku(env, "venom:silinecekMesaj", []); await kaydet(env, "venom:silinecekMesaj", [...l, { id: r.result.message_id, sil: simdi + (Number(gm.sure) || 3600) }], 2 * 86400); }
+      await kaydet(env, "venom:gizliMesajSonuc", { zaman: simdi, ok: Boolean(r && r.ok) }, 86400);
+    }
+    const sl = await oku(env, "venom:silinecekMesaj", []);
+    if (sl.some((x) => x.sil <= simdi)) {
+      for (const x of sl.filter((y) => y.sil <= simdi)) await tg(env, "deleteMessage", { chat_id: patron(env), message_id: x.id }).catch(() => null);
+      await kaydet(env, "venom:silinecekMesaj", sl.filter((y) => y.sil > simdi), 2 * 86400);
+    }
+  } catch (e) { await hataYaz(env, "gizliMesaj", e); }
+  // 6 Kasım: KV "venom:patronaDosya" = { ad, metin, aciklama } → Patron'a dosya olarak (ör. ofis planı)
+  try {
+    const pd = await oku(env, "venom:patronaDosya", null);
+    if (pd) {
+      await env.KAYIT.delete("venom:patronaDosya");
+      const f = new FormData();
+      f.append("chat_id", patron(env)); if (pd.aciklama) f.append("caption", String(pd.aciklama).slice(0, 1000));
+      f.append("document", new Blob([String(pd.metin)], { type: "text/markdown" }), String(pd.ad || "dosya.md"));
+      await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN).trim()}/sendDocument`, { method: "POST", body: f });
+    }
+  } catch (e) { await hataYaz(env, "patronaDosya", e); }
+  // 6 Kasım (Claude Code okur, sadece SÜTUN/TABLO adları için): KV "venom:ayarOkuSimdi" = ["mali:kesif:VOLONTE", …] → "venom:ayarOkuSonuc" (1 saat)
+  try { const ao = await oku(env, "venom:ayarOkuSimdi", null); if (ao) { await env.KAYIT.delete("venom:ayarOkuSimdi"); const sonuc = {}; for (const k of [].concat(ao).slice(0, 10)) sonuc[k] = (await stokIste(env, "/ayar-oku", { k }).catch(() => ({}))).v ?? null; await kaydet(env, "venom:ayarOkuSonuc", { zaman: simdi, sonuc }, 3600); } } catch (e) { await hataYaz(env, "ayarOku", e); }
   // 6 Kasım (sadece rapor): iki markanın Vegawin'inde de görünen kodlar → KV venom:ikiMagazaSonuc (Claude Code okur)
   try { if (await env.KAYIT.get("venom:ikiMagazaSimdi")) { await env.KAYIT.delete("venom:ikiMagazaSimdi"); await env.KAYIT.put("venom:ikiMagazaSonuc", JSON.stringify({ zaman: simdi, liste: await stokIste(env, "/iki-magaza", {}) }), { expirationTtl: 7 * 86400 }); } } catch (e) { await hataYaz(env, "ikiMagaza", e); }
   // 6 Kasım: Patron'a "hangi marka?" sorusu, kod başına iki düğme → KV venom:markaKarar (bütün botlar kullanır)

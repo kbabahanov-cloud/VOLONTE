@@ -723,3 +723,17 @@ test("6 Kasım: 907 = VOLONTE (Patron kararı) — Vegawin'de iki markada olsa d
   assert.equal((await markaKesin(env, "4205")).marka, "BLACKROSE");
   assert.equal((await markaKesin(env, "3002")).marka, "VOLONTE");
 });
+
+test("6 Kasım: gizli mesaj — Patron'a iletilemez mesaj, anahtar hemen silinir, 1 saat sonra mesaj silinir", async () => {
+  const o = ortam();
+  o.depo.set("venom:gizliMesaj", JSON.stringify({ metin: "🔐 yeni şifre: TEST", sure: 3600 }));
+  const t = ist(3, 12, 10);
+  await venomCron(o.env, t);
+  assert.ok(!o.depo.has("venom:gizliMesaj"));
+  const giden = o.g.find((x) => x.metod === "sendMessage" && /yeni şifre/.test(x.govde.text));
+  assert.equal(giden.govde.protect_content, true);
+  assert.ok(!o.g.some((x) => x.metod === "deleteMessage"));
+  await venomCron(o.env, t + 3605);
+  assert.ok(o.g.some((x) => x.metod === "deleteMessage"));
+  assert.deepEqual(JSON.parse(o.depo.get("venom:silinecekMesaj")), []);
+});
