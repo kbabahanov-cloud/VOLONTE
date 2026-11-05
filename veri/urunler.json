@@ -1,5 +1,24 @@
 [
  {
+  "kod": "3572",
+  "baslik": "Belted Peplum Pleated Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A black maxi dress with a fitted short-sleeve bodice, structured peplum waist and a long, fluid pleated skirt. A high stand collar with a pearl brooch, a statement belt with gold-tone buckle and chain, and the sculpted ruffle peplum define the look. Elegant for events, ceremonies and refined daytime occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Robe longue noire au buste ajusté à manches courtes, taille péplum structurée et jupe plissée ample et fluide. Le col montant orné d'une broche en perles, la ceinture à boucle dorée avec chaîne et le volant péplum sculpté lui donnent tout son caractère. Idéale pour les cérémonies, les événements et les sorties élégantes en journée. Confectionnée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Vestido longo preto com corpete ajustado de manga curta, cintura peplum estruturada e saia plissada longa e fluida. A gola alta com broche de pérolas, o cinto com fivela dourada e corrente e o babado peplum esculpido marcam o visual. Elegante para cerimónias, eventos e ocasiões diurnas sofisticadas. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3572/1.jpg",
+   "galeri/3572/2.jpg",
+   "galeri/3572/3.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3571",
   "baslik": "Sequin Trim Ruffle Dress",
   "kategori": "dresses",
