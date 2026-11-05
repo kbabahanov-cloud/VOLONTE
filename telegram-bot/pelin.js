@@ -16,7 +16,7 @@
 // Ayarlar (Cloudflare volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY (secret, kullanıcı girer), WEBHOOK_SECRET (kurulumda
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
-import { patronaGider, venomaAktar, venomCevabi, sahteDugme, tekKapiAcik } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
@@ -1035,6 +1035,11 @@ function gizliEsit(a, b) {
 }
 const nesne = (env) => env.PELIN.get(env.PELIN.idFromName("pelin"), { locationHint: "enam" });
 // TEK KAPI (5 Kasım): Patron Venom'da Pelin/Nora düğmesine bastı → aynı yol (pelin-giris.js "VenomKapisi")
+export async function venomMesaj(env, metin) {
+  const u = JSON.stringify(sahteMesaj(env, metin));
+  if (env.PELIN) await nesne(env).fetch("https://pelin/guncelleme", { method: "POST", body: u }); else await guncelleme(JSON.parse(u), env);
+  return true;
+}
 export async function venomDugme(env, data, rid) {
   const u = JSON.stringify(sahteDugme(env, data, rid));
   if (env.PELIN) await nesne(env).fetch("https://pelin/guncelleme", { method: "POST", body: u }); else await guncelleme(JSON.parse(u), env);

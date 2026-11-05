@@ -12,7 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
-import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl } from "./venom-kopru.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
@@ -105,6 +105,11 @@ const KILIT_MESAJI = "🔒 Siteye yükleme şu an kilitli (fotoğraflar kontrol 
 // (KV günlük yazma sınırı). Hata/durum kayıtları izlenebilsin diye KV'de kalır (depo.js).
 const selinNesne = (env) => env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
 // TEK KAPI (5 Kasım): Venom → Selin iç giriş (selin-giris.js "VenomKapisi"): düğme, model durumu, taslak başlat
+export async function venomMesaj(env, metin) {
+  const u = sahteMesaj(env, metin);
+  if (env.SELIN) await selinNesne(env).fetch("https://selin/guncelleme", { method: "POST", body: JSON.stringify(u) }); else await guncelleme(u, env);
+  return true;
+}
 export async function venomDugme(env, data, rid) {
   const u = sahteDugme(env, data, rid);
   if (env.SELIN) await selinNesne(env).fetch("https://selin/guncelleme", { method: "POST", body: JSON.stringify(u) }); else await guncelleme(u, env);
@@ -1612,7 +1617,7 @@ export async function ozelHazirla(env, kod, simdi, duzeltme) {
     };
     await yazKV(env, "selin:modeller", guncel);
     for (const k of await sahipler(env)) await kartGoster(env, kod, k);
-    if ((await tekKapiAcik(env)) && !(await sahipler(env)).includes(patronKisisel(env))) await kartGoster(env, kod, patronKisisel(env)).catch(() => null); // 5 Kasım: Selin taslak kartı Venom'a da
+    // 5 Kasım (Patron): site onayı 0091 + Merdan'da; Selin taslak kartı Patron'a/Venom'a GELMEZ (Venom sadece durumu takip eder)
   } catch (e) {
     const g = await oku(env, "selin:modeller", {});
     g[kod].hata = (g[kod].hata || 0) + 1;

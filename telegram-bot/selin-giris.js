@@ -2,7 +2,7 @@
 // (Testler selin.js'i doğrudan kullanır; "cloudflare:workers" sadece burada.)
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { depoDosya } from "./depo-oku.js";
-import { venomDugme, venomSelin } from "./selin.js";
+import { venomDugme, venomMesaj, venomSelin } from "./selin.js";
 export * from "./selin.js";
 export { default } from "./selin.js";
 export class SelinDepo extends WorkerEntrypoint {
@@ -10,6 +10,7 @@ export class SelinDepo extends WorkerEntrypoint {
 }
 export class VenomKapisi extends WorkerEntrypoint { // tek kapı (5 Kasım): Venom → Selin
   async dugme(data, rid) { return venomDugme(this.env, data, rid); }
+  async mesaj(metin) { return venomMesaj(this.env, metin); }
   async durum(kod) { return venomSelin(this.env, "/venom/durum", kod); }
   async taslak(kod) { return venomSelin(this.env, "/venom/taslak", kod); }
 }

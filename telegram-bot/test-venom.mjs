@@ -396,3 +396,32 @@ test("Venom sohbeti: araç hafızayı değiştirse de aynı mesajdaki Claude ça
   assert.equal(o.claude.length, 2);
   assert.deepEqual(o.claude[0].system, o.claude[1].system);
 });
+
+test("VENOM KANAL + SİTE + İŞ DAĞITIMI (5 Kasım): kanal paylaşımı kaydedilir, fiyat/yanlış imza/renk → Patron'a uyarı; Venom kanala yazmaz; site_kontrol okur; bota_yaz işi bota Patron yazmış gibi verir", async () => {
+  const o = ortam();
+  o.depo.set("kanal", JSON.stringify({ id: -1001, kullanici: "Volonteroseoffical" }));
+  o.depo.set("pelinboy:3627", JSON.stringify({ marka: "BLACKROSE", renk: "koyu bordo" }));
+  const kanal = (post, ek = {}) => guncelleme({ update_id: uid++, channel_post: { chat: { id: -1001, type: "channel" }, date: ist(5, 12), ...post }, ...ek }, o.env);
+  await kanal({ message_id: 50, media_group_id: "g1", video: { file_id: "v" } });
+  await kanal({ message_id: 51, media_group_id: "g1", photo: [{ file_id: "p" }], caption: "✅ CODE: 3627\n🎨 Colors / Couleurs: black\nPrice 45$\nVOLONTE – Premium Women's Fashion" });
+  const uyari = patronaGiden(o).find((x) => /Kanalda sorun — 3627/.test(x.govde.text));
+  assert.ok(uyari);
+  assert.match(uyari.govde.text, /FİYAT[\s\S]*Black Rose modeli ama imza VOLONTE[\s\S]*renk: model kartında "koyu bordo"/);
+  assert.match(uyari.govde.text, /t\.me\/Volonteroseoffical\/51/);
+  await kanal({ message_id: 52, photo: [{ file_id: "p2" }], caption: "✅ CODE: 3627\n🎨 Colors / Couleurs: dark burgundy\nBLACK ROSE – Premium Women's Fashion" });
+  assert.equal(patronaGiden(o).filter((x) => /Kanalda sorun/.test(x.govde.text)).length, 1); // doğru paylaşım sessiz
+  assert.ok(!o.g.some((x) => String(x.govde && x.govde.chat_id) === "-1001")); // Venom kanala YAZMAZ
+  const { aracCalistir } = await import("./venom-bot.js");
+  const kp = await aracCalistir(o.env, "kanal_paylasimlari", { kod: "3627", gun: 2 }, ist(5, 13));
+  assert.match(kp, /3627 · albüm \(video\+foto\)[\s\S]*⚠️[\s\S]*3627 · foto · sorun yok/);
+  // site kontrolü (Selin depo okuyucusundan)
+  o.env.SELIN_DEPO = { dosya: async () => ({ ok: true, govde: new TextEncoder().encode(JSON.stringify([{ kod: "3627", baslik: "X", fotolar: ["galeri/3627/1.jpg", "galeri/3627/pelin-abc.jpg"], videolar: [] }, { kod: "3700", fotolar: [], videolar: ["selin/3700/0"] }, { kod: "3800", gizli: true }])).buffer }) };
+  const sk = await aracCalistir(o.env, "site_kontrol", {}, ist(5, 13));
+  assert.match(sk, /2 model görünüyor \(1 gizli\)[\s\S]*Fotoğrafsız: 1 \(3700\)[\s\S]*Videosuz: 1 \(3627\)[\s\S]*Yapay zekâ \(Pelin\) fotoğrafı olan: 1 \(3627\)/);
+  // iş dağıtımı: Pelin'e Patron yazmış gibi
+  const giden = [];
+  o.env.PELIN_W = { mesaj: async (m) => { giden.push(m); return true; } };
+  const by = await aracCalistir(o.env, "bota_yaz", { bot: "pelin", metin: "3627 beyaz üret" }, ist(5, 13));
+  assert.deepEqual(giden, ["3627 beyaz üret"]);
+  assert.match(by, /Pelin'e iletildi/);
+});

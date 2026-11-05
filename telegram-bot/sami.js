@@ -14,7 +14,7 @@
 // Ayarlar: BOT_TOKEN, WEBHOOK_SECRET (secret) · ALLOWED_IDS, EKIP_IDS, SELF_URL, GITHUB_REPO (düz metin) ·
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
-import { patronaGider, venomaAktar, venomCevabi, sahteDugme } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj } from "./tek-kapi.js";
 import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
@@ -63,6 +63,7 @@ function gizliEsit(a, b) {
 
 // TEK KAPI (5 Kasım): Venom'dan Sami düğmesi (sami-giris.js "VenomKapisi")
 export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
+export async function venomMesaj(env, metin) { await guncelleme(sahteMesaj(env, metin), env); return true; }
 
 export default {
   async fetch(istek, env) {

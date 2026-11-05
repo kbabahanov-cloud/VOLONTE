@@ -83,3 +83,8 @@ export function sahteDugme(env, data, rid) {
   return { update_id: Date.now(), callback_query: { id: `venom-${rid || Date.now()}`, from: { id: p, is_bot: false, first_name: "Patron" }, data: String(data), chat_instance: "venom", message: { message_id: 0, date: Math.floor(Date.now() / 1000), chat: { id: p, type: "private" }, text: "" } } };
 }
 export const venomCevabi = (metod, govde) => metod === "answerCallbackQuery" && String((govde && govde.callback_query_id) || "").startsWith("venom-");
+// Venom'dan bota "Patron yazdı" (✏️ Düzelt gibi yazı bekleyen adımlar; ya da Venom'un bota verdiği iş)
+export function sahteMesaj(env, metin) {
+  const p = Number(patronKisisel(env)), t = Math.floor(Date.now() / 1000);
+  return { update_id: Date.now(), message: { message_id: Date.now() % 1000000000, date: t, chat: { id: p, type: "private", first_name: "Patron" }, from: { id: p, is_bot: false, first_name: "Patron" }, text: String(metin).slice(0, 3500) } };
+}

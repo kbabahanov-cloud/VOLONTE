@@ -50,7 +50,7 @@ import { SITE_VERI, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, a
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
-import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, tekKapiAcik } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
@@ -87,6 +87,12 @@ const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
 // TEK KAPI: Patron Venom'da Kemal'in düğmesine bastı → aynı yol (sahte callback, Patron'dan). İç giriş: kemal-giris.js
+export async function venomMesaj(env, metin) {
+  const update = sahteMesaj(env, metin);
+  if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
+  else await guncellemeIsle(update, env);
+  return true;
+}
 export async function venomDugme(env, data, rid) {
   const update = sahteDugme(env, data, rid);
   if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });

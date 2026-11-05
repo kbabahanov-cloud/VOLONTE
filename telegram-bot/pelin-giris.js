@@ -2,7 +2,7 @@
 // (Testler pelin.js'i doğrudan kullanır; "cloudflare:workers" sadece burada.)
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { kopruIstegi } from "./anahtar-kopru.js";
-import { venomDugme } from "./pelin.js";
+import { venomDugme, venomMesaj } from "./pelin.js";
 export * from "./pelin.js";
 export { default } from "./pelin.js";
 export class AnahtarKopru extends WorkerEntrypoint {
@@ -10,4 +10,5 @@ export class AnahtarKopru extends WorkerEntrypoint {
 }
 export class VenomKapisi extends WorkerEntrypoint { // tek kapı (5 Kasım): Venom → Pelin/Nora düğmesi
   async dugme(data, rid) { return venomDugme(this.env, data, rid); }
+  async mesaj(metin) { return venomMesaj(this.env, metin); }
 }
