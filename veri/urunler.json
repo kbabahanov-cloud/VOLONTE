@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3544",
+  "baslik": "Pinstripe Three-Piece Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A navy pinstripe three-piece set with a collarless, fitted blazer, high-waisted wide-leg trousers and a detachable white pointed collar. Contrast white cuffs with covered buttons, flap pockets and a nipped waist give the look its sharp, modern line. Wear it with the collar for statement occasions or without it for the office. Made in Istanbul with careful tailoring.",
+   "fr": "Un ensemble trois pièces bleu marine à fines rayures : blazer ajusté sans col, pantalon taille haute à jambe large et col blanc pointu amovible. Les poignets blancs contrastés à boutons recouverts, les poches à rabat et la taille marquée dessinent une silhouette nette et moderne. À porter avec le col pour se démarquer, ou sans pour le bureau. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de três peças azul-marinho com risca de giz: blazer ajustado sem gola, calça de cintura alta e perna larga e gola branca pontiaguda removível. Punhos brancos em contraste com botões forrados, bolsos com aba e cintura marcada criam uma linha elegante e moderna. Use com a gola para ocasiões especiais ou sem ela no escritório. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3544/1.jpg",
+   "galeri/3544/2.jpg",
+   "galeri/3544/3.jpg",
+   "galeri/3544/4.jpg",
+   "galeri/3544/5.jpg",
+   "galeri/3544/6.jpg",
+   "galeri/3544/7.jpg"
+  ],
+  "videolar": [
+   "selin/3544/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3545",
   "baslik": "Croc Print Blazer Set",
   "kategori": "sets",
