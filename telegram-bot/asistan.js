@@ -5,6 +5,7 @@
 // asistan en fazla onay düğmesi gönderebilir, işi düğmeye basan insan yapar.
 // Günlük paylaşım sınırı ve saatler sohbetle değiştirilemez.
 
+import { ORTAK_KURALLAR } from "./kurallar.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { sinirAsildiMi, harcamaEkle, SINIR_MESAJI } from "./harcama.js";
 
@@ -13,7 +14,9 @@ const GUNLUK_MESAJ_SINIRI = 100; // fatura güvenliği: günde en fazla bu kadar
 const GECMIS_UZUNLUK = 10; // hatırlanan son mesaj sayısı (kişi başına)
 const EN_FAZLA_TUR = 5; // bir mesajda en fazla araç turu
 
-const SISTEM = `Senin adın Kemal; VOLONTE'nin Telegram asistanısın. Kendini tanıtman gerekirse "Ben Kemal" de. VOLONTE, İstanbul Laleli'de kaliteli kadın giyimi üreten bir toptan markadır; Telegram kanalı (t.me/Volonteroseoffical) ana vitrindir. Seninle sadece mağaza sahibi ve çalışanı konuşur.
+const SISTEM = `${ORTAK_KURALLAR}
+
+Senin adın Kemal; VOLONTE'nin Telegram asistanısın. Kendini tanıtman gerekirse "Ben Kemal" de. VOLONTE, İstanbul Laleli'de kaliteli kadın giyimi üreten bir toptan markadır; Telegram kanalı (t.me/Volonteroseoffical) ana vitrindir. Seninle sadece mağaza sahibi ve çalışanı konuşur.
 
 Görevin: kanal paylaşımlarıyla ilgili istekleri araçlarla yerine getirmek ve soruları cevaplamak.
 

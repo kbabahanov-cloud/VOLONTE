@@ -37,6 +37,7 @@
 //     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
+import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir, ayniModelMi } from "./tanima.js";
@@ -608,7 +609,7 @@ async function dugmeIsle(cq, env) {
   const veri = String(cq.data || "");
   if (veri.startsWith("mk:") && !izinliMi(cq.from.id, env)) return cevapla("Bu ayar sadece Murat ve Merdan'da.");
   if (/^(y1|yd|yg|yb):/.test(veri)) return yeniTurDugmesi(cq, env);
-  if (/^(rp1|rpd|rpx):/.test(veri)) return repeteDugmesi(cq, env);
+  if (/^(rp1|rpd|rpx|rpb):/.test(veri)) return repeteDugmesi(cq, env);
   if (/^(t1|t7|tx|ty|tv|tg|tb):/.test(veri)) return turDugmesi(cq, env);
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
@@ -662,6 +663,7 @@ async function dugmeIsle(cq, env) {
 // Kanala yeniden paylaşımın tek yolu. Bot kendi kanal paylaşımlarını güncelleme
 // olarak almadığı için kod dizinini, günlük sayacı ve /hafta sayısını burada günceller.
 export async function kanaldaPaylas(env, kod, ids, simdi, beden = null) {
+  if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ. Black Rose modeli eski gönderiden kopyalanmaz (eski yazıda VOLONTE imzası kalıyordu: 3148, 3246) →
@@ -1383,6 +1385,7 @@ async function silmeDevam(env) {
 }
 
 async function siradakiniPaylas(env, simdi) {
+  if (await durdurulduMu(env, "kemal")) return; // 6 Kasım: durdurulduysa sıradaki bekler (silinmez)
   const sonraki = Number((await env.KAYIT.get("sonraki")) || 0);
   if (simdi < sonraki) return;
   if ((await bugunSayac(env, simdi)) >= GUNLUK_SINIR) return;
@@ -1854,6 +1857,17 @@ async function duzeltmeIsle(msg, env) {
   return true;
 }
 
+// 6 Kasım (günlük akış denemesi, 09:30): sitedeki bir model için GERÇEK kart hazırlanır + Venom kontrolü, GÖNDERİLMEZ (yapay zekâ yok)
+export async function akisDenemesi(env, simdi = Math.floor(Date.now() / 1000)) {
+  const site = (await siteUrunleriAl(env)).filter((u) => !u.gizli);
+  let u = null;
+  for (const x of site.slice(0, 40)) if (await env.KAYIT.get(`yazi:${x.kod}`)) { u = x; break; } // yazısı hazır olan (yapay zekâ çağrılmaz)
+  if (!u) return { ok: false, sorun: "akış denemesi: yazısı hazır model bulunamadı" };
+  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(u.kod)], simdi), simdi);
+  const k = await kanalKontrol(env, paket, { simdi });
+  const tekrar = k.sorunlar.every((x) => /zaten paylaşıldı/.test(x)); // deneme için tekrar uyarısı sorun sayılmaz
+  return { ok: k.ok || tekrar, bilgi: `akış denemesi: ${u.kod} kartı hazırlandı, ${k.ok || tekrar ? "kontrol tamam" : k.satir} (gönderilmedi)`, sorun: k.ok || tekrar ? null : `akış denemesi ${u.kod}: ${k.sorunlar.join("; ")}` };
+}
 // 6 Kasım (Patron): Venom kontrolü durdurduysa Patron'a kısa sebep (tek kapı açıkken Venom'dan gelir)
 async function kontrolBildir(env, kod, kontrol, simdi) {
   await engelKaydet(env, "kemal", kod, kontrol.sorunlar, simdi);
@@ -1869,6 +1883,7 @@ async function siteyeVideoBildir(env, kod, mesajlar, simdi, ek = {}) {
   await kuyrugaEkle(env, "kanalVideo", { id: `kv-${kod}-${mesajlar[0]}`, kod: String(kod), mesajlar: mesajlar.slice(0, 10), zaman: simdi, ...ek }).catch(() => null);
 }
 export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null } = {}) {
+  if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ — yanlışsa yayına çıkmaz. Patron (ya da onaylayan) ⚠️'li kartı gördüyse o sorunlar geçer; yeni çıkan sorun durdurur.
@@ -1926,6 +1941,14 @@ export function repeteAyikla(metin) {
 
 const repeteKlavye = (id) => ({ inline_keyboard: [[{ text: "✅ Onayla", callback_data: `rp1:${id}` }, { text: "✏️ Düzelt", callback_data: `rpd:${id}` }, { text: "❌ İptal", callback_data: `rpx:${id}` }]] });
 const repeteAlicilar = (env, kim) => [...new Set([hemraId(env), String(kim)])];
+// 6 Kasım (Patron): Selin'in siteye eklediği modellerin "kanalda paylaşayım mı?" kartı SADECE Merdan ve Hemra'ya
+const yeniModelAlicilar = (env) => { const patronlar = kimlikler(env.MURAT_ID); return [...new Set([...kimlikler(env.ALLOWED_IDS).filter((x) => !patronlar.includes(x)), hemraId(env)].filter(Boolean))]; };
+const yeniKlavye4 = (id) => ({ inline_keyboard: [[{ text: "✅ Onayla", callback_data: `rp1:${id}` }, { text: "✏️ Düzelt", callback_data: `rpd:${id}` }], [{ text: "⏭️ Geç", callback_data: `rpx:${id}` }, { text: "⏳ Beklesin", callback_data: `rpb:${id}` }]] });
+async function yeniModelSay(env, ne, simdi) {
+  const k = `venom:yeniModelSayac:${gunAnahtari(simdi)}`, v = (await env.KAYIT.get(k, "json").catch(() => null)) || {};
+  v[ne] = (v[ne] || 0) + 1;
+  await env.KAYIT.put(k, JSON.stringify(v), { expirationTtl: 3 * 86400 }).catch(() => null);
+}
 
 async function repeteOnizlemeGonder(env, rec) {
   const bicim = (await env.KAYIT.get("bicim")) || "album";
@@ -1934,17 +1957,18 @@ async function repeteOnizlemeGonder(env, rec) {
   for (const kisi of rec.alicilar) {
     const g = await paketGonder(env, kisi, rec.paket, bicim);
     if (!g.ok) { await telegram(env, "sendMessage", { chat_id: kisi, text: `⚠️ ${rec.kod} önizlemesi gönderilemedi: ${g.hata}` }); continue; }
-    const k = await telegram(env, "sendMessage", { chat_id: kisi, text: repeteKontrol(rec, simdi) + (g.not ? `\n⚠️ ${g.not}` : ""), reply_markup: repeteKlavye(rec.id), disable_web_page_preview: true });
+    const k = await telegram(env, "sendMessage", { chat_id: kisi, text: repeteKontrol(rec, simdi) + (g.not ? `\n⚠️ ${g.not}` : ""), reply_markup: rec.tur === "yeni" ? yeniKlavye4(rec.id) : repeteKlavye(rec.id), disable_web_page_preview: true });
     if (k.ok) rec.mesajlar.push([kisi, k.result.message_id]);
   }
 }
 const repeteKontrol = (rec, simdi) => [
+  rec.kontrolSatir || null, // 6 Kasım: Venom kontrolü en üstte
   rec.tur === "yeni" ? `🆕 YENİ MODEL — ${rec.kod} (siteye ekleyen: ${rec.kim})` : `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
   `Medya: ${rec.kaynak === "site" ? "siteden" : "kanaldaki son paylaşımdan (eski yazı kullanılmadı)"}`,
   `Renkler: ${rec.paket.renkEmin && rec.paket.renkler.length ? rec.paket.renkler.join(", ") : "yazılmadı → satır yok (✏️ Düzelt ile ekleyebilirsiniz)"}`,
   rec.stokUyari ? `⚠️ ${rec.stokUyari}` : null,
   `Telegram'da son paylaşım: ${rec.paket.tgSon ? tarihUzun(rec.paket.tgSon) : "—"}`,
-  "✅ Onayla → sıra beklemeden hemen kanala (günlük 10'a sayılmaz). Fiyat yazılmaz.",
+  rec.tur === "yeni" ? "✅ Onayla → hemen kanala · ⏭️ Geç → paylaşılmaz · ⏳ Beklesin → 3 gün sonra yeniden sorulur. Fiyat yazılmaz." : "✅ Onayla → sıra beklemeden hemen kanala (günlük 10'a sayılmaz). Fiyat yazılmaz.",
 ].filter(Boolean).join("\n");
 
 export async function repeteIstegi(msg, env, { kodlar, renkler }) {
@@ -1966,7 +1990,8 @@ export async function repeteIstegi(msg, env, { kodlar, renkler }) {
     const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
     const rec = { id, kod, paket, kim, kimId: msg.from.id, alicilar, kaynak: paket.kaynak, stokUyari: st && !(st.toplam > 0) ? "Vegawin'de stok henüz 0 görünüyor (giriş yapılmamış olabilir)" : null, durum: null, zaman: simdi };
     await repeteOnizlemeGonder(env, rec);
-    await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 });
+    await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 5 * 86400 });
+    await yeniModelSay(env, "soruldu", simdi);
   }
 }
 
@@ -1974,7 +1999,7 @@ async function repeteDugmesi(cq, env) {
   const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const [islem, id] = String(cq.data).split(":");
   const rec = await env.KAYIT.get(`rpt:${id}`, "json");
-  if (rec && rec.tur === "yeni" ? !muratMi(env, cq.from.id) : !repeteYetkili(env, cq.from.id)) return cevapla(rec && rec.tur === "yeni" ? "Yeni model onayı Patron'da." : "Bu onay Hemra, Murat ve Merdan'da.");
+  if (!repeteYetkili(env, cq.from.id)) return cevapla("Bu onay Merdan ve Hemra'da.");
   if (!rec || rec.durum) return cevapla(rec ? `${rec.karar || "Karar"} verildi.` : "Bu önizleme artık geçerli değil.");
   const kim = kisiAdi(cq.from);
   const simdi = Math.floor(Date.now() / 1000);
@@ -1984,12 +2009,21 @@ async function repeteDugmesi(cq, env) {
     await cevapla("Düzeltmeyi yazın");
     return telegram(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${rec.kod} ${rec.tur === "yeni" ? "yeni model" : "repete"} paylaşımı için düzeltmeyi yazın (1 saat içinde).\n${DUZELT_ORNEK.replace("durum: new | back | best | last | available\n", "")}` });
   }
+  if (islem === "rp1" && (await durdurulduMu(env, "kemal"))) return cevapla("⛔ Şu an durduruldu; açılınca onaylayın.");
   rec.durum = islem;
-  rec.karar = `${kim}: ${islem === "rp1" ? "onayla" : "iptal"}`;
-  await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 }); // önce kilitle
-  if (islem === "rpx") { await cevapla("İptal"); return hepsi(`❌ ${kim} iptal etti — kanalda paylaşılmadı.`); }
+  rec.karar = `${kim}: ${islem === "rp1" ? "onayla" : islem === "rpb" ? "beklesin" : rec.tur === "yeni" ? "geç" : "iptal"}`;
+  await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 5 * 86400 }); // önce kilitle
+  if (islem === "rpb") { // 6 Kasım: 3 gün sonra aynı kişilere yeniden sorulur
+    const sira = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+    await env.KAYIT.put("venom:yeniModel", JSON.stringify([...sira.filter((x) => String(x.kod) !== rec.kod), { kod: rec.kod, kim: rec.kim, zaman: simdi, sonra: simdi + 3 * 86400, bekleme: (rec.bekleme || 0) + 1 }]));
+    await yeniModelSay(env, "beklesin", simdi);
+    await cevapla("3 gün sonra tekrar");
+    return hepsi(`⏳ ${kim}: beklesin — 3 gün sonra yeniden sorulacak.`);
+  }
+  if (islem === "rpx") { if (rec.tur === "yeni") await yeniModelSay(env, "gec", simdi); await cevapla(rec.tur === "yeni" ? "Geçildi" : "İptal"); return hepsi(`${rec.tur === "yeni" ? "⏭️" : "❌"} ${kim} ${rec.tur === "yeni" ? "geçti" : "iptal etti"} — kanalda paylaşılmadı.`); }
   await cevapla("Paylaşılıyor");
-  const p = await yeniKanalaPaylas(env, rec.paket, simdi, { sayma: false, stokKontrol: false });
+  const p = await yeniKanalaPaylas(env, rec.paket, simdi, { sayma: false, stokKontrol: false, onayliSorunlar: rec.kontrolSorunlar || [] });
+  if (rec.tur === "yeni") await yeniModelSay(env, p.ok ? "onay" : "durdu", simdi);
   return hepsi(p.ok ? `✅ ${kim} onayladı — kanalda paylaşıldı${p.link ? `: ${p.link}` : ""}. Telegram son paylaşım tarihi güncellendi.${p.markaNotu ? ` ⚠️ ${p.markaNotu}` : ""}` : `⚠️ Paylaşılamadı: ${p.hata}`);
 }
 
@@ -2058,7 +2092,7 @@ export async function yeniModelIsleri(env, simdi) {
   const islenen = new Set();
   const tekrar = {};
   const hataTekrar = {};
-  for (const r of sira.slice(0, 3)) {
+  for (const r of sira.filter((x) => !(x.sonra > simdi)).slice(0, 3)) { // "⏳ Beklesin" denenler 3 gün sonra
     islenen.add(r.kod);
     if (indirimliMi(r.kod)) continue;
     const u = site.find((x) => String(x.kod) === String(r.kod) && !x.gizli);
@@ -2073,7 +2107,8 @@ export async function yeniModelIsleri(env, simdi) {
     }
     const st = env.STOK ? (await stokIste(env, "/toplu", { kodlar: [String(r.kod)] }).catch(() => ({})))[String(r.kod)] : null;
     const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-    const rec = { id, tur: "yeni", kod: String(r.kod), paket, kim: r.kim || "Selin", alicilar: [muratId(env)], kaynak: "site", durum: null, zaman: simdi,
+    const kontrol = await kanalKontrol(env, paket, { simdi }).catch(() => null);
+    const rec = { id, tur: "yeni", kod: String(r.kod), paket, kim: r.kim || "Selin", alicilar: yeniModelAlicilar(env), kaynak: "site", durum: null, zaman: simdi, kontrolSatir: kontrol ? kontrol.satir : null, kontrolSorunlar: kontrol ? kontrol.sorunlar : [], bekleme: r.bekleme || 0,
       stokUyari: !st ? "Vegawin'de bu modelin stok kaydı henüz görünmüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : !(st.toplam > 0) ? "Vegawin'de stok henüz 0 görünüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : null };
     await repeteOnizlemeGonder(env, rec);
     await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 });
@@ -2145,6 +2180,7 @@ export async function venomYayinKararlari(env) {
   }
 }
 async function yayinOnayUygula(env, id, islem) {
+  if (islem !== "x" && (await durdurulduMu(env, "kemal"))) return `${await durMesaji(env, "kemal")} — kart geçerli kaldı, açılınca yeniden onaylayın.`;
   const k = await env.KAYIT.get(`kemal:pelinYayin:${id}`, "json");
   if (!k) return "Bu kart artık geçerli değil (zaten karar verilmiş ya da yenisi geldi).";
   await env.KAYIT.delete(`kemal:pelinYayin:${id}`);

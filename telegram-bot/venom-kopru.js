@@ -3,6 +3,7 @@
 //  • "pelinIs" → Pelin (foto + video üretimi)
 //  • "sonuc"   → Venom ("✅ yapıldı" / "⚠️ olmadı" Patron'a)
 // Kuyruklar StokDO'da (ekle/al tek adım; KV gibi gecikmeli değil → iş kaybolmaz, iki kez gitmez).
+import { ekipSuzgec } from "./venom-yonetim.js";
 import { stokIste } from "./stokbot.js";
 import { fuatSuzgec, arsiv, venomMutabakatGonder } from "./mutabakat.js";
 
@@ -34,8 +35,8 @@ export async function venomGidenAdimi(env, simdi, tg) {
       }
       const hedef = k.id(env);
       if (!hedef) { await sonucBildir(env, is.id, false, `${k.in} Telegram kimliği kayıtlı değil.`); continue; }
-      if (k.dis) {
-        const yasak = fuatSuzgec(is.metin);
+      { // 6 Kasım (Patron): fiyat/satış/kâr bilgisi Patron dışında KİMSEYE gitmez (ekip dahil)
+        const yasak = k.dis ? fuatSuzgec(is.metin) : ekipSuzgec(is.metin);
         if (yasak) { await arsiv(env, "venom-engel", is.id, { kime: is.kime, neden: yasak }, simdi); await sonucBildir(env, is.id, false, `${k.e} mesaj GİTMEDİ: gizli bilgi içeriyor (${yasak.join(", ")}).`); continue; }
       }
       const r = await tg(env, "sendMessage", { chat_id: hedef, text: String(is.metin).slice(0, 4000), disable_web_page_preview: true });

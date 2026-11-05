@@ -24,6 +24,7 @@ function ortam() {
     return { toArray: () => satir };
   } };
   const stok = new StokDO({ storage: { sql } });
+  depo.set("venom:bot:klavye:v1", "1"); // sabit düğmeler kurulmuş say (ayrı testte sınanır)
   const env = {
     BOT_TOKEN: "venom-token", ANTHROPIC_API_KEY: "k", WEBHOOK_SECRET: "gizli", SELF_URL: "https://venom.test",
     MURAT_ID: String(PATRON), FUAT_ID: FUAT, NURI_ID: NURI, BR_SORUMLU: MERDAN, HEMRA_ID: "504", ALLOWED_IDS: String(PATRON),
@@ -549,6 +550,8 @@ test("ANLAMA (6 Kasım, D8–D10): üretim / paylaş / açıklamasız dosya ayr�
   assert.deepEqual(uretNiyeti("3627 beyaz fotoğrafını yap"), { kod: "3627", renk: "beyaz" });
   assert.deepEqual(uretNiyeti("36 27 beyaz videosunu çek"), { kod: "3627", renk: "beyaz" });
   assert.equal(uretNiyeti("3627 beyaz paylaş"), null);
+  assert.deepEqual(uretNiyeti("3627 beyaz üret"), { kod: "3627", renk: "beyaz" }); // Türkçe harfle başlayan kelime (eski \b hatası)
+  assert.equal(paylasNiyeti("3627 beyaz paylaşalım mı"), null);
   assert.equal(uretNiyeti("3627 videosu ne zaman gelir?"), null);
   assert.deepEqual(kodRenk("3627 koyu bordo büyük"), { kod: "3627", renk: "koyu bordo", beden: "b" });
   const o = ortam();
@@ -589,4 +592,74 @@ test("CLOUDFLARE KULLANIM (6 Kasım): %80'de uyarı, altında ✅; ölçüm eski
   o.depo.set("venom:cfKullanim", JSON.stringify({ zaman: simdi - 3600, kalemler: [{ ad: "KV yazma", yuzde: 40, tahminYuzde: 85 }] }));
   r = await cfKullanimSatiri(o.env, simdi);
   assert.equal(r.uyari, true); assert.match(r.metin, /LİMİT UYARISI \(%80\): KV yazma şimdi %40, ay sonu tahmini %85/);
+});
+
+import { _durOnbellekSifirla, durdurulduMu } from "./durdurma.js";
+import { hataAlarmi, isKaydet, isHatirlat, isCevap, satisUyarisi, ekipSuzgec, hatirlaticiEkle, vadesiGelenler } from "./venom-yonetim.js";
+test("YÖNETİM (6 Kasım): ⛔ Durdur / hepsini aç; bot'u aç; 3 hata → otomatik durdurma; iş takibi 30 dk; hatırlatıcı; satış uyarısı; gizlilik", async () => {
+  const o = ortam();
+  _durOnbellekSifirla();
+  // ⛔ Durdur düğmesi → onay → hepsi durur
+  await yazi(o, PATRON, "⛔ Durdur");
+  assert.equal(o.claude.length, 0);
+  const k = sonKart(o);
+  await bas(o, k.govde.reply_markup.inline_keyboard[0][0].callback_data);
+  _durOnbellekSifirla();
+  assert.equal(await durdurulduMu(o.env, "kemal"), true);
+  assert.ok(patronaGiden(o).some((x) => /HEPSİ DURDURULDU/.test(x.govde.text)));
+  await yazi(o, PATRON, "hepsini aç");
+  _durOnbellekSifirla();
+  assert.equal(await durdurulduMu(o.env, "selin"), false);
+  await yazi(o, PATRON, "Pelin'i durdur");
+  _durOnbellekSifirla();
+  assert.deepEqual([await durdurulduMu(o.env, "pelin"), await durdurulduMu(o.env, "kemal")], [true, false]);
+  await yazi(o, PATRON, "pelini aç");
+  _durOnbellekSifirla();
+  assert.equal(await durdurulduMu(o.env, "pelin"), false);
+  // hata alarmı: 2 saatte 3 hata → durdur
+  const t = 1793900000;
+  assert.equal(await hataAlarmi(o.env, "selin", t, "a", t), null);
+  assert.equal(await hataAlarmi(o.env, "selin", t + 60, "b", t + 60), null);
+  const al = await hataAlarmi(o.env, "selin", t + 120, "GitHub 422", t + 120);
+  assert.match(al, /Selin 2 saatte 3 kez hata verdi; .*DURDURDUM/);
+  _durOnbellekSifirla();
+  assert.equal(await durdurulduMu(o.env, "selin"), true);
+  _durOnbellekSifirla();
+  // iş takibi
+  await isKaydet(o.env, "kemal", "3627 paylaşım kartı", t);
+  assert.equal(await isHatirlat(o.env, t + 600), null);
+  assert.match(await isHatirlat(o.env, t + 1900), /30 dakikadır cevap gelmeyen iş:\n• Kemal: 3627 paylaşım kartı/);
+  assert.equal(await isHatirlat(o.env, t + 2000), null); // bir kez
+  await isCevap(o.env, "kemal", t + 2100);
+  assert.equal(JSON.parse(o.depo.get("venom:bot:isler"))[0].durum, "bitti");
+  // hatırlatıcı
+  assert.match(await hatirlaticiEkle(o.env, { zaman: "2026-11-07T10:00", metin: "Merdan'a 3627 videosunu sor", kime: "merdan" }, t), /Not aldım: 2026-11-07 10:00/);
+  assert.equal((await vadesiGelenler(o.env, Date.parse("2026-11-07T09:59:00+03:00") / 1000)).length, 0);
+  assert.equal((await vadesiGelenler(o.env, Date.parse("2026-11-07T10:01:00+03:00") / 1000)).length, 1);
+  // gizlilik süzgeci (ekip)
+  assert.ok(ekipSuzgec("3627'nin fiyatı 45$"));
+  assert.ok(ekipSuzgec("bugün satış 30 adet"));
+  assert.equal(ekipSuzgec("3627 videosunu tekrar gönderir misin"), null);
+});
+
+test("YÖNETİM (6 Kasım): satış uyarısı >20/gün (kod, adet, kalan stok; bir kez); sesli rapor önce maliyet sorar; sabit düğmeler bir kez", async () => {
+  const o = ortam();
+  const simdi = Math.floor(Date.now() / 1000);
+  const gun = new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", urunler: [{ kod: "3557", adet: 9, fiyat: 40 }], simdi: 1 }) });
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun, kalemler: [{ kod: "3557", adet: 25 }, { kod: "3600", adet: 3 }] }) });
+  const u = await satisUyarisi(o.env, simdi);
+  assert.match(u, /3557 — 25 adet, kalan stok 9/);
+  assert.ok(!/3600/.test(u));
+  assert.equal(await satisUyarisi(o.env, simdi), null);
+  await yazi(o, PATRON, "sesli rapor istiyorum");
+  const k = sonKart(o);
+  assert.match(k.govde.text, /ÜCRETLİ\): rapor başına ≈0,02 \$/);
+  assert.equal(o.depo.get("venom:sesliAcik"), undefined);
+  // sabit düğmeler: kurulmamışsa ilk mesajda bir kez
+  o.depo.delete("venom:bot:klavye:v1");
+  o.cevaplar.push({ text: "Tamam." }, { text: "Tamam." });
+  await yazi(o, PATRON, "selam");
+  await yazi(o, PATRON, "selam");
+  assert.equal(o.g.filter((x) => x.govde && x.govde.reply_markup && x.govde.reply_markup.keyboard).length, 1);
 });

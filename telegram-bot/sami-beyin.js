@@ -6,6 +6,7 @@
 //  - Bütçe: ekibin 80 $'ından ayrı, aylık 10 $; 8 $'da Murat'a uyarı; dolunca beyin durur, komutlar çalışır.
 //  - Sohbet geçmişi ve harcama Sami'nin deposunda (StokDO ayar; KV günlük yazma sınırını harcamaz).
 
+import { ORTAK_KURALLAR } from "./kurallar.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
@@ -36,7 +37,9 @@ async function harcamaEkle(env, u, simdi, tg) {
   }
 }
 
-const SISTEM = `Sen Sayım Sami'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyimi toptancısı) stok ve fabrika eksik listesi asistanı. Seninle mağazadakiler (Murat, Merdan, Hemra, Aziz) Telegram'dan normal cümleyle konuşur.
+const SISTEM = `${ORTAK_KURALLAR}
+
+Sen Sayım Sami'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyimi toptancısı) stok ve fabrika eksik listesi asistanı. Seninle mağazadakiler (Murat, Merdan, Hemra, Aziz) Telegram'dan normal cümleyle konuşur.
 Kurallar:
 - Kısa, net, sade Türkçe (Rusça yazılırsa Rusça). Telegram'da düz metin; tablo ve başlık kullanma, gerekirse "- " ile kısa madde.
 - Bilgiyi SADECE araçlardan al. Sayı, kod, tarih uydurma. Bulamazsan "bulamadım" de.

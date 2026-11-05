@@ -12,6 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
+import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
@@ -186,6 +187,7 @@ export default {
       if (duraklatildi(Math.floor(Date.now() / 1000))) return void (await nesne.fetch("https://selin/goc", { method: "POST" }));
       // Ayrı istekler: her birinin kendi istek sınırı; biri hata verirse diğerleri yine çalışır.
       // Yeni akış (28 Ekim): kanal tabanlı işler (liste, hazırlık, kare, tarama, toplu) KAPALI.
+      if (await durdurulduMu(env, "selin")) return; // 6 Kasım: durduruldu → zamanlı işler bekler
       await cagir("/cron");
       await cagir("/istek");
       await cagir("/video-isleri");
@@ -233,7 +235,7 @@ export class SelinDO {
         }
         return new Response("ok");
       case "/video-isleri": // 5 Kasım: video işleri ayrı istekte (Cloudflare'in istek başına 50 dış istek sınırı)
-        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi, siteTekrarBulAdimi })) {
+        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi, siteTekrarBulAdimi, selinYedekAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -788,6 +790,7 @@ const b64Metin = (s) => btoa(unescape(encodeURIComponent(s)));
 // 4 Kasım (Patron): FİYAT açık depoya YAZILMAZ (depo herkese açık); fiyatın tek kaynağı Vegawin (Sami'nin deposu, gizli).
 export const fiyatsiz = (liste) => (liste || []).map(({ fiyat, ...u }) => u);
 export async function siteyeYaz(env, dosyalar, liste, mesaj) {
+  if (await durdurulduMu(env, "selin")) throw new Error(await durMesaji(env, "selin"));
   liste = fiyatsiz(liste);
   // 6 Kasım (Patron): VENOM KONTROLÜ — aynı fotoğraf/video iki kez konmaz, kolaj konmaz, açıklamada fiyat varsa site yazılmaz
   const k = siteKontrol(liste, dosyalar);
@@ -1839,6 +1842,8 @@ export async function pelinSiteAdimi(env, simdi) {
       }
       const yeni = [...liste]; yeni[i] = u;
       await siteyeYaz(env, dosyalar, yeni, `Selin: ${x.kod} Pelin medyası siteye eklendi (${ozet})`);
+      // 6 Kasım (geri alma): bu paylaşımla siteye eklenenler — "son paylaşımı geri al" siteden de bunları kaldırır
+      await env.KAYIT.put(`venom:siteSonEkleme:${x.kod}`, JSON.stringify({ zaman: simdi, fotolar: yollar, videolar: vid && !videoVardi ? [vid] : [] }), { expirationTtl: 14 * 86400 }).catch(() => null);
       await yazKV(env, `selin:pelinFoto:${x.kod}`, eklenmis.slice(-60));
       await bildir(`🌸 ${x.kod}: Pelin medyası siteye eklendi — ${ozet} (birkaç dakika içinde görünür).`);
       if (istendi && !videoTamam) await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: video eklenemedi (fotoğraflar eklendi)` }, 7 * 86400);
@@ -2162,6 +2167,23 @@ async function siteVideoUidleri(env, u, modeller) {
 }
 // 6 Kasım (temizlik B2): sitede aynı modelde AYNI video iki kez mi (Telegram dosya kimliği)? KV "venom:siteTekrarBul" → sonuç
 // "venom:siteTekrarSonuc" = [{ kod, videolar: [fazla adresler] }] (Patron onayıyla Venom kartından kaldırılır)
+// 6 Kasım (yedek): her gece (03–05) Selin'in iç kayıtları KV "yedek:<gün>:selin" (8 gün). Geri yükleme: araclar/yedek-geri.py
+export async function selinYedekAdimi(env, simdi) {
+  // Geri yükleme (tek seferlik): KV "venom:yedekGeriYukle:selin" = "YYYY-AA-GG" → o günün yedeği iç kayda yazılır
+  const gy = await env.KAYIT.get("venom:yedekGeriYukle:selin");
+  if (gy) {
+    await env.KAYIT.delete("venom:yedekGeriYukle:selin");
+    const y = await env.KAYIT.get(`yedek:${gy}:selin`, "json");
+    if (y && y.veri) for (const [k, v] of Object.entries(y.veri)) if (v != null) await (typeof v === "string" ? env.KAYIT.put(k, v) : yazKV(env, k, v));
+    await env.KAYIT.put("venom:yedekGeriYukleSonuc:selin", JSON.stringify({ zaman: simdi, gun: gy, ok: Boolean(y), anahtar: y ? Object.keys(y.veri).length : 0 }), { expirationTtl: 7 * 86400 });
+  }
+  const s = saat(simdi);
+  if (s < 3 || s >= 5 || (await oku(env, `selin:yedek:${gunAnahtari(simdi)}`, null))) return;
+  const veri = { "selin:modeller": await oku(env, "selin:modeller", {}), "selin:sahip": await env.KAYIT.get("selin:sahip") };
+  for (let i = 0; i < 3; i++) { const g = gunAnahtari(simdi - i * 86400); veri[`selin:istek:${g}`] = await oku(env, `selin:istek:${g}`, null); }
+  await env.KAYIT.put(`yedek:${gunAnahtari(simdi)}:selin`, JSON.stringify({ zaman: simdi, veri }), { expirationTtl: 8 * 86400 });
+  await yazKV(env, `selin:yedek:${gunAnahtari(simdi)}`, 1, 2 * 86400);
+}
 export async function siteTekrarBulAdimi(env, simdi) {
   if (!(await env.KAYIT.get("venom:siteTekrarBul"))) return;
   const { liste } = await siteVerisi(env);
@@ -2208,7 +2230,10 @@ export async function kanalVideoAdimi(env, simdi) {
       notlar.push(String(x.kod));
     }
   }
-  if (notlar.length) await siteyeYaz(env, [], liste, `Selin: kanaldaki video siteye eklendi (${[...new Set(notlar)].join(", ")})`);
+  if (notlar.length) {
+    await siteyeYaz(env, [], liste, `Selin: kanaldaki video siteye eklendi (${[...new Set(notlar)].join(", ")})`);
+    for (const k of new Set(notlar)) { const u = liste.find((y) => String(y.kod) === k); await env.KAYIT.put(`venom:siteSonEkleme:${k}`, JSON.stringify({ zaman: simdi, fotolar: [], videolar: (u.videolar || []).slice(0, 1) }), { expirationTtl: 14 * 86400 }).catch(() => null); }
+  }
   if (notlar.length || sorun.length) {
     const l = await oku(env, "venom:kanalVideoSonuc", []);
     await env.KAYIT.put("venom:kanalVideoSonuc", JSON.stringify([...l, ...[...new Set(notlar)].map((k) => ({ kod: k, ok: true, zaman: simdi })), ...sorun.map((y) => ({ ...y, ok: false }))].slice(-50)), { expirationTtl: 7 * 86400 });

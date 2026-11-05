@@ -3,6 +3,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { botSagligi, sonHata } from "./saglik.js";
 import { siteVerisi } from "./depo-oku.js";
+import { siteKontrol } from "./yayin-kontrol.js";
 import { depoDosya } from "./depo-oku.js";
 import { venomDugme, venomMesaj, venomSelin } from "./selin.js";
 export * from "./selin.js";
@@ -15,5 +16,5 @@ export class VenomKapisi extends WorkerEntrypoint { // tek kapı (5 Kasım): Ven
   async mesaj(metin) { return venomMesaj(this.env, metin); }
   async durum(kod) { return venomSelin(this.env, "/venom/durum", kod); }
   async taslak(kod) { return venomSelin(this.env, "/venom/taslak", kod); }
-  async saglik() { return botSagligi(this.env, async () => { const l = await siteVerisi(this.env); const h = await sonHata(this.env, "selin:hata"); if (!Array.isArray(l) || !l.length) return { sorun: "site verisi okunamadı" }; return h ? { sorun: h } : { bilgi: `site okundu (${l.length} model)` }; }); } // 6 Kasım: 09:30 testi
+  async saglik() { return botSagligi(this.env, async () => { const l = await siteVerisi(this.env); const h = await sonHata(this.env, "selin:hata"); if (!Array.isArray(l) || !l.length) return { sorun: "site verisi okunamadı" }; if (h) return { sorun: h }; const k = siteKontrol(l, []); return k.ok ? { bilgi: `site okundu (${l.length} model) · akış denemesi: site kontrolü ${k.notlar.length ? `${k.notlar.length} tekrar/kolaj bulur` : "temiz"} (yazılmadı)` } : { sorun: `akış denemesi: ${k.sorunlar.join("; ")}` }; }); } // 6 Kasım: 09:30 testi
 }

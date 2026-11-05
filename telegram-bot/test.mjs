@@ -1678,35 +1678,39 @@ test("köprü cari: anahtarlı köprü Black Rose hesap bakiyelerini gönderir; 
   assert.equal(v.ozel[0].kod, "BLACK ROSE BORC VERDIM");
 });
 
-test("yeni model: Selin siteye ekleyince Kemal önizlemeyi SADECE Patron'a (🆕 YENİ MODEL); Patron ✅ → hemen kanala, günlük 10'a sayılmaz, tarih güncellenir; Hemra basamaz; 2000 yok", async () => {
+test("yeni model (6 Kasım): Selin siteye ekleyince Kemal kartı SADECE Merdan ve Hemra'ya (Patron'a/Venom'a değil); 4 düğme; Venom kontrolü üstte; ✅ → kanala; ⏳ Beklesin → 3 gün sonra yeniden; 2000 yok", async () => {
   const o = await yeniOrtam();
-  Object.assign(o.env, { MURAT_ID: "999,111", ALLOWED_IDS: "999,111,222", EKIP_IDS: "333" });
+  Object.assign(o.env, { MURAT_ID: "999,111", ALLOWED_IDS: "999,111,222", EKIP_IDS: "333", FABRIKA_SORUMLU: "333" });
   const { yeniModelIsleri } = await import("./worker.js");
-  await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]); // Vegawin'de stok henüz 0 → uyarı (engel değil)
-  o.depo.set("venom:yeniModel", JSON.stringify([{ kod: "3403", kim: "MURAT BABAHANOV", zaman: 1 }, { kod: "2000", kim: "x", zaman: 1 }, { kod: "7777", kim: "x", zaman: 1 }]));
+  await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]);
+  o.depo.set("venom:yeniModel", JSON.stringify([{ kod: "3403", kim: "Selin", zaman: 1 }, { kod: "2000", kim: "x", zaman: 1 }, { kod: "7777", kim: "x", zaman: 1 }]));
   o.gonderilen.length = 0;
   await yeniModelIsleri(o.env, ist(10));
   const albumler = cagrilar(o.gonderilen, "sendMediaGroup");
-  assert.deepEqual(albumler.map((m) => m.govde.chat_id), ["999"]); // sadece Patron
-  assert.match(albumler[0].govde.media[0].caption, /^🆕 NEW \/ NOUVEAU\n<b>✅ CODE: 3403<\/b>/);
-  assert.ok(!/\$|price|prix/i.test(JSON.stringify(o.gonderilen)));
-  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => /^🆕 YENİ MODEL — 3403 \(siteye ekleyen: MURAT BABAHANOV\)/.test(m.govde.text));
-  assert.equal(kontrol.govde.chat_id, "999");
-  assert.match(kontrol.govde.text, /⚠️ Vegawin'de .*paylaşım engellenmez/);
-  assert.ok(!cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === "333"));
-  assert.deepEqual(JSON.parse(o.depo.get("venom:yeniModel")), [{ kod: "7777", kim: "x", zaman: 1, deneme: 1 }]); // sitede henüz yok → tekrar denenecek; 2000 çıkarıldı
-  const onay = kontrol.govde.reply_markup.inline_keyboard[0][0].callback_data;
-  o.gonderilen.length = 0;
-  await bas(o.env, 333, onay); // Hemra basamaz
-  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
-  const gun = gunAnahtari(ist(10));
-  o.depo.set(`sayac:${gun}`, "10");
+  assert.deepEqual(albumler.map((m) => String(m.govde.chat_id)).sort(), ["222", "333"]); // Merdan + Hemra
+  assert.ok(!o.gonderilen.some((m) => ["999", "111"].includes(String(m.govde && m.govde.chat_id))));
+  const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => String(m.govde.chat_id) === "222" && /🆕 YENİ MODEL — 3403/.test(m.govde.text));
+  assert.match(kart.govde.text, /^(✅|⚠️) Venom kontrolü/);
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Onayla", "✏️ Düzelt", "⏭️ Geç", "⏳ Beklesin"]);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:yeniModel")), [{ kod: "7777", kim: "x", zaman: 1, deneme: 1 }]);
+  // ⏳ Beklesin (Hemra) → 3 gün sonra yeniden
+  const bekle = kart.govde.reply_markup.inline_keyboard[1][1].callback_data;
   const gercek = Date.now; Date.now = () => ist(10) * 1000;
-  try { await bas(o.env, 111, onay); } finally { Date.now = gercek; } // Murat'ın eski hesabı da Patron yetkisinde
+  try { await bas(o.env, 333, bekle); } finally { Date.now = gercek; }
+  const sira = JSON.parse(o.depo.get("venom:yeniModel")).find((x) => x.kod === "3403");
+  assert.equal(sira.sonra, ist(10) + 3 * 86400);
+  o.gonderilen.length = 0;
+  await yeniModelIsleri(o.env, ist(11)); // 3 gün dolmadı → sorulmaz
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").length, 0);
+  await yeniModelIsleri(o.env, ist(11) + 3 * 86400);
+  const kart2 = cagrilar(o.gonderilen, "sendMessage").find((m) => String(m.govde.chat_id) === "222" && /🆕 YENİ MODEL — 3403/.test(m.govde.text));
+  assert.ok(kart2);
+  // ✅ Onayla (Merdan) → kanala
+  const onay = kart2.govde.reply_markup.inline_keyboard[0][0].callback_data;
+  Date.now = () => (ist(11) + 3 * 86400) * 1000;
+  try { await bas(o.env, 222, onay); } finally { Date.now = gercek; }
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
-  assert.equal(o.depo.get(`sayac:${gun}`), "10");
-  const { stokIste } = await import("./stokbot.js");
-  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3403"], ist(10));
+  assert.match(o.depo.get(`venom:yeniModelSayac:${gunAnahtari(ist(10))}`), /"beklesin":1/);
 });
 
 test("köprü kendini güncelleme: /kopru/surum ve /kopru/dosya sadece anahtarla; sadece listedeki dosyalar; köprünün sürümü kaydedilir", async () => {

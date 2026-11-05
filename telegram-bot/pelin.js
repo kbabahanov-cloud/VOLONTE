@@ -16,6 +16,8 @@
 // Ayarlar (Cloudflare volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY (secret, kullanıcı girer), WEBHOOK_SECRET (kurulumda
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
+import { durdurulduMu, durMesaji } from "./durdurma.js";
+import { ORTAK_KURALLAR } from "./kurallar.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { karmaDepo } from "./depo.js";
@@ -498,17 +500,25 @@ async function videoluKodlar(env) {
   for (const id of (await oku(env, "pelin:isler", [])).slice(-200)) { const x = await oku(env, `pelin:is:${id}`, null); if (x && x.durum === "onaylandi") v.add(String(x.kod)); }
   return v;
 }
+// 6 Kasım (Patron): Merdan'dan video BEKLENEN modeller (20 MB üstü gelmiş / tekrar istenmiş) Pelin'e önerilmez
+export async function merdanVideoBekleyen(env, simdi = Math.floor(Date.now() / 1000)) {
+  const d = (await env.KAYIT.get("venom:videoDenetim", "json").catch(() => null)) || {};
+  const gelen = (await env.KAYIT.get("venom:videoGelenBuyuk", "json").catch(() => null)) || [];
+  return new Set([...(d.sorunlar || []).filter((x) => ["buyuk", "sitede-bozuk"].includes(x.tur)).map((x) => String(x.kod)), ...(d.istenen || []).map(String),
+    ...gelen.filter((x) => x.kod && simdi - x.zaman < 14 * 86400).map((x) => String(x.kod))]);
+}
 export async function oncelikMetni(env, simdi) {
   if (!env.STOK) return "Stok deposu bağlı değil.";
   const videolu = await videoluKodlar(env), satir = [];
+  const bekleyen = await merdanVideoBekleyen(env, simdi);
   for (const [magaza, ad] of [["VOLONTE", "VOLONTE"], ["BLACKROSE", "BLACK ROSE"]]) {
     const s = await satisToplam(env, magaza, simdi - 6 * 86400, simdi);
-    const kodlar = Object.keys(s).filter((k) => !videolu.has(k));
+    const kodlar = Object.keys(s).filter((k) => !videolu.has(k) && !bekleyen.has(k));
     const st = kodlar.length ? await stokIste(env, "/toplu", { kodlar }).catch(() => ({})) : {};
     const l = kodlar.map((k) => ({ k, s: s[k], stok: Math.max(0, (st[k] || {}).toplam || 0) })).filter((x) => x.stok >= 5).sort((a, b) => b.s - a.s || b.stok - a.stok).slice(0, 8);
     satir.push(`🏬 ${ad}:`, ...(l.length ? l.map((x, i) => `${i + 1}. ${x.k} — 7 günde ${x.s} adet satış · stok ${x.stok}`) : ["(videosuz, stoğu ≥5 ve satan model yok)"]));
   }
-  return ["🎯 ÖNCELİK (Pelin önce bunları yapsın): son 7 gün en çok satan + stoğu fazla + henüz videosu yok", ...satir, "Üretmek için: \"<kod> üret\""].join("\n");
+  return ["🎯 ÖNCELİK (Pelin önce bunları yapsın): son 7 gün en çok satan + stoğu fazla + henüz videosu yok", ...satir, ...(bekleyen.size ? [`(Merdan'dan video beklenen ${bekleyen.size} model listeye alınmadı: ${[...bekleyen].slice(0, 10).join(", ")})`] : []), "Üretmek için: \"<kod> üret\""].join("\n");
 }
 export async function haftalikRapor(env, simdi) {
   const satir = ["📊 HAFTALIK PELİN RAPORU"], maliyet = {}, yayin = {};
@@ -584,6 +594,26 @@ async function donusAdimi(env, simdi) {
 
 // Zamanlı işler (Claude Code, Patron isteğiyle): KV "venom:pelinZamanli" = [{ zaman, islem: "teslim", isId }] → zamanı gelince
 // hazır paket (video + mankenli foto seti; askı/360 YOK) Kemal'e: SON YAYIN ONAYI kartı. Yeni üretim yok, para yok.
+// 6 Kasım (yedek): her gece (03–05) Pelin'in iç kayıtları KV "yedek:<gün>:pelin" (8 gün) — işler, ürün fotoğrafları, seçim
+async function pelinYedek(env, simdi) {
+  const gy = await env.KAYIT.get("venom:yedekGeriYukle:pelin"); // geri yükleme (tek seferlik): "YYYY-AA-GG"
+  if (gy) {
+    await env.KAYIT.delete("venom:yedekGeriYukle:pelin");
+    const y = await env.KAYIT.get(`yedek:${gy}:pelin`, "json");
+    if (y && y.veri) for (const [k, v] of Object.entries(y.veri)) if (v != null) await kaydet(env, k, v);
+    await env.KAYIT.put("venom:yedekGeriYukleSonuc:pelin", JSON.stringify({ zaman: simdi, gun: gy, ok: Boolean(y), anahtar: y ? Object.keys(y.veri).length : 0 }), { expirationTtl: 7 * 86400 });
+  }
+  const s = (new Date((simdi + 3 * 3600) * 1000)).getUTCHours();
+  const gun = new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  if (s < 3 || s >= 5 || (await oku(env, `pelin:yedek:${gun}`, null))) return;
+  const isler = await oku(env, "pelin:isler", []);
+  const veri = { "pelin:secim": await oku(env, "pelin:secim", null), "pelin:isler": isler };
+  for (const id of isler.slice(-60)) veri[`pelin:is:${id}`] = await oku(env, `pelin:is:${id}`, null);
+  const ks = ((await Promise.resolve().then(() => env.KAYIT.list({ prefix: "pelin:urunfoto:" })).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
+  for (const k of ks) veri[k] = await oku(env, k, null);
+  await env.KAYIT.put(`yedek:${gun}:pelin`, JSON.stringify({ zaman: simdi, veri }), { expirationTtl: 8 * 86400 });
+  await kaydet(env, `pelin:yedek:${gun}`, 1, 2 * 86400);
+}
 async function zamanliIsler(env, simdi) {
   const l = (await env.KAYIT.get("venom:pelinZamanli", "json")) || [];
   if (!l.length) return;
@@ -698,6 +728,7 @@ export async function pelinCron(env, simdi) {
   try { const pk = await env.KAYIT.get("venom:pelinKomut", "json"); if (pk && /^\/(uret|maliyettesti)\b/.test(String(pk.metin))) { await env.KAYIT.delete("venom:pelinKomut"); const p = murat(env); await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: pk.metin, sonSenaryo: Boolean(pk.sonSenaryo) }, simdi, /^\/maliyettesti/.test(pk.metin)); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   if (env.STOK) { try { await eskiTeslimSor(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "eskiTeslim", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
   try { await urunFotoUrlAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoUrl", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  try { await pelinYedek(env, simdi); } catch { /* sonraki gece */ }
   try { await zamanliIsler(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "zamanli", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { await urunFotoAktar(env); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "urunFotoAktar", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   try { const yk = await env.KAYIT.get("venom:pelinYuzKart", "json"); if (Array.isArray(yk) && yk.length) { await env.KAYIT.delete("venom:pelinYuzKart"); for (const k of yk) await yuzDuzenleKarti(env, murat(env), k.seri, k.talimat, k.istem, simdi, k.onEk || ""); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "yuzKart", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
@@ -735,7 +766,9 @@ async function dosyaVer(env, anahtar) {
 }
 
 // ---------- Sohbet (Claude; komutsuz) ----------
-const SISTEM = `Sen Pelin'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyim toptancısı; ana pazar Afrika, dünya geneli) görsel ve video yapımcısı. Hollywood seviyesinde bir yapımcı gibi düşünürsün: ışık, kadraj, hareket, müzik, ilk 2 saniyede dikkat çekme, Telegram/Instagram/WhatsApp için dikey video.
+const SISTEM = `${ORTAK_KURALLAR}
+
+Sen Pelin'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyim toptancısı; ana pazar Afrika, dünya geneli) görsel ve video yapımcısı. Hollywood seviyesinde bir yapımcı gibi düşünürsün: ışık, kadraj, hareket, müzik, ilk 2 saniyede dikkat çekme, Telegram/Instagram/WhatsApp için dikey video.
 Sade, kısa, samimi Türkçe konuş (Rusça yazılırsa Rusça). Sohbet gibi konuş: soru sor, fikir ver, daha iyi bir yol görürsen söyle. Komut bekleme.
 Kesin kurallar (asla esnemez): kıyafetin rengi, deseni ve kesimi asla değişmez; manken yüzleri hep aynı; fiyat, maliyet, alış fiyatı, kâr ve stok hiçbir görsele/yazıya girmez; videoya AI notu basılmaz; videonun son karesinde modelin MARKASI (VOLONTE ya da BLACK ROSE — model kartında, Sami'nin deposundan) ve altında model kodu (fiyat ve başka yazı yok). Markayı ASLA tahmin etme; VOLONTE ve BLACK ROSE iki ayrı mağazadır, karıştırılmaz. Onaysız harcama yok: her üretimden önce maliyet önizlemesi gider, sadece Murat onaylar. Para harcayan bir işi sen başlatamazsın; sadece "kurulum_karti" (yüz + ortam kurulumu) ya da "uretim_karti" (model kodlarıyla üretim / maliyet testi) ile Patron'a ✅ Onayla / ❌ İptal düğmeli maliyet kartı gönderebilirsin. Eski deneme akışı ("fal hazır", kör test, askı/kumaş denemesi) TAMAMEN KALDIRILDI; ondan söz etme.
 Üretim akışı (2 Kasım, Patron): /uret <kod> → ürün fotoğrafı (önce Patron/Hemra'nın gönderdiği, yoksa site) → sabit yüzle fotoğraf → aynı fotoğraftan 6 sn video → kalite kontrol (sen + ikinci göz OpenAI) → renk/desen/kesim farkı varsa otomatik yeniden; 2 denemede olmazsa Patron'a ⚠️ → Patron [✅ Onayla] [🔄 Yeniden üret] [❌ İptal] → onaylanınca Selin siteye, Kemal kanala. /maliyettesti 5 kod → model başı maliyet raporu. Örnek video ("bunun gibi yap, 3557"): kamera, ışık, hız, poz ve ortam havasını tarif olarak çıkarırsın; birebir kopya yok, başkasının yüzü/logosu/müziği yok; beğenilen tarif şablon olur (/sablonlar).
@@ -1122,6 +1155,7 @@ export default {
   async scheduled(olay, env) {
     if (!env.BOT_TOKEN) return;
     try { await patronDenemesi(env, "Pelin", tg); } catch { /* */ }
+    if (await durdurulduMu(env, "pelin")) return; // 6 Kasım: durduruldu → üretim adımları bekler (açılınca kaldığı yerden)
     if (env.PELIN) await nesne(env).fetch("https://pelin/cron", { method: "POST" });
     else await pelinCron(env, Math.floor(Date.now() / 1000));
   },
@@ -1684,6 +1718,7 @@ async function kartDugmesi(env, cq, simdi) {
 
 async function uretKomutu(env, m, simdi, test = false) {
   if (!muratMi(env, m.from.id)) return yaz(env, m.chat.id, "Üretimi sadece Patron başlatır.");
+  if (await durdurulduMu(env, "pelin")) return yaz(env, m.chat.id, `${await durMesaji(env, "pelin")} — üretim başlatılmadı.`);
   const secim = await oku(env, "pelin:secim", null);
   if (!secim) return yaz(env, m.chat.id, "Önce kurulum: /kurulum (yüz + ortam seçimi).");
   const sozler = String(m.text || "").split(/\s+/).slice(1);
