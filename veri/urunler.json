@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3566",
+  "baslik": "Satin Cuff Blazer Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece suit in soft pink, pairing a tailored single-button blazer with high-waisted wide-leg trousers. The blazer features a notch lapel, flap pockets, a shaped waist and slit cuffs that reveal a satin lining. Wear it to the office, meetings or evening events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces rose poudré, associant une veste cintrée à un bouton et un pantalon large taille haute. La veste se distingue par son col cranté, ses poches à rabat, sa taille marquée et ses poignets fendus laissant apparaître une doublure satinée. Idéal au bureau, en rendez-vous ou en soirée. Confectionné à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças em rosa suave, com blazer acinturado de um botão e calça pantalona de cintura alta. O blazer tem gola entalhada, bolsos com aba, cintura marcada e punhos com fenda que revelam um forro acetinado. Perfeito para o escritório, reuniões ou eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3566/1.jpg",
+   "galeri/3566/2.jpg",
+   "galeri/3566/3.jpg",
+   "galeri/3566/4.jpg",
+   "galeri/3566/5.jpg",
+   "galeri/3566/6.jpg"
+  ],
+  "videolar": [
+   "selin/3566/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3570",
   "baslik": "Jewel Trim Velvet Maxi Dress",
   "kategori": "evening",
