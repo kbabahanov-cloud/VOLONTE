@@ -719,4 +719,7 @@ test("6 Kasım: 907 = VOLONTE (Patron kararı) — Vegawin'de iki markada olsa d
   assert.equal((await markaKesin(env, "3600")).marka, null); // karar yoksa yine "belirsiz" (tahmin yok)
   assert.equal(await markaKarari(env, "3600"), null);
   assert.match(ORTAK_KURALLAR, /13\. PATRON'UN KESİN MARKA KARARLARI[^\n]*907 = VOLONTE/);
+  assert.match(ORTAK_KURALLAR, /907 = VOLONTE, 3000 = VOLONTE, 3002 = VOLONTE, 3047 = BLACK ROSE, 4205 = BLACK ROSE\./);
+  assert.equal((await markaKesin(env, "4205")).marka, "BLACKROSE");
+  assert.equal((await markaKesin(env, "3002")).marka, "VOLONTE");
 });

@@ -20,7 +20,7 @@ import { KISILER, kuyrugaEkle, kuyruguAl, hataEkle } from "./venom-kopru.js";
 import { siteVerisi } from "./depo-oku.js";
 import { renkCevir } from "./duzen.js";
 import { renkBilinir, renkDilleri } from "./site-renk.js";
-import { ORTAK_KURALLAR, BOT_YETENEKLERI, VENOM_KURALLARI } from "./kurallar.js";
+import { ORTAK_KURALLAR, BOT_YETENEKLERI, VENOM_KURALLARI, MARKA_KARARLARI } from "./kurallar.js";
 import { isKaydet, isCevap, isHatirlat, bitmeyenIsler, hataAlarmi, hataSayilari, geriAlBul, satisUyarisi, stokBitiyor, paylasilmayanlar, paraOzeti, hatirlaticiEkle, vadesiGelenler, yedekAl, gunA } from "./venom-yonetim.js";
 import { durYaz, durDurumu, _durOnbellekSifirla } from "./durdurma.js";
 import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
@@ -255,7 +255,8 @@ export async function dugme(env, cq, simdi) {
   }
   if (/^vk:/.test(String(cq.data))) { // 6 Kasım: Patron'un kesin marka kararı
     const [, kod, h] = String(cq.data).split(":");
-    const marka = h === "B" ? "BLACKROSE" : "VOLONTE";
+    const kesin = MARKA_KARARLARI[kod]; // kural kitabında zaten karar varsa o geçerli (düğme değiştiremez)
+    const marka = kesin || (h === "B" ? "BLACKROSE" : "VOLONTE");
     const l = (await oku(env, "venom:markaKarar", {})) || {};
     l[kod] = marka; await kaydet(env, "venom:markaKarar", l);
     await stokIste(env, "/ayar-yaz", { k: "marka:karar", v: JSON.stringify(l) }).catch(() => null); // Sami'nin Black Rose stoğu da uysun

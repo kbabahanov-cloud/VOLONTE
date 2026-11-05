@@ -4,7 +4,8 @@
 export const KURAL_SURUM = "2026-11-06";
 // PATRON'UN KESİN MARKA KARARLARI (Vegawin'den ÖNCE gelir; Vegawin'de iki markada görünse bile). Yenileri Venom'daki
 // "hangi marka?" düğmeleriyle KV "venom:markaKarar"a da yazılır (aynı değeri taşır). Sami, Venom, Kemal, Selin, Pelin hepsi kullanır.
-export const MARKA_KARARLARI = { "907": "VOLONTE" }; // 907: Patron kararı 5 Kasım — Black Rose Vegawin'indeki kayıt hatalı
+// 5 Kasım Patron: 907 (Black Rose Vegawin kaydı hatalı); 3047, 4205 (VOLONTE kartında stok yok); 3000, 3002 (Celal'in indirim stoğu)
+export const MARKA_KARARLARI = { "907": "VOLONTE", "3047": "BLACKROSE", "4205": "BLACKROSE", "3000": "VOLONTE", "3002": "VOLONTE" };
 const markaAd = (m) => (m === "BLACKROSE" ? "BLACK ROSE" : m);
 
 export const ORTAK_KURALLAR = `ORTAK KURAL KİTABI (${KURAL_SURUM}) — her botta geçerli, çakışırsa bu kazanır:
