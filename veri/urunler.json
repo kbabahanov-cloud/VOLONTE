@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3559",
+  "baslik": "Chiffon Bell Sleeve Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece suit pairing a tailored single-breasted blazer with high-waisted wide-leg trousers. The blazer features a notched lapel, sheer chiffon cascading bell sleeves and jewel-detail buttons, while pressed creases lengthen the trouser line. Wear it to the office, ceremonies or evening events. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant une veste cintrée à boutonnage simple et un pantalon large taille haute. La veste se distingue par son col à revers, ses manches évasées en mousseline fluide et ses boutons bijoux, tandis que les plis marqués allongent la silhouette. À porter au bureau, lors de cérémonies ou en soirée. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um blazer ajustado de abotoamento simples com calça pantalona de cintura alta. O blazer tem gola com lapela, mangas em sino de chiffon transparente e botões tipo joia, enquanto os vincos alongam a silhueta da calça. Ideal para o escritório, cerimónias ou eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3559/1.jpg",
+   "galeri/3559/2.jpg",
+   "galeri/3559/3.jpg",
+   "galeri/3559/4.jpg",
+   "galeri/3559/5.jpg",
+   "galeri/3559/6.jpg",
+   "galeri/3559/7.jpg",
+   "galeri/3559/8.jpg",
+   "galeri/3559/9.jpg"
+  ],
+  "videolar": [
+   "selin/3559/0",
+   "selin/3559/1",
+   "selin/3559/2",
+   "selin/3559/3"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3561",
   "baslik": "Pinstripe Wide-Leg Suit",
   "kategori": "sets",
