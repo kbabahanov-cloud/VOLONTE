@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3548",
+  "baslik": "Cloud Print Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted mock-neck top with high-waisted wide-leg trousers in a soft blue cloud print. The top comes in short or long sleeve, and the trousers feature a wide waistband and a fluid, floor-grazing leg. Easy to style for daytime events, gatherings or travel. Made in Istanbul with careful attention to finish.",
+   "fr": "Un ensemble deux pièces composé d'un haut ajusté à col montant et d'un pantalon large taille haute, dans un imprimé nuageux bleu tout en douceur. Le haut se décline en manches courtes ou longues, et le pantalon se distingue par sa ceinture large et sa jambe fluide. Idéal pour les sorties de jour, les réunions ou les voyages. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina uma blusa justa de gola alta com calça pantalona de cintura alta, num suave estampado azul de nuvens. A blusa está disponível com manga curta ou comprida, e a calça tem cós largo e caimento fluido até ao chão. Ideal para eventos diurnos, encontros ou viagens. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3548/1.jpg",
+   "galeri/3548/2.jpg",
+   "galeri/3548/3.jpg",
+   "galeri/3548/4.jpg"
+  ],
+  "videolar": [
+   "selin/3548/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3549",
   "baslik": "Corset Waist Leopard Maxi Dress",
   "kategori": "dresses",
