@@ -593,6 +593,18 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 30 model sahibe istenir (Celal'i
   assert.ok(!kodlar.includes("9100"));
   assert.match(istek[0].govde.text, /\n\n👤 Celal'in modelleri \(en son\): 9100\n/); // Celal en sonda (30. model)
   assert.match(istek[0].govde.text, /Dosya olarak[\s\S]*3503 Küçük[\s\S]*\/yok 3503/);
+  // Tek seferlik TEKRAR (5 Kasım): aynı liste aynı biçimde SADECE /sahip hesabına (0091), durumlar değişmez
+  o.depo.set("selin:sahip", "999");
+  o.depo.set("venom:selinIstekTekrar", JSON.stringify({}));
+  const once = o.depo.get("selin:modeller");
+  await istekAdimi(o.env, gun + 600);
+  const tekrar = cagri(o.g, "sendMessage").slice(1);
+  assert.deepEqual(tekrar.map((m) => m.govde.chat_id), ["999"]);
+  assert.equal(tekrar[0].govde.text.split("\n")[1], istek[0].govde.text.split("\n")[1]);
+  assert.match(tekrar[0].govde.text, /^🌸 \(Tekrar\) Bugün 30 model/);
+  assert.equal(o.depo.get("selin:modeller"), once);
+  assert.equal(JSON.parse(o.depo.get("venom:selinIstekTekrarSonuc")).kodlar.length, 30);
+  o.depo.delete("selin:sahip"); o.g.splice(o.g.indexOf(tekrar[0]), 1);
   // albüm: yazısız parça önce gelir, sonra yazılı (Dosya olarak) + video
   const gonder = (ek) => guncelleme({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Murat" }, ...ek } }, o.env);
   await gonder({ media_group_id: "g1", document: { file_id: "d2", file_unique_id: "u2", mime_type: "image/jpeg" } });

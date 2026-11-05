@@ -1227,7 +1227,67 @@ async function stokIste2(env, yol, govde = {}) {
 }
 
 // 10:00 — günün istek listesi (bir kez). Sahiplere (0091 hesabı + Merdan: SAHIP_IDS) gider; Celal'in modelleri en sonda.
+// Tek seferlik (5 Kasım, Patron): KV "venom:selinIstekTekrar" = { gun } → o günün istek listesi AYNI BİÇİMDE yeniden gönderilir
+// (sadece /sahip ile kayıtlı hesaplara = 0091; SAHIP_IDS'teki Merdan'a tekrar gitmez). Model durumları DEĞİŞMEZ.
+// Sonuç (kodlar + her modelin durumu) "venom:selinIstekTekrarSonuc".
+// Tek seferlik SALT OKUMA (Claude Code): KV "venom:selinDurumDok" → model durumları + bugünkü aday sayısı "venom:selinDurumDokSonuc"
+async function durumDokum(env) {
+  if (!(await env.KAYIT.get("venom:selinDurumDok"))) return false;
+  await env.KAYIT.delete("venom:selinDurumDok");
+  const modeller = await oku(env, "selin:modeller", {});
+  let sitede = new Set(); try { sitede = await sitedekiKodlar(env); } catch { /* */ }
+  const stok = await stokIste2(env, "/stoktakiler");
+  const { kodlar } = await istekAdaylari(env, modeller, sitede);
+  const durum = {};
+  for (const [k, m] of Object.entries(modeller)) if (m && ozelMi(m)) durum[k] = { d: m.durum, i: m.istenme || null };
+  await env.KAYIT.put("venom:selinDurumDokSonuc", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), stoktaki: stok.map((r) => String(r.kod)), sitede: [...sitede], aday: kodlar, durum, sahipSayisi: kimlikler(await env.KAYIT.get("selin:sahip")).length }), { expirationTtl: 86400 });
+  return true;
+}
+async function istekTekrarAdimi(env, simdi) {
+  const t = await env.KAYIT.get("venom:selinIstekTekrar", "json");
+  if (!t) return false;
+  await env.KAYIT.delete("venom:selinIstekTekrar");
+  const gun = t.gun || gunAnahtari(simdi);
+  let ist = await oku(env, `selin:istek:${gun}`, null);
+  const modeller = await oku(env, "selin:modeller", {});
+  const stok = await stokIste2(env, "/stoktakiler");
+  // 5 Kasım: günün listesi boşsa (bütün stok ya sitede ya "gönderilemedi") → "gönderilemedi" modellerden normal sırayla N tanesi
+  // yeniden istenir (durum "istendi", bugünün listesine yazılır; 20:00 özetine girer)
+  if (t.bekleyenler && !((ist && ist.kodlar) || []).length) {
+    let sitede = new Set(); try { sitede = await sitedekiKodlar(env); } catch { /* */ }
+    const stoktaki = stok.map((r) => String(r.kod));
+    const uygun = (k) => !sitede.has(k) && modeller[k] && ozelMi(modeller[k]) && modeller[k].durum === "gonderilemedi";
+    const sirali = [...ONCELIKLI.filter((k) => stoktaki.includes(k) && uygun(k)), ...stoktaki.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((x, y) => Number(y) - Number(x) || y.localeCompare(x))].slice(0, Number(t.bekleyenler) || GUNLUK_ISTEK);
+    const ck = new Set(stok.filter((r) => r.tedarikci === "CELAL").map((r) => String(r.kod)));
+    const secilen = [...sirali.filter((k) => !ck.has(k)), ...sirali.filter((k) => ck.has(k))];
+    if (!t.kuru) {
+      for (const k of secilen) modeller[k] = { ...modeller[k], durum: "istendi", istenme: simdi, tekrar: (modeller[k].tekrar || 0) + 1 };
+      await yazKV(env, "selin:modeller", modeller);
+    }
+    ist = { kodlar: secilen, zaman: simdi, tekrarIstek: true };
+    if (!t.kuru) await yazKV(env, `selin:istek:${gun}`, ist, 30 * 86400);
+  }
+  const kodlar = (ist && ist.kodlar) || [];
+  const celalKume = new Set(stok.filter((r) => r.tedarikci === "CELAL").map((r) => String(r.kod)));
+  const kime = kimlikler(await env.KAYIT.get("selin:sahip"));
+  const normal = kodlar.filter((k) => !celalKume.has(k)), celal = kodlar.filter((k) => celalKume.has(k));
+  const metin = [
+    `🌸 (Tekrar) Bugün ${kodlar.length} model istiyorum (Vegawin'de stokta):`,
+    normal.join(", "),
+    ...(celal.length ? ["", `👤 Celal'in modelleri (en son): ${celal.join(", ")}`] : []),
+    "",
+    "Her model için fotoğrafları 📎 → Dosya olarak gönderin (kalite düşmesin), videoyu da ekleyin.",
+    "Yazıya kod ve beden: \"3503 Küçük\" · \"3518 Büyük\" · \"3520 İkisi de\" (Küçük 38-44, Büyük 44-50).",
+    "Gönderemeyeceğiniz model: /yok 3503",
+  ].join("\n");
+  const gonderim = [];
+  if (kodlar.length && !t.kuru) for (const k of kime) { const r = await tg(env, "sendMessage", { chat_id: k, text: metin }); gonderim.push(Boolean(r && r.ok)); }
+  await env.KAYIT.put("venom:selinIstekTekrarSonuc", JSON.stringify({ zaman: simdi, gun, istekZaman: ist && ist.zaman, kodlar, celal, durum: Object.fromEntries(kodlar.map((k) => [k, (modeller[k] || {}).durum || "?"])), kisiSayisi: kime.length, gonderim, kuru: Boolean(t.kuru), metin }), { expirationTtl: 3 * 86400 });
+  return true;
+}
 export async function istekAdimi(env, simdi) {
+  if (await durumDokum(env)) return;
+  if (await istekTekrarAdimi(env, simdi)) return;
   if (await istekDuzeltAdimi(env, simdi)) return;
   const s = saat(simdi);
   if (s < ISTEK_SAATI || s >= GUN_SONU_SAATI) return;
@@ -1603,6 +1663,7 @@ export async function pelinSiteAdimi(env, simdi) {
       u.fotolar = (u.fotolar || []).filter((f) => !fs.has(f));
       u.videolar = (u.videolar || []).filter((v) => !vs.has(v));
       for (const f of fs) if (/^galeri\/\d+\/pelin-[a-z0-9]+\.jpg$/.test(f) && f0 !== u.fotolar.length) dosyalar.push({ yol: f, b64: null }); // sadece Pelin dosyası silinir
+      for (const f of x.dosyaSil || []) if (new RegExp(`^galeri/${x.kod}/pelin-[a-z0-9]+\\.jpg$`).test(f) && !u.fotolar.includes(f)) { dosyalar.push({ yol: f, b64: null }); notlar.push(`${x.kod}: sahipsiz dosya silindi (${f.split("/").pop()})`); } // listede olmayan eski Pelin dosyası
       yeni[i] = u;
       notlar.push(`${x.kod}: ${f0 - u.fotolar.length} fotoğraf, ${v0 - u.videolar.length} video kaldırıldı`);
     }

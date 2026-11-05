@@ -1493,4 +1493,11 @@ test("ZAMANLI TESLİM (09:00): hazır paket Kemal'e, askı/ekler YOK, yeni üret
   await cronlar(o, 1);
   const l = JSON.parse(o.depo.get("pelin:urunfoto:3627"));
   assert.equal(l[0].url, "https://site/galeri/3627/3.jpg");
+  // Eski bekleyenler (ofis "4 onay"): sadece bekleyen durumdakiler iptal
+  o.depo.set("pelin:is:3627-e1", JSON.stringify({ id: "3627-e1", kod: "3627", durum: "onay", gecmis: [] }));
+  o.depo.set("pelin:is:3627-e2", JSON.stringify({ id: "3627-e2", kod: "3627", durum: "video_bekle", gecmis: [] }));
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "-", islem: "eskiKapat", isIdler: ["3627-e1", "3627-e2"], neden: "bordo yayınlandı" }));
+  await cronlar(o, 1);
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3627-e1")).durum, "iptal");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3627-e2")).durum, "video_bekle");
 });
