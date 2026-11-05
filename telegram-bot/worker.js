@@ -51,7 +51,7 @@ import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, D
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
-import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, renkIngilizce } from "./yayin-kontrol.js";
+import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce } from "./yayin-kontrol.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
@@ -725,6 +725,8 @@ async function telegramForm(env, metod, form) {
 // Medya ve yazı, mesajlar arşiv kanalına iletilerek okunur.
 // 4 Kasım (Patron): fotoğraf etiketi modelin MARKASIYLA — model kartı (pelinboy:<kod>.marka), yoksa Sami'nin deposu (tek mağaza)
 export async function modelMarkasi(env, kod) {
+  const pk = await markaKarari(env, kod); // 6 Kasım: Patron'un kesin kararı önce
+  if (pk) return pk;
   const kart = await env.KAYIT.get(`pelinboy:${kod}`, "json").catch(() => null);
   if (kart && (kart.marka === "BLACKROSE" || kart.marka === "VOLONTE")) return kart.marka;
   if (env.STOK) {

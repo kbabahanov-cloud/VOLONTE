@@ -21,6 +21,7 @@ import { ORTAK_KURALLAR } from "./kurallar.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { claudeTur } from "./ai-istemci.js";
+import { markaKarari } from "./yayin-kontrol.js";
 import { karmaDepo } from "./depo.js";
 import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
@@ -102,6 +103,8 @@ const aksesuarIstemi = (st) => (st && st.aksesuarEn ? ` ACCESSORIES: ${st.aksesu
 // Kalıcı: pelinboy:<kod>.marka. Videonun son karesine marka + kod basılır; marka yazısı yanlış/eksik video yayına GİTMEZ.
 export const MARKALAR = { VOLONTE: { ad: "VOLONTE", yazi: (kod) => `a small, tasteful GOLD serif text "VOLONTE" and directly below it the model code "${kod}"` }, BLACKROSE: { ad: "BLACK ROSE", yazi: (kod) => `a small, tasteful SILVER-WHITE text "BLACK ROSE" with a thin rose line, and directly below it the model code "${kod}"` } };
 export async function markaSor(env, kod) {
+  const pk = await markaKarari(env, kod); // 6 Kasım: Patron'un kesin kararı (ör. 907 = VOLONTE) her şeyden önce
+  if (pk) return { marka: pk, kaynak: "Patron kararı" };
   const b = await boyOku(env, kod);
   if (b && MARKALAR[b.marka]) return { marka: b.marka, kaynak: b.markaKaynak || "model kartı" };
   if (!env.STOK) return { marka: null, neden: "Sami'nin deposuna ulaşılamadı" };

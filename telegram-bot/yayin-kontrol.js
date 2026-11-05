@@ -3,6 +3,14 @@
 // Kontroller: marka (kesin değilse durur), renk (Patron/iş rengiyle), beden ve EN/FR alt yazı, fiyat, aynı gün aynı renkle
 // tekrar, yapay zekâ kolajı. Görselin içine bakılmaz (ücretli olurdu): "renk fotoğrafla uyuşuyor mu" yazıdaki renk ile işin
 // rengi karşılaştırılarak yapılır. Durdurulan her iş KV "venom:kontrol:engel" (Venom akşam raporu) + Patron'a kısa sebep.
+import { MARKA_KARARLARI } from "./kurallar.js";
+// 6 Kasım (Patron): kesin marka kararı — kural kitabı + KV "venom:markaKarar" ({ kod: "VOLONTE"|"BLACKROSE" }). Her şeyden önce gelir.
+export async function markaKarari(env, kod) {
+  const k = String(kod);
+  if (MARKA_KARARLARI[k]) return MARKA_KARARLARI[k];
+  const kv = env && env.KAYIT ? await env.KAYIT.get("venom:markaKarar", "json").catch(() => null) : null;
+  return kv && ["VOLONTE", "BLACKROSE"].includes(kv[k]) ? kv[k] : null;
+}
 const stokSor = async (env, yol, govde) => {
   const r = await env.STOK.get(env.STOK.idFromName("stok")).fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(govde) });
   return r.json();
@@ -18,6 +26,8 @@ export function renkIngilizce(tr) {
 }
 // Marka KESİN mi? Sami'nin deposu okunamazsa VARSAYILAN YOK (önceden sessizce VOLONTE sayılıyordu → Black Rose'a VOLONTE imzası)
 export async function markaKesin(env, kod, { defterden = true } = {}) {
+  const pk = await markaKarari(env, kod);
+  if (pk) return { marka: pk, kaynak: "Patron kararı" };
   if (defterden) { // 6 Kasım: TEK DOĞRU LİSTE (site defteri) önce
     const d = await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null);
     const m = d && d.modeller && d.modeller[String(kod)];

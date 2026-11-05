@@ -253,6 +253,19 @@ export async function dugme(env, cq, simdi) {
     await cevap(r ? `${BOT_AD[k.bot]}'e iletildi` : "İletilemedi");
     return null;
   }
+  if (/^vk:/.test(String(cq.data))) { // 6 Kasım: Patron'un kesin marka kararı
+    const [, kod, h] = String(cq.data).split(":");
+    const marka = h === "B" ? "BLACKROSE" : "VOLONTE";
+    const l = (await oku(env, "venom:markaKarar", {})) || {};
+    l[kod] = marka; await kaydet(env, "venom:markaKarar", l);
+    await stokIste(env, "/ayar-yaz", { k: "marka:karar", v: JSON.stringify(l) }).catch(() => null); // Sami'nin Black Rose stoğu da uysun
+    const d = await oku(env, "venom:siteDefteri", null);
+    if (d && d.modeller && d.modeller[kod]) { const { markaNot, ...m } = d.modeller[kod]; d.modeller[kod] = { ...m, marka }; await kaydet(env, "venom:siteDefteri", d); }
+    const satirlar = ((cq.message.reply_markup || {}).inline_keyboard || []).filter((r) => !r.some((b) => String(b.callback_data || "").startsWith(`vk:${kod}:`)));
+    await tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: satirlar } }).catch(() => null);
+    await yaz(env, `🏷 ${kod} = ${marka === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE"} (kalıcı; bütün botlar bunu kullanır).`);
+    return cevap("Kaydedildi");
+  }
   if (/^vd:/.test(String(cq.data))) { // 6 Kasım: ⛔ Durdur onayı
     await tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null);
     if (cq.data === "vd:x") return cevap("Vazgeçildi");
@@ -922,6 +935,10 @@ export async function venomCron(env, simdi) {
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   try { await hataBildir(env, simdi); } catch (e) { await hataYaz(env, "hataBildir", e); }
   // Tek seferlik (Claude Code): KV "venom:patronaYaz" = metin → Patron'a Venom'dan (ör. kural kitabı özeti)
+  // 6 Kasım (sadece rapor): iki markanın Vegawin'inde de görünen kodlar → KV venom:ikiMagazaSonuc (Claude Code okur)
+  try { if (await env.KAYIT.get("venom:ikiMagazaSimdi")) { await env.KAYIT.delete("venom:ikiMagazaSimdi"); await env.KAYIT.put("venom:ikiMagazaSonuc", JSON.stringify({ zaman: simdi, liste: await stokIste(env, "/iki-magaza", {}) }), { expirationTtl: 7 * 86400 }); } } catch (e) { await hataYaz(env, "ikiMagaza", e); }
+  // 6 Kasım: Patron'a "hangi marka?" sorusu, kod başına iki düğme → KV venom:markaKarar (bütün botlar kullanır)
+  try { const t = await oku(env, "venom:markaSor", null); if (t) { await env.KAYIT.delete("venom:markaSor"); await yaz(env, t.metin, { reply_markup: { inline_keyboard: (t.kodlar || []).slice(0, 40).map((k) => [{ text: `${k} = VOLONTE`, callback_data: `vk:${k}:V` }, { text: `${k} = BLACK ROSE`, callback_data: `vk:${k}:B` }]) } }); } } catch (e) { await hataYaz(env, "markaSor", e); }
   try { const t = await env.KAYIT.get("venom:patronaYaz"); if (t) { await env.KAYIT.delete("venom:patronaYaz"); await yaz(env, t); } } catch (e) { await hataYaz(env, "patronaYaz", e); }
   // Tek seferlik (Claude Code): KV "venom:testSimdi" → günlük test şimdi, sonuç KV "venom:testSonuc" (Patron'a mesaj YOK)
   try { if (await env.KAYIT.get("venom:testSimdi")) { await env.KAYIT.delete("venom:testSimdi"); await env.KAYIT.put("venom:testSonuc", JSON.stringify({ zaman: simdi, metin: await gunlukTest(env, simdi) }), { expirationTtl: 86400 }); } } catch (e) { await hataYaz(env, "testSimdi", e); }

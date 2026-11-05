@@ -9,6 +9,7 @@
 import { ORTAK_KURALLAR } from "./kurallar.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { claudeTur } from "./ai-istemci.js";
+import { markaKarari } from "./yayin-kontrol.js";
 import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
@@ -81,7 +82,8 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     if (indirimliMi(girdi.kod) && !muratMi(env, kim)) return { kod: girdi.kod, sonuc: "İndirimli mal kodu (gerçek model değil, tekrar alınmaz). Bilgisi sadece Murat'ta." };
     const b = await stokIste(env, "/bilgi", { kod: girdi.kod });
     if (!b.satirlar || !b.satirlar.length) return { kod: b.kod, sonuc: "Vegawin'de kaydı yok (Black Rose ya da pasif kart olabilir)" };
-    return { kod: b.kod, toplam: b.toplam, magazalar: b.satirlar.map((s) => ({ magaza: s.magaza, adet: s.adet })), durum: b.karar ? b.karar.durum : b.toplam > 0 ? "stokta" : "bitti" };
+    const pk = await markaKarari(env, b.kod); // 6 Kasım: Patron'un kesin marka kararı (ör. 907 = VOLONTE)
+    return { kod: b.kod, toplam: b.toplam, magazalar: b.satirlar.map((s) => ({ magaza: s.magaza, adet: s.adet })), durum: b.karar ? b.karar.durum : b.toplam > 0 ? "stokta" : "bitti", ...(pk ? { marka: pk === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE", markaNotu: "Patron'un kesin kararı — Vegawin'de iki markada görünse bile marka budur (öbür kayıt hatalı)" } : {}) };
   }
   if (ad === "satislar") {
     const gun = girdi.gun === "dun" ? gunAnahtari(simdi - 86400) : /^\d{4}-\d{2}-\d{2}$/.test(girdi.gun) ? girdi.gun : gunAnahtari(simdi);

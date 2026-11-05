@@ -2,6 +2,10 @@
 // Venom, Pelin (Nora dahil), Kemal ve Sami'nin yapay zekâ talimatları bu dosyayı okur. Bir kural değişecekse SADECE burada değişir.
 // Kişiye özel bilgi (kimlik, numara, fiyat) bu dosyaya YAZILMAZ — depo herkese açık; onlar gizli kayıtta (KV).
 export const KURAL_SURUM = "2026-11-06";
+// PATRON'UN KESİN MARKA KARARLARI (Vegawin'den ÖNCE gelir; Vegawin'de iki markada görünse bile). Yenileri Venom'daki
+// "hangi marka?" düğmeleriyle KV "venom:markaKarar"a da yazılır (aynı değeri taşır). Sami, Venom, Kemal, Selin, Pelin hepsi kullanır.
+export const MARKA_KARARLARI = { "907": "VOLONTE" }; // 907: Patron kararı 5 Kasım — Black Rose Vegawin'indeki kayıt hatalı
+const markaAd = (m) => (m === "BLACKROSE" ? "BLACK ROSE" : m);
 
 export const ORTAK_KURALLAR = `ORTAK KURAL KİTABI (${KURAL_SURUM}) — her botta geçerli, çakışırsa bu kazanır:
 1. VOLONTE ve BLACK ROSE iki AYRI mağazadır: asla toplanmaz, karşılaştırılmaz; marka ASLA tahmin edilmez (Sami'nin deposu / model kartı). Black Rose modelinin imzası "BLACK ROSE – Premium Women's Fashion".
@@ -15,7 +19,8 @@ export const ORTAK_KURALLAR = `ORTAK KURAL KİTABI (${KURAL_SURUM}) — her bott
 9. Patron dışında kimseyle Venom konuşmaz; elemanlar eski usulle çalışır.
 10. "Hepsini durdur" denince bütün botların paylaşım/üretim/yazma işleri durur; "hepsini aç" ile açılır. Bir bot 3 kez üst üste hata yaparsa Venom onu durdurur ve Patron'a haber verir.
 11. Bilmediğin şeyi uydurma; emin değilsen tek kısa soru sor.
-12. TEK DOĞRU LİSTE: sitedeki modellerin marka/renk/fotoğraf/video bilgisi SADECE "site defteri"nden (KV venom:siteDefteri, Selin her gece ve her site değişiminde yeniler) okunur; eski kayıtlara bakılmaz.`;
+12. TEK DOĞRU LİSTE: sitedeki modellerin marka/renk/fotoğraf/video bilgisi SADECE "site defteri"nden (KV venom:siteDefteri, Selin her gece ve her site değişiminde yeniler) okunur; eski kayıtlara bakılmaz.
+13. PATRON'UN KESİN MARKA KARARLARI (Vegawin'de iki markada görünse bile bunlar geçerli): ${Object.entries(MARKA_KARARLARI).map(([k, m]) => `${k} = ${markaAd(m)}`).join(", ")}.`;
 
 export const BOT_YETENEKLERI = `BOTLARIN YAPABİLDİKLERİ (yapamadığı işi o bota sorma):
 • Sami (stok): Vegawin stok adetleri, günlük/dönem satış adetleri, marka (VOLONTE/BLACK ROSE), fabrika eksik listesi, stoktaki modeller, kanalda son paylaşım tarihi. YAPAMAZ: fotoğraf/video, site, kanal paylaşımı.

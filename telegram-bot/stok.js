@@ -16,6 +16,7 @@
 export const BEKLESIN_STOK_GUN = 7;
 
 import { sha256 } from "./sha256.js";
+import { MARKA_KARARLARI } from "./kurallar.js";
 
 export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
 // İndirimli mal kodları (kullanıcı kararı 30 Ekim): 2000 = CRY'den toplu alınan indirimli malların ortak kodu, gerçek model
@@ -209,9 +210,11 @@ export class StokDeposu {
   // Black Rose kodu (kullanıcı kararı 31 Ekim): İKİ mağazada da Vegawin kodu "B" ile biten kartlar (bradet) + Murat'ın
   // "Black Rose say" dediği B'siz modeller (ayar "br:say"; o modelin Black Rose mağazasındaki adedi). 2000 hariç.
   brSayListesi() { return JSON.parse(this.ayarOku("br:say") || "[]"); }
+  // 6 Kasım (Patron): kesin marka kararı VOLONTE olan kod (ör. 907) "B" kartı olsa da Black Rose stoğu SAYILMAZ
+  volonteKarari(k) { let kv = {}; try { kv = JSON.parse(this.ayarOku("marka:karar") || "{}"); } catch { kv = {}; } return (MARKA_KARARLARI[k] || kv[k]) === "VOLONTE"; }
   brStokDetay(kod) {
     const k = stokKodu(kod);
-    if (indirimliMi(k)) return null;
+    if (indirimliMi(k) || this.volonteKarari(k)) return null;
     const say = this.brSayListesi().includes(k);
     const d = {};
     for (const r of this.hepsi("SELECT magaza, bradet, adet FROM urun WHERE kod = ?", k)) {
@@ -229,7 +232,7 @@ export class StokDeposu {
     const say = new Set(this.brSayListesi());
     const sonuc = { BLACKROSE: [], VOLONTE: [] };
     for (const r of this.hepsi("SELECT magaza, kod, bradet, adet FROM urun ORDER BY kod")) {
-      if (indirimliMi(r.kod) || !sonuc[r.magaza]) continue;
+      if (indirimliMi(r.kod) || !sonuc[r.magaza] || this.volonteKarari(r.kod)) continue;
       const v = r.bradet != null ? r.bradet : say.has(r.kod) && r.magaza === "BLACKROSE" ? r.adet : null;
       if (v != null && v > 0) sonuc[r.magaza].push([r.kod, v]);
     }
@@ -374,6 +377,17 @@ export class StokDeposu {
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
 
+  // 6 Kasım (Patron, sadece rapor): iki mağazanın Vegawin'inde de satırı olan kodlar — kart bilgisi + mağaza başına satış özeti
+  ikiMagaza() {
+    const kodlar = this.hepsi("SELECT kod FROM urun GROUP BY kod HAVING COUNT(DISTINCT magaza) > 1 ORDER BY kod").map((r) => r.kod);
+    return kodlar.map((kod) => ({
+      kod,
+      satirlar: this.hepsi("SELECT magaza, ad, adet, guncel, tedarikci, ikikart, bradet FROM urun WHERE kod = ? ORDER BY magaza", kod),
+      satis: this.hepsi("SELECT magaza, COUNT(*) AS gun, SUM(adet) AS adet, MIN(gun) AS ilk, MAX(gun) AS son FROM satis WHERE kod = ? GROUP BY magaza ORDER BY magaza", kod),
+      karar: this.tek("SELECT durum, kim, zaman FROM karar WHERE kod = ?", kod) || null,
+    }));
+  }
+
   bilgi(kod) {
     const satirlar = this.hepsi("SELECT magaza, ad, adet, fiyat, guncel FROM urun WHERE kod = ?", kod);
     const karar = this.tek("SELECT durum, kim, zaman, sonraki FROM karar WHERE kod = ?", kod);
@@ -447,6 +461,7 @@ export class StokDO {
     if (yol === "/sorgu-karar") return cevap(d.sorguKarar(g.id, g.durum, g.kim, g.zaman));
     if (yol === "/sorgu-bekleyen") return cevap(d.sorguBekleyen(g.murat, g.sure));
     if (yol === "/sorgu-liste") return cevap(d.sorguListe(g.basla, g.bitis));
+    if (yol === "/iki-magaza") return cevap(d.ikiMagaza());
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
     return new Response("?", { status: 404 });

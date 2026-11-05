@@ -2097,3 +2097,14 @@ test("6 Kasım: imza düzeltme turu — caption düzenlenir (medya yok), silinme
   assert.match(s.aciklama, /^🖋 İmza düzeltme bitti: 1 gönderi "BLACK ROSE – Premium Women's Fashion" yapıldı \(hiçbiri silinmedi\)\./);
   assert.match(s.aciklama, /❌ Düzenlenemeyen 2:\n1\. 3148 t\.me\/x\/502 — Telegram: Bad Request: message can't be edited\n2\. 3246 t\.me\/x\/503 — kanalda bulunamadı/);
 });
+
+test("6 Kasım: 907 = VOLONTE — VOLONTE Vegawin'indeki '907 B 20' kartı Black Rose stoğu sayılmaz", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "907", adet: 14, brAdet: 14 }, { kod: "3900", adet: 24, brAdet: 24 }]);
+  const br = async (kod) => (await (await o.env.STOK.get().fetch("https://stok/br-stok", { method: "POST", body: JSON.stringify({ kod }) })).json()).stok;
+  assert.equal(await br("907"), null);
+  assert.equal(await br("3900"), 24);
+  const l = await (await o.env.STOK.get().fetch("https://stok/br-stoklar", { method: "POST", body: "{}" })).json();
+  assert.ok(!Object.values(l).flat().some((x) => x[0] === "907"));
+});
