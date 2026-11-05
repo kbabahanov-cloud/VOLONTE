@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3549",
+  "baslik": "Corset Waist Leopard Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A flowing maxi dress in a soft grey and black leopard print, cut with a gently draped bodice and a full gathered skirt. A wide black corset-style waistband defines the silhouette, finished with a clean boat neckline and soft cap sleeves. Easy to wear for daytime outings, gatherings and special occasions. Made in Istanbul with careful attention to detail.",
+   "fr": "Une robe longue fluide à imprimé léopard gris et noir, avec un buste légèrement drapé et une jupe ample froncée. Une large ceinture noire façon corset sculpte la taille, associée à une encolure bateau nette et de petites manches courtes. Idéale pour la journée, les réunions et les occasions spéciales. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Um vestido longo e fluido com estampa de leopardo em cinzento e preto, com corpete levemente drapeado e saia ampla franzida. Uma faixa preta larga em estilo corset marca a cintura, com decote canoa limpo e mangas curtas suaves. Fácil de usar no dia a dia, em encontros e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3549/1.jpg",
+   "galeri/3549/2.jpg",
+   "galeri/3549/3.jpg",
+   "galeri/3549/4.jpg",
+   "galeri/3549/5.jpg",
+   "galeri/3549/6.jpg",
+   "galeri/3549/7.jpg"
+  ],
+  "videolar": [
+   "selin/3549/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3552",
   "baslik": "Crystal Button Skirt Set",
   "kategori": "sets",
