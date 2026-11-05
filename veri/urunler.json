@@ -1,5 +1,33 @@
 [
  {
+  "kod": "907",
+  "baslik": "Embellished Satin Wide-Leg Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted three-quarter-sleeve top with flowing wide-leg trousers in a smooth satin finish. The wide boat neck and hem are framed with black panels and stone fringe, while the open back carries embellished bands from the shoulders down. Made for receptions, celebrations and evening events. Produced in Istanbul with careful handwork.",
+   "fr": "Un ensemble deux pièces qui associe un haut ajusté à manches trois-quarts à un pantalon large et fluide au tombé satiné. L'encolure bateau et le bas du haut sont soulignés de bandes noires ornées de franges de pierres, et le dos ouvert reprend ces bandes depuis les épaules. Idéal pour les réceptions, cérémonies et soirées. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa ajustada de manga três-quartos com calça pantalona fluida de acabamento acetinado. O decote canoa e a barra da blusa trazem faixas pretas com franjas de pedraria, e as costas abertas repetem o bordado desde os ombros. Pensado para recepções, cerimônias e eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/907/1.jpg",
+   "galeri/907/2.jpg",
+   "galeri/907/3.jpg",
+   "galeri/907/4.jpg",
+   "galeri/907/5.jpg",
+   "galeri/907/6.jpg",
+   "galeri/907/7.jpg",
+   "galeri/907/8.jpg",
+   "galeri/907/9.jpg",
+   "galeri/907/10.jpg"
+  ],
+  "videolar": [
+   "selin/907/3"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3544",
   "baslik": "Pinstripe Three-Piece Suit",
   "kategori": "sets",
@@ -598,29 +626,6 @@
   "videolar": [
    "selin/3148/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-04"
- },
- {
-  "kod": "907",
-  "baslik": "Piped Bib Pleated Dress",
-  "kategori": "dresses",
-  "aciklama": {
-   "en": "A long-sleeve midi dress with a fitted waist and a finely pleated skirt that falls to a handkerchief hem. A contrast-piped bib collar, a tie-bow neckline and a 3D floral appliqué at the waist define the look, finished with puff sleeves and buttoned cuffs. Polished enough for the office, church or daytime events. Made in Istanbul with careful workmanship.",
-   "fr": "Robe midi à manches longues, taille ajustée et jupe finement plissée terminée par un ourlet mouchoir. Le plastron bordé d'un passepoil contrasté, le col à nœud et l'applique florale en relief à la taille lui donnent tout son caractère, avec des manches bouffantes et des poignets boutonnés. Idéale pour le bureau, l'église ou les événements de journée. Fabriquée à Istanbul avec soin.",
-   "pt": "Vestido midi de manga comprida, com cintura ajustada e saia plissada que termina numa bainha assimétrica em pontas. O peitilho com debrum contrastante, a gola com laço e o aplique floral em relevo na cintura marcam o modelo, completado por mangas bufantes e punhos abotoados. Elegante para o escritório, a igreja ou eventos de dia. Produzido em Istambul com acabamento cuidadoso."
-  },
-  "bedenler": "38-40-42-44-46-48-50",
-  "fotolar": [
-   "galeri/907/1.jpg",
-   "galeri/907/2.jpg",
-   "galeri/907/3.jpg",
-   "galeri/907/4.jpg",
-   "galeri/907/5.jpg",
-   "galeri/907/6.jpg",
-   "galeri/907/7.jpg"
-  ],
-  "videolar": [],
   "gizli": false,
   "eklenme": "2026-11-04"
  },
