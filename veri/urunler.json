@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3396",
+  "baslik": "Tweed Trim Shirt Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a white long-sleeve shirt with a high-waisted tweed pencil skirt. The shirt features a tweed collar, placket, cuffs and flap pockets with gold buttons, while the midi skirt has a clean fitted line and a back slit. Ideal for the office, meetings and refined daytime events. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une chemise blanche à manches longues et une jupe crayon taille haute en tweed. La chemise se distingue par son col, sa patte de boutonnage, ses poignets et ses poches à rabat en tweed ornées de boutons dorés ; la jupe midi offre une ligne ajustée et une fente au dos. Idéal pour le bureau, les rendez-vous et les occasions de journée. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de duas peças que combina uma camisa branca de manga comprida com uma saia lápis de cintura alta em tweed. A camisa tem gola, carcela, punhos e bolsos com pala em tweed com botões dourados, e a saia midi apresenta um corte ajustado e racha atrás. Ideal para o escritório, reuniões e eventos diurnos elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3396/1.jpg",
+   "galeri/3396/2.jpg",
+   "galeri/3396/3.jpg",
+   "galeri/3396/4.jpg",
+   "galeri/3396/5.jpg",
+   "galeri/3396/6.jpg",
+   "galeri/3396/7.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3634",
   "baslik": "Butterfly Print Shirt Set",
   "kategori": "sets",
@@ -1066,29 +1089,6 @@
    "selin/3394/0",
    "selin/3394/1"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-03"
- },
- {
-  "kod": "3396",
-  "baslik": "Tweed Trim Shirt Set",
-  "kategori": "sets",
-  "aciklama": {
-   "en": "A two-piece set pairing a white shirt with a high-waisted tweed pencil skirt. The shirt features a tweed collar, button placket, flap pockets with gold buttons and contrast cuffs, while the midi skirt has a back slit for easy movement. Suited to the office, meetings and polished daytime events. Made in Istanbul with careful workmanship.",
-   "fr": "Un ensemble deux pièces associant une chemise blanche à une jupe crayon taille haute en tweed. La chemise se distingue par son col en tweed, sa patte boutonnée, ses poches à rabat ornées de boutons dorés et ses poignets contrastés ; la jupe midi est fendue au dos pour plus d'aisance. Idéal pour le bureau, les rendez-vous et les journées élégantes. Fabriqué à Istanbul avec soin.",
-   "pt": "Um conjunto de duas peças que combina uma camisa branca com uma saia lápis de cintura alta em tweed. A camisa tem gola em tweed, carcela de botões, bolsos com pala e botões dourados e punhos em contraste; a saia midi tem racha atrás para maior conforto. Ideal para o escritório, reuniões e ocasiões elegantes de dia. Produzido em Istambul com acabamento cuidadoso."
-  },
-  "bedenler": "38-40-42-44-46-48-50",
-  "fotolar": [
-   "galeri/3396/1.jpg",
-   "galeri/3396/2.jpg",
-   "galeri/3396/3.jpg",
-   "galeri/3396/4.jpg",
-   "galeri/3396/5.jpg",
-   "galeri/3396/6.jpg",
-   "galeri/3396/7.jpg"
-  ],
-  "videolar": [],
   "gizli": false,
   "eklenme": "2026-11-03"
  },
