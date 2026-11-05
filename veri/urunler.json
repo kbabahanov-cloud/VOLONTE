@@ -1,5 +1,36 @@
 [
  {
+  "kod": "3555",
+  "baslik": "Printed Kimono Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a floor-length open-front kimono with high-waisted wide-leg trousers. The kimono features wide batwing sleeves and a fluid abstract swirl print, while the trousers have soft front pleats and a satin-look sheen. Wear it to events, gatherings or elegant daytime occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un kimono long ouvert sur le devant et un pantalon large taille haute. Le kimono se distingue par ses manches amples chauve-souris et son imprimé abstrait aux motifs ondulés, tandis que le pantalon offre des plis devant et un tombé satiné. Idéal pour les cérémonies, réceptions ou journées élégantes. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina um quimono longo de frente aberta com calça pantalona de cintura alta. O quimono traz mangas amplas estilo morcego e uma estampa abstrata de ondas, enquanto a calça tem pregas frontais e brilho acetinado. Perfeito para eventos, encontros ou ocasiões elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3555/1.jpg",
+   "galeri/3555/2.jpg",
+   "galeri/3555/3.jpg",
+   "galeri/3555/4.jpg",
+   "galeri/3555/5.jpg",
+   "galeri/3555/6.jpg",
+   "galeri/3555/7.jpg",
+   "galeri/3555/8.jpg",
+   "galeri/3555/9.jpg",
+   "galeri/3555/10.jpg"
+  ],
+  "videolar": [
+   "selin/3555/0",
+   "selin/3555/1",
+   "selin/3555/2",
+   "selin/3555/3"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3557",
   "baslik": "Ruffle Belted Trouser Suit",
   "kategori": "sets",
