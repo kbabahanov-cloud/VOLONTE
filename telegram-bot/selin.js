@@ -16,7 +16,7 @@ import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
-import { siteKontrol, engelKaydet } from "./yayin-kontrol.js";
+import { siteKontrol, engelKaydet, markaKesin } from "./yayin-kontrol.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -235,7 +235,7 @@ export class SelinDO {
         }
         return new Response("ok");
       case "/video-isleri": // 5 Kasım: video işleri ayrı istekte (Cloudflare'in istek başına 50 dış istek sınırı)
-        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi, siteTekrarBulAdimi, selinYedekAdimi })) {
+        for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi, siteTekrarBulAdimi, selinYedekAdimi, siteDefteriAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -810,6 +810,7 @@ export async function siteyeYaz(env, dosyalar, liste, mesaj) {
   const yeniAgac = await gh(env, "/git/trees", { method: "POST", body: JSON.stringify({ base_tree: sonCommit.tree.sha, tree: agac }) });
   const commit = await gh(env, "/git/commits", { method: "POST", body: JSON.stringify({ message: mesaj, tree: yeniAgac.sha, parents: [ref.object.sha] }) });
   await gh(env, "/git/refs/heads/main", { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
+  try { await siteDefteriYenile(env, Math.floor(Date.now() / 1000), { liste }); } catch { /* gece yeniden sayılır */ } // 6 Kasım: defter anında
   return commit.sha;
 }
 
@@ -1559,7 +1560,7 @@ async function dosyalariBagla(env, uid, kod, grup, dosyalar, simdi, { album = nu
       if (x.medya.some((y) => y.uid === md.uid)) continue;
       // taslak video sırası = medyadaki video sırası (sitenin "selin/<kod>/<n>" adresi)
       const n = x.medya.filter((y) => y.tur === "video").length;
-      x.medya.push({ file_id: md.file_id, tur: "video", belge: md.belge || false, boyut: md.boyut || 0, w: md.w || 0, h: md.h || 0, uid: md.uid });
+      x.medya.push({ file_id: md.file_id, tur: "video", belge: md.belge || false, boyut: md.boyut || 0, w: md.w || 0, h: md.h || 0, uid: md.uid, yeniden: true, zaman: simdi });
       x.taslak.videolar[n] = { id: n, file_id: md.file_id, boyut: md.boyut || 0, w: md.w || 0, belge: Boolean(md.belge) };
       if (!((md.boyut || 0) > VIDEO_SINIR)) ekle.push({ kod, id: n, kim: uid, zaman: simdi });
     }
@@ -2124,7 +2125,7 @@ export async function videoDenetimAdimi(env, simdi, { zorla = false } = {}) {
     (kisiye[kim] = kisiye[kim] || []).push(s);
   }
   for (const [kim, l] of Object.entries(kisiye)) {
-    if (await oku(env, `selin:tekrarMesaj:${kim}:${gunAnahtari(simdi)}`, null)) continue;
+    if (true) continue; // 6 Kasım: yerine siteDefteriAdimi günde bir TEK liste gönderir
     const r = await tg(env, "sendMessage", { chat_id: kim, text: [`📹 Bu modellerin videosu siteye KONAMADI, lütfen tekrar gönderin:`, ...l.map((s) => `• ${s.kod} — ${s.neden}`), "",
       "Nasıl: videoyu NORMAL video olarak gönderin (\"dosya olarak\" DEĞİL; Telegram sıkıştırır), 20 MB altında. Yazısına sadece kodu yazın (ör. 3612). Model sitedeyse video doğrudan siteye eklenir; fotoğrafları tekrar göndermeyin."].join("\n") }).catch(() => null);
     if (r && r.ok) { await yazKV(env, `selin:tekrarMesaj:${kim}:${gunAnahtari(simdi)}`, 1, 2 * 86400); sonuc.istenen = [...(sonuc.istenen || []), ...l.map((y) => y.kod)]; }
@@ -2167,6 +2168,65 @@ async function siteVideoUidleri(env, u, modeller) {
 }
 // 6 Kasım (temizlik B2): sitede aynı modelde AYNI video iki kez mi (Telegram dosya kimliği)? KV "venom:siteTekrarBul" → sonuç
 // "venom:siteTekrarSonuc" = [{ kod, videolar: [fazla adresler] }] (Patron onayıyla Venom kartından kaldırılır)
+// ---------- SİTE DEFTERİ (6 Kasım, Patron): TEK DOĞRU LİSTE — KV "venom:siteDefteri" ----------
+// Sitedeki her model: kod, marka (Sami'den, kesin değilse "belirsiz" + sebep), renkler, fotoğraf sayısı, video sayısı / oynayan,
+// son eklenme, gizli, stok, Merdan'dan video bekleniyor mu (20 MB üstü gelip yerine yenisi gelmeyen). Venom, Kemal, Pelin, Sami bu deftere bakar.
+// Her gece baştan sayılır; site her değiştiğinde (siteyeYaz) hemen güncellenir (marka yeni modeller için sorulur).
+const MB20 = 20 * 1024 * 1024;
+export async function siteDefteriYenile(env, simdi, { liste = null, tam = false } = {}) {
+  if (!liste) liste = (await siteVerisi(env)).liste;
+  const modeller = await oku(env, "selin:modeller", {});
+  const eski = (await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null)) || { modeller: {} };
+  const vd = (await env.KAYIT.get("venom:videoDenetim", "json").catch(() => null)) || {};
+  const bozuk = new Set((vd.sorunlar || []).filter((x) => x.tur === "sitede-bozuk").map((x) => x.v));
+  const stok = env.STOK ? ((await stokIste2(env, "/toplu", { kodlar: liste.map((u) => String(u.kod)) })) || {}) : {};
+  const defter = {}, duzeltme = [];
+  for (const u of liste) {
+    const kod = String(u.kod), e = eski.modeller[kod];
+    let marka = e && e.marka && e.marka !== "belirsiz" && !tam ? { marka: e.marka } : await markaKesin(env, kod, { defterden: false }).catch(() => ({ marka: null, hata: "okunamadı" }));
+    const x = modeller[kod], vids = ((x && x.medya) || []).filter((y) => y.tur === "video");
+    // bekleniyor: Merdan'ın gönderdiği bir video 20 MB üstü geldi (siteye konamadı) ve sonradan yeniden gönderilen uygun video yok
+    const sonBuyuk = vids.reduce((a, y, i) => (y.boyut > MB20 ? i : a), -1);
+    const bekleniyor = sonBuyuk >= 0 && !vids.some((y) => y.yeniden && !(y.boyut > MB20));
+    const kart = await env.KAYIT.get(`pelinboy:${kod}`, "json").catch(() => null);
+    const yazi = (u.renkler && u.renkler.length) || (kart && kart.renk) ? null : await env.KAYIT.get(`yazi:${kod}`, "json").catch(() => null); // kanal yazısındaki renkler (İngilizce)
+    const renkler = (u.renkler && u.renkler.length) ? u.renkler : kart && kart.renk ? [kart.renk] : yazi && yazi.renkEmin && (yazi.renkler || []).length ? yazi.renkler : [];
+    const v = u.videolar || [];
+    defter[kod] = { kod, marka: marka.marka || "belirsiz", ...(marka.marka ? {} : { markaNot: marka.hata || "Sami'de kayıt yok" }), renkler, foto: (u.fotolar || []).length, video: v.length,
+      videoOynuyor: v.filter((y) => !bozuk.has(y)).length, eklenme: u.eklenme || null, gizli: Boolean(u.gizli), stok: (stok[kod] || {}).toplam ?? null,
+      videoBekleniyor: bekleniyor, ...(bekleniyor ? { bekleyenMb: Math.round(vids[sonBuyuk].boyut / 1048576), gonderen: (x && x.gonderen) || null } : {}) };
+    if (e && e.videoBekleniyor !== defter[kod].videoBekleniyor) duzeltme.push(`${kod}: video bekleniyor ${e.videoBekleniyor ? "→ HAYIR (video gelmiş)" : "→ EVET"}`);
+    if (e && e.video !== defter[kod].video) duzeltme.push(`${kod}: video sayısı ${e.video} → ${defter[kod].video}`);
+    if (e && e.marka !== defter[kod].marka) duzeltme.push(`${kod}: marka ${e.marka} → ${defter[kod].marka}`);
+  }
+  // eski/yanlış iç kayıtlar: Selin "sitede" diyor ama sitede yok → "kaldirildi"; sitede var ama kayıt "istendi/bekliyor" → "sitede"
+  let mdeg = false;
+  for (const [k, m] of Object.entries(modeller)) {
+    if (!ozelMi(m)) continue;
+    if (m.durum === "sitede" && !defter[k]) { modeller[k] = { ...m, durum: "kaldirildi", duzeltme: simdi }; mdeg = true; duzeltme.push(`${k}: Selin kaydı "sitede" idi, sitede yok → "kaldırıldı"`); }
+    else if (defter[k] && ["istendi", "bekliyor", "bulunamiyor", "gonderilemedi"].includes(m.durum)) { modeller[k] = { ...m, durum: "sitede", duzeltme: simdi }; mdeg = true; duzeltme.push(`${k}: Selin kaydı "${m.durum}" idi, sitede var → "sitede"`); }
+  }
+  if (mdeg) await yazKV(env, "selin:modeller", modeller);
+  const sonuc = { zaman: simdi, sayi: liste.length, modeller: defter };
+  await env.KAYIT.put("venom:siteDefteri", JSON.stringify(sonuc));
+  if (duzeltme.length) { const l = (await env.KAYIT.get("venom:siteDefteriDuzeltme", "json").catch(() => null)) || []; await env.KAYIT.put("venom:siteDefteriDuzeltme", JSON.stringify([...l, { zaman: simdi, duzeltme }].slice(-20)), { expirationTtl: 14 * 86400 }); }
+  return { sayi: liste.length, duzeltme };
+}
+export async function siteDefteriAdimi(env, simdi) {
+  const simdiIste = await env.KAYIT.get("venom:defterSimdi");
+  if (simdiIste) await env.KAYIT.delete("venom:defterSimdi");
+  const gece = saat(simdi) >= 3 && saat(simdi) < 5 && !(await oku(env, `selin:defter:${gunAnahtari(simdi)}`, null));
+  if (simdiIste || gece) { await siteDefteriYenile(env, simdi, { tam: true }); await yazKV(env, `selin:defter:${gunAnahtari(simdi)}`, 1, 2 * 86400); }
+  // Merdan'a günde BİR kez tek liste (11:00 sonrası): deftere göre videosu gerçekten beklenen modeller
+  if (saat(simdi) < 11 || saat(simdi) >= 19 || (await oku(env, `selin:videoHatirlat:${gunAnahtari(simdi)}`, null))) return;
+  const d = (await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null)) || { modeller: {} };
+  const bek = Object.values(d.modeller).filter((m) => m.videoBekleniyor && !m.gizli);
+  await yazKV(env, `selin:videoHatirlat:${gunAnahtari(simdi)}`, 1, 2 * 86400);
+  if (!bek.length) return;
+  const kisiye = {};
+  for (const m of bek) { const k = String(m.gonderen || (await sahipler(env))[0] || ""); if (k) (kisiye[k] = kisiye[k] || []).push(m); }
+  for (const [k, l] of Object.entries(kisiye)) await tg(env, "sendMessage", { chat_id: k, text: [`📹 Videosu beklenen modeller (${l.length}):`, ...l.map((m, i) => `${i + 1}. ${m.kod} — önceki video ${m.bekleyenMb} MB geldi, siteye konamadı`), "", "Lütfen NORMAL video olarak (📎 dosya olarak DEĞİL), 20 MB altı gönderin; yazısına sadece kodu yazın. Video doğrudan siteye eklenir."].join("\n") }).catch(() => null);
+}
 // 6 Kasım (yedek): her gece (03–05) Selin'in iç kayıtları KV "yedek:<gün>:selin" (8 gün). Geri yükleme: araclar/yedek-geri.py
 export async function selinYedekAdimi(env, simdi) {
   // Geri yükleme (tek seferlik): KV "venom:yedekGeriYukle:selin" = "YYYY-AA-GG" → o günün yedeği iç kayda yazılır

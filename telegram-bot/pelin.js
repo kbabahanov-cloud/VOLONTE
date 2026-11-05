@@ -502,6 +502,8 @@ async function videoluKodlar(env) {
 }
 // 6 Kasım (Patron): Merdan'dan video BEKLENEN modeller (20 MB üstü gelmiş / tekrar istenmiş) Pelin'e önerilmez
 export async function merdanVideoBekleyen(env, simdi = Math.floor(Date.now() / 1000)) {
+  const df = await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null); // 6 Kasım: tek doğru liste
+  if (df && df.modeller) return new Set(Object.values(df.modeller).filter((m) => m.videoBekleniyor).map((m) => String(m.kod)));
   const d = (await env.KAYIT.get("venom:videoDenetim", "json").catch(() => null)) || {};
   const gelen = (await env.KAYIT.get("venom:videoGelenBuyuk", "json").catch(() => null)) || [];
   return new Set([...(d.sorunlar || []).filter((x) => ["buyuk", "sitede-bozuk"].includes(x.tur)).map((x) => String(x.kod)), ...(d.istenen || []).map(String),

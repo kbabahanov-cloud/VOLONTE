@@ -58,6 +58,7 @@ const ARACLAR = [
   { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
   { name: "model_boyu", description: "Bir modelin Pelin'de kayıtlı boyunu (mini/diz/midi/bilek/maksi, referans) gösterir. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "kemal_paylas", description: "Patron'un Venom'a son gönderdiği TÜM fotoğraf/videoları (video sesi/müziği aynen) Kemal'e verir: kanal paylaşımı (marka yazısı fotoğraflara, EN/FR alt yazı). Renk ve beden Patron ne yazdıysa o (yoksa model kartı). YAYINLAMAZ: SON YAYIN ONAYI kartı Patron'a gelir; onaydan sonra kanal + site. 'paylaş' isteği HER ZAMAN buraya (Pelin'e değil).", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Patron'un yazdığı renk, Türkçe (beyaz, koyu bordo…)" }, beden: { type: "string", enum: ["kucuk", "buyuk", "ikisi"] }, son_set: { type: "boolean", description: "Patron yeni dosya göndermeden 'en son gönderdiğim set' derse true" } } } },
+  { name: "site_defteri", description: "TEK DOĞRU LİSTE (site defteri): sitedeki modellerin kodu, markası (Sami'den), renkleri, fotoğraf/video sayısı, video oynuyor mu, Merdan'dan video bekleniyor mu, eklenme tarihi. Site/marka/video sorularında SADECE buna bak; defterde yoksa tahmin etme. kod verilirse o model.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" }, filtre: { type: "string", enum: ["hepsi", "videosuz", "video_bekleyen", "black_rose", "volonte"] } } } },
   { name: "model_listesi", description: "Sitedeki modellerden liste (kod listesi döner; çok adımlı işte bir sonraki araca ver): videosuz, fotografsiz, paylasilmayan (stokta + 2 haftadır kanalda yok). Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["filtre"], properties: { filtre: { type: "string", enum: ["videosuz", "fotografsiz", "paylasilmayan"] } } } },
   { name: "satis_sorgu", description: "Sami'nin deposundan verilen kodların son N gün satış adetleri + kalan stok (en çok satandan aza). Sadece Patron'a. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } }, gun_sayisi: { type: "integer" } } } },
   { name: "geri_al", description: "Son kanal paylaşımını (ya da verilen kodun son paylaşımını) kanaldan ve siteden birlikte geri alır — önce Patron'a tek onay kartı.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" } } } },
@@ -142,11 +143,10 @@ export async function aracCalistir(env, ad, g, simdi) {
     return "Maliyet kartı Patron'a gösterildi; onaylamadan para harcanmaz.";
   }
   if (ad === "kemal_paylas") return paylasBaslat(env, { kod: g.kod, renk: g.renk || null, beden: g.beden || null, sonSet: Boolean(g.son_set) }, simdi);
+  if (ad === "site_defteri") return defterMetni(env, g);
   if (ad === "model_listesi") {
     if (g.filtre === "paylasilmayan") return paylasilmayanlar(env, simdi);
-    const liste = await siteVerisi(env);
-    const l = liste.filter((u) => !u.gizli && (g.filtre === "videosuz" ? !(u.videolar || []).length : !(u.fotolar || []).length)).map((u) => String(u.kod));
-    return `${g.filtre === "videosuz" ? "Videosuz" : "Fotoğrafsız"} ${l.length} model: ${l.join(", ") || "yok"}`;
+    return defterMetni(env, { filtre: g.filtre === "videosuz" ? "videosuz" : "fotografsiz" });
   }
   if (ad === "satis_sorgu") {
     const kodlar = [...new Set((g.kodlar || []).map((x) => String(x).replace(/\D/g, "")).filter(Boolean))].slice(0, 200);
@@ -810,6 +810,7 @@ export async function sohbet(env, metin, simdi) {
     await yetenekNotu(env, `Patron istedi, Venom yapamadı: "${String(metin).slice(0, 300)}"`, simdi);
     cevapMetni = `${cevapMetni.replace(/[^.\n]*(arac[ıi]m (yok|bulunmuyor)|b[öo]yle bir arac[ıi]m|yetene[ğg]im yok)[^.\n]*[.]?/gi, "").trim()}\n📝 Not ettim, Claude Code ekleyecek.`;
   }
+  if (cevapMetni) cevapMetni = tabloyuListeyeCevir(cevapMetni); // 6 Kasım: Telegram'da tablo yok
   if (cevapMetni) await yaz(env, cevapMetni);
   await kaydet(env, "venom:bot:sohbet", [...gecmis, { role: "user", content: girdi.slice(0, 1500) }, { role: "assistant", content: (cevapMetni || "…").slice(0, 1500) }].slice(-20), 7 * 86400);
 }
@@ -907,6 +908,8 @@ export async function venomCron(env, simdi) {
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await yaz(env, `🤖 Selin\n${[].concat(rs).join("\n")}`); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   try { await hataBildir(env, simdi); } catch (e) { await hataYaz(env, "hataBildir", e); }
+  // Tek seferlik (Claude Code): KV "venom:patronaYaz" = metin → Patron'a Venom'dan (ör. kural kitabı özeti)
+  try { const t = await env.KAYIT.get("venom:patronaYaz"); if (t) { await env.KAYIT.delete("venom:patronaYaz"); await yaz(env, t); } } catch (e) { await hataYaz(env, "patronaYaz", e); }
   // Tek seferlik (Claude Code): KV "venom:testSimdi" → günlük test şimdi, sonuç KV "venom:testSonuc" (Patron'a mesaj YOK)
   try { if (await env.KAYIT.get("venom:testSimdi")) { await env.KAYIT.delete("venom:testSimdi"); await env.KAYIT.put("venom:testSonuc", JSON.stringify({ zaman: simdi, metin: await gunlukTest(env, simdi) }), { expirationTtl: 86400 }); } } catch (e) { await hataYaz(env, "testSimdi", e); }
   // 6 Kasım: iş takibi (30 dk), Patron hatırlatıcıları
@@ -933,6 +936,33 @@ export async function venomCron(env, simdi) {
   if (saat(simdi) >= 20 && saat(simdi) < 22 && (await ilkKezBugun(env, `aksam:${gun}`))) {
     try { const m = await gunOzeti(env, simdi); await yaz(env, m); await sesliGonder(env, m, simdi); } catch (e) { await hataYaz(env, "aksam", e); }
   }
+}
+// ---------- 6 Kasım: SİTE DEFTERİ (Selin sayar; Venom sadece buna bakar) ----------
+const MARKA_AD = { BLACKROSE: "BLACK ROSE", VOLONTE: "VOLONTE" };
+export async function defterMetni(env, { kod = null, filtre = "hepsi" } = {}) {
+  const d = await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null);
+  if (!d || !d.modeller) return "Site defteri henüz hazır değil (Selin sayıyor). Tahmin etmiyorum.";
+  const satir = (m) => `${m.kod} — ${MARKA_AD[m.marka] || `marka belirsiz (${m.markaNot || "Sami'de kayıt yok"})`} · renk: ${(m.renkler || []).join(", ") || "kayıtlı değil"} · ${m.foto} foto · ${m.video ? `${m.video} video${m.videoOynuyor < m.video ? ` (${m.video - m.videoOynuyor} oynamıyor)` : ""}` : "videosuz"}${m.videoBekleniyor ? ` · 📹 Merdan'dan video bekleniyor (önceki ${m.bekleyenMb} MB)` : ""}${m.gizli ? " · gizli (stok yok)" : ""} · eklenme ${m.eklenme || "?"}`;
+  if (kod) { const m = d.modeller[String(kod).replace(/\D/g, "")]; return m ? satir(m) : `${kod} sitede yok (site defteri, ${new Date((d.zaman + 3 * 3600) * 1000).toISOString().slice(0, 16).replace("T", " ")}).`; }
+  const hepsi = Object.values(d.modeller).filter((m) => !m.gizli);
+  const l = filtre === "videosuz" ? hepsi.filter((m) => !m.video) : filtre === "fotografsiz" ? hepsi.filter((m) => !m.foto) : filtre === "video_bekleyen" ? hepsi.filter((m) => m.videoBekleniyor)
+    : filtre === "black_rose" ? hepsi.filter((m) => m.marka === "BLACKROSE") : filtre === "volonte" ? hepsi.filter((m) => m.marka === "VOLONTE") : hepsi;
+  const ad = { videosuz: "Videosuz", fotografsiz: "Fotoğrafsız", video_bekleyen: "Merdan'dan video bekleyen", black_rose: "BLACK ROSE", volonte: "VOLONTE", hepsi: "Sitedeki" }[filtre] || "Sitedeki";
+  return `${ad} ${l.length} model (site defteri):\n${l.slice(0, 60).map((m, i) => `${i + 1}. ${satir(m)}`).join("\n")}${l.length > 60 ? `\n… (+${l.length - 60})` : ""}`;
+}
+// Telegram'da tablo YOK: Markdown tablo satırları düz numaralı listeye çevrilir
+export function tabloyuListeyeCevir(metin) {
+  const satirlar = String(metin || "").split("\n"), cikti = [];
+  let baslik = null, n = 0;
+  for (const s of satirlar) {
+    if (/^\s*\|.*\|\s*$/.test(s)) {
+      const h = s.trim().replace(/^\||\|$/g, "").split("|").map((x) => x.trim());
+      if (h.every((x) => /^:?-{2,}:?$/.test(x))) continue;
+      if (!baslik) { baslik = h; continue; }
+      n++; cikti.push(`${n}. ${h.map((x, i) => (baslik[i] && i ? `${baslik[i]}: ${x}` : x)).filter((x) => x && !/:\s*$/.test(x)).join(" · ")}`);
+    } else { baslik = null; n = 0; cikti.push(s); }
+  }
+  return cikti.join("\n");
 }
 // ---------- 6 Kasım: sabit düğmeler, durdur/aç, sesli rapor, haftalık özet, fikir kutusu ----------
 const SABIT_KLAVYE = { keyboard: [[{ text: "📋 Bekleyenler" }, { text: "📊 Bugün ne oldu" }, { text: "⛔ Durdur" }]], resize_keyboard: true, is_persistent: true };

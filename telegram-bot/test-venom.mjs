@@ -663,3 +663,21 @@ test("YÖNETİM (6 Kasım): satış uyarısı >20/gün (kod, adet, kalan stok; b
   await yazi(o, PATRON, "selam");
   assert.equal(o.g.filter((x) => x.govde && x.govde.reply_markup && x.govde.reply_markup.keyboard).length, 1);
 });
+
+import { tabloyuListeyeCevir, defterMetni } from "./venom-bot.js";
+test("DEFTER + TABLO (6 Kasım): Telegram'da tablo düz numaralı listeye döner; defterden marka/renk/video ve 'Merdan'dan bekleniyor'; defter yoksa tahmin yok", async () => {
+  const t = tabloyuListeyeCevir("Videosuz modeller:\n| Kod | Marka | Durum |\n|---|---|---|\n| 3396 | VOLONTE | bekleniyor |\n| 3618 | BLACK ROSE | yok |\nSon.");
+  assert.equal(t, "Videosuz modeller:\n1. 3396 · Marka: VOLONTE · Durum: bekleniyor\n2. 3618 · Marka: BLACK ROSE · Durum: yok\nSon.");
+  const o = ortam();
+  assert.match(await defterMetni(o.env, { filtre: "videosuz" }), /henüz hazır değil.*Tahmin etmiyorum/);
+  o.depo.set("venom:siteDefteri", JSON.stringify({ zaman: 1793900000, modeller: {
+    "3396": { kod: "3396", marka: "VOLONTE", renkler: ["siyah"], foto: 7, video: 0, videoOynuyor: 0, videoBekleniyor: true, bekleyenMb: 22, eklenme: "2026-11-05" },
+    "3627": { kod: "3627", marka: "BLACKROSE", renkler: ["siyah", "koyu bordo", "beyaz"], foto: 12, video: 4, videoOynuyor: 4, videoBekleniyor: false, eklenme: "2026-11-05" },
+    "3999": { kod: "3999", marka: "belirsiz", markaNot: "Sami'de kayıt yok", renkler: [], foto: 3, video: 0, videoOynuyor: 0, videoBekleniyor: false, eklenme: "2026-11-01" },
+  } }));
+  const v = await defterMetni(o.env, { filtre: "videosuz" });
+  assert.match(v, /Videosuz 2 model \(site defteri\):\n1\. 3396 — VOLONTE · renk: siyah · 7 foto · videosuz · 📹 Merdan'dan video bekleniyor \(önceki 22 MB\)/);
+  assert.match(v, /3999 — marka belirsiz \(Sami'de kayıt yok\)/);
+  assert.ok(!/\?/.test(v.replace(/eklenme \?/g, "")));
+  assert.match(await defterMetni(o.env, { kod: "3627" }), /3627 — BLACK ROSE · renk: siyah, koyu bordo, beyaz · 12 foto · 4 video/);
+});

@@ -34,8 +34,9 @@ export const DURUMLAR = {
   cok: "🔥 BEST SELLER",
   son: "⚡ LAST SERIES / DERNIÈRES SÉRIES",
   hazir: "✅ AVAILABLE / DISPONIBLE",
+  yenirenk: "🎨 NEW COLOR / NOUVELLE COULEUR", // 6 Kasım: modelin bu rengi kanala İLK kez gidiyor
 };
-export const DURUM_AD = { yeni: "Yeni", donus: "Stoğa döndü", cok: "Çok satan", son: "Son seriler", hazir: "Mevcut" };
+export const DURUM_AD = { yeni: "Yeni", donus: "Stoğa döndü", cok: "Çok satan", son: "Son seriler", hazir: "Mevcut", yenirenk: "Yeni renk" };
 
 const KUCUK = [38, 40, 42, 44];
 const BUYUK = [44, 46, 48, 50];

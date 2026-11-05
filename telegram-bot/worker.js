@@ -51,7 +51,7 @@ import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, D
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
-import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet } from "./yayin-kontrol.js";
+import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, renkIngilizce } from "./yayin-kontrol.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
@@ -1857,6 +1857,22 @@ async function duzeltmeIsle(msg, env) {
   return true;
 }
 
+// 6 Kasım (Patron): modelin bu rengi kanala İLK kez mi gidiyor? (site defteri renkleri + kanal renk geçmişi "kemal:kanalRenkleri")
+export async function yeniRenkMi(env, kod, renk) {
+  const en = renkIngilizce(renk);
+  if (!en) return false;
+  const d = await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null);
+  const m = d && d.modeller && d.modeller[String(kod)];
+  const siteRenk = ((m && m.renkler) || []).map((r) => renkIngilizce(r) || String(r).toLowerCase());
+  const kanal = ((await env.KAYIT.get("kemal:kanalRenkleri", "json").catch(() => null)) || {})[String(kod)] || [];
+  return !siteRenk.includes(en) && !kanal.includes(en);
+}
+async function kanalRenkKaydet(env, kod, renkler) {
+  if (!(renkler || []).length) return;
+  const h = (await env.KAYIT.get("kemal:kanalRenkleri", "json").catch(() => null)) || {};
+  h[String(kod)] = [...new Set([...(h[String(kod)] || []), ...renkler.map((r) => String(r).toLowerCase())])];
+  await env.KAYIT.put("kemal:kanalRenkleri", JSON.stringify(h)).catch(() => null);
+}
 // 6 Kasım (günlük akış denemesi, 09:30): sitedeki bir model için GERÇEK kart hazırlanır + Venom kontrolü, GÖNDERİLMEZ (yapay zekâ yok)
 export async function akisDenemesi(env, simdi = Math.floor(Date.now() / 1000)) {
   const site = (await siteUrunleriAl(env)).filter((u) => !u.gizli);
@@ -1906,6 +1922,7 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
   if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
   await gecmisKaydet(env, String(paket.kod), (paket.renkler || []).join(","), simdi);
+  await kanalRenkKaydet(env, paket.kod, paket.renkler);
   if (siteVideo && !g.not) {
     const vid = (paket.medya || []).map((m, i) => (m.type === "video" && !String(m.media).startsWith(VIDEO_SUNUCU) ? g.ids[i] : 0)).filter((id) => id > 0);
     await siteyeVideoBildir(env, paket.kod, vid, simdi);
@@ -2140,7 +2157,9 @@ export async function pelinKanalAdimi(env, simdi) {
 const pelinMedya = (x) => [...(x.video ? [{ type: "video", media: x.video }] : []), ...[x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, x.video ? 9 : 10).map((m) => ({ type: "photo", media: m }))];
 async function yayinOnayKarti(env, x, u, simdi) {
   const patron = String(env.MURAT_ID || "").split(",")[0].trim();
-  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null, beden: x.beden || null });
+  if (!x.marka) x.marka = (await markaKesin(env, String(x.kod)).catch(() => ({}))).marka || null; // 6 Kasım: "?" bırakma
+  if (x.renk && x.yeniRenk === undefined) x.yeniRenk = await yeniRenkMi(env, x.kod, x.renk).catch(() => false);
+  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null, beden: x.beden || null, durum: x.yeniRenk ? "yenirenk" : null });
   // 4 Kasım (Patron): aynı işe yeni paket gelirse ESKİ kart geçersiz (kart no her pakette yeni; eski mesaj "geçersiz" diye kapatılır)
   const kartNo = `${x.id}.${Number(x.zaman || simdi).toString(36).slice(-5)}`;
   const eskiler = ((await env.KAYIT.list({ prefix: `kemal:pelinYayin:${x.id}` }).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
@@ -2149,7 +2168,7 @@ async function yayinOnayKarti(env, x, u, simdi) {
     if (e && e.mid) await telegram(env, "editMessageText", { chat_id: patron, message_id: e.mid, text: `❌ ${x.kod}: bu SON YAYIN kartı geçersiz — düzeltilmiş paketle yeni kart geldi.` }).catch(() => null);
     await env.KAYIT.delete(k);
   }
-  const marka = x.marka === "BLACKROSE" ? "BLACK ROSE" : x.marka || "?";
+  const marka = x.marka === "BLACKROSE" ? "BLACK ROSE" : x.marka || "marka belirsiz (Sami'de kayıt yok)";
   const kontrol = await kanalKontrol(env, { ...paket, adlar: (x.set || []).map((y) => y.ad) }, { renk: x.renk || null, simdi }); // 6 Kasım: kartın en üstünde
   // 4 Kasım (Patron önerisi 10): TÜM PAKET TEK ALBÜMDE (video + foto seti + askı ön/arka + detay kolajları), kanal yazısı albümün
   // yazısı olarak — kanala aynen böyle gider; altında TEK onay kartı
@@ -2190,7 +2209,7 @@ async function yayinOnayUygula(env, id, islem) {
   if (islem === "x") return `❌ ${x.kod}: gönderilmedi (kanal ve site değişmedi).`;
   const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
   if (!u) return `⚠️ ${x.kod}: model sitede yok ya da gizli — paylaşılmadı.`;
-  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null, beden: x.beden || null });
+  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null, beden: x.beden || null, durum: x.yeniRenk ? "yenirenk" : null });
   const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false, siteVideo: false, renk: x.renk || null, onayliSorunlar: k.kontrolSorunlar || [] }); // site işi aşağıda (pelinSite, dosyadan)
   if (!g.ok) return `⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`;
   // 5 Kasım: Selin videoyu DOSYADAN (videoUrl) koyar; kanal mesajı yedek. Fotoğraflar: ön + set (hepsi).
@@ -2391,6 +2410,37 @@ export async function fabrikaIsleri(env, simdi) {
       ...(silinmis.length ? [``, `Kanalda artık olmayan (elle silinmiş) ${silinmis.length} gönderi kayıttan düşüldü: ${silinmis.map((x) => `${x.kod} #${x.g.ids[0]}`).join(", ")}`] : []),
       ``, kanalSil.length ? `✅ Onaylarsanız ${kanalSil.length} fazla gönderi silinir (her modelin en son paylaşımı kalır).` : "Silinecek bir şey yok."].join("\n");
     if ((await env.KAYIT.put("venom:temizlikKart", JSON.stringify({ metin: metin.slice(0, 3800), kanalSil, siteKaldir: [] })).then(() => true).catch(() => false))) await env.KAYIT.delete("venom:kanalTemizlikHazirla").catch(() => null);
+  }
+  // 6 Kasım (C9, tek seferlik "venom:kanalImzaHazirla"): son 30 günde kanalda VOLONTE imzasıyla duran BLACK ROSE gönderileri →
+  // her gönderi arşive iletilip yazısı okunur → liste Venom onay kartına (silinmeden önce Patron onayı)
+  if (await env.KAYIT.get("venom:kanalImzaHazirla")) {
+    const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
+    const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+    const yanlis = [], kanalSil = [];
+    for (const [kod, l] of Object.entries(kodlar)) {
+      const son = l.filter((g) => simdi - g.tarih < 30 * 86400);
+      if (!son.length || !kanal || !arsiv) continue;
+      const mk = await markaKesin(env, kod).catch(() => ({}));
+      if (mk.marka !== "BLACKROSE") continue;
+      for (const g of son) {
+        let yazi = "";
+        for (const id of g.ids.slice(0, 8)) { // albümde yazı ilk mesajda; "👆 CODE" mesajı da olabilir
+          const r = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true }).catch(() => null);
+          if (!r || !r.ok) continue;
+          await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: r.result.message_id }).catch(() => null);
+          yazi += `\n${r.result.caption || r.result.text || ""}`;
+          if (/Premium/i.test(yazi)) break;
+        }
+        if (/VOLONTE\s*[–-]\s*Premium/i.test(yazi) && !/BLACK\s*ROSE\s*[–-]\s*Premium/i.test(yazi)) {
+          const t = new Date((g.tarih + 3 * 3600) * 1000).toISOString().slice(5, 16).replace("T", " ");
+          yanlis.push(`• ${kod} — ${t} t.me/${kanal.kullanici || "kanal"}/${g.ids[0]}`);
+          kanalSil.push({ kod, ids: g.ids, not: `yanlış imza (VOLONTE), ${t}` });
+        }
+      }
+    }
+    const metin = [`🖋 KANAL — BLACK ROSE modeli ama VOLONTE imzasıyla duran gönderiler (son 30 gün): ${yanlis.length}`, ...(yanlis.length ? yanlis : ["• Yok."]), "",
+      yanlis.length ? `✅ Onaylarsanız bu ${yanlis.length} gönderi kanaldan silinir. (İsterseniz sonra doğru imzayla yeniden paylaşılır: Venom'a "3148 paylaş" deyin.)` : "Silinecek bir şey yok."].join("\n");
+    if ((await env.KAYIT.put("venom:temizlikKart", JSON.stringify({ metin: metin.slice(0, 3800), kanalSil, siteKaldir: [] })).then(() => true).catch(() => false))) await env.KAYIT.delete("venom:kanalImzaHazirla").catch(() => null);
   }
   // 6 Kasım (temizlik, Patron onayıyla Venom'dan): belirli kanal mesajları silinir (tekrar paylaşımın fazlası); dizinden de çıkar
   const mesajSil = (await env.KAYIT.get("venom:kanalMesajSil", "json")) || [];

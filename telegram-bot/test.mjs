@@ -2041,3 +2041,15 @@ test("VENOM KONTROLÜ (6 Kasım): aynı model aynı gün ikinci kez kanala GİTM
   assert.match(r3.hata, /Black Rose modeli eski gönderiden KOPYALANAMAZ/);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
+
+test("YENİ RENK (6 Kasım): modelin rengi sitede ve kanal geçmişinde yoksa başlık NEW COLOR / NOUVELLE COULEUR; varsa değil", async () => {
+  const o = await yeniOrtam();
+  const { yeniRenkMi } = await import("./worker.js");
+  const { altYazi } = await import("./duzen.js");
+  await o.env.KAYIT.put("venom:siteDefteri", JSON.stringify({ modeller: { "3627": { kod: "3627", renkler: ["siyah", "koyu bordo"] } } }));
+  assert.equal(await yeniRenkMi(o.env, "3627", "beyaz"), true);
+  assert.equal(await yeniRenkMi(o.env, "3627", "koyu bordo"), false);
+  await o.env.KAYIT.put("kemal:kanalRenkleri", JSON.stringify({ "3627": ["white"] }));
+  assert.equal(await yeniRenkMi(o.env, "3627", "beyaz"), false);
+  assert.match(altYazi({ kod: "3627", durum: "yenirenk", renkler: ["white"], renkEmin: true, bedenler: "38-40-42-44", en: "Dress.", fr: "Robe.", marka: "BLACKROSE" }), /^🎨 NEW COLOR \/ NOUVELLE COULEUR/);
+});

@@ -1006,13 +1006,11 @@ test("VİDEO DENETİMİ (5 Kasım): sitedeki her video Selin yoluyla denenir; 20
   assert.equal(d.calisan, 2);
   assert.deepEqual(d.sorunlar.map((x) => [x.kod, x.tur]), [["3612", "buyuk"]]);
   assert.match(d.sorunlar[0].neden, /34\.0 MB/);
-  const msj = o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "222");
-  assert.equal(msj.length, 1);
-  assert.match(msj[0].govde.text, /3612 — 34\.0 MB[\s\S]*NORMAL video/);
+  // 6 Kasım: denetim artık kendisi mesaj atmaz; Merdan'a günde BİR tek liste (siteDefteriAdimi)
+  assert.equal(o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "222").length, 0);
   // 3 saat dolmadan tekrar çalışmaz; zorlansa da aynı video için tekrar mesaj yok
   assert.equal(await videoDenetimAdimi(o.env, ist(12)), null);
   await videoDenetimAdimi(o.env, ist(15), { zorla: true });
-  assert.equal(o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "222").length, 1);
   assert.ok(o.depo.has("venom:videoDenetim"));
 });
 
@@ -1057,4 +1055,38 @@ test("KANAL → SİTE VİDEO (5 Kasım): Kemal'in kanala koyduğu video siteye e
   await kanalVideoAdimi(o.env, ist(12));
   u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
   assert.equal(u.videolar.length, 1);
+});
+
+test("SİTE DEFTERİ (6 Kasım): tek liste — marka (Sami/model kartı), renk, foto/video, video bekleniyor (20 MB üstü, yeniden gönderilmemiş); eski kayıt düzeltme; Merdan'a günde BİR liste", async () => {
+  const o = ortam();
+  const { siteDefteriYenile, siteDefteriAdimi } = await import("./selin.js");
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([
+    { kod: "3582", fotolar: ["a", "b"], videolar: ["selin/3582/1"], eklenme: "2026-10-31" },
+    { kod: "3396", fotolar: ["a"], videolar: [], eklenme: "2026-11-05" },
+    { kod: "907", fotolar: ["a"], videolar: ["selin/907/1"], eklenme: "2026-11-04" },
+  ]));
+  o.depo.set("pelinboy:3582", JSON.stringify({ marka: "BLACKROSE", renk: "siyah" }));
+  o.depo.set("pelinboy:3396", JSON.stringify({ marka: "VOLONTE" }));
+  o.depo.set("pelinboy:907", JSON.stringify({ marka: "VOLONTE" }));
+  const B = 30 * 1048576, K = 5 * 1048576;
+  o.depo.set("selin:modeller", JSON.stringify({
+    "3582": { kaynak: "ozel", durum: "sitede", gonderen: 222, medya: [{ tur: "video", boyut: B }, { tur: "video", boyut: K }] }, // aynı partide küçük video → büyük hâlâ bekleniyor
+    "3396": { kaynak: "ozel", durum: "sitede", gonderen: 222, medya: [{ tur: "video", boyut: B }] },
+    "907": { kaynak: "ozel", durum: "istendi", gonderen: 222, medya: [{ tur: "video", boyut: B }, { tur: "video", boyut: K, yeniden: true }] }, // yeniden geldi
+    "3001": { kaynak: "ozel", durum: "sitede", medya: [] }, // sitede yok → eski kayıt
+  }));
+  const r = await siteDefteriYenile(o.env, ist(10), { tam: true });
+  const d = JSON.parse(o.depo.get("venom:siteDefteri"));
+  assert.equal(r.sayi, 3);
+  assert.deepEqual([d.modeller["3582"].marka, d.modeller["3582"].renkler, d.modeller["3582"].videoBekleniyor], ["BLACKROSE", ["siyah"], true]);
+  assert.equal(d.modeller["3396"].videoBekleniyor, true);
+  assert.equal(d.modeller["907"].videoBekleniyor, false);
+  assert.ok(r.duzeltme.some((x) => /3001: Selin kaydı "sitede" idi, sitede yok/.test(x)));
+  assert.ok(r.duzeltme.some((x) => /907: Selin kaydı "istendi" idi, sitede var/.test(x)));
+  // Merdan'a günde bir tek liste
+  await siteDefteriAdimi(o.env, ist(11));
+  await siteDefteriAdimi(o.env, ist(12));
+  const m = o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "222");
+  assert.equal(m.length, 1);
+  assert.match(m[0].govde.text, /Videosu beklenen modeller \(2\):\n1\. 3396[\s\S]*2\. 3582/);
 });

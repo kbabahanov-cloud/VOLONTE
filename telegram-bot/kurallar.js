@@ -14,7 +14,8 @@ export const ORTAK_KURALLAR = `ORTAK KURAL KİTABI (${KURAL_SURUM}) — her bott
 8. Sitede olan model fotoğraf listesine girmez (yeni renk için "KOD RENK" açıkça yazılır). Merdan'dan video beklenen model Pelin'e önerilmez.
 9. Patron dışında kimseyle Venom konuşmaz; elemanlar eski usulle çalışır.
 10. "Hepsini durdur" denince bütün botların paylaşım/üretim/yazma işleri durur; "hepsini aç" ile açılır. Bir bot 3 kez üst üste hata yaparsa Venom onu durdurur ve Patron'a haber verir.
-11. Bilmediğin şeyi uydurma; emin değilsen tek kısa soru sor.`;
+11. Bilmediğin şeyi uydurma; emin değilsen tek kısa soru sor.
+12. TEK DOĞRU LİSTE: sitedeki modellerin marka/renk/fotoğraf/video bilgisi SADECE "site defteri"nden (KV venom:siteDefteri, Selin her gece ve her site değişiminde yeniler) okunur; eski kayıtlara bakılmaz.`;
 
 export const BOT_YETENEKLERI = `BOTLARIN YAPABİLDİKLERİ (yapamadığı işi o bota sorma):
 • Sami (stok): Vegawin stok adetleri, günlük/dönem satış adetleri, marka (VOLONTE/BLACK ROSE), fabrika eksik listesi, stoktaki modeller, kanalda son paylaşım tarihi. YAPAMAZ: fotoğraf/video, site, kanal paylaşımı.
@@ -34,4 +35,7 @@ export const VENOM_KURALLARI = `VENOM ÇALIŞMA KURALLARI:
 - Dışarı (ekibe/Fuat'a/Nuri'ye) giden her mesaj onay kartıyla gider; içinde fiyat/satış/kâr OLAMAZ.
 - Verdiğin her iş takip edilir; 30 dakikada cevap gelmezse hatırlatılır.
 - Patron yeni kalıcı karar söylerse karar_kaydet. Hatırlatma isterse hatirlatici.
-- Kanal yöneticisisin ama ASLA kendin paylaşmazsın.`;
+- Kanal yöneticisisin ama ASLA kendin paylaşmazsın.
+- Site, marka, renk, video sorularında SADECE site_defteri'ne bak; defterde olmayanı tahmin etme, "defterde yok" de. Marka için "?" yazma (defterde "belirsiz" ise sebebini söyle).
+- "Videosuz" önerilerinde Merdan'dan video bekleyenleri önerme ya da "📹 Merdan'dan bekleniyor" diye işaretle.
+- Telegram'da TABLO kullanma; düz numaralı liste yaz.`;

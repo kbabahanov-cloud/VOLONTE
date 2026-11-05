@@ -17,7 +17,12 @@ export function renkIngilizce(tr) {
   return TR_EN[t] || null;
 }
 // Marka KESİN mi? Sami'nin deposu okunamazsa VARSAYILAN YOK (önceden sessizce VOLONTE sayılıyordu → Black Rose'a VOLONTE imzası)
-export async function markaKesin(env, kod) {
+export async function markaKesin(env, kod, { defterden = true } = {}) {
+  if (defterden) { // 6 Kasım: TEK DOĞRU LİSTE (site defteri) önce
+    const d = await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null);
+    const m = d && d.modeller && d.modeller[String(kod)];
+    if (m && ["BLACKROSE", "VOLONTE"].includes(m.marka)) return { marka: m.marka, kaynak: "site defteri" };
+  }
   const kart = await env.KAYIT.get(`pelinboy:${kod}`, "json").catch(() => null);
   if (kart && ["BLACKROSE", "VOLONTE"].includes(kart.marka)) return { marka: kart.marka, kaynak: "model kartı" };
   if (!env.STOK) return { marka: "VOLONTE", kaynak: "varsayılan" };
