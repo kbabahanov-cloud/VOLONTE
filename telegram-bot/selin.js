@@ -187,7 +187,7 @@ export default {
       // Yeni akış (28 Ekim): kanal tabanlı işler (liste, hazırlık, kare, tarama, toplu) KAPALI.
       await cagir("/cron");
       await cagir("/istek");
-      await cagir("/video");
+      await cagir("/video-isleri");
       await cagir("/uretim");
       return;
     }
@@ -231,7 +231,7 @@ export class SelinDO {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
-      case "/video": // 5 Kasım: video işleri ayrı istekte (Cloudflare'in istek başına 50 dış istek sınırı)
+      case "/video-isleri": // 5 Kasım: video işleri ayrı istekte (Cloudflare'in istek başına 50 dış istek sınırı)
         for (const [ad, f] of Object.entries({ siteVideoEkleAdimi, kanalVideoAdimi, videoDenetimAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
