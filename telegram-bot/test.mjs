@@ -1988,3 +1988,31 @@ test("TEK KAPI (Kemal): kapı açıkken SON YAYIN albümü + kartı Patron'un ki
   assert.ok(venomaGelen.some((k) => /SON YAYIN ONAYI — 3403 · BLACK ROSE/.test(k.metin) && k.butonlar));
   kapi._bayrakSifirla();
 });
+
+test("PATRON PAYLAŞIMI (6 Kasım): Venom'dan renk/beden Patron'un yazdığı (model kartı değil); video adresi aynen (müzik korunur); onaydan sonra site işinde damgalı fotoğraflar + video + renk", async () => {
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "999", ALLOWED_IDS: "999,111" });
+  await o.env.KAYIT.put("pelinboy:3403", JSON.stringify({ renk: "koyu bordo", marka: "BLACKROSE" }));
+  await o.env.KAYIT.put("venommedya:" + "a".repeat(32), new Uint8Array([1, 2, 3]).buffer);
+  const { patronPaylasimAdimi, venomYayinKararlari } = await import("./worker.js");
+  const { kuyruguAl, kuyrugaEkle } = await import("./venom-kopru.js");
+  const V = "https://volonte-venom.volonte.workers.dev/medya/";
+  await kuyrugaEkle(o.env, "patronPaylas", { id: "vp-1", kod: "3403", kim: "Patron (Venom)", renk: "beyaz", beden: "i", medya: [{ tur: "foto", url: V + "a".repeat(32) }, { tur: "video", url: V + "b".repeat(32) }] });
+  o.gonderilen.length = 0;
+  await patronPaylasimAdimi(o.env, Math.floor(Date.now() / 1000));
+  const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => /SON YAYIN ONAYI — 3403/.test(m.govde.text || ""));
+  assert.ok(kart && /\bwhite\b/i.test(kart.govde.text) && !/burgundy/i.test(kart.govde.text), kart && kart.govde.text);
+  const alb = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "999");
+  assert.equal(alb.govde.media[0].media, V + "b".repeat(32)); // video kendi dosyası (sesi/müziği aynen)
+  assert.match(alb.govde.media[0].caption, /38-40-42-44-46-48-50|38.*50/);
+  const s0 = await kuyruguAl(o.env, "sonuc");
+  assert.match(s0.at(-1).aciklama, /renk: beyaz \(Patron\), beden: İkisi de/);
+  const vo = await kuyruguAl(o.env, "venomOnay");
+  await kuyrugaEkle(o.env, "kemalYayinKarar", { id: "k1", kartNo: vo[0].kartNo, islem: "o" });
+  await venomYayinKararlari(o.env);
+  const site = await kuyruguAl(o.env, "pelinSite");
+  assert.equal(site.length, 1);
+  assert.equal(site[0].videoUrl, V + "b".repeat(32));
+  assert.equal(site[0].renk, "beyaz");
+  assert.ok(site[0].fotolar.length >= 1 && site[0].fotolar.every((f) => /volonte-pelin\.volonte\.workers\.dev\/medya\/[a-f0-9]{32}$/.test(f)), JSON.stringify(site[0]));
+});

@@ -1339,7 +1339,9 @@ async function durumDokum(env) {
   const { kodlar } = await istekAdaylari(env, modeller, sitede);
   const durum = {};
   for (const [k, m] of Object.entries(modeller)) if (m && ozelMi(m)) durum[k] = { d: m.durum, i: m.istenme || null };
-  await env.KAYIT.put("venom:selinDurumDokSonuc", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), stoktaki: stok.map((r) => String(r.kod)), sitede: [...sitede], aday: kodlar, durum, sahipSayisi: kimlikler(await env.KAYIT.get("selin:sahip")).length }), { expirationTtl: 86400 });
+  const simdi0 = Math.floor(Date.now() / 1000), listeler = {}; // 6 Kasım: son 5 günün listeleri (tekrar isteme teşhisi)
+  for (let i = 0; i < 5; i++) { const g = gunAnahtari(simdi0 - i * 86400); const ist = await oku(env, `selin:istek:${g}`, null); if (ist) listeler[g] = { zaman: ist.zaman || null, kodlar: ist.kodlar || [], eklenen: ist.eklenen || [], ek: ist.ek || null }; }
+  await env.KAYIT.put("venom:selinDurumDokSonuc", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), stoktaki: stok.map((r) => String(r.kod)), sitede: [...sitede], aday: kodlar, durum, listeler, sahipSayisi: kimlikler(await env.KAYIT.get("selin:sahip")).length }), { expirationTtl: 86400 });
   return true;
 }
 async function istekTekrarAdimi(env, simdi) {
@@ -1384,7 +1386,25 @@ async function istekTekrarAdimi(env, simdi) {
   await env.KAYIT.put("venom:selinIstekTekrarSonuc", JSON.stringify({ zaman: simdi, gun, istekZaman: ist && ist.zaman, kodlar, celal, durum: Object.fromEntries(kodlar.map((k) => [k, (modeller[k] || {}).durum || "?"])), kisiSayisi: kime.length, gonderim, kuru: Boolean(t.kuru), metin }), { expirationTtl: 3 * 86400 });
   return true;
 }
+// 6 Kasım teşhis: son 5 günün listelerinde, liste gününden ÖNCE siteye eklenmiş (yani sitede olduğu halde istenen) modeller.
+// Sonuç KV "venom:selinListeTeshis"; KV yazılamazsa (günlük sınır) sonraki turda yeniden denenir.
+async function listeTeshisi(env, simdi) {
+  if (await oku(env, "selin:listeTeshisYapildi", null)) return;
+  const { liste } = await siteVerisi(env);
+  const ekl = Object.fromEntries(liste.map((u) => [String(u.kod), u.eklenme || null]));
+  const gunler = {};
+  for (let i = 0; i < 5; i++) {
+    const g = gunAnahtari(simdi - i * 86400);
+    const ist = await oku(env, `selin:istek:${g}`, null);
+    if (!ist) continue;
+    const kodlar = ist.kodlar || [];
+    gunler[g] = { istenen: kodlar.length, sitedeyken: kodlar.filter((k) => ekl[k] && ekl[k] < g), sonradanEklenen: kodlar.filter((k) => ekl[k] && ekl[k] >= g) };
+  }
+  const ok = await env.KAYIT.put("venom:selinListeTeshis", JSON.stringify({ zaman: simdi, gunler }), { expirationTtl: 14 * 86400 }).then(() => true).catch(() => false);
+  if (ok) await yazKV(env, "selin:listeTeshisYapildi", simdi, 30 * 86400);
+}
 export async function istekAdimi(env, simdi) {
+  try { await listeTeshisi(env, simdi); } catch { /* sonraki turda */ }
   if (await durumDokum(env)) return;
   if (await istekTekrarAdimi(env, simdi)) return;
   if (await istekDuzeltAdimi(env, simdi)) return;
@@ -1461,16 +1481,29 @@ async function ekIstekAdimi(env, gun, simdi) {
 }
 
 async function istekGonder(env, kime, modeller, secilen, celalKume, simdi, baslik) {
+  // 6 Kasım (Patron): sitede olan model listeye GİRMEZ — gönderimden hemen önce son kontrol (yeni renk isteği "KOD RENK" hariç)
+  let sitede = null; try { sitede = await sitedekiKodlar(env); } catch { /* okunamazsa önceki süzgeç geçerli */ }
+  if (sitede) {
+    const atilan = secilen.filter((k) => sitede.has(k) && !(modeller[k] && modeller[k].renkIstek));
+    if (atilan.length) {
+      for (const k of atilan) if (modeller[k] && modeller[k].durum !== "sitede") modeller[k] = { ...modeller[k], durum: "sitede", duzeltme: simdi };
+      secilen = secilen.filter((k) => !atilan.includes(k));
+      const l = await oku(env, "venom:selinTekrarEngellendi", []);
+      await env.KAYIT.put("venom:selinTekrarEngellendi", JSON.stringify([...l, { zaman: simdi, kodlar: atilan }].slice(-30)), { expirationTtl: 7 * 86400 }).catch(() => null);
+    }
+    if (!secilen.length) return yazKV(env, "selin:modeller", modeller);
+  }
+  const ad = (k) => (modeller[k] && modeller[k].renkIstek ? `${k} ${String(modeller[k].renkIstek).toLocaleUpperCase("tr")}` : k);
   const normal = secilen.filter((k) => !celalKume.has(k));
   const celal = secilen.filter((k) => celalKume.has(k));
   for (const k of secilen) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "istendi", istenme: simdi, medya: [], kart: [] };
   await yazKV(env, "selin:modeller", modeller);
   const metin = [
     baslik,
-    normal.join(", "),
-    ...(celal.length ? ["", `👤 Celal'in modelleri (en son): ${celal.join(", ")}`] : []),
+    normal.map(ad).join(", "),
+    ...(celal.length ? ["", `👤 Celal'in modelleri (en son): ${celal.map(ad).join(", ")}`] : []),
     "",
-    "Her model için fotoğrafları 📎 → Dosya olarak gönderin (kalite düşmesin), videoyu da ekleyin.",
+    "Fotoğrafları 📎 → Dosya olarak gönderin (kalite düşmesin). Videoyu NORMAL video olarak gönderin (dosya olarak DEĞİL; 20 MB altı).",
     "Yazıya kod ve beden: \"3503 Küçük\" · \"3518 Büyük\" · \"3520 İkisi de\" (Küçük 38-44, Büyük 44-50).",
     "Gönderemeyeceğiniz model: /yok 3503",
   ].join("\n");
@@ -1723,10 +1756,10 @@ async function kemaleDevret(env, anahtar, kayit) {
 // Kemal kanala paylaştı → Pelin VİDEOSU + Pelin FOTOĞRAFLARI (ön + set) siteye. 5 Kasım: video artık kanal mesaj numarasına bağlı
 // DEĞİL (4–5 Kasım'da hiç eklenmedi): Pelin'in video dosyası Selin'in arşivine yüklenir, sitenin kendi oynatıcısında "selin/<kod>/1xx"
 // olarak oynar. Kanal mesajı yalnızca yedek. Ne eklendiği tek tek söylenir; hiçbir şey eklenemediyse boş kayıt yazılmaz.
-const PELIN_MEDYA = /volonte-pelin[^/]*\/medya\/([a-f0-9]{16,64})/;
+const PELIN_MEDYA = /volonte-(pelin|venom)[^/]*\/medya\/([a-f0-9]{16,64})/;
 async function medyaBayt(env, url) {
   const m = String(url || "").match(PELIN_MEDYA);
-  if (m) { const b = await env.KAYIT.get(`pelinmedya:${m[1]}`, "arrayBuffer").catch(() => null); if (b) return new Uint8Array(b); }
+  if (m) { const b = await env.KAYIT.get(`${m[1] === "venom" ? "venommedya" : "pelinmedya"}:${m[2]}`, "arrayBuffer").catch(() => null); if (b) return new Uint8Array(b); }
   const r = await fetch(url).catch(() => null);
   return r && r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
 }

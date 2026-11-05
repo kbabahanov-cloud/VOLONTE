@@ -185,6 +185,9 @@ test("İptal ve Düzelt: iptal edilen iş gitmez; Düzelt → Patron'un talimat�
 test("Pelin işi: maliyet kartı (aylık sınır), kurulum yoksa kart açılmaz; onaylanınca Pelin kuyruğu; kurulum/sınır kontrolü Pelin'de de", async () => {
   const o = ortam();
   const { aracCalistir } = await import("./venom-bot.js");
+  // 6 Kasım: sağlamlaştırma haftası — Patron açıkça istemedikçe Pelin üretimi başlamaz
+  assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557"], test: true }, ist(3, 12)), /duraklatıldı/);
+  o.env.__patronMetni = "3557 için video üret";
   assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557"], test: true }, ist(3, 12)), /kurulum yapılmamış/);
   const sc = JSON.stringify({ yuz: { anahtar: "a", manken: 0 }, ortamlar: [{ ad: "retro", sahne: "x", hareket: "y" }], arac: "veo" });
   o.depo.set("pelin:secim", sc); o.depo.set("venom:pelinSecim", sc); // Pelin'in kendi kaydı + Venom'un aynası
@@ -306,6 +309,7 @@ test("ANAHTAR KÖPRÜSÜ (5 Kasım): Venom kendi anahtarı olmadan Pelin'in anah
 
 test("VENOM 5 Kasım: hafıza (kurallar + Patron kararları) sistemde; fotoğraf → kemal_paylas → Kemal kuyruğu; Kemal SON YAYIN kartı Venom'dan onaylanır; bot hataları Patron'a bir kez", async () => {
   const o = ortam();
+  o.depo.set("venom:kemalPaylasAcik", "1"); // 6 Kasım: sağlamlaştırma haftasında varsayılan kapalı
   o.depo.set("venom:bot:hafiza", "Marka Sami'nin deposundan. Etek yerden 2-3 cm.");
   // karar kaydı + hafıza sistem isteminde
   o.cevaplar.push({ arac: "karar_kaydet", girdi: { metin: "Bundan sonra 3627 beyaz önce gelsin" } }, { text: "Not aldım Patron." });
@@ -460,4 +464,81 @@ test("AKŞAM RAPORU VİDEO (5 Kasım): denetim sonucu, bugün gelen 20 MB üstü
   assert.match(r, /• 3500 — sitede oynamıyor/);
   assert.match(r, /20 MB üstü gelen video: 1 \(3612 34 MB, Merdan\)/);
   assert.match(r, /Kanaldan siteye eklenen video: 3194/);
+});
+
+import { paylasNiyeti, gunlukTest, sorunRaporu } from "./venom-bot.js";
+test("SAĞLAMLAŞTIRMA (6 Kasım) — paylaş niyeti: kod + renk + beden çıkarılır; soru cümlesi / iki kod → sohbete", () => {
+  assert.deepEqual(paylasNiyeti("3627 beyaz paylaş"), { kod: "3627", renk: "beyaz", beden: null, sonSet: false });
+  assert.deepEqual(paylasNiyeti("Bunu Kemal'e ilet paylaşım yapsın beyaz renk 36 27 büyük küçüğü var"), { kod: "3627", renk: "beyaz", beden: "i", sonSet: false });
+  assert.equal(paylasNiyeti("koyu bordo 3627 paylaş").renk, "koyu bordo");
+  assert.equal(paylasNiyeti("3627 en son gönderdiğim seti beyaz paylaş").sonSet, true);
+  assert.equal(paylasNiyeti("3627 paylaşıldı mı?"), null);
+  assert.equal(paylasNiyeti("3627 ve 3612 paylaş"), null);
+  assert.equal(paylasNiyeti("3627 beyaz"), null);
+});
+
+test("SAĞLAMLAŞTIRMA (6 Kasım) — '3627 beyaz paylaş': soru sormadan, Claude'suz Kemal'e (renk Patron'un); kapalıyken DURAKLATILDI; renk yoksa tek soru + düğme; son set yeniden", async () => {
+  const o = ortam();
+  const foto = (fid, caption) => guncelleme({ update_id: uid++, message: { message_id: 2, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: fid }], ...(caption ? { caption } : {}) } }, o.env);
+  // kapalı (varsayılan)
+  await foto("F1", "3627 beyaz paylaş");
+  assert.equal(o.claude.length, 0);
+  assert.ok(patronaGiden(o).some((x) => /DURAKLATILDI/.test(x.govde.text)));
+  // açık
+  o.depo.set("venom:kemalPaylasAcik", "1");
+  await foto("F2", "3627 beyaz büyük küçük paylaş");
+  assert.equal(o.claude.length, 0);
+  const b = JSON.parse(o.depo.get("venom:bot:paylasBekle"));
+  assert.deepEqual([b.kod, b.renk, b.beden], ["3627", "beyaz", "i"]);
+  o.depo.set("venom:bot:medya", JSON.stringify(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => ({ ...m, zaman: 1 }))));
+  await venomCron(o.env, 1793900000);
+  const pp = await kuyruguAl(o.env, "patronPaylas");
+  assert.equal(pp.length, 1);
+  assert.deepEqual([pp[0].renk, pp[0].beden, pp[0].medya.length], ["beyaz", "i", 2]);
+  assert.ok(patronaGiden(o).some((x) => /İLETİLDİ — 2 fotoğraf Kemal'e gitti · renk: beyaz · beden: İkisi de/.test(x.govde.text)));
+  // renk yok → tek soru + düğme (model kartı rengi)
+  o.depo.set("pelinboy:3627", JSON.stringify({ renk: "koyu bordo" }));
+  await foto("F3", "3627 paylaş");
+  const soru = sonKart(o);
+  assert.match(soru.govde.text, /3627 hangi renk/);
+  assert.equal(soru.govde.reply_markup.inline_keyboard[0][0].text, "koyu bordo (model kartı)");
+  await bas(o, soru.govde.reply_markup.inline_keyboard[0][0].callback_data);
+  assert.equal(JSON.parse(o.depo.get("venom:bot:paylasBekle")).renk, "koyu bordo");
+  // reddedilen karttan sonra: dosya yok + "en son gönderdiğim set" → son set yeniden Kemal'e
+  o.depo.delete("venom:bot:paylasBekle"); o.depo.delete("venom:bot:medya");
+  await yazi(o, PATRON, "3627 beyaz en son gönderdiğim seti paylaş");
+  const pp2 = await kuyruguAl(o.env, "patronPaylas");
+  assert.equal(pp2.length, 1);
+  assert.equal(pp2[0].medya.length, 2);
+  assert.ok(patronaGiden(o).some((x) => /en son gönderdiğiniz set \(2 dosya\) yeniden Kemal'e gitti/.test(x.govde.text)));
+});
+
+test("SAĞLAMLAŞTIRMA (6 Kasım) — 'aracım yok' denmez: not alınır; 09:30 testi her botu dener; akşam raporunda tekrarlar ve hatalar", async () => {
+  const o = ortam();
+  o.cevaplar.push({ text: "Patron, bunu yapacak bir aracım yok." });
+  await yazi(o, PATRON, "Selin'e Instagram'a da koysun de");
+  const son = patronaGiden(o).at(-1).govde.text;
+  assert.ok(!/aracım yok/.test(son) && /Not ettim/.test(son), son);
+  assert.match(o.depo.get("venom:yetenekIstekleri"), /Instagram/);
+  // günlük test
+  o.env.KEMAL_W = { saglik: async () => ({ ok: true, bilgi: "kanal bağlı" }) };
+  o.env.SELIN_W = { saglik: async () => ({ ok: false, sorunlar: ["site verisi okunamadı"] }) };
+  o.env.SAMI_W = { saglik: async () => { throw new Error("bağlanamadı"); } };
+  const t = await gunlukTest(o.env, 1793900000);
+  assert.match(t, /⚠️ 3 sorun/);
+  assert.match(t, /✅ Kemal — kanal bağlı/);
+  assert.match(t, /❌ Selin: site verisi okunamadı/);
+  assert.match(t, /❌ Sami: bağlanamadı/);
+  assert.match(t, /❌ Pelin: bağlantı yok/);
+  // akşam: tekrarlar ve hatalar
+  const simdi = 1793900000;
+  o.depo.set("selin:hata", JSON.stringify({ zaman: simdi - 100, hata: "GitHub 422" }));
+  o.depo.set("venom:kanal:son", JSON.stringify([{ id: 1, zaman: simdi - 50, kod: "3148", medya: "albüm (foto)", album: "a" }, { id: 9, zaman: simdi - 40, kod: "3148", medya: "albüm (foto)", album: "b" }]));
+  o.depo.set("venom:selinTekrarEngellendi", JSON.stringify([{ zaman: simdi - 10, kodlar: ["3570"] }]));
+  o.depo.set("venom:bot:iletilmedi", JSON.stringify([{ zaman: simdi - 5, metin: "3627: Patron'un dosyaları indirilemedi" }]));
+  const r = await sorunRaporu(o.env, simdi);
+  assert.match(r, /selin: GitHub 422/);
+  assert.match(r, /Tekrar paylaşım.*3148 \(2 kez\)/);
+  assert.match(r, /ÇIKARILDI: 3570/);
+  assert.match(r, /İletilmedi: 3627/);
 });

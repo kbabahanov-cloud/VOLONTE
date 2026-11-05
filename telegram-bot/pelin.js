@@ -839,6 +839,8 @@ async function sohbetAraci(env, m, ad, g, simdi) {
   if (!muratMi(env, m.from.id) && ad !== "kayitli_yuzler") return "Bu iş sadece Patron'da; hiçbir şey yapılmadı.";
   if (ad === "kurulum_karti") return kartSonucu(await kurulumKomutu(env, m, simdi));
   if (ad === "uretim_karti") {
+    // 6 Kasım (sağlamlaştırma haftası): yeni üretim SADECE Patron açıkça isterse
+    if ((await env.KAYIT.get("venom:pelinUretimAcik").catch(() => null)) !== "1" && !/[üu]ret|video|[çc]ek|giydir|maliyet|test/i.test(String((m && (m.text || m.caption)) || ""))) return "KART GÖNDERİLMEDİ: bu hafta (sağlamlaştırma) yeni üretim sadece Patron açıkça isterse başlar. Önerme; sadece sorulana cevap ver.";
     const buyuk = (g.buyuk_seri || []).map(String);
     const renk = Object.fromEntries((g.renkler || []).map((x) => [String(x.kod), String(x.renk).toLocaleLowerCase("tr")]));
     const bilinmeyen = Object.values(renk).filter((x) => !renkGecerli(x));
