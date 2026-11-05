@@ -577,3 +577,16 @@ test("ANLAMA (6 Kasım, D8–D10): üretim / paylaş / açıklamasız dosya ayr�
   assert.match(r, /🤔 Anlamadıklarım \(1\)/);
   assert.match(r, /"3627 beyaz" — yanlış anladım/);
 });
+
+import { cfKullanimSatiri } from "./venom-bot.js";
+test("CLOUDFLARE KULLANIM (6 Kasım): %80'de uyarı, altında ✅; ölçüm eskiyse 'ölçülemedi'", async () => {
+  const o = ortam();
+  const simdi = 1793900000;
+  assert.match((await cfKullanimSatiri(o.env, simdi)).satir, /ölçülemedi/);
+  o.depo.set("venom:cfKullanim", JSON.stringify({ zaman: simdi - 3600, kalemler: [{ ad: "DO istekleri", yuzde: 5.7, tahminYuzde: 37.6 }] }));
+  let r = await cfKullanimSatiri(o.env, simdi);
+  assert.equal(r.uyari, false); assert.match(r.satir, /DO istekleri — şimdi %5.7, ay sonu tahmini %37.6 ✅/);
+  o.depo.set("venom:cfKullanim", JSON.stringify({ zaman: simdi - 3600, kalemler: [{ ad: "KV yazma", yuzde: 40, tahminYuzde: 85 }] }));
+  r = await cfKullanimSatiri(o.env, simdi);
+  assert.equal(r.uyari, true); assert.match(r.metin, /LİMİT UYARISI \(%80\): KV yazma şimdi %40, ay sonu tahmini %85/);
+});

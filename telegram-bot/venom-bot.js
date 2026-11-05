@@ -441,6 +441,19 @@ export async function paylasBaslat(env, { kod, renk = null, beden = null, sonSet
   await kaydet(env, "venom:bot:paylasBekle", { kod, renk: renk || null, beden: bd, zaman: simdi }, 3600);
   return `⏳ ${kod}: dosyalar Kemal'e hazırlanıyor (renk: ${renk || "model kartından"}${bd ? ` · beden: ${BEDEN_AD[bd]}` : ""}). Albümün kalanı 20 sn içinde eklenir; kaç dosya gittiği "İLETİLDİ" mesajında yazacak.`;
 }
+// ---------- 6 Kasım (Patron kuralı): Cloudflare faturası 5 $'ı geçmesin — dahil limitlerin %80'inde uyar ----------
+// Ölçüm her gün (Claude Code'un günlük görevi, araclar/cf-kullanim.py) → KV "venom:cfKullanim". 2 günden eskiyse "ölçülemedi".
+export async function cfKullanimSatiri(env, simdi) {
+  const k = await oku(env, "venom:cfKullanim", null);
+  if (!k || simdi - k.zaman > 2 * 86400) return { satir: "☁️ Cloudflare kullanımı: son 2 günde ölçülemedi (Claude Code'a söyleyin).", uyari: false };
+  const en = k.kalemler[0];
+  const yuksek = k.kalemler.filter((x) => x.yuzde >= 80 || x.tahminYuzde >= 80);
+  return {
+    satir: `☁️ Cloudflare (5 $/ay plan): en yüksek ${en.ad} — şimdi %${en.yuzde}, ay sonu tahmini %${en.tahminYuzde}${yuksek.length ? " ⚠️" : " ✅"}`,
+    uyari: yuksek.length > 0,
+    metin: yuksek.length ? `⚠️ CLOUDFLARE LİMİT UYARISI (%80): ${yuksek.map((x) => `${x.ad} şimdi %${x.yuzde}, ay sonu tahmini %${x.tahminYuzde}`).join("; ")}. Aşarsa 5 $'ın üstünde ücret çıkar. Claude Code'a söyleyin; kullanımı azaltalım.` : null,
+  };
+}
 // ---------- 6 Kasım: GÜNLÜK TEST (09:30) ve SORUN RAPORU ----------
 async function botSor(env, bot, islem, ms = 20000) {
   const b = env[BOT_BAG[bot]];
@@ -458,6 +471,7 @@ export async function gunlukTest(env, simdi) {
   try { const st = await stokIste(env, "/toplu", { kodlar: ["3627"] }); satir.push(st && typeof st === "object" ? "✅ Stok okuma (Venom → Sami deposu)" : "❌ Stok okunamadı"); } catch (e) { satir.push(`❌ Stok okunamadı: ${String(e && e.message).slice(0, 80)}`); }
   const yaz1 = await env.KAYIT.put("venom:bot:kvTest", String(simdi), { expirationTtl: 3 * 86400 }).then(() => true).catch((e) => String(e && e.message));
   satir.push(yaz1 === true ? "✅ Ortak kayda yazma" : `❌ Ortak kayda (KV) YAZILAMIYOR: ${/limit/i.test(yaz1) ? "Cloudflare günlük ücretsiz yazma sınırı doldu" : yaz1}`);
+  try { satir.push((await cfKullanimSatiri(env, simdi)).satir); } catch { /* */ }
   const bozuk = satir.filter((x) => x.startsWith("❌")).length;
   return `🧪 Sabah testi (09:30): ${bozuk ? `⚠️ ${bozuk} sorun` : "hepsi çalışıyor"}\n${satir.join("\n")}`;
 }
@@ -854,6 +868,8 @@ export async function venomCron(env, simdi) {
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await yaz(env, `🤖 Selin\n${[].concat(rs).join("\n")}`); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   try { await hataBildir(env, simdi); } catch (e) { await hataYaz(env, "hataBildir", e); }
+  // Cloudflare %80 uyarısı: günde bir kez (pazar da)
+  try { const cf = await cfKullanimSatiri(env, simdi); if (cf.uyari && (await ilkKezBugun(env, `cf80:${gunAnahtari(simdi)}`))) await yaz(env, cf.metin); } catch (e) { await hataYaz(env, "cfKullanim", e); }
   if (pazarMi(simdi)) return; // pazar: rapor ve bildirim yok
   const gun = gunAnahtari(simdi);
   // 6 Kasım: 09:30 günlük test + sabah raporu (çalışmayan varsa raporda); işaretler StokDO'da (KV sınırından bağımsız)
