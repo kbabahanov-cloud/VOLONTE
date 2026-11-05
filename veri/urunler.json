@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3561",
+  "baslik": "Pinstripe Wide-Leg Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A navy pinstripe set pairing a tailored blazer with high-waisted wide-leg trousers. The blazer features a sharp lapel collar, an asymmetric double-button closure and flap pockets, with solid navy panels contrasting the fine stripes. Ideal for the office, meetings and refined evening plans. Made in Istanbul with careful tailoring.",
+   "fr": "Un ensemble bleu marine à fines rayures, composé d'un blazer ajusté et d'un pantalon large taille haute. Le blazer se distingue par son col à revers, sa fermeture asymétrique à deux boutons et ses poches à rabat, avec des empiècements unis qui contrastent avec les rayures. Parfait pour le bureau, les rendez-vous et les sorties élégantes. Fabriqué à Istanbul avec une finition soignée.",
+   "pt": "Um conjunto azul-marinho risca de giz, com blazer acinturado e calça pantalona de cintura alta. O blazer tem gola com lapela, fecho assimétrico de dois botões e bolsos com aba, com painéis lisos que contrastam com as riscas finas. Ideal para o escritório, reuniões e saídas elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3561/1.jpg",
+   "galeri/3561/2.jpg",
+   "galeri/3561/3.jpg",
+   "galeri/3561/4.jpg",
+   "galeri/3561/5.jpg"
+  ],
+  "videolar": [
+   "selin/3561/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3560",
   "baslik": "Wrap Jacket Mermaid Skirt Set",
   "kategori": "sets",
