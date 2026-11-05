@@ -1,5 +1,30 @@
 [
  {
+  "kod": "3575",
+  "baslik": "Lace Tunic Pleated Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flared floral lace tunic with a long pleated skirt. The tunic has a high neck with a long bow tie and a gold-tone DG accent, sheer long sleeves and a tiered ruffle hem; the skirt sits on an elastic waist and falls in soft pleats. Made for evening events and special occasions. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une tunique évasée en dentelle florale à une longue jupe plissée. La tunique présente un col montant avec long nœud et accessoire DG doré, des manches longues transparentes et un bas volanté étagé ; la jupe, à taille élastiquée, tombe en plis souples. Idéal pour les soirées et les grandes occasions. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma túnica evasê em renda floral com uma saia longa plissada. A túnica tem gola alta com laço comprido e detalhe DG dourado, mangas longas transparentes e barra com babados em camadas; a saia tem cós elástico e cai em pregas suaves. Pensado para eventos à noite e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3575/1.jpg",
+   "galeri/3575/2.jpg",
+   "galeri/3575/3.jpg",
+   "galeri/3575/4.jpg",
+   "galeri/3575/5.jpg",
+   "galeri/3575/6.jpg",
+   "galeri/3575/7.jpg"
+  ],
+  "videolar": [
+   "selin/3575/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3620",
   "baslik": "Pinstripe Wide-Leg Suit Set",
   "kategori": "sets",
