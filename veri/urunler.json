@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3537",
+  "baslik": "Lace Sleeve Vest Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A four-piece set with a sleeveless stand-collar long vest, a high-neck lace inner top and high-waisted wide-leg trousers, finished with a fabric tie belt. Mixed decorative flower buttons, front pockets and ruffled lace cuffs add a refined touch. Ideal for office days, ceremonies and evening invitations. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble quatre pièces composé d'un long gilet sans manches à col montant, d'un haut en dentelle à col haut et d'un pantalon large taille haute, complété par une ceinture à nouer. Les boutons fleurs variés, les poches plaquées et les poignets en dentelle volantée apportent une touche raffinée. Idéal pour le bureau, les cérémonies et les soirées. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Um conjunto de quatro peças com colete longo sem mangas de gola alta, blusa interior de renda de gola subida e calça pantalona de cintura alta, completado por um cinto de amarrar. Botões decorativos em forma de flor, bolsos frontais e punhos de renda com folho dão um toque requintado. Ideal para o escritório, cerimónias e eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3537/1.jpg",
+   "galeri/3537/2.jpg",
+   "galeri/3537/3.jpg",
+   "galeri/3537/4.jpg",
+   "galeri/3537/5.jpg",
+   "galeri/3537/6.jpg",
+   "galeri/3537/7.jpg",
+   "galeri/3537/8.jpg",
+   "galeri/3537/9.jpg",
+   "galeri/3537/10.jpg"
+  ],
+  "videolar": [
+   "selin/3537/0",
+   "selin/3537/1",
+   "selin/3537/2"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3627",
   "baslik": "Sequin Lace Waist Midi Dress",
   "kategori": "dresses",
