@@ -1090,3 +1090,53 @@ test("SİTE DEFTERİ (6 Kasım): tek liste — marka (Sami/model kartı), renk, 
   assert.equal(m.length, 1);
   assert.match(m[0].govde.text, /Videosu beklenen modeller \(2\):\n1\. 3396[\s\S]*2\. 3582/);
 });
+
+test("6 Kasım: GitHub 502 → Selin vazgeçmez; 10 dk sonra yine 502, 30 dk sonra yüklenir ve haber verir; ikisi de olmazsa tek uyarı + Venom raporu", async () => {
+  const o = ortam();
+  const { DatabaseSync } = await import("node:sqlite");
+  const { StokDO } = await import("./stok.js");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) { if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; } const st = db.prepare(q); const s = /^\s*SELECT/i.test(q) ? st.all(...p).map((x) => ({ ...x })) : (st.run(...p), []); return { toArray: () => s }; } };
+  const stok = new StokDO({ storage: { sql } });
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) };
+  Object.assign(o.env, { SAHIP_IDS: "111", GH_BEKLEME: 0 });
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", baslik: "X", fotolar: ["galeri/3618/1.jpg"], videolar: [] }]));
+  const asil = globalThis.fetch;
+  let bozuk = true;
+  globalThis.fetch = async (url, istek) => {
+    if (String(url) === "https://img/pelin.jpg") return new Response(new Uint8Array([9, 9, 9]));
+    if (String(url) === "https://img/pelin2.jpg") return new Response(new Uint8Array([7, 7, 7, 7]));
+    if (bozuk && String(url).endsWith("/git/refs/heads/main") && istek && istek.method === "PATCH") return new Response(JSON.stringify({ message: "Server Error" }), { status: 502 });
+    return asil(url, istek);
+  };
+  const { kuyrugaEkle } = await import("./venom-kopru.js");
+  const { pelinSiteAdimi, ghTekrarAdimi } = await import("./selin.js");
+  const { sorunRaporu } = await import("./venom-bot.js");
+  const t0 = ist(11);
+  await kuyrugaEkle(o.env, "pelinSite", { id: "3618-a", kod: "3618", foto: "https://img/pelin.jpg" });
+  await pelinSiteAdimi(o.env, t0);
+  const yazi = () => o.g.filter((x) => x.metod === "sendMessage").map((x) => x.govde.text);
+  assert.ok(yazi().some((t) => /⏳ 3618: GitHub şu an hata veriyor; Pelin medyasını 10 dk ve 30 dk sonra/.test(t)));
+  assert.equal(JSON.parse(o.depo.get("selin:ghTekrar")).length, 1);
+  await ghTekrarAdimi(o.env, t0 + 5 * 60); // vakti gelmedi
+  assert.equal(JSON.parse(o.depo.get("selin:ghTekrar"))[0].asama, 0);
+  await ghTekrarAdimi(o.env, t0 + 10 * 60); // 10 dk: yine 502 → 30 dk'ya
+  const q = JSON.parse(o.depo.get("selin:ghTekrar"));
+  assert.deepEqual([q[0].asama, q[0].sonraki], [1, t0 + 30 * 60]);
+  bozuk = false;
+  await ghTekrarAdimi(o.env, t0 + 30 * 60); // 30 dk: yüklenir
+  assert.ok(yazi().some((t) => /🌸 3618: Pelin medyası siteye eklendi/.test(t)));
+  assert.equal(JSON.parse(o.depo.get("selin:ghTekrar")).length, 0);
+  assert.match(await sorunRaporu(o.env, t0 + 3600), /GitHub hatası sonrası kendiliğinden yüklendi: 3618 \(30 dk sonra\)/);
+  // ikisi de olmazsa: tek uyarı + rapor
+  bozuk = true;
+  o.g.length = 0;
+  await kuyrugaEkle(o.env, "pelinSite", { id: "3618-b", kod: "3618", foto: "https://img/pelin2.jpg" });
+  await pelinSiteAdimi(o.env, t0 + 3600);
+  await ghTekrarAdimi(o.env, t0 + 3600 + 600);
+  await ghTekrarAdimi(o.env, t0 + 3600 + 1800);
+  globalThis.fetch = asil;
+  const uyari = yazi().filter((t) => /⚠️ 3618 siteye yüklenemedi: GitHub hâlâ hata veriyor/.test(t));
+  assert.equal(uyari.length, 1);
+  assert.match(await sorunRaporu(o.env, t0 + 7200), /❌ Selin: 3618 siteye yüklenemedi — GitHub hatası, 10 ve 30 dk sonra da olmadı/);
+});

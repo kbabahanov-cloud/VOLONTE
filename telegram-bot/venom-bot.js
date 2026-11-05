@@ -559,6 +559,10 @@ export async function sorunRaporu(env, simdi, sure = 86400) {
   if (en.length) satir.push(...en.slice(-10).map((x) => `• 🛑 Venom kontrolü durdurdu (${x.bot === "selin" ? "site" : "kanal"}) ${x.kod}: ${(x.sorunlar || []).join("; ").slice(0, 160)}`));
   const sk = (await oku(env, "venom:kontrol:site", [])).filter((x) => simdi - x.zaman < sure).flatMap((x) => x.notlar);
   if (sk.length) satir.push(`• Sitede tekrar/kolaj çıkarıldı: ${sk.slice(-6).join("; ")}`);
+  const gh = (await oku(env, "venom:selinGithub", [])).filter((x) => simdi - x.zaman < sure); // 6 Kasım: Selin GitHub 500/502
+  const ghOlmadi = gh.filter((x) => x.durum === "yuklenemedi"), ghOldu = gh.filter((x) => x.durum === "yuklendi");
+  if (ghOlmadi.length) satir.push(...ghOlmadi.slice(-8).map((x) => `• ❌ Selin: ${x.kod} siteye yüklenemedi — GitHub hatası, 10 ve 30 dk sonra da olmadı (${String(x.hata || "").slice(0, 80)})`));
+  if (ghOldu.length) satir.push(`• Selin: GitHub hatası sonrası kendiliğinden yüklendi: ${ghOldu.map((x) => `${x.kod} (${x.dk} dk sonra)`).join(", ")}`);
   const an = (await oku(env, "venom:bot:anlamadim", [])).filter((x) => simdi - x.zaman < sure);
   const anMetin = an.length ? `\n🤔 Anlamadıklarım (${an.length}):\n${an.slice(-10).map((x) => `• "${x.metin}" — ${x.neden}`).join("\n")}` : "\n🤔 Anlamadıklarım: yok.";
   return (satir.length ? `🔁 Tekrarlar ve hatalar (son 24 saat):\n${satir.join("\n")}` : "🔁 Tekrarlar ve hatalar (son 24 saat): yok.") + anMetin;

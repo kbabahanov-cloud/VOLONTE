@@ -230,7 +230,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi, ghTekrarAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -727,7 +727,15 @@ async function onayKartiGonder(env, kod) {
 
 // ---------- 3) Siteye yükleme (GitHub, tek commit) ----------
 
-async function gh(env, yol, secenek = {}) {
+export const ghGecici = (e) => /GitHub (500|502|503|504)\b/.test(String((e && e.message) || e));
+async function gh(env, yol, secenek = {}, deneme = 0) {
+  try { return await ghTek(env, yol, secenek); } catch (e) {
+    if (!ghGecici(e) || deneme >= 2 || env.GH_BEKLEME === 0) throw e;
+    await new Promise((r) => setTimeout(r, deneme ? 3000 : 1000)); // GitHub blob/ağaç/commit aynı içerikle tekrar yazılabilir (zararsız)
+    return gh(env, yol, secenek, deneme + 1);
+  }
+}
+async function ghTek(env, yol, secenek = {}) {
   const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}${yol}`, {
     ...secenek,
     headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github+json", "user-agent": "volonte-selin", "x-github-api-version": "2022-11-28", ...(secenek.body ? { "content-type": "application/json" } : {}) },
@@ -886,6 +894,52 @@ async function siteyeYukle(env, kod, kim, simdi) {
   modeller[kod] = { ...modeller[kod], durum: "sitede", zaman: simdi, onaylayan: kim };
   await yazKV(env, "selin:modeller", modeller);
   return `${env.SITE_URL}/#model/${encodeURIComponent(kod)}`;
+}
+
+// ---------- 6 Kasım (Patron): GitHub 500/502 → vazgeçme; 10 dk ve 30 dk sonra kendiliğinden tekrar ----------
+// Kuyruk "selin:ghTekrar" = [{ id, tur: "onay"|"pelinSite", kod, kim, chat, kartlar, x, asama: 0|1, zaman (ilk hata), sonraki }]
+// Başarınca onaylayana "✅ yüklendi"; iki tekrar da olmazsa TEK uyarı + KV "venom:selinGithub" (Venom akşam raporu).
+export const GH_TEKRAR_DK = [10, 30];
+export async function ghTekrarEkle(env, is, simdi) {
+  const l = await oku(env, "selin:ghTekrar", []);
+  const id = `${is.tur}:${is.kod}`;
+  if (l.some((y) => y.id === id)) return false; // aynı iş zaten bekliyor
+  await yazKV(env, "selin:ghTekrar", [...l, { ...is, id, asama: 0, zaman: simdi, sonraki: simdi + GH_TEKRAR_DK[0] * 60 }], 2 * 86400);
+  return true;
+}
+async function ghKayit(env, kayit) {
+  const l = (await env.KAYIT.get("venom:selinGithub", "json").catch(() => null)) || [];
+  await env.KAYIT.put("venom:selinGithub", JSON.stringify([...l, kayit].slice(-30)), { expirationTtl: 7 * 86400 }).catch(() => null);
+}
+export async function ghTekrarAdimi(env, simdi) {
+  const l = await oku(env, "selin:ghTekrar", []);
+  const vakti = l.filter((y) => y.sonraki <= simdi);
+  if (!vakti.length) return;
+  const kalan = l.filter((y) => y.sonraki > simdi);
+  for (const y of vakti) {
+    const dk = GH_TEKRAR_DK[y.asama];
+    try {
+      if (y.tur === "onay") {
+        const m = (await oku(env, "selin:modeller", {}))[y.kod];
+        if (m && m.durum === "sitede" && (m.zaman || 0) > y.zaman) continue; // bu arada elle yüklenmiş
+        const link = await siteyeYukle(env, y.kod, y.kim, simdi);
+        try { await yeniModelBildir(env, y.kod, y.kim, simdi); } catch { /* site yine tamam */ }
+        for (const [k, id] of y.kartlar || []) await tg(env, "editMessageText", { chat_id: k, message_id: id, text: `✅ ${y.kod} siteye eklendi (${y.kim}). Sayfa 1–2 dakikada yayında:\n${link}`, disable_web_page_preview: true }).catch(() => null);
+        if (y.chat) await tg(env, "sendMessage", { chat_id: y.chat, text: `✅ ${y.kod} yüklendi — GitHub hatası geçti, ${dk} dk sonra kendim tekrar denedim.\n${link}`, disable_web_page_preview: true }).catch(() => null);
+      } else if (y.tur === "pelinSite") {
+        await pelinSiteIsle(env, [{ ...y.x, deneme: 99, ghTekrar: true }], simdi, { firlat: true });
+      }
+      await ghKayit(env, { zaman: simdi, kod: y.kod, tur: y.tur, durum: "yuklendi", dk, hata: y.hata });
+    } catch (e) {
+      const hata = String((e && e.message) || e).slice(0, 160);
+      if (ghGecici(e) && y.asama + 1 < GH_TEKRAR_DK.length) { kalan.push({ ...y, asama: y.asama + 1, hata, sonraki: y.zaman + GH_TEKRAR_DK[y.asama + 1] * 60 }); continue; }
+      const metin = `⚠️ ${y.kod} siteye yüklenemedi: GitHub hâlâ hata veriyor (${hata}). 10 ve 30 dk sonra tekrar denedim, olmadı.${y.tur === "onay" ? " Taslak duruyor; sonra tekrar onaylayabilirsiniz." : ""}`;
+      if (y.chat) await tg(env, "sendMessage", { chat_id: y.chat, text: metin }).catch(() => null);
+      else for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text: metin }).catch(() => null);
+      await ghKayit(env, { zaman: simdi, kod: y.kod, tur: y.tur, durum: "yuklenemedi", hata });
+    }
+  }
+  await yazKV(env, "selin:ghTekrar", kalan, 2 * 86400);
 }
 
 // Kemal'e haber (kullanıcı kararı 31 Ekim): siteye yeni eklenen model sıra beklemeden "🆕 YENİ MODEL" önizlemesiyle
@@ -1795,6 +1849,9 @@ export async function pelinVideoKaydet(env, kod, url, simdi) {
 export async function pelinSiteAdimi(env, simdi) {
   if (!env.STOK || !env.GITHUB_TOKEN) return;
   const isler = await kuyruguAl(env, "pelinSite");
+  return pelinSiteIsle(env, isler, simdi);
+}
+async function pelinSiteIsle(env, isler, simdi, { firlat = false } = {}) {
   // Tek seferlik (5 Kasım, Patron): KV "venom:pelinSiteEkle" = [{ kod, videoUrl, fotolar: [url] }] → aynı yol
   const ek = await env.KAYIT.get("venom:pelinSiteEkle", "json").catch(() => null);
   if (ek) { await env.KAYIT.delete("venom:pelinSiteEkle"); for (const y of [].concat(ek)) isler.push({ id: `elle-${simdi}`, ...y, zaman: simdi }); }
@@ -1850,6 +1907,9 @@ export async function pelinSiteAdimi(env, simdi) {
       if (istendi && !videoTamam) await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: video eklenemedi (fotoğraflar eklendi)` }, 7 * 86400);
     } catch (e) {
       await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
+      if (firlat) throw e; // gecikmeli tekrar (ghTekrarAdimi) sonucu kendisi bildirir
+      // 6 Kasım: GitHub 500/502 → 10 ve 30 dk sonra kendiliğinden tekrar (vazgeçme)
+      if (ghGecici(e) && (await ghTekrarEkle(env, { tur: "pelinSite", kod: x.kod, x, hata: String(e.message).slice(0, 160) }, simdi))) { await bildir(`⏳ ${x.kod}: GitHub şu an hata veriyor; Pelin medyasını 10 dk ve 30 dk sonra kendim tekrar yükleyeceğim.`).catch(() => null); continue; }
       // GitHub anlık hatası (ör. 422) işi kaybettirmesin: 3 kez yeniden denenir
       if ((x.deneme || 0) < 3) { await kuyrugaEkle(env, "pelinSite", { ...x, id: `${x.id}-t${(x.deneme || 0) + 1}`, deneme: (x.deneme || 0) + 1 }).catch(() => null); continue; }
       await bildir(`⚠️ ${x.kod}: Pelin medyası siteye eklenemedi (hata Claude Code'da).`).catch(() => null);
@@ -2832,7 +2892,9 @@ async function dugme(cq, env) {
       const geri = await oku(env, "selin:modeller", {});
       geri[kod].durum = "onayda";
       await yazKV(env, "selin:modeller", geri);
-      await tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⚠️ ${kod} siteye yüklenemedi: ${e.message}. Taslak duruyor, tekrar deneyebilirsiniz.` });
+      if (ghGecici(e) && (await ghTekrarEkle(env, { tur: "onay", kod, kim, chat: cq.message.chat.id, kartlar, hata: String(e.message).slice(0, 160) }, simdi))) // 6 Kasım: vazgeçme
+        await tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⏳ ${kod}: GitHub şu an hata veriyor (${e.message}). Vazgeçmiyorum: 10 dk ve 30 dk sonra kendim tekrar deneyeceğim, yüklenince haber veririm.` });
+      else await tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⚠️ ${kod} siteye yüklenemedi: ${e.message}. Taslak duruyor, tekrar deneyebilirsiniz.` });
     }
     return;
   }
