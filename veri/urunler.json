@@ -1,5 +1,37 @@
 [
  {
+  "kod": "3557",
+  "baslik": "Ruffle Belted Trouser Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A three-piece suit with a tailored single-breasted blazer, matching belt and wide-leg trousers. A cascade of sheer black organza ruffles runs from one shoulder down the front, while a sculpted gold buckle and gold buttons add a polished finish. Wear it to ceremonies, receptions or the office with heels. Made in Istanbul with careful tailoring.",
+   "fr": "Un ensemble trois pièces composé d'un blazer cintré à boutonnage simple, d'une ceinture assortie et d'un pantalon large. Une cascade de volants en organza noir transparent descend d'une épaule sur le devant, tandis qu'une boucle dorée sculptée et des boutons dorés apportent une touche raffinée. À porter pour une cérémonie, une réception ou au bureau avec des escarpins. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de três peças com blazer acinturado de abotoamento simples, cinto a condizer e calça de perna larga. Uma cascata de folhos em organza preta transparente desce de um ombro pela frente, enquanto a fivela dourada esculpida e os botões dourados dão um acabamento elegante. Ideal para cerimónias, recepções ou o escritório com saltos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3557/1.jpg",
+   "galeri/3557/2.jpg",
+   "galeri/3557/3.jpg",
+   "galeri/3557/4.jpg",
+   "galeri/3557/5.jpg",
+   "galeri/3557/6.jpg",
+   "galeri/3557/7.jpg",
+   "galeri/3557/8.jpg",
+   "galeri/3557/9.jpg",
+   "galeri/3557/10.jpg"
+  ],
+  "videolar": [
+   "selin/3557/0",
+   "selin/3557/1",
+   "selin/3557/2",
+   "selin/3557/3",
+   "selin/3557/4"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3559",
   "baslik": "Chiffon Bell Sleeve Suit",
   "kategori": "sets",
