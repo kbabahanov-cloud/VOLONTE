@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3633",
+  "baslik": "Sheer Cape Satin Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a fitted satin slip dress with a sheer, floor-length cape overlay. The overlay features a high mock neck with a back tie, wide draped sleeves and soft cascading sides, while the slip has fine straps and a gentle front slit. Made for evening events, receptions and celebrations. Produced in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant une robe nuisette ajustée en satin à une cape fluide et transparente, longueur sol. La cape se distingue par son col montant noué au dos, ses larges manches drapées et ses pans tombants, tandis que la nuisette offre de fines bretelles et une légère fente. Idéal pour les soirées, réceptions et cérémonies. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que une um vestido slip ajustado em cetim a uma capa transparente até ao chão. A capa tem gola alta com laço nas costas, mangas amplas e drapeadas e laterais fluidas, enquanto o slip traz alças finas e uma fenda discreta. Pensado para noites especiais, receções e celebrações. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3633/1.jpg",
+   "galeri/3633/2.jpg",
+   "galeri/3633/3.jpg",
+   "galeri/3633/4.jpg"
+  ],
+  "videolar": [
+   "selin/3633/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3396",
   "baslik": "Tweed Trim Shirt Set",
   "kategori": "sets",
