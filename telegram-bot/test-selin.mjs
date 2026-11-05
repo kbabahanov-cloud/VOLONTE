@@ -848,11 +848,11 @@ test("Pelin teslim → site (4 Kasım): kanal videosu ürün videolarının baş
   const u = liste.find((x) => x.kod === "3618");
   assert.deepEqual(u.videolar, ["Volonteroseoffical/5555", "selin/3618/0"]);
   assert.equal(u.fotolar[0], "galeri/3618/1.jpg");
-  assert.match(u.fotolar[1], /^galeri\/3618\/pelin-[a-z0-9]+\.jpg$/);
+  assert.match(u.fotolar[1], /^galeri\/3618\/pelin-[a-z0-9-]+\.jpg$/);
   assert.ok(o.github.dosyalar.has(u.fotolar[1]));
   assert.ok(liste.every((x) => !("fiyat" in x))); // yazılan her listede fiyat yok
   assert.equal(o.github.commitler.filter(([m, y]) => m === "PATCH" && y === "/git/refs/heads/main").length, 1);
-  assert.ok(o.g.some((x) => /🌸 3618: Pelin videosu ve fotoğrafı siteye eklendi/.test(x.govde.text || "")));
+  assert.ok(o.g.some((x) => /🌸 3618: Pelin medyası siteye eklendi — video ✅ eklendi, 1\/1 fotoğraf/.test(x.govde.text || "")));
   // tek seferlik fiyat temizliği (Selin dışında yazılmış eski fiyatlar)
   o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3618", fiyat: 55 }, { kod: "3700", fiyat: 40 }]));
   o.depo.set("venom:siteFiyatSil", "1");
@@ -868,6 +868,57 @@ test("Pelin teslim → site (4 Kasım): kanal videosu ürün videolarının baş
   assert.deepEqual([u2.fotolar, u2.videolar], [["galeri/3618/1.jpg", "galeri/3618/2.jpg"], ["selin/3618/0"]]);
   assert.ok(!o.github.dosyalar.has("galeri/3618/pelin-abc.jpg"));
   assert.match(o.depo.get("venom:siteMedyaKaldirSonuc"), /3618: 1 fotoğraf, 1 video kaldırıldı/);
+});
+
+test("Pelin → site (5 Kasım düzeltmesi): video DOSYADAN Selin oynatıcısına (selin/<kod>/100), ön + set fotoğrafları, tekrar gelirse çift eklenmez; hiçbir şey yoksa boş kayıt yok; yeniden onayda Pelin medyası korunur", async () => {
+  const o = ortam();
+  const { DatabaseSync } = await import("node:sqlite");
+  const { StokDO } = await import("./stok.js");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...p) { if (!p.length && !/^\s*SELECT/i.test(q)) { db.exec(q); return { toArray: () => [] }; } const st = db.prepare(q); const s = /^\s*SELECT/i.test(q) ? st.all(...p).map((x) => ({ ...x })) : (st.run(...p), []); return { toArray: () => s }; } };
+  const stok = new StokDO({ storage: { sql } });
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) };
+  o.env.SAHIP_IDS = "111";
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3627", fotolar: ["galeri/3627/1-a.jpg", "galeri/3627/2-a.jpg"], videolar: ["selin/3627/0"] }]));
+  const vid = "https://volonte-pelin.volonte.workers.dev/medya/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const on = "https://volonte-pelin.volonte.workers.dev/medya/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  o.depo.set("pelinmedya:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", new Uint8Array([1, 2, 3]).buffer);
+  o.depo.set("pelinmedya:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", new Uint8Array([4, 5]).buffer);
+  const asil = globalThis.fetch, videolar = [];
+  globalThis.fetch = async (url, istek) => {
+    if (String(url).endsWith("/sendVideo")) { videolar.push(istek.body.get("chat_id")); return Response.json({ ok: true, result: { message_id: 9, video: { file_id: "SV1", file_size: 3 } } }); }
+    if (String(url) === "https://img/arka.jpg") return new Response(new Uint8Array([7]));
+    return asil(url, istek);
+  };
+  const { kuyrugaEkle } = await import("./venom-kopru.js");
+  const { pelinSiteAdimi, ozelVideo } = await import("./selin.js");
+  const is = { id: "3627-b", kod: "3627", kanal: "Volonteroseoffical", videoMesaj: null, videoUrl: vid, foto: on, fotolar: ["https://img/arka.jpg"] };
+  await kuyrugaEkle(o.env, "pelinSite", is);
+  await pelinSiteAdimi(o.env, ist(11));
+  let u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.deepEqual(u.videolar, ["selin/3627/100", "selin/3627/0"]);
+  assert.equal(u.fotolar.length, 4);
+  assert.equal(u.fotolar[0], "galeri/3627/1-a.jpg");
+  assert.deepEqual(videolar, ["-555"]); // Selin'in arşivine yüklendi
+  assert.ok(o.g.some((x) => /🌸 3627: Pelin medyası siteye eklendi — video ✅ eklendi, 2\/2 fotoğraf/.test(x.govde.text || "")));
+  // sitenin oynatıcısı Pelin videosunu verir
+  const r = await ozelVideo(o.env, "3627", "100", null);
+  assert.equal(r.status, 200);
+  // aynı iş tekrar gelirse: video yeniden yüklenmez, fotoğraf çift eklenmez, boş kayıt yazılmaz
+  const once = o.github.commitler.length;
+  await kuyrugaEkle(o.env, "pelinSite", { ...is, id: "3627-c" });
+  await pelinSiteAdimi(o.env, ist(12));
+  assert.equal(videolar.length, 1);
+  assert.equal(o.github.commitler.filter(([m, y], i) => i >= once && m === "PATCH").length, 0);
+  assert.ok(o.g.some((x) => /⚠️ 3627: Pelin medyası siteye eklenemedi \(video ✅ \(zaten vardı\), 0\/0 fotoğraf\)/.test(x.govde.text || "")));
+  // tek seferlik elle ekleme yolu
+  o.depo.set("venom:pelinSiteEkle", JSON.stringify([{ kod: "3627", fotolar: ["https://img/arka2.jpg"] }]));
+  globalThis.fetch = async (url, istek) => (String(url) === "https://img/arka2.jpg" ? new Response(new Uint8Array([8])) : asil(url, istek));
+  await pelinSiteAdimi(o.env, ist(13));
+  globalThis.fetch = asil;
+  u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.equal(u.fotolar.length, 5);
+  assert.ok(!o.depo.has("venom:pelinSiteEkle"));
 });
 
 test("FOTO YENİLE (5 Kasım): fotoğraflar yeni adla yeniden kaydedilir (önbellek), eski dosyalar silinir, liste güncellenir", async () => {

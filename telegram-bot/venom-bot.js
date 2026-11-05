@@ -54,6 +54,7 @@ const ARACLAR = [
   { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
   { name: "model_boyu", description: "Bir modelin Pelin'de kayıtlı boyunu (mini/diz/midi/bilek/maksi, referans) gösterir. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "kemal_paylas", description: "Patron'un Venom'a son gönderdiği fotoğraf/videolarla Kemal'e kanal paylaşımı hazırlatır (marka yazısı fotoğraflara, renk model kartından, EN/FR alt yazı). YAYINLAMAZ: SON YAYIN ONAYI kartı Patron'a gelir. Model sitede olmalı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
+  { name: "pelin_foto_kaydet", description: "Patron'un Venom'a son gönderdiği FOTOĞRAFLARI dosya olarak Pelin'e iletir ve ürün fotoğrafı olarak kaydeder: '<kod> <renk> ön/arka' (sıra: roller). sadece_bunlar=true → o rengin eski fotoğrafları (ör. site) silinir, üretimde SADECE bunlar kullanılır. yeniden_baslat=true → o kod/renk için bekleyen Pelin kartları iptal edilir ve üretim yeniden başlar (önce anlama/maliyet kartı, sonra ön fotoğraf onayı; onaysız para harcanmaz). Sonuç 'İLETİLDİ' ya da 'İLETİLMEDİ' diye döner; Patron'a aynen söyle.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Türkçe renk (beyaz, siyah, bordo…); bilinmiyorsa boş" }, roller: { type: "array", items: { type: "string", enum: ["on", "arka", "detay"] }, description: "Fotoğrafların gönderiliş sırasıyla rolleri; boşsa 1. ön, 2. arka, sonrası detay" }, etiket: { type: "string", enum: ["manken", "aski"] }, adet: { type: "integer", description: "Sadece SON gönderilen N fotoğraf (Patron 'iki fotoğraf attım' dediyse 2)" }, sadece_bunlar: { type: "boolean" }, yeniden_baslat: { type: "boolean" } } } },
   { name: "bekleyenler", description: "Bütün botlarda Patron onayı bekleyen işleri (Pelin, Kemal SON YAYIN kartları, Selin taslakları, Venom kartları) ve bugünkü Selin listesini tek listede verir. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "karar_kaydet", description: "Patron yeni bir KALICI karar/kural söylediğinde (ör. 'bundan sonra …', 'her zaman …', 'asla …') Venom'un hafızasına yazar; sonraki her konuşmada uygulanır. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["metin"], properties: { metin: { type: "string" } } } },
   { name: "selin_durum", description: "Selin'de bir modelin durumu: neden taslak çıkmadı (fotoğraf gelmedi mi, hata mı, onayda mı, sitede mi), bugünkü listede mi, kaç gündür gelmiyor, stok. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
@@ -137,6 +138,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     await kaydet(env, "venom:bot:paylasBekle", { kod, zaman: simdi }, 3600);
     return `Tamam: ${medya.length} dosya ${kod} için Kemal'e gidecek (albümün kalanı gelirse eklenir). Kemal birkaç dakika içinde SON YAYIN ONAYI kartını hazırlar; kart buraya da gelir, onaylamadan yayınlanmaz.`;
   }
+  if (ad === "pelin_foto_kaydet") return pelinFotoIlet(env, g, simdi);
   if (ad === "bekleyenler") return bekleyenlerMetni(env, simdi);
   if (ad === "karar_kaydet") {
     const l = await oku(env, "venom:bot:kararlar", []);
@@ -291,6 +293,36 @@ export async function bekleyenlerMetni(env, simdi) {
   for (const k of (vk.keys || []).slice(0, 20)) { const is = await oku(env, k.name, null); if (is && ["bekliyor", "emin"].includes(is.durum)) satir.push(`• Venom — ${String(is.metin || "").split("\n")[0].slice(0, 80)}`); }
   return satir.length ? ["⏳ Onay bekleyenler:", ...satir].join("\n") : "✅ Şu an onay bekleyen iş yok.";
 }
+// 5 Kasım (B5–B7): Patron'un Venom'a gönderdiği fotoğraflar → DOSYA olarak Pelin'e (KV "pelinmedya:<id>", Pelin /medya/<id>, 30 gün)
+// → Pelin ürün fotoğrafı "<kod> <renk> ön/arka". Sonuç açıkça: İLETİLDİ / İLETİLMEDİ.
+export async function pelinFotoIlet(env, g, simdi, bekle = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  const kod = String(g.kod || "").replace(/\D/g, "");
+  if (!/^\d{3,6}$/.test(kod)) return "❌ FOTOĞRAF İLETİLMEDİ: geçerli model kodu yok.";
+  if (!env.PELIN_W || typeof env.PELIN_W.foto !== "function") return "❌ FOTOĞRAF İLETİLMEDİ: Pelin bağlantısı yok (Claude Code'a söyleyin).";
+  // albümün kalanı birkaç saniye sonra gelebilir: liste 6 sn değişmeyene kadar (en fazla ~15 sn) beklenir
+  let medya = await oku(env, "venom:bot:medya", []);
+  for (let i = 0; i < 5 && medya.length && Math.floor(Date.now() / 1000) - Math.max(...medya.map((m) => m.zaman || 0)) < 6; i++) { await bekle(3000); medya = await oku(env, "venom:bot:medya", []); }
+  const fotolar = medya.filter((m) => m.tur === "foto").slice(-Math.max(1, Math.min(8, Number(g.adet) || 8)));
+  if (!fotolar.length) return "❌ FOTOĞRAF İLETİLMEDİ: son 1 saatte gönderilmiş fotoğraf yok. Fotoğrafları tekrar gönderin (en iyisi \"dosya olarak\").";
+  const iletilen = [];
+  for (const [i, m] of fotolar.entries()) {
+    const f = await tg(env, "getFile", { file_id: m.file_id }).catch(() => null);
+    if (!f || !f.ok) continue;
+    const r = await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`).catch(() => null);
+    if (!r || !r.ok) continue;
+    const id = crypto.randomUUID().replace(/-/g, "");
+    await env.KAYIT.put(`pelinmedya:${id}`, await r.arrayBuffer(), { expirationTtl: 30 * 86400, metadata: { tur: "image/jpeg" } });
+    iletilen.push({ url: `${env.PELIN_URL || "https://volonte-pelin.volonte.workers.dev"}/medya/${id}`, rol: (g.roller || [])[i] || null });
+  }
+  if (!iletilen.length) return `❌ FOTOĞRAF İLETİLMEDİ: ${fotolar.length} fotoğraf Telegram'dan indirilemedi; tekrar gönderir misiniz?`;
+  const s = await env.PELIN_W.foto({ kod, renk: g.renk || null, fotolar: iletilen, etiket: g.etiket || "manken", sadeceBunlar: Boolean(g.sadece_bunlar), yenidenBaslat: Boolean(g.yeniden_baslat) }).catch((e) => ({ ok: false, mesaj: String(e && e.message).slice(0, 120) }));
+  if (!s || !s.ok) return `❌ FOTOĞRAF İLETİLMEDİ: Pelin kaydetmedi (${(s && s.mesaj) || "cevap yok"}).`;
+  await kaydet(env, "venom:bot:medya", medya.filter((m) => !fotolar.includes(m)), 3600); // aynı fotoğraf başka işe karışmasın
+  return [`✅ FOTOĞRAF İLETİLDİ: ${s.kaydedilen.length} fotoğraf Pelin'e kaydedildi — ${s.kaydedilen.join(", ")}.`,
+    s.silinen ? `Eski ${s.silinen} fotoğraf (bu renk) silindi; Pelin bu renkte SADECE bunları kullanır.` : null,
+    g.yeniden_baslat ? `Bekleyen ${s.iptal} kart/iş iptal edildi; üretim yeniden başladı — Pelin'in kartı buraya gelecek (onaysız para harcanmaz; önce ön fotoğraf onayı).` : null,
+    fotolar.length > iletilen.length ? `⚠️ ${fotolar.length - iletilen.length} fotoğraf indirilemedi.` : null].filter(Boolean).join("\n");
+}
 // Patron'un Venom'a gönderdiği medya → Kemal paylaşımı (kemal_paylas). Dosyalar Venom /medya/<id> adresinden (3 gün) Kemal'e
 async function paylasimGonder(env, simdi) {
   const b = await oku(env, "venom:bot:paylasBekle", null);
@@ -309,8 +341,10 @@ async function paylasimGonder(env, simdi) {
     liste.push({ tur: m.tur, url: `${env.SELF_URL}/medya/${id}` });
   }
   await env.KAYIT.delete("venom:bot:medya");
-  if (!liste.length) return yaz(env, `⚠️ ${b.kod}: dosyalar indirilemedi; tekrar gönderir misiniz?`);
-  await kuyrugaEkle(env, "patronPaylas", { id: `vp-${b.kod}-${simdi}`, kod: b.kod, medya: liste, kim: "Patron (Venom)", venomMedya: medya.slice(-10).map((m) => ({ type: m.tur === "video" ? "video" : "photo", media: m.file_id })) });
+  if (!liste.length) return yaz(env, `❌ ${b.kod}: FOTOĞRAF İLETİLMEDİ — dosyalar indirilemedi; tekrar gönderir misiniz?`);
+  const ok = await kuyrugaEkle(env, "patronPaylas", { id: `vp-${b.kod}-${simdi}`, kod: b.kod, medya: liste, kim: "Patron (Venom)", venomMedya: medya.slice(-10).map((m) => ({ type: m.tur === "video" ? "video" : "photo", media: m.file_id })) }).then(() => true).catch(() => false);
+  const fs = liste.filter((m) => m.tur !== "video").length, vs = liste.length - fs;
+  await yaz(env, ok ? `✅ ${b.kod}: FOTOĞRAF İLETİLDİ — ${fs} fotoğraf${vs ? ` + ${vs} video` : ""} Kemal'e gitti${medya.length > liste.length ? ` (⚠️ ${medya.length - liste.length} dosya indirilemedi)` : ""}. SON YAYIN ONAYI kartı birkaç dakika içinde gelir.` : `❌ ${b.kod}: FOTOĞRAF İLETİLMEDİ — Kemal'e iş gönderilemedi; tekrar deneyeyim mi?`);
 }
 // Kemal'in SON YAYIN kartları Venom'a da gelir: Patron buradan onaylar (Kemal uygular, sonuç "sonuc" kuyruğundan)
 async function onayAktar(env, simdi) {
@@ -466,6 +500,8 @@ Kurallar:
 - Site onayı 0091 ve Merdan'dadır; Selin'in taslak kartları Patron'a gelmez. Selin'i sadece bilgi olarak takip et (selin_durum, site_kontrol).
 - Kanal: sen yöneticisin ama ASLA paylaşım yapmazsın; paylaşımları kanal_paylasimlari ile görürsün, sorun varsa Patron'a söylersin.
 - Patron fotoğraf/video gönderip kanal paylaşımı isterse kemal_paylas kullan (yayın SON YAYIN ONAYI kartıyla, onaysız gitmez).
+- Patron ürün/manken fotoğrafı gönderip "Pelin'e", "ön/arka", "bu renk için bunları kullan" derse pelin_foto_kaydet kullan (kod + renk + roller; "sadece bunlar / eskileri kullanma" → sadece_bunlar; "yeniden başlat / baştan" → yeniden_baslat). Fotoğraf ASLA bota yazı olarak anlatılmaz; dosya olarak iletilir.
+- Fotoğraf/video içeren HER işte sonucu açıkça söyle: "✅ fotoğraf iletildi (kime, kaç tane, hangi etiketle)" ya da "❌ fotoğraf İLETİLMEDİ (neden)". Araç sonucu ne diyorsa onu söyle; iletilmeden "ilettim" deme.
 - Aşağıdaki HAFIZA, depodaki notlar ve Patron kararlarıdır; her cevapta uygula.`;
 
 async function sesiYaziyaCevir(env, dosyaId) {
@@ -539,7 +575,7 @@ export async function guncelleme(u, env) {
   if (dosya) {
     const l = await oku(env, "venom:bot:medya", []);
     await kaydet(env, "venom:bot:medya", [...l, { ...dosya, zaman: simdi }].slice(-10), 3600);
-    if (!metin.trim()) { if (!m.media_group_id || !l.some((x) => simdi - x.zaman < 5)) await yaz(env, `📎 Aldım (${l.length + 1} dosya). Ne yapayım Patron? Örn. "3627 kanala hazırla".`); return; }
+    if (!metin.trim()) { if (!m.media_group_id || !l.some((x) => simdi - x.zaman < 5)) await yaz(env, `📎 Aldım (${l.length + 1} dosya). Ne yapayım Patron? Örn. "3627 beyaz ön/arka, Pelin bunları kullansın" ya da "3627 kanala hazırla".`); return; }
     metin = `${metin}\n(Patron az önce ${l.length + 1} fotoğraf/video gönderdi.)`;
   }
   if (m.voice || m.audio) {
@@ -563,6 +599,8 @@ export async function venomCron(env, simdi) {
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) await yaz(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`);
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }
+  // Tek seferlik (Claude Code, 5 Kasım): KV "venom:pelinFotoIlet" = pelin_foto_kaydet girdisi → sonuç Patron'a (İLETİLDİ/İLETİLMEDİ)
+  try { const t = await oku(env, "venom:pelinFotoIlet", null); if (t) { await env.KAYIT.delete("venom:pelinFotoIlet"); await yaz(env, await pelinFotoIlet(env, t, simdi, async () => {})); } } catch (e) { await hataYaz(env, "pelinFotoIlet", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   try { await hataBildir(env, simdi); } catch (e) { await hataYaz(env, "hataBildir", e); }
   if (pazarMi(simdi)) return; // pazar: rapor ve bildirim yok

@@ -13,7 +13,7 @@
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
-import { kuyruguAl } from "./venom-kopru.js";
+import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -856,6 +856,14 @@ async function siteyeYukle(env, kod, kim, simdi) {
     gizli: Boolean(st && st.gizli),        // stoğu bitince sitede görünmez (kayıt silinmez)
     eklenme: gunAnahtari(simdi),
   };
+  // 5 Kasım (3627 bordo sitede kayboldu): yeniden onayda sitedeki PELİN fotoğrafları ve PELİN videoları korunur
+  const eski = liste.find((u) => u.kod === kod);
+  if (eski) {
+    const pf = (eski.fotolar || []).filter((f) => /\/pelin-[^/]+\.jpg$/.test(f) && !urun.fotolar.includes(f));
+    const pv = (eski.videolar || []).filter((v) => new RegExp(`^selin/${kod}/1\\d\\d+$`).test(v) && !urun.videolar.includes(v));
+    if (pf.length) urun.fotolar.splice(Math.min(1, urun.fotolar.length), 0, ...pf);
+    if (pv.length) urun.videolar = [...pv, ...urun.videolar];
+  }
   const yeniListe = [urun, ...liste.filter((u) => u.kod !== kod)];
   await siteyeYaz(env, dosyalar, yeniListe, `Selin: ${kod} siteye eklendi (onaylayan: ${kim})`);
   modeller[kod] = { ...modeller[kod], durum: "sitede", zaman: simdi, onaylayan: kim };
@@ -1681,40 +1689,86 @@ async function kemaleDevret(env, anahtar, kayit) {
   l.push(kayit);
   await env.KAYIT.put(anahtar, JSON.stringify(l.slice(-50)));
 }
-// ---------- PELİN TESLİM → SİTE (4 Kasım): Kemal kanala paylaştı → video (kanal mesajı, sitenin oynatıcısı) + Pelin fotoğrafı ----------
+// ---------- PELİN TESLİM → SİTE (4 Kasım; 5 Kasım düzeltmesi) ----------
+// Kemal kanala paylaştı → Pelin VİDEOSU + Pelin FOTOĞRAFLARI (ön + set) siteye. 5 Kasım: video artık kanal mesaj numarasına bağlı
+// DEĞİL (4–5 Kasım'da hiç eklenmedi): Pelin'in video dosyası Selin'in arşivine yüklenir, sitenin kendi oynatıcısında "selin/<kod>/1xx"
+// olarak oynar. Kanal mesajı yalnızca yedek. Ne eklendiği tek tek söylenir; hiçbir şey eklenemediyse boş kayıt yazılmaz.
+const PELIN_MEDYA = /volonte-pelin[^/]*\/medya\/([a-f0-9]{16,64})/;
+async function medyaBayt(env, url) {
+  const m = String(url || "").match(PELIN_MEDYA);
+  if (m) { const b = await env.KAYIT.get(`pelinmedya:${m[1]}`, "arrayBuffer").catch(() => null); if (b) return new Uint8Array(b); }
+  const r = await fetch(url).catch(() => null);
+  return r && r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
+}
+export async function pelinVideoKaydet(env, kod, url, simdi) {
+  const anahtar = `selin:pelinVid:${kod}`, l = await oku(env, anahtar, []);
+  const varolan = l.find((v) => v.kaynak === url);
+  if (varolan) return `selin/${kod}/${varolan.n}`;
+  const bayt = await medyaBayt(env, url);
+  if (!bayt || !bayt.length || bayt.length > VIDEO_SINIR) return null;
+  const arsiv = await oku(env, "arsiv", null);
+  if (!arsiv || !arsiv.id) return null;
+  const f = new FormData();
+  f.append("chat_id", String(arsiv.id)); f.append("disable_notification", "true"); f.append("supports_streaming", "true");
+  f.append("caption", `${kod} · Pelin videosu (site)`);
+  f.append("video", new Blob([bayt], { type: "video/mp4" }), `${kod}.mp4`);
+  const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/sendVideo`, { method: "POST", body: f }).then((x) => x.json()).catch(() => null);
+  const v = r && r.ok && (r.result.video || r.result.animation || r.result.document);
+  if (!v) return null;
+  const n = 100 + l.length;
+  l.push({ n, file_id: v.file_id, boyut: v.file_size || bayt.length, kaynak: url, zaman: simdi });
+  await yazKV(env, anahtar, l);
+  return `selin/${kod}/${n}`;
+}
 export async function pelinSiteAdimi(env, simdi) {
   if (!env.STOK || !env.GITHUB_TOKEN) return;
   const isler = await kuyruguAl(env, "pelinSite");
+  // Tek seferlik (5 Kasım, Patron): KV "venom:pelinSiteEkle" = [{ kod, videoUrl, fotolar: [url] }] → aynı yol
+  const ek = await env.KAYIT.get("venom:pelinSiteEkle", "json").catch(() => null);
+  if (ek) { await env.KAYIT.delete("venom:pelinSiteEkle"); for (const y of [].concat(ek)) isler.push({ id: `elle-${simdi}`, ...y, zaman: simdi }); }
   for (const x of isler) {
     const bildir = async (text) => { for (const k of await sahipler(env)) await tg(env, "sendMessage", { chat_id: k, text }); };
+    await yazKV(env, "selin:pelinSiteSon", { zaman: simdi, x }, 14 * 86400); // teşhis: gelen iş aynen saklanır
     try {
       const { liste } = await siteVerisi(env);
       const i = liste.findIndex((u) => String(u.kod) === String(x.kod));
-      if (i < 0) { await bildir(`⚠️ ${x.kod}: Pelin videosu siteye eklenemedi — model sitede yok.`); continue; }
+      if (i < 0) { await bildir(`⚠️ ${x.kod}: Pelin videosu/fotoğrafları siteye eklenemedi — model sitede yok.`); continue; }
       const u = { ...liste[i] };
-      const vid = x.kanal && x.videoMesaj ? `${x.kanal}/${x.videoMesaj}` : null;
+      let vid = null;
+      if (/^https?:\/\//.test(String(x.videoUrl || ""))) vid = await pelinVideoKaydet(env, x.kod, x.videoUrl, simdi).catch(() => null);
+      if (!vid && x.kanal && x.videoMesaj) vid = `${x.kanal}/${x.videoMesaj}`;
+      const videoVardi = Boolean(vid && (u.videolar || []).includes(vid));
       if (vid) u.videolar = [vid, ...(u.videolar || []).filter((v) => v !== vid)];
-      const dosyalar = [];
-      if (x.foto) {
+      const eklenmis = await oku(env, `selin:pelinFoto:${x.kod}`, []);
+      const adresler = [...new Set([x.foto, ...(x.fotolar || [])].filter((a) => /^https?:\/\//.test(String(a || ""))))].filter((a) => !eklenmis.includes(a)).slice(0, 6);
+      const dosyalar = [], yollar = [];
+      for (const [j, a] of adresler.entries()) {
         try {
-          const r = await fetch(x.foto);
-          if (r.ok) {
-            let bayt = new Uint8Array(await r.arrayBuffer());
-            if (env.IMAGES) { const k = await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: 1600, fit: "scale-down" }).output({ format: "image/jpeg", quality: 88 }); bayt = new Uint8Array(await k.response().arrayBuffer()); }
-            const yol = `galeri/${x.kod}/pelin-${simdi.toString(36)}.jpg`;
-            dosyalar.push({ yol, b64: b64Yap(bayt) });
-            const f = [...(u.fotolar || [])];
-            f.splice(Math.min(1, f.length), 0, yol); // ilk fotoğraf (afiş olabilir) yerinde kalır
-            u.fotolar = f;
-          }
-        } catch { /* fotoğraf olmadan video yine eklenir */ }
+          let bayt = await medyaBayt(env, a);
+          if (!bayt) continue;
+          if (env.IMAGES) { const k = await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: 1600, fit: "scale-down" }).output({ format: "image/jpeg", quality: 88 }); bayt = new Uint8Array(await k.response().arrayBuffer()); }
+          const yol = `galeri/${x.kod}/pelin-${simdi.toString(36)}-${j}.jpg`;
+          dosyalar.push({ yol, b64: b64Yap(bayt) }); yollar.push(yol); eklenmis.push(a);
+        } catch { /* bu fotoğraf atlanır; sonuç mesajında sayı görünür */ }
+      }
+      if (yollar.length) { const f = [...(u.fotolar || [])]; f.splice(Math.min(1, f.length), 0, ...yollar); u.fotolar = f; } // ilk fotoğraf (afiş) yerinde kalır
+      const videoTamam = Boolean(vid), istendi = Boolean(x.videoUrl || x.videoMesaj);
+      const ozet = `video ${videoTamam ? (videoVardi ? "✅ (zaten vardı)" : "✅ eklendi") : istendi ? "❌ EKLENEMEDİ" : "— (yok)"}, ${yollar.length}/${adresler.length} fotoğraf`;
+      if (!yollar.length && (!videoTamam || videoVardi)) {
+        await bildir(`⚠️ ${x.kod}: Pelin medyası siteye eklenemedi (${ozet}).`);
+        await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: hiçbir şey eklenemedi (${ozet})` }, 7 * 86400);
+        continue;
       }
       const yeni = [...liste]; yeni[i] = u;
-      await siteyeYaz(env, dosyalar, yeni, `Selin: ${x.kod} Pelin videosu${dosyalar.length ? " + fotoğrafı" : ""} siteye eklendi`);
-      await bildir(`🌸 ${x.kod}: Pelin videosu${dosyalar.length ? " ve fotoğrafı" : ""} siteye eklendi (birkaç dakika içinde görünür).`);
+      await siteyeYaz(env, dosyalar, yeni, `Selin: ${x.kod} Pelin medyası siteye eklendi (${ozet})`);
+      await yazKV(env, `selin:pelinFoto:${x.kod}`, eklenmis.slice(-60));
+      await bildir(`🌸 ${x.kod}: Pelin medyası siteye eklendi — ${ozet} (birkaç dakika içinde görünür).`);
+      if (istendi && !videoTamam) await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: video eklenemedi (fotoğraflar eklendi)` }, 7 * 86400);
     } catch (e) {
       await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinSite ${x.kod}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400);
-      await bildir(`⚠️ ${x.kod}: Pelin videosu siteye eklenemedi (hata Claude Code'da).`).catch(() => null);
+      // GitHub anlık hatası (ör. 422) işi kaybettirmesin: 3 kez yeniden denenir
+      if ((x.deneme || 0) < 3) { await kuyrugaEkle(env, "pelinSite", { ...x, id: `${x.id}-t${(x.deneme || 0) + 1}`, deneme: (x.deneme || 0) + 1 }).catch(() => null); continue; }
+      await bildir(`⚠️ ${x.kod}: Pelin medyası siteye eklenemedi (hata Claude Code'da).`).catch(() => null);
     }
   }
   // Tek seferlik (4 Kasım, Patron): KV "venom:siteFiyatSil" → açık depodaki ürün listesinden fiyatlar hemen çıkarılır
@@ -1870,7 +1924,9 @@ export async function gunSonuOzeti(env, simdi) {
 export async function ozelVideo(env, kod, n, aralik) {
   const modeller = await oku(env, "selin:modeller", {});
   const m = modeller[kod];
-  const v = ozelMi(m) && m.durum === "sitede" && m.taslak && m.taslak.videolar[Number(n)];
+  // 5 Kasım: 100 ve üstü = Pelin videosu (Selin'in arşivine yüklenmiş; model hangi yolla sitede olursa olsun)
+  const v = Number(n) >= 100 ? (await oku(env, `selin:pelinVid:${kod}`, [])).find((y) => y.n === Number(n))
+    : ozelMi(m) && m.durum === "sitede" && m.taslak && m.taslak.videolar[Number(n)];
   if (!v || v.boyut > VIDEO_SINIR) return new Response("yok", { status: 404 });
   const anahtar = `selin:v2yol:${kod}:${n}`;
   let yol = await oku(env, anahtar, null);

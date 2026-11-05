@@ -2106,8 +2106,13 @@ async function yayinOnayUygula(env, id, islem) {
   const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
   const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false });
   if (!g.ok) return `⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`;
-  await kuyrugaEkle(env, "pelinSite", { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: g.ids[0], foto: /^https?:/.test(String(x.foto || "")) ? x.foto : null, zaman: simdi });
-  return `📣 ${x.kod}: Patron onayıyla kanalda${g.link ? `: ${g.link}` : ""}. Selin siteye ekliyor.`;
+  // 5 Kasım: Selin videoyu DOSYADAN (videoUrl) koyar; kanal mesajı yedek. Fotoğraflar: ön + set (hepsi).
+  const http = (a) => /^https?:\/\//.test(String(a || ""));
+  const videoKanalda = !g.markaNotu || !/video eklenemedi/.test(g.markaNotu);
+  const site = { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: videoKanalda && x.video ? g.ids[0] : null, videoUrl: http(x.video) ? x.video : null,
+    foto: http(x.foto) ? x.foto : null, fotolar: (x.set || []).map((y) => y.url).filter(http), marka: x.marka || null, renk: x.renk || null, zaman: simdi };
+  const s = await kuyrugaEkle(env, "pelinSite", site).then(() => true).catch(() => false);
+  return `📣 ${x.kod}: Patron onayıyla kanalda${g.link ? `: ${g.link}` : ""}. ${s ? `Selin siteye ekliyor (video ${site.videoUrl || site.videoMesaj ? "+" : "yok"}, ${[site.foto, ...site.fotolar].filter(Boolean).length} fotoğraf).` : "⚠️ Selin'e iş iletilemedi — site eklenmedi."}`;
 }
 
 // 5 Kasım (Patron): Patron'un gönderdiği fotoğraf/videoyla paylaşım: fotoğraflara "MARKA · kod" (marka Sami/model kartı), renk model

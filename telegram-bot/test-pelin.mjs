@@ -1501,3 +1501,30 @@ test("ZAMANLI TESLİM (09:00): hazır paket Kemal'e, askı/ekler YOK, yeni üret
   assert.equal(JSON.parse(o.depo.get("pelin:is:3627-e1")).durum, "iptal");
   assert.equal(JSON.parse(o.depo.get("pelin:is:3627-e2")).durum, "video_bekle");
 });
+
+import { fotoKaydetVenom } from "./pelin.js";
+test("VENOM → PELİN FOTOĞRAF (5 Kasım): '3627 beyaz ön/arka' kaydı; sadece bunlar → o rengin eski (site) fotoğrafları silinir, diğer renkler kalır; yeniden başlat → bekleyen beyaz iş iptal + /uret", async () => {
+  const o = ortam();
+  o.depo.set("pelin:urunfoto:3627", JSON.stringify([
+    { anahtar: "u1", url: "https://site/3.jpg", rol: "on", renk: "beyaz", site: true, zaman: 1 },
+    { anahtar: "u2", url: "https://site/4.jpg", rol: "arka", renk: "beyaz", site: true, zaman: 1 },
+    { anahtar: "a".repeat(32), rol: "on", renk: "bordo", zaman: 5 },
+  ]));
+  o.depo.set("pelin:is:eski1", JSON.stringify({ id: "eski1", kod: "3627", renk: "beyaz", durum: "foto_onay", gecmis: [] }));
+  o.depo.set("pelin:is:bordo1", JSON.stringify({ id: "bordo1", kod: "3627", renk: "bordo", durum: "onay", gecmis: [] }));
+  o.depo.set("pelin:isler", JSON.stringify(["eski1", "bordo1"]));
+  const s = await fotoKaydetVenom(o.env, { kod: "3627", renk: "beyaz", fotolar: [{ url: "https://p/medya/on", rol: "on" }, { url: "https://p/medya/arka", rol: "arka" }], sadeceBunlar: true, yenidenBaslat: true }, 1000);
+  assert.equal(s.ok, true);
+  assert.deepEqual(s.kaydedilen, ["3627 beyaz ön", "3627 beyaz arka"]);
+  assert.equal(s.silinen, 2);
+  const l = fotoSirala(JSON.parse(o.depo.get("pelin:urunfoto:3627")));
+  assert.deepEqual(l.filter((x) => x.renk === "beyaz").map((x) => [x.url, x.rol, x.etiket]), [["https://p/medya/on", "on", "manken"], ["https://p/medya/arka", "arka", "manken"]]);
+  assert.ok(l.some((x) => x.renk === "bordo")); // başka renk silinmez
+  assert.equal(JSON.parse(o.depo.get("pelin:is:eski1")).durum, "iptal");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:bordo1")).durum, "onay");
+  assert.equal(s.baslatildi, true);
+  assert.ok(o.g.length > 0); // /uret 3627 beyaz → Patron'a kart/soru gitti
+  // geçersiz girişler
+  assert.equal((await fotoKaydetVenom(o.env, { kod: "x", fotolar: [{ url: "https://a" }] }, 1)).ok, false);
+  assert.equal((await fotoKaydetVenom(o.env, { kod: "3627", fotolar: [] }, 1)).ok, false);
+});

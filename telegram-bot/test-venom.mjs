@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { StokDO } from "./stok.js";
-import venom, { guncelleme, venomCron, gunOzeti, aktarilanGonder } from "./venom-bot.js";
+import venom, { guncelleme, venomCron, gunOzeti, aktarilanGonder, pelinFotoIlet } from "./venom-bot.js";
 import { venomGidenAdimi, venomPelinAdimi, kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { venomUretimi } from "./pelin.js";
 import { topluRapor } from "./venom.js";
@@ -424,4 +424,25 @@ test("VENOM KANAL + SİTE + İŞ DAĞITIMI (5 Kasım): kanal paylaşımı kayded
   const by = await aracCalistir(o.env, "bota_yaz", { bot: "pelin", metin: "3627 beyaz üret" }, ist(5, 13));
   assert.deepEqual(giden, ["3627 beyaz üret"]);
   assert.match(by, /Pelin'e iletildi/);
+});
+
+test("PELİN'E FOTOĞRAF (5 Kasım, B5–B7): Patron'un fotoğrafları DOSYA olarak Pelin'e (KV pelinmedya), son N fotoğraf, sonuç açıkça İLETİLDİ / İLETİLMEDİ", async () => {
+  const o = ortam();
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).includes("/file/bot") ? new Response(new Uint8Array([1, 2, 3])) : String(url).endsWith("/getFile") ? Response.json({ ok: true, result: { file_path: "f.jpg" } }) : asil(url, istek));
+  // Pelin bağlantısı yok → İLETİLMEDİ
+  assert.match(await pelinFotoIlet(o.env, { kod: "3627" }, 1000, async () => {}), /İLETİLMEDİ: Pelin bağlantısı yok/);
+  const giden = [];
+  o.env.PELIN_W = { foto: async (g) => { giden.push(g); return { ok: true, kaydedilen: g.fotolar.map((f) => `3627 beyaz ${f.rol === "arka" ? "arka" : "ön"}`), silinen: 2, iptal: 1 }; } };
+  // fotoğraf yok → İLETİLMEDİ
+  assert.match(await pelinFotoIlet(o.env, { kod: "3627" }, 1000, async () => {}), /İLETİLMEDİ: son 1 saatte/);
+  o.depo.set("venom:bot:medya", JSON.stringify([{ tur: "foto", file_id: "ilgisiz", zaman: 1 }, { tur: "foto", file_id: "ON", zaman: 2 }, { tur: "foto", file_id: "ARKA", zaman: 3 }]));
+  const t = await pelinFotoIlet(o.env, { kod: "3627", renk: "beyaz", roller: ["on", "arka"], adet: 2, sadece_bunlar: true, yeniden_baslat: true }, 1000, async () => {});
+  globalThis.fetch = asil;
+  assert.match(t, /✅ FOTOĞRAF İLETİLDİ: 2 fotoğraf Pelin'e kaydedildi — 3627 beyaz ön, 3627 beyaz arka/);
+  assert.match(t, /Eski 2 fotoğraf/);
+  assert.equal(giden.length, 1);
+  assert.deepEqual([giden[0].renk, giden[0].sadeceBunlar, giden[0].yenidenBaslat, giden[0].fotolar.map((f) => f.rol)], ["beyaz", true, true, ["on", "arka"]]);
+  assert.ok(giden[0].fotolar.every((f) => /\/medya\/[a-f0-9]{32}$/.test(f.url) && o.depo.has(`pelinmedya:${f.url.split("/").pop()}`)));
+  assert.deepEqual(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => m.file_id), ["ilgisiz"]); // kullanılanlar listeden çıkar
 });

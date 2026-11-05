@@ -1046,6 +1046,45 @@ export async function venomDugme(env, data, rid) {
   return true;
 }
 
+// 5 Kasım (Patron, B5–B6): Patron'un VENOM'a gönderdiği ürün fotoğrafları → Pelin ürün fotoğrafı ("<kod> <renk> ön/arka").
+// Dosyalar Venom'da KV "pelinmedya:<id>" olarak yazılır (30 gün; Pelin /medya/<id> sunar). sadeceBunlar: o rengin eski kayıtları
+// (ör. site fotoğrafları) silinir → üretimde SADECE bunlar. yenidenBaslat: o kod/renk için bekleyen kartlar iptal + "/uret kod renk".
+export async function venomFotoKaydet(env, g) {
+  if (env.PELIN) { const r = await nesne(env).fetch("https://pelin/venom/foto", { method: "POST", body: JSON.stringify(g || {}) }); return r.json().catch(() => ({ ok: false, mesaj: "Pelin cevap vermedi" })); }
+  return fotoKaydetVenom(env, g || {}, Math.floor(Date.now() / 1000));
+}
+export async function fotoKaydetVenom(env, g, simdi) {
+  const kod = String(g.kod || "").replace(/\D/g, "");
+  if (!/^\d{3,6}$/.test(kod)) return { ok: false, mesaj: "geçerli model kodu yok" };
+  const renk = g.renk ? String(g.renk).toLocaleLowerCase("tr").trim() : null;
+  if (renk && !renkGecerli(renk)) return { ok: false, mesaj: `"${renk}" rengi tanınmadı` };
+  const fotolar = (g.fotolar || []).filter((f) => /^https:\/\//.test(String(f && f.url))).slice(0, 8);
+  if (!fotolar.length) return { ok: false, mesaj: "fotoğraf yok" };
+  let l = (await oku(env, `pelin:urunfoto:${kod}`, [])).map((x) => (typeof x === "string" ? { anahtar: x, rol: null } : x));
+  const once = l.length;
+  if (g.sadeceBunlar) l = l.filter((x) => (renk ? x.renk !== renk : false));
+  const silinen = once - l.length;
+  const yeni = fotolar.map((f, i) => ({ anahtar: `u${crypto.randomUUID().replace(/-/g, "").slice(0, 31)}`, url: f.url, rol: ROL_AD[f.rol] ? f.rol : i === 0 ? "on" : i === 1 ? "arka" : "detay",
+    etiket: g.etiket === "aski" ? "aski" : "manken", renk, album: null, mid: 0, zaman: simdi - i, kaynak: "venom" }));
+  await kaydet(env, `pelin:urunfoto:${kod}`, [...yeni, ...l].slice(0, 12), 120 * 86400);
+  const sonuc = { ok: true, kod, renk, kaydedilen: yeni.map((x) => `${kod}${renk ? ` ${renk}` : ""} ${ROL_AD[x.rol]}`), silinen, iptal: 0, baslatildi: false };
+  if (g.yenidenBaslat) {
+    const uyar = (x) => String(x.kod || "") === kod || (x.kodlar || []).map(String).includes(kod);
+    const renkUyar = (r) => !renk || !r || r === renk;
+    for (const on of ["pelin:anlama:", "pelin:uretimOnay:"]) {
+      const ks = ((await Promise.resolve().then(() => env.KAYIT.list({ prefix: on })).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
+      for (const k of ks) { const x = await oku(env, k, null); if (x && uyar(x) && renkUyar(x.renk || (x.renkler || {})[kod])) { await env.KAYIT.delete(k); sonuc.iptal++; } }
+    }
+    for (const id of await oku(env, "pelin:isler", [])) {
+      const x = await oku(env, `pelin:is:${id}`, null);
+      if (x && String(x.kod) === kod && renkUyar(x.renk) && BEKLEYEN.includes(x.durum)) { x.durum = "iptal"; x.gecmis = [...(x.gecmis || []), [simdi, "iptal — Patron yeni ürün fotoğrafı gönderdi (Venom)"]]; await kaydet(env, `pelin:is:${id}`, x); sonuc.iptal++; }
+    }
+    await guncelleme(sahteMesaj(env, `/uret ${kod}${renk ? ` ${renk}` : ""}`), env);
+    sonuc.baslatildi = true;
+  }
+  return sonuc;
+}
+
 export class PelinDO {
   constructor(state, env) { this.state = state; this.env = env; }
   async fetch(istek) {
@@ -1054,6 +1093,7 @@ export class PelinDO {
     try {
       if (yol === "/guncelleme") await guncelleme(await istek.json(), env);
       else if (yol === "/cron") await pelinCron(env, Math.floor(Date.now() / 1000));
+      else if (yol === "/venom/foto") return Response.json(await fotoKaydetVenom(env, await istek.json(), Math.floor(Date.now() / 1000)));
     } catch (e) {
       await this.env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), yol, hata: String(e && e.message).slice(0, 400) }), { expirationTtl: 7 * 86400 });
     }
