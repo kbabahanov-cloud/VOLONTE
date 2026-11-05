@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3570",
+  "baslik": "Jewel Trim Velvet Maxi Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A long-sleeved velvet maxi dress with a fitted, figure-following silhouette and a front slit. Gold chain trim outlines the round neckline, the sculpted side panels and the cuffs, while a centre line of red and green jewel accents adds a refined focal point. Made for evening events, celebrations and formal dinners. Produced in Istanbul with careful attention to finishing.",
+   "fr": "Robe longue en velours à manches longues, à la coupe ajustée qui suit la silhouette, avec une fente sur le devant. Un galon doré façon chaîne souligne l'encolure ronde, les découpes latérales et les poignets, tandis qu'une ligne centrale de bijoux rouges et verts apporte une touche raffinée. Idéale pour les soirées, les cérémonies et les dîners habillés. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Vestido longo de veludo com mangas compridas, corte ajustado que acompanha o corpo e fenda frontal. Um galão dourado em corrente contorna o decote redondo, os recortes laterais e os punhos, enquanto uma linha central de pedras vermelhas e verdes cria um detalhe elegante. Pensado para eventos à noite, celebrações e jantares formais. Produzido em Istambul, com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3570/1.jpg",
+   "galeri/3570/2.jpg",
+   "galeri/3570/3.jpg",
+   "galeri/3570/4.jpg",
+   "galeri/3570/5.jpg",
+   "galeri/3570/6.jpg"
+  ],
+  "videolar": [
+   "selin/3570/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3572",
   "baslik": "Belted Peplum Pleated Maxi Dress",
   "kategori": "dresses",
