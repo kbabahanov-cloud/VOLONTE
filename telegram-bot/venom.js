@@ -3,7 +3,7 @@
 // botundan, kısa yapay zekâ yorumuyla). Botlar Telegram'da birbirinin mesajını göremez; arka planda ortak
 // hafıza üzerinden haberleşir: her biri raporunun özetini KV'de "venom:rapor:<bot>:<gün>" olarak bırakır.
 
-import Anthropic from "@anthropic-ai/sdk";
+import { claudeIstemci, claudeVar } from "./ai-istemci.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -70,9 +70,9 @@ export async function topluRaporMetni(env, simdi) {
 }
 
 async function yapayZekaYorumu(env, simdi, metin) {
-  if (!env.ANTHROPIC_API_KEY || (await sinirAsildiMi(env, simdi))) return null;
+  if (!claudeVar(env) || (await sinirAsildiMi(env, simdi))) return null;
   const model = env.MUSTERI_MODEL || "claude-sonnet-5-5"; // kısa yorum: ekonomik model
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 40_000 });
+  const client = claudeIstemci(env, { maxRetries: 1, timeout: 40_000 });
   const r = await client.messages.create({
     model, max_tokens: 400,
     messages: [{ role: "user", content: `VOLONTE (İstanbul, toptan kadın giyim) iş sisteminin bugünkü toplu raporu aşağıda. Sahibine sade Türkçe ile en fazla 3 kısa cümlelik yorum yaz: en önemli konu ne, bugün neye öncelik vermeli. Uydurma bilgi ekleme, sadece rapordakileri kullan. Vegawin'de bir şey değiştirmeyi asla önerme (sadece okunur).\n\n${metin}` }],

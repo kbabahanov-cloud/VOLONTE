@@ -7,7 +7,7 @@
     "build": "esbuild worker.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --outfile=dist/worker.js",
     "build:selin": "esbuild selin-giris.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --external:cloudflare:workers --outfile=dist/selin.js",
     "build:sami": "esbuild sami.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --outfile=dist/sami.js",
-    "build:pelin": "esbuild pelin.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --outfile=dist/pelin.js",
+    "build:pelin": "esbuild pelin-giris.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --external:cloudflare:workers --outfile=dist/pelin.js",
     "build:venom": "esbuild venom-bot.js --bundle --format=esm --platform=browser --conditions=workerd,worker,browser --target=es2022 --minify-syntax --minify-whitespace --outfile=dist/venom.js"
   },
   "dependencies": {

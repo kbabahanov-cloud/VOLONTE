@@ -1675,6 +1675,30 @@ export async function pelinSiteAdimi(env, simdi) {
     const n = liste.filter((u) => "fiyat" in u).length;
     if (n) { await siteyeYaz(env, [], liste, `Selin: fiyatlar açık depodan çıkarıldı (${n} model; fiyatın kaynağı Vegawin)`); await notEkle(env, `Fiyatlar açık depodan çıkarıldı (${n} model).`); }
   }
+  // Tek seferlik (5 Kasım): KV "venom:siteFotoYenile" = { kod } → modelin fotoğrafları YENİ ADLA yeniden kaydedilir (site ve depo
+  // okuyucu önbellekleri dosya adına göre 1 gün saklıyor; aynı adla değişen fotoğrafın eskisi görünmeye devam ediyordu)
+  const fy = await env.KAYIT.get("venom:siteFotoYenile", "json");
+  if (fy && fy.kod) {
+    await env.KAYIT.delete("venom:siteFotoYenile");
+    const { liste } = await siteVerisi(env);
+    const i = liste.findIndex((u) => String(u.kod) === String(fy.kod));
+    const notlar = [];
+    if (i >= 0) {
+      const u = { ...liste[i] }, dosyalar = [], yeni = [], ek = simdi.toString(36);
+      for (const f of u.fotolar || []) {
+        const m = String(f).match(new RegExp(`^(galeri/${fy.kod}/)([\\w]+?)(?:-[a-z0-9]{6,8})?\\.(jpe?g|png|webp)$`, "i"));
+        if (!m) { yeni.push(f); continue; }
+        const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/contents/${f}?ref=main`, { headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github.raw+json", "user-agent": "volonte-selin", "x-github-api-version": "2022-11-28" } });
+        if (!r.ok) { yeni.push(f); continue; }
+        const yol = `${m[1]}${m[2]}-${ek}.${m[3].toLowerCase()}`;
+        dosyalar.push({ yol, b64: b64Yap(new Uint8Array(await r.arrayBuffer())) }, { yol: f, b64: null });
+        yeni.push(yol);
+      }
+      if (dosyalar.length) { u.fotolar = yeni; const l = [...liste]; l[i] = u; await siteyeYaz(env, dosyalar, l, `Selin: ${fy.kod} fotoğrafları yeni adla (önbellekteki eski görsel görünmesin)`); }
+      notlar.push(`${fy.kod}: ${dosyalar.length / 2} fotoğraf yenilendi`);
+    } else notlar.push(`${fy.kod}: sitede yok`);
+    await yazKV(env, "venom:siteFotoYenileSonuc", { zaman: simdi, notlar, fotolar: i >= 0 ? (await siteVerisi(env)).liste[i].fotolar : [] }, 3 * 86400);
+  }
   // Tek seferlik (4 Kasım, Patron): GİZLİ test sayfası (360° görüntüleyici) — KV "venom:siteDosyaYaz" = { dosyalar: [{ yol: "ozel/…html",
   // metin }], mesaj }. Sadece "ozel/" altına HTML; ürün listesi değişmez; sayfa hiçbir yerden bağlanmaz (noindex).
   const dy = await env.KAYIT.get("venom:siteDosyaYaz", "json");

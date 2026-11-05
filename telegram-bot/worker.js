@@ -458,6 +458,7 @@ async function mesajIsle(msg, env) {
   }
   const komut = (msg.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   let cevap;
+  if ((msg.photo || msg.video || msg.document) && (await patronMedyaTopla(msg, env))) return null; // "3627 paylaş" → paylaşım hazırlama (5 Kasım)
   if (medyaDosyasi(msg, 0)) {
     return fotoTani(msg, env, Math.floor(Date.now() / 1000));
   } else if (komut === "/son") {
@@ -2033,7 +2034,7 @@ export async function pelinKanalAdimi(env, simdi) {
   }
 }
 
-const pelinMedya = (x) => [{ type: "video", media: x.video }, ...[x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, 9).map((m) => ({ type: "photo", media: m }))];
+const pelinMedya = (x) => [...(x.video ? [{ type: "video", media: x.video }] : []), ...[x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, x.video ? 9 : 10).map((m) => ({ type: "photo", media: m }))];
 async function yayinOnayKarti(env, x, u, simdi) {
   const patron = String(env.MURAT_ID || "").split(",")[0].trim();
   const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
@@ -2062,30 +2063,119 @@ async function yayinOnayKarti(env, x, u, simdi) {
     text: [`📣 SON YAYIN ONAYI — ${x.kod} · ${marka}`, `Yukarıdaki albüm kanala AYNEN böyle gider: video ("${marka} · ${x.kod}" sağ altta) + ${medya.filter((m) => m.type === "photo").length} fotoğraf (${["ön", ...(x.set || []).map((y) => y.ad)].join(", ")}) + kanal yazısı.`, "Bu kart onaylanmadan hiçbir şey kanala/siteye gitmez.", "", "Kanal yazısı:", "───", yazi.slice(0, 1500), "───", "Tek onay: Kemal kanala koyar, Selin siteye ekler."].join("\n"),
     reply_markup: { inline_keyboard: [[{ text: "📣 Kanala ve siteye gönder", callback_data: `py:o:${kartNo}` }, { text: "❌ Gönderme", callback_data: `py:x:${kartNo}` }]] } });
   await env.KAYIT.put(`kemal:pelinYayin:${kartNo}`, JSON.stringify({ x, zaman: simdi, mid: kart && kart.ok ? kart.result.message_id : null }), { expirationTtl: 14 * 86400 });
+  // 5 Kasım (Patron: "tek muhatap Venom"): kart Venom'a da gider; Patron Venom'dan onaylarsa Kemal uygular (önce basılan geçerli)
+  if (env.STOK) await kuyrugaEkle(env, "venomOnay", { id: `ky-${kartNo}`, tur: "kemalYayin", kartNo, kod: x.kod, marka, yazi: yazi.slice(0, 700), medya: pelinMedya(x).filter((m) => /^https?:\/\//.test(m.media)).slice(0, 10), venomMedya: x.venomMedya || null, zaman: simdi }).catch(() => null);
   return kart;
 }
 const duzMetinYazi = (html) => String(html || "").replace(/<br\s*\/?>/g, "\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+// Venom'dan gelen SON YAYIN kararı (StokDO kuyruğu "kemalYayinKarar") → aynı uygulama; sonuç Venom'a ("sonuc" kuyruğu)
+export async function venomYayinKararlari(env) {
+  for (const k of await kuyruguAl(env, "kemalYayinKarar")) {
+    const sonuc = await yayinOnayUygula(env, k.kartNo, k.islem === "o" ? "o" : "x").catch((e) => `⚠️ ${kisaHata(e)}`);
+    await kuyrugaEkle(env, "sonuc", { id: `kys-${k.kartNo}-${Date.now()}`, ok: !/^⚠️/.test(sonuc), aciklama: sonuc });
+  }
+}
+async function yayinOnayUygula(env, id, islem) {
+  const k = await env.KAYIT.get(`kemal:pelinYayin:${id}`, "json");
+  if (!k) return "Bu kart artık geçerli değil (zaten karar verilmiş ya da yenisi geldi).";
+  await env.KAYIT.delete(`kemal:pelinYayin:${id}`);
+  const x = k.x, simdi = Math.floor(Date.now() / 1000);
+  const patron = String(env.MURAT_ID || "").split(",")[0].trim();
+  if (k.mid) await telegram(env, "editMessageReplyMarkup", { chat_id: patron, message_id: k.mid, reply_markup: { inline_keyboard: [] } }).catch(() => null);
+  if (islem === "x") return `❌ ${x.kod}: gönderilmedi (kanal ve site değişmedi).`;
+  const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
+  if (!u) return `⚠️ ${x.kod}: model sitede yok ya da gizli — paylaşılmadı.`;
+  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
+  const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false });
+  if (!g.ok) return `⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`;
+  await kuyrugaEkle(env, "pelinSite", { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: g.ids[0], foto: /^https?:/.test(String(x.foto || "")) ? x.foto : null, zaman: simdi });
+  return `📣 ${x.kod}: Patron onayıyla kanalda${g.link ? `: ${g.link}` : ""}. Selin siteye ekliyor.`;
+}
+
+// 5 Kasım (Patron): Patron'un gönderdiği fotoğraf/videoyla paylaşım: fotoğraflara "MARKA · kod" (marka Sami/model kartı), renk model
+// kartından, EN/FR alt yazı sitedeki modelden → SON YAYIN ONAYI (tek albüm). Kaynak: Kemal'e "3627 paylaş" yazılı albüm ya da Venom.
+// medya: [{ tur: "foto"|"video", file_id? (Kemal'in), url? }]
+export async function patronPaylasimHazirla(env, { kod, medya, kim, venomMedya = null }, simdi) {
+  kod = String(kod);
+  const patron = String(env.MURAT_ID || "").split(",")[0].trim();
+  const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === kod && !y.gizli);
+  if (!u) return { ok: false, mesaj: `⚠️ ${kod}: model sitede yok — EN/FR yazı siteden hazırlanıyor; önce Selin siteye eklesin.` };
+  const marka = await modelMarkasi(env, kod);
+  const kart = await env.KAYIT.get(`pelinboy:${kod}`, "json").catch(() => null);
+  const arsiv = await env.KAYIT.get("arsiv", "json");
+  const fotolar = [];
+  let video = null;
+  for (const m of (medya || []).slice(0, 10)) {
+    if (m.tur === "video") { if (!video) video = m.file_id || m.url; continue; }
+    let bayt = null, w = 1280;
+    if (m.file_id) bayt = await dosyaBaytIndir(env, (metod, g) => telegram(env, metod, g), m.file_id).catch(() => null);
+    else if (m.url) { const r = await fetch(m.url).catch(() => null); if (r && r.ok) bayt = new Uint8Array(await r.arrayBuffer()); }
+    if (!bayt) continue;
+    if (env.IMAGES) { const b = await env.IMAGES.info(new Blob([bayt]).stream()).catch(() => null); if (b && b.width) w = b.width; }
+    const damgali = env.IMAGES ? await markaBas(env, bayt, w, kod, marka).catch(() => bayt) : bayt;
+    // damgalı fotoğraf arşiv kanalına yüklenir → Kemal'in dosya kimliği (kanal paylaşımı bununla)
+    if (arsiv) {
+      const f = new FormData(); f.append("chat_id", String(arsiv.id)); f.append("disable_notification", "true"); f.append("photo", new Blob([damgali], { type: "image/jpeg" }), "f.jpg");
+      const r = await telegramForm(env, "sendPhoto", f);
+      if (r && r.ok) { const ph = r.result.photo; fotolar.push(ph[ph.length - 1].file_id); continue; }
+    }
+    if (m.file_id) fotolar.push(m.file_id); else if (m.url) fotolar.push(m.url);
+  }
+  if (!fotolar.length && !video) return { ok: false, mesaj: `⚠️ ${kod}: kullanılabilir fotoğraf/video bulunamadı.` };
+  const x = { v: 3, yayinOnayi: true, id: `${kod}-p${simdi.toString(36)}`, kod, marka, video, foto: fotolar[0] || null, set: fotolar.slice(1).map((url, i) => ({ ad: `foto ${i + 2}`, url })), renk: (kart && kart.renk) || null, kaynak: "patron", kim: kim || "Patron", venomMedya, deneme: false, zaman: simdi };
+  await yayinOnayKarti(env, x, u, simdi);
+  return { ok: true, mesaj: `📦 ${kod}: paylaşım hazırlandı (${fotolar.length} fotoğraf${video ? " + video" : ""}, "${marka === "BLACKROSE" ? "BLACK ROSE" : marka} · ${kod}"${x.renk ? `, renk: ${x.renk}` : ""}). SON YAYIN ONAYI kartı gönderildi.` };
+}
+// Kemal'e doğrudan: "3627 paylaş" yazılı fotoğraf/video (albüm olabilir) → biriktir; 5 dk görevinde (sessizlik ≥ 30 sn) hazırla
+const PAYLAS_YAZI = /(\d{3,6})\s*(?:'?[yi]?[iı]?\s*)?(?:kanala\s+)?(?:payla[sş]|kanal|yay[iı]nla)/i;
+async function patronMedyaTopla(msg, env) {
+  const kod = (String(msg.caption || "").match(PAYLAS_YAZI) || [])[1];
+  const anahtar = `kemal:patronPaylas:${msg.chat.id}`;
+  let k = await env.KAYIT.get(anahtar, "json");
+  const ayniAlbum = k && msg.media_group_id && k.album === msg.media_group_id;
+  if (!kod && !ayniAlbum) return false;
+  if (kod && !ayniAlbum) k = { kod: kodNormal(kod), album: msg.media_group_id || null, medya: [], chat: msg.chat.id, kim: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(" ") || "Patron" };
+  if (msg.photo) k.medya.push({ tur: "foto", file_id: msg.photo[msg.photo.length - 1].file_id });
+  else if (msg.video) k.medya.push({ tur: "video", file_id: msg.video.file_id });
+  else if (msg.document && /^image\//.test(msg.document.mime_type || "")) k.medya.push({ tur: "foto", file_id: msg.document.file_id });
+  else if (msg.document && /^video\//.test(msg.document.mime_type || "")) k.medya.push({ tur: "video", file_id: msg.document.file_id });
+  k.son = Math.floor(Date.now() / 1000);
+  await env.KAYIT.put(anahtar, JSON.stringify(k), { expirationTtl: 3600 });
+  const sira = (await env.KAYIT.get("kemal:patronPaylasSira", "json")) || [];
+  if (!sira.includes(String(msg.chat.id))) await env.KAYIT.put("kemal:patronPaylasSira", JSON.stringify([...sira, String(msg.chat.id)]), { expirationTtl: 3600 });
+  if (kod) await telegram(env, "sendMessage", { chat_id: msg.chat.id, text: `📥 ${k.kod} paylaşım için alındı. Birkaç dakika içinde SON YAYIN ONAYI kartı gelir (marka yazısı fotoğraflara basılır, renk model kartından).` });
+  return true;
+}
+export async function patronPaylasimAdimi(env, simdi) {
+  const sira = (await env.KAYIT.get("kemal:patronPaylasSira", "json")) || [];
+  const kalan = [];
+  for (const c of sira) {
+    const k = await env.KAYIT.get(`kemal:patronPaylas:${c}`, "json");
+    if (!k) continue;
+    if (simdi - (k.son || 0) < 30) { kalan.push(c); continue; }
+    await env.KAYIT.delete(`kemal:patronPaylas:${c}`);
+    const r = await patronPaylasimHazirla(env, k, simdi).catch((e) => ({ ok: false, mesaj: `⚠️ ${k.kod}: hazırlanamadı (${kisaHata(e)})` }));
+    if (!r.ok) await telegram(env, "sendMessage", { chat_id: k.chat, text: r.mesaj });
+  }
+  await env.KAYIT.put("kemal:patronPaylasSira", JSON.stringify(kalan), { expirationTtl: 3600 });
+  // Venom'dan gelen paylaşım istekleri (Patron Venom'a fotoğraf/video gönderdi)
+  for (const v of await kuyruguAl(env, "patronPaylas")) {
+    const r = await patronPaylasimHazirla(env, v, simdi).catch((e) => ({ ok: false, mesaj: `⚠️ ${v.kod}: hazırlanamadı (${kisaHata(e)})` }));
+    await kuyrugaEkle(env, "sonuc", { id: `pp-${v.kod}-${simdi}`, ok: r.ok, aciklama: r.mesaj });
+  }
+}
 async function yayinOnayDugmesi(cq, env) {
   const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   if (!String(env.MURAT_ID || "").split(",").map((v) => v.trim()).includes(String(cq.from.id))) return cevapla("Son yayın onayı sadece Patron'da.");
   const [, islem, id] = String(cq.data).split(":");
-  const k = await env.KAYIT.get(`kemal:pelinYayin:${id}`, "json");
-  if (!k) return cevapla("Bu kart artık geçerli değil.");
-  await env.KAYIT.delete(`kemal:pelinYayin:${id}`);
-  const x = k.x, simdi = Math.floor(Date.now() / 1000);
-  const kapat = (text) => telegram(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text });
-  if (islem === "x") { await cevapla("Gönderilmedi"); return kapat(`❌ ${x.kod}: gönderilmedi (kanal ve site değişmedi).`); }
-  await cevapla("Paylaşıyorum");
-  const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
-  if (!u) return kapat(`⚠️ ${x.kod}: model sitede yok ya da gizli — paylaşılmadı.`);
-  const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null });
-  const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false });
-  if (!g.ok) return kapat(`⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`);
-  await kuyrugaEkle(env, "pelinSite", { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: g.ids[0], foto: x.foto || null, zaman: simdi });
-  return kapat(`📣 ${x.kod}: Patron onayıyla kanalda${g.link ? `: ${g.link}` : ""}. Selin siteye ekliyor.`);
+  if (!(await env.KAYIT.get(`kemal:pelinYayin:${id}`))) return cevapla("Bu kart artık geçerli değil.");
+  await cevapla(islem === "x" ? "Gönderilmedi" : "Paylaşıyorum");
+  const sonuc = await yayinOnayUygula(env, id, islem === "x" ? "x" : "o");
+  return telegram(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: sonuc });
 }
 
 export async function fabrikaIsleri(env, simdi) {
+  if (env.STOK) { try { await venomYayinKararlari(env); await patronPaylasimAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:pelinTeslimHata", JSON.stringify({ zaman: simdi, hata: `patron/venom: ${String(e && e.message).slice(0, 300)}` }), { expirationTtl: 7 * 86400 }); } }
   if (env.STOK) { try { await pelinKanalAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:pelinTeslimHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
   // Tek seferlik (2 Kasım): KV "venom:soldoutUygula" = [{kod, kanal, arsiv}] → daha önce silinemeyen eski paylaşımlar SOLD OUT ile gizlenir
   const uygula = await env.KAYIT.get("venom:soldoutUygula", "json");

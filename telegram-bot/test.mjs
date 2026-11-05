@@ -1937,3 +1937,36 @@ test("ofis konuşma ucu: anahtarsız 401; Patron adına Kemal'in beyni (Sonnet) 
   assert.match(JSON.stringify(o.istekler[0].messages), /Ofisten, sesli\/yazılı konuşma/);
   assert.ok(!o.istekler[0].tools.some((t) => /paylas$|^sil$/.test(t.name))); // kanala doğrudan paylaşma/silme aracı yok
 });
+
+test("PATRON PAYLAŞIMI (5 Kasım): Kemal'e '3403 paylaş' yazılı albüm → marka basılı fotoğraflar + video → SON YAYIN kartı (Venom'a da); Venom'dan onay → kanal", async () => {
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "999", ALLOWED_IDS: "999,111" });
+  await o.env.KAYIT.put("pelinboy:3403", JSON.stringify({ renk: "koyu bordo", marka: "BLACKROSE" }));
+  const { patronPaylasimAdimi, venomYayinKararlari } = await import("./worker.js");
+  const { kuyruguAl, kuyrugaEkle } = await import("./venom-kopru.js");
+  const gonder = (ek) => guncellemeIsle({ message: { chat: { id: 999, type: "private" }, from: { id: 999, first_name: "Murat" }, message_id: 1, ...ek } }, o.env);
+  await gonder({ media_group_id: "a1", photo: [{ file_id: "F1", width: 900 }], caption: "3403 paylaş" });
+  await gonder({ media_group_id: "a1", video: { file_id: "V1" } });
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /3403 paylaşım için alındı/.test(m.govde.text)));
+  const simdi = Math.floor(Date.now() / 1000);
+  await patronPaylasimAdimi(o.env, simdi + 5); // sessizlik 30 sn dolmadı
+  assert.equal((await kuyruguAl(o.env, "venomOnay")).length, 0);
+  o.gonderilen.length = 0;
+  await patronPaylasimAdimi(o.env, simdi + 60);
+  const alb = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "999");
+  assert.ok(alb, JSON.stringify(cagrilar(o.gonderilen, "sendMessage").map((m) => m.govde.text)));
+  assert.equal(alb.govde.media[0].type, "video");
+  assert.match(alb.govde.media[0].caption, /CODE: 3403/);
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /SON YAYIN ONAYI — 3403 · BLACK ROSE/.test(m.govde.text) && /dark burgundy/i.test(m.govde.text)));
+  const vo = await kuyruguAl(o.env, "venomOnay");
+  assert.equal(vo.length, 1);
+  assert.equal(vo[0].tur, "kemalYayin");
+  await kuyrugaEkle(o.env, "kemalYayinKarar", { id: "k1", kartNo: vo[0].kartNo, islem: "o" });
+  await venomYayinKararlari(o.env);
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+  const s = await kuyruguAl(o.env, "sonuc");
+  assert.match(s.at(-1).aciklama, /📣 3403: Patron onayıyla kanalda/);
+  await kuyrugaEkle(o.env, "kemalYayinKarar", { id: "k2", kartNo: vo[0].kartNo, islem: "o" }); // iki kez paylaşılmaz
+  await venomYayinKararlari(o.env);
+  assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 1);
+});

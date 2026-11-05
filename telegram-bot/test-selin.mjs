@@ -869,3 +869,21 @@ test("Pelin teslim → site (4 Kasım): kanal videosu ürün videolarının baş
   assert.ok(!o.github.dosyalar.has("galeri/3618/pelin-abc.jpg"));
   assert.match(o.depo.get("venom:siteMedyaKaldirSonuc"), /3618: 1 fotoğraf, 1 video kaldırıldı/);
 });
+
+test("FOTO YENİLE (5 Kasım): fotoğraflar yeni adla yeniden kaydedilir (önbellek), eski dosyalar silinir, liste güncellenir", async () => {
+  const { pelinSiteAdimi } = await import("./selin.js");
+  const o = ortam();
+  o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3627", fotolar: ["galeri/3627/1.jpg", "galeri/3627/2.jpg"], videolar: [] }]));
+  o.github.dosyalar.set("galeri/3627/1.jpg", "A"); o.github.dosyalar.set("galeri/3627/2.jpg", "B");
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => (String(url).includes("/contents/galeri/3627/") ? new Response(String(url).includes("1.jpg") ? "A" : "B") : asil(url, istek));
+  o.env.STOK = { idFromName: () => "s", get: () => ({ fetch: async () => Response.json([]) }) };
+  o.depo.set("venom:siteFotoYenile", JSON.stringify({ kod: "3627" }));
+  await pelinSiteAdimi(o.env, ist(11));
+  globalThis.fetch = asil;
+  const u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
+  assert.equal(u.fotolar.length, 2);
+  assert.ok(u.fotolar.every((f) => /^galeri\/3627\/[12]-[a-z0-9]+\.jpg$/.test(f)), JSON.stringify([u.fotolar, o.depo.get("venom:siteFotoYenileSonuc")]));
+  assert.ok(!o.github.dosyalar.has("galeri/3627/1.jpg"));
+  assert.ok(o.github.dosyalar.has(u.fotolar[0]));
+});

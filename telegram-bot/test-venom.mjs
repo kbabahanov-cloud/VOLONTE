@@ -282,3 +282,69 @@ test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; 
   await yazi(o, PATRON, "stok 3557");
   assert.equal(o.claude.length, n + 1);
 });
+
+test("ANAHTAR KÖPRÜSÜ (5 Kasım): Venom kendi anahtarı olmadan Pelin'in anahtarını iç bağlantıyla kullanır; anahtar dışarı çıkmaz, sadece Anthropic/OpenAI", async () => {
+  const { kopruIstegi } = await import("./anahtar-kopru.js");
+  const { claudeIstemci, openaiFetch, claudeVar } = await import("./ai-istemci.js");
+  const asil = globalThis.fetch; const giden = [];
+  globalThis.fetch = async (url, init) => { giden.push({ url: String(url), h: new Headers(init.headers) }); return Response.json({ id: "m", type: "message", role: "assistant", model: "claude-sonnet-5-5", stop_reason: "end_turn", content: [{ type: "text", text: "Merhaba Patron" }], usage: { input_tokens: 1, output_tokens: 1 } }); };
+  try {
+    const pelinEnv = { ANTHROPIC_API_KEY: "GERCEK-A", OPENAI_API_KEY: "GERCEK-O" };
+    const venomEnv = { ANAHTAR: { fetch: (u, i) => kopruIstegi(pelinEnv, new Request(u, i)) } };
+    assert.ok(claudeVar(venomEnv));
+    const r = await claudeIstemci(venomEnv, { maxRetries: 0 }).messages.create({ model: "claude-sonnet-5-5", max_tokens: 10, messages: [{ role: "user", content: "selam" }] });
+    assert.equal(r.content[0].text, "Merhaba Patron");
+    assert.equal(giden[0].url, "https://api.anthropic.com/v1/messages");
+    assert.equal(giden[0].h.get("x-api-key"), "GERCEK-A");
+    await openaiFetch(venomEnv, "/v1/audio/transcriptions", { method: "POST", body: "x" });
+    assert.equal(giden[1].url, "https://api.openai.com/v1/audio/transcriptions");
+    assert.equal(giden[1].h.get("authorization"), "Bearer GERCEK-O");
+    assert.equal((await kopruIstegi(pelinEnv, new Request("https://kopru/evil/x"))).status, 403);
+    assert.equal(giden.length, 2);
+  } finally { globalThis.fetch = asil; }
+});
+
+test("VENOM 5 Kasım: hafıza (kurallar + Patron kararları) sistemde; fotoğraf → kemal_paylas → Kemal kuyruğu; Kemal SON YAYIN kartı Venom'dan onaylanır; bot hataları Patron'a bir kez", async () => {
+  const o = ortam();
+  o.depo.set("venom:bot:hafiza", "Marka Sami'nin deposundan. Etek yerden 2-3 cm.");
+  // karar kaydı + hafıza sistem isteminde
+  o.cevaplar.push({ arac: "karar_kaydet", girdi: { metin: "Bundan sonra 3627 beyaz önce gelsin" } }, { text: "Not aldım Patron." });
+  await yazi(o, PATRON, "bundan sonra 3627 beyaz önce gelsin");
+  o.cevaplar.push({ text: "Tamam." });
+  await yazi(o, PATRON, "selam");
+  const sistem = JSON.stringify(o.claude.at(-1).system);
+  assert.match(sistem, /Etek yerden 2-3 cm/);
+  assert.match(sistem, /3627 beyaz önce gelsin/);
+  // fotoğraf + "3627 kanala hazırla" → kemal_paylas → (20 sn sonra) Kemal kuyruğu, Venom /medya adresleriyle
+  const orijinal = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => { const u = String(url); if (u.endsWith("/getFile")) return Response.json({ ok: true, result: { file_path: "photos/a.jpg" } }); if (u.includes("/file/bot")) return new Response("FOTO"); return orijinal(url, istek); };
+  o.cevaplar.push({ arac: "kemal_paylas", girdi: { kod: "3627" } }, { text: "Kemal hazırlıyor." });
+  await guncelleme({ update_id: uid++, message: { message_id: 2, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: "P1" }], caption: "3627 kanala hazırla" } }, o.env);
+  o.depo.set("venom:bot:medya", JSON.stringify(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => ({ ...m, zaman: 1 }))));
+  await venomCron(o.env, ist(5, 12));
+  const pp = await kuyruguAl(o.env, "patronPaylas");
+  assert.equal(pp.length, 1);
+  assert.equal(pp[0].kod, "3627");
+  assert.match(pp[0].medya[0].url, /^https:\/\/venom\.test\/medya\/[0-9a-f]{32}$/);
+  assert.deepEqual(pp[0].venomMedya, [{ type: "photo", media: "P1" }]);
+  globalThis.fetch = orijinal;
+  // Kemal kartı Venom'a gelir → Patron Venom'dan onaylar → Kemal kuyruğu
+  await kuyrugaEkle(o.env, "venomOnay", { id: "ky-1", tur: "kemalYayin", kartNo: "3627-a.b", kod: "3627", marka: "BLACK ROSE", yazi: "✅ CODE: 3627", medya: [{ type: "video", media: "https://x/v.mp4" }], zaman: 1 });
+  o.g.length = 0;
+  await venomCron(o.env, ist(5, 12, 5));
+  const kart = sonKart(o);
+  assert.match(kart.govde.text, /SON YAYIN ONAYI — 3627 · BLACK ROSE/);
+  assert.ok(o.g.some((x) => x.metod === "sendVideo"));
+  await bas(o, kart.govde.reply_markup.inline_keyboard[0][0].callback_data);
+  const karar = await kuyruguAl(o.env, "kemalYayinKarar");
+  assert.deepEqual([karar[0].kartNo, karar[0].islem], ["3627-a.b", "o"]);
+  // hatalar: ilk çalışmada eski hatalar sessiz, yeni hata bir kez
+  o.depo.set("pelin:hata", JSON.stringify({ zaman: ist(5, 11), yol: "x", hata: "eski" }));
+  await venomCron(o.env, ist(5, 12, 10)); o.g.length = 0;
+  o.depo.set("pelin:hata", JSON.stringify({ zaman: ist(5, 12, 12), yol: "x", hata: "fal hatası" }));
+  await venomCron(o.env, ist(5, 12, 15));
+  await venomCron(o.env, ist(5, 12, 20));
+  const h = patronaGiden(o).filter((x) => /Botlarda hata/.test(x.govde.text));
+  assert.equal(h.length, 1);
+  assert.match(h[0].govde.text, /Pelin: fal hatası/);
+});
