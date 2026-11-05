@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3620",
+  "baslik": "Pinstripe Wide-Leg Suit Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece pinstripe suit in white, pairing a fitted single-breasted jacket with relaxed wide-leg trousers. The jacket features sculpted wide lapels and flap pockets, while the trousers have an elasticated back waistband for easy comfort. Wear it to the office or for formal daytime events, styled with a burgundy tie or coat. Made in Istanbul with careful tailoring.",
+   "fr": "Un tailleur deux pièces blanc à fines rayures, associant une veste ajustée à boutonnage simple et un pantalon large et fluide. La veste se distingue par ses larges revers structurés et ses poches à rabat, tandis que le pantalon offre une ceinture élastiquée au dos pour plus de confort. Idéal au bureau comme pour les occasions de jour plus habillées. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças em branco com riscas finas, que combina um blazer ajustado de abotoamento simples com calças largas e fluidas. O blazer destaca-se pelas lapelas largas e estruturadas e pelos bolsos com pala, e as calças têm cós elástico atrás para maior conforto. Perfeito para o escritório ou eventos formais de dia. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3620/1.jpg",
+   "galeri/3620/2.jpg",
+   "galeri/3620/3.jpg",
+   "galeri/3620/4.jpg",
+   "galeri/3620/5.jpg"
+  ],
+  "videolar": [
+   "selin/3620/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3633",
   "baslik": "Sheer Cape Satin Set",
   "kategori": "sets",
