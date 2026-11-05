@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3545",
+  "baslik": "Croc Print Blazer Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a tailored single-breasted blazer with wide-leg trousers. The blush and cocoa croc-effect print runs across both pieces, finished with notched lapels, two dark buttons and flap pockets. Wear it together for meetings and evening events, or separate the pieces for easy daily styling. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant une veste blazer droite bien coupée à un pantalon large. L'imprimé effet croco, rose poudré et cacao, habille les deux pièces, avec revers crantés, deux boutons foncés et poches à rabat. À porter ensemble pour le bureau ou une soirée, ou séparément au quotidien. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que combina um blazer de abotoamento simples bem estruturado com calça de perna larga. O estampado efeito croco, em rosa suave e cacau, acompanha as duas peças, com lapelas entalhadas, dois botões escuros e bolsos com aba. Use junto para reuniões e eventos à noite, ou separado no dia a dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3545/1.jpg",
+   "galeri/3545/2.jpg",
+   "galeri/3545/3.jpg",
+   "galeri/3545/4.jpg"
+  ],
+  "videolar": [
+   "selin/3545/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3611",
   "baslik": "Embellished Corset Pleated Set",
   "kategori": "sets",
