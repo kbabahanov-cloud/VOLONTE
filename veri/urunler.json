@@ -1,5 +1,34 @@
 [
  {
+  "kod": "3611",
+  "baslik": "Embellished Corset Pleated Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece evening set pairing a halter-neck corset bodysuit with a high-waisted, finely pleated maxi skirt. Clustered paillettes and pearl beads trace the neckline, halter straps and hip panels, while the structured cups and pointed waist shape the silhouette. Suited to galas, weddings and formal dinners. Made in Istanbul with careful hand-finished detailing.",
+   "fr": "Un ensemble de soirée deux pièces associant un body corseté à encolure américaine et une longue jupe plissée taille haute. Des grappes de paillettes et de perles soulignent le décolleté, les bretelles et les empiècements des hanches, tandis que les bonnets structurés et la taille en pointe dessinent la silhouette. Idéal pour les galas, mariages et dîners habillés. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de noite de duas peças que combina um body corset com decote halter e uma saia longa plissada de cintura alta. Aglomerados de paetês e pérolas contornam o decote, as alças e os recortes do quadril, enquanto as taças estruturadas e a cintura em ponta modelam a silhueta. Ideal para galas, casamentos e jantares formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3611/1.jpg",
+   "galeri/3611/2.jpg",
+   "galeri/3611/3.jpg",
+   "galeri/3611/4.jpg",
+   "galeri/3611/5.jpg",
+   "galeri/3611/6.jpg",
+   "galeri/3611/7.jpg",
+   "galeri/3611/8.jpg",
+   "galeri/3611/9.jpg",
+   "galeri/3611/10.jpg"
+  ],
+  "videolar": [
+   "selin/3611/0",
+   "selin/3611/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3548",
   "baslik": "Cloud Print Trouser Set",
   "kategori": "sets",
