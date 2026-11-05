@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3542",
+  "baslik": "Embellished Satin Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece satin set pairing a fitted top with three-quarter sleeves and fluid wide-leg trousers. Hand-embellished black bands with stone fringe trim the boat neckline and waist, while the open back is framed by matching beaded panels and a centre zip. Made for weddings, receptions and evening events. Produced in Istanbul with careful handwork.",
+   "fr": "Ensemble deux pièces en satin associant un haut ajusté à manches trois-quarts et un pantalon large et fluide. Des bandes noires brodées à la main, ornées de franges de pierres, soulignent l'encolure bateau et la taille, tandis que le dos ouvert est encadré de panneaux perlés assortis. Idéal pour les mariages, réceptions et soirées. Fabriqué à Istanbul avec un travail soigné.",
+   "pt": "Conjunto de duas peças em cetim, com blusa ajustada de mangas três-quartos e calça pantalona fluida. Faixas pretas bordadas à mão com franjas de pedras realçam o decote canoa e a cintura, e as costas abertas são emolduradas por painéis bordados combinando. Perfeito para casamentos, recepções e eventos noturnos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3542/1.jpg",
+   "galeri/3542/2.jpg",
+   "galeri/3542/3.jpg",
+   "galeri/3542/4.jpg",
+   "galeri/3542/5.jpg",
+   "galeri/3542/6.jpg",
+   "galeri/3542/7.jpg",
+   "galeri/3542/8.jpg",
+   "galeri/3542/9.jpg",
+   "galeri/3542/10.jpg"
+  ],
+  "videolar": [
+   "selin/3542/0",
+   "selin/3542/1",
+   "selin/3542/2"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "907",
   "baslik": "Embellished Satin Wide-Leg Set",
   "kategori": "sets",
