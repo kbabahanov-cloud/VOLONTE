@@ -1,5 +1,36 @@
 [
  {
+  "kod": "3560",
+  "baslik": "Wrap Jacket Mermaid Skirt Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a tailored wrap jacket with a long mermaid skirt. The jacket features a structured shawl collar, an asymmetric draped waist and defined shoulders, while the skirt flows into a sheer, fluid hem. Suited to formal events, ceremonies and elegant evenings. Produced in Istanbul with careful tailoring.",
+   "fr": "Un ensemble deux pièces associant une veste portefeuille ajustée à une jupe longue sirène. La veste se distingue par un col châle structuré, une taille drapée asymétrique et des épaules bien dessinées, tandis que la jupe s'achève sur un bas fluide et transparent. Idéal pour les cérémonies, événements officiels et soirées élégantes. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina um casaco transpassado de corte alfaiataria com uma saia longa sereia. O casaco tem gola xale estruturada, cintura drapeada assimétrica e ombros bem definidos, e a saia termina numa barra fluida e transparente. Ideal para cerimónias, eventos formais e noites elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3560/1.jpg",
+   "galeri/3560/2.jpg",
+   "galeri/3560/3.jpg",
+   "galeri/3560/4.jpg",
+   "galeri/3560/5.jpg",
+   "galeri/3560/6.jpg",
+   "galeri/3560/7.jpg",
+   "galeri/3560/8.jpg",
+   "galeri/3560/9.jpg",
+   "galeri/3560/10.jpg"
+  ],
+  "videolar": [
+   "selin/3560/0",
+   "selin/3560/1",
+   "selin/3560/2",
+   "selin/3560/3"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3566",
   "baslik": "Satin Cuff Blazer Set",
   "kategori": "sets",
