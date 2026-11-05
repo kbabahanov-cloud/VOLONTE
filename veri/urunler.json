@@ -1,5 +1,26 @@
 [
  {
+  "kod": "3571",
+  "baslik": "Sequin Trim Ruffle Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A relaxed A-line maxi dress with a high stand collar, soft gathers at the neckline and long, wide sleeves. Sequin bands at the collar and cuffs add a quiet shimmer, while the gathered ruffle hem gives easy movement. Wear it to dinners, celebrations or elegant daytime gatherings. Made in Istanbul with careful finishing.",
+   "fr": "Une robe longue évasée à col montant, avec de légères fronces à l'encolure et de longues manches amples. Les bandes de sequins au col et aux poignets apportent un éclat discret, tandis que le volant froncé en bas donne du mouvement. Idéale pour un dîner, une fête ou une réception en journée. Fabriquée à Istanbul avec soin.",
+   "pt": "Um vestido longo de corte evasê com gola alta, franzidos suaves no decote e mangas compridas e amplas. As faixas de lantejoulas na gola e nos punhos trazem um brilho discreto, e a barra franzida com babado dá movimento. Perfeito para jantares, celebrações ou encontros elegantes de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3571/1.jpg",
+   "galeri/3571/2.jpg",
+   "galeri/3571/3.jpg"
+  ],
+  "videolar": [
+   "selin/3571/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-05"
+ },
+ {
   "kod": "3575",
   "baslik": "Lace Tunic Pleated Set",
   "kategori": "sets",
