@@ -636,8 +636,61 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 30 model sahibe istenir (Celal'i
   await gunSonuOzeti(o.env, ist(20, 5));
   const ozet = cagri(o.g, "sendMessage")[0].govde.text;
   assert.match(ozet, /İstenen: 30 · gelen: 1 · bugün siteye çıkan: 1 \(3618\)/);
-  assert.match(ozet, /Gönderilemeyen \(sonra fal\.ai ile\): 29/);
+  assert.match(ozet, /Fotoğrafı gelmeyen → yarın tekrar listede: 28 /); // 5 Kasım: kaybolmaz, yarın tekrar
+  assert.match(ozet, /Eski gönderilemeyen \(liste boşalınca sırayla tekrar istenir\): 1/); // /yok 5019
   Date.now = gercekSaat;
+});
+
+test("LİSTE HEP 30 (5 Kasım): fotoğraf gelen/yok denen modelin yerine gün içinde yeni kod (30 dk'da bir, 0091'e ek mesaj); gelmeyen ertesi gün başta; 3 gün gelmezse 'bulunamıyor' + Patron'a Vegawin stoklu rapor", async () => {
+  const { istekAdimi, gunSonuOzeti, GUNLUK_ISTEK } = await import("./selin.js");
+  const o = ortam();
+  o.env.SAHIP_IDS = "777"; o.env.MURAT_ID = "555,556";
+  o.depo.set("selin:sahip", "999");
+  const stok = {};
+  for (let i = 0; i < 70; i++) stok[String(6000 + i)] = { toplam: 2, fiyat: 10 };
+  stokBagla(o, stok);
+  const stokFetch = o.env.STOK.get().fetch;
+  o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
+    ? Response.json(Object.entries(o.stok).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat, tedarikci: null })))
+    : url.endsWith("/bilgi") ? Response.json({ kod: JSON.parse(init.body).kod, satirlar: [{ magaza: "VOLONTE", adet: 2 }] }) : stokFetch(url, init) }) };
+  const gun1 = ist(10, 5);
+  await istekAdimi(o.env, gun1);
+  const ilk = cagri(o.g, "sendMessage")[0].govde.text.split("\n")[1].split(", ");
+  assert.equal(ilk.length, GUNLUK_ISTEK);
+  // iki modelin fotoğrafı geldi + biri /yok → 30 dk dolmadan eklenmez, sonra 3 yeni kod 0091'e
+  const m = JSON.parse(o.depo.get("selin:modeller"));
+  m[ilk[0]].durum = "geldi"; m[ilk[1]].durum = "onayda"; m[ilk[2]] = { ...m[ilk[2]], durum: "gonderilemedi", yokDendi: true };
+  o.depo.set("selin:modeller", JSON.stringify(m));
+  o.g.length = 0;
+  await istekAdimi(o.env, gun1 + 600);
+  assert.equal(cagri(o.g, "sendMessage").length, 0);
+  await istekAdimi(o.env, gun1 + 1900);
+  const ek = cagri(o.g, "sendMessage");
+  assert.deepEqual(ek.map((x) => x.govde.chat_id), ["999"]);
+  assert.match(ek[0].govde.text, /^➕ Listeye eklenenler \(3\): /);
+  const eklenen = ek[0].govde.text.split("\n")[0].split(": ")[1].split(", ");
+  assert.ok(eklenen.every((k) => !ilk.includes(k)));
+  const ist1 = JSON.parse(o.depo.get(`selin:istek:${new Date((gun1 + 3 * 3600) * 1000).toISOString().slice(0, 10)}`));
+  assert.equal(ist1.kodlar.length, 33);
+  // 20:00: 30 açık gelmedi → "bekliyor"; ertesi gün listenin BAŞINDA
+  o.g.length = 0;
+  await gunSonuOzeti(o.env, ist(20, 5));
+  let mm = JSON.parse(o.depo.get("selin:modeller"));
+  assert.equal(mm[ilk[5]].durum, "bekliyor");
+  assert.equal(mm[ilk[5]].kacirma, 1);
+  for (let g = 1; g <= 2; g++) {
+    o.g.length = 0;
+    await istekAdimi(o.env, gun1 + g * 86400);
+    const liste = cagri(o.g, "sendMessage")[0].govde.text.split("\n")[1].split(", ");
+    assert.ok(liste.includes(ilk[5]));
+    o.g.length = 0;
+    await gunSonuOzeti(o.env, ist(20, 5) + g * 86400);
+  }
+  mm = JSON.parse(o.depo.get("selin:modeller"));
+  assert.equal(mm[ilk[5]].durum, "bulunamiyor");
+  const rapor = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "555");
+  assert.match(rapor.govde.text, /3 gün üst üste[\s\S]*Vegawin'de VOLONTE 2 adet/);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "556"));
 });
 
 test("yazısız dosyalar + ayrı kod mesajı: '3183 Küçük' gelince son yazısız dosyalar bağlanır, tek cevap; eski menü yok; bekleyen yoksa sohbetten geri bulunur", async () => {

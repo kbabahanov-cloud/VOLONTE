@@ -1193,7 +1193,12 @@ const ISTEK_SAATI = 10;
 const GUN_SONU_SAATI = 20;
 // Önce: önizlemede fotoğrafı karışan 24 model + sitedeki 4 model (yeni yolla baştan), sonra stoktaki diğerleri.
 const ONCELIKLI = ["3183", "3186", "3322", "3335", "3360", "3403", "3407", "3411", "3429", "3439", "3475", "3481", "3506", "3520", "3558", "3565", "3567", "3577", "3578", "3583", "3592", "3593", "3618", "4211", "3563", "3279", "3595", "3448"];
-const OZEL_ACIK = ["istendi", "geldi", "onayda", "yukleniyor", "sitede", "gonderilemedi", "eklenmeyecek"];
+const OZEL_ACIK = ["istendi", "geldi", "onayda", "yukleniyor", "sitede", "gonderilemedi", "eklenmeyecek", "bekliyor", "bulunamiyor"];
+// 5 Kasım (Patron): liste HEP 30 — fotoğrafı gelen (ya da /yok denen) modelin yerine gün içinde yeni kod eklenir (en sık 30 dk'da bir,
+// 0091'e kısa ek mesaj). Gelmeyen model kaybolmaz: 20:00'de "bekliyor" → ertesi gün listenin başında; 3 gün üst üste gelmezse
+// "bulunamiyor" + Patron'a rapor (Sami'nin Vegawin stoğuyla). Havuz sırası: bekliyor → yeni (stokta, sitede değil) → eski gönderilemedi.
+const EK_ARALIK = 30 * 60;
+export const KACIRMA_SINIRI = 3;
 const BEDEN_KELIME = [[/k[üu][çc][üu]k/i, "k"], [/b[üu]y[üu]k/i, "b"], [/ik[iı]s[iı]/i, "i"]];
 
 const sahipler = async (env) => [...new Set([...kimlikler(env.SAHIP_IDS), ...kimlikler(await env.KAYIT.get("selin:sahip"))])];
@@ -1214,7 +1219,7 @@ export async function istekAdaylari(env, modeller, sitede = new Set()) {
   // Celal'in modelleri (Vegawin kodu "CELAL" ile biten; köprü sadece işaret gönderir): listede EN SONA (kullanıcı kararı 30 Ekim).
   const celal = new Set(stok.filter((r) => r.tedarikci === "CELAL").map((r) => String(r.kod)));
   const sirali = [...oncelik, ...diger];
-  return { kodlar: sirali, celal };
+  return { kodlar: sirali, celal, stoktaki: kodlar };
 }
 async function stokIste2(env, yol, govde = {}) {
   if (!env.STOK) return [];
@@ -1224,6 +1229,36 @@ async function stokIste2(env, yol, govde = {}) {
   } catch {
     return [];
   }
+}
+
+// İstek havuzu: dünden kalan "bekliyor" (çok kaçırılan önce) → yeni adaylar → eski "gönderilemedi" (/yok denenler hariç)
+export function istekHavuzu(modeller, sitede, yeni, stoktaki, haric = new Set()) {
+  const ac = (k, d) => !sitede.has(k) && !haric.has(k) && modeller[k] && ozelMi(modeller[k]) && modeller[k].durum === d;
+  const bekliyor = stoktaki.filter((k) => ac(k, "bekliyor")).sort((a, b) => (modeller[b].kacirma || 0) - (modeller[a].kacirma || 0) || Number(b) - Number(a));
+  const eski = stoktaki.filter((k) => ac(k, "gonderilemedi") && !modeller[k].yokDendi).sort((a, b) => Number(b) - Number(a));
+  return [...new Set([...bekliyor, ...yeni.filter((k) => !haric.has(k)), ...eski])];
+}
+const listeKisileri = async (env) => { const s = kimlikler(await env.KAYIT.get("selin:sahip")); return s.length ? s : sahipler(env); }; // 0091
+// Gün içi tamamlama: açık ("istendi") model sayısı 30'un altına düşünce havuzdan eklenir
+export async function listeTamamla(env, gun, ist, simdi) {
+  if (simdi - (ist.ekZaman || ist.zaman || 0) < EK_ARALIK) return;
+  const modeller = await oku(env, "selin:modeller", {});
+  const aktif = (ist.kodlar || []).filter((k) => modeller[k] && ozelMi(modeller[k]) && modeller[k].durum === "istendi");
+  const gerek = GUNLUK_ISTEK - aktif.length;
+  ist.ekZaman = simdi;
+  if (gerek <= 0) return yazKV(env, `selin:istek:${gun}`, ist, 30 * 86400);
+  let sitede; try { sitede = await sitedekiKodlar(env); } catch { return; }
+  const { kodlar, celal, stoktaki } = await istekAdaylari(env, modeller, sitede);
+  const ek = istekHavuzu(modeller, sitede, kodlar, stoktaki, new Set(ist.kodlar || [])).slice(0, gerek);
+  if (!ek.length) return yazKV(env, `selin:istek:${gun}`, ist, 30 * 86400);
+  const sirali = [...ek.filter((k) => !celal.has(k)), ...ek.filter((k) => celal.has(k))];
+  for (const k of sirali) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "istendi", istenme: simdi, medya: [], kart: [] };
+  await yazKV(env, "selin:modeller", modeller);
+  ist.kodlar = [...(ist.kodlar || []), ...sirali];
+  ist.eklenen = [...(ist.eklenen || []), ...sirali];
+  await yazKV(env, `selin:istek:${gun}`, ist, 30 * 86400);
+  const metin = `➕ Listeye eklenenler (${sirali.length}): ${sirali.join(", ")}\nBugün açık ${aktif.length + sirali.length} model. Aynı kural: 📎 Dosya olarak + "kod Küçük/Büyük/İkisi de"; gönderemeyeceğiniz: /yok kod`;
+  for (const k of await listeKisileri(env)) await tg(env, "sendMessage", { chat_id: k, text: metin });
 }
 
 // 10:00 — günün istek listesi (bir kez). Sahiplere (0091 hesabı + Merdan: SAHIP_IDS) gider; Celal'in modelleri en sonda.
@@ -1293,15 +1328,16 @@ export async function istekAdimi(env, simdi) {
   if (s < ISTEK_SAATI || s >= GUN_SONU_SAATI) return;
   const gun = gunAnahtari(simdi);
   if (await ekIstekAdimi(env, gun, simdi)) return;
-  if (await env.KAYIT.get(`selin:istek:${gun}`)) return;
+  const mevcut = await oku(env, `selin:istek:${gun}`, null);
+  if (mevcut) return listeTamamla(env, gun, mevcut, simdi);
   const kime = await sahipler(env);
   if (!kime.length) return; // sahip (0091) tanımlanmadan istek gitmez
   const modeller = await oku(env, "selin:modeller", {});
   let sitede;
   try { sitede = await sitedekiKodlar(env); } catch { return; } // site listesi okunamazsa yanlış istek yerine sonraki turda tekrar
-  const { kodlar, celal } = await istekAdaylari(env, modeller, sitede);
-  // Günün 30 modeli normal sırayla seçilir; liste içinde Celal'in modelleri en sona konur.
-  const ilk = kodlar.slice(0, GUNLUK_ISTEK);
+  const { kodlar, celal, stoktaki } = await istekAdaylari(env, modeller, sitede);
+  // Günün 30 modeli: önce dünden kalan "bekliyor", sonra yeni adaylar, yetmezse eski gönderilemedi; Celal'inkiler en sonda.
+  const ilk = istekHavuzu(modeller, sitede, kodlar, stoktaki).slice(0, GUNLUK_ISTEK);
   const secilen = [...ilk.filter((k) => !celal.has(k)), ...ilk.filter((k) => celal.has(k))];
   await yazKV(env, `selin:istek:${gun}`, { kodlar: secilen, zaman: simdi }, 30 * 86400);
   if (!secilen.length) return;
@@ -1411,7 +1447,7 @@ async function dosyalariBagla(env, uid, kod, grup, dosyalar, simdi, { album = nu
   const eski = modeller[kod] || {};
   // Aynı koda sonradan gelen dosya (ör. unutulan video) mevcut dosyalara eklenir; taslak yeniden hazırlanır.
   const devam = ozelMi(eski) && ["geldi", "onayda", "hazirlanamadi"].includes(eski.durum);
-  const x = devam ? { ...eski, kart: eski.durum === "onayda" ? [] : eski.kart || [], hata: 0 } : { ...eski, kaynak: "ozel", durum: "geldi", medya: [], kart: [], gonderen: uid, hata: 0, bildirildi: false };
+  const x = devam ? { ...eski, kart: eski.durum === "onayda" ? [] : eski.kart || [], hata: 0 } : { ...eski, kaynak: "ozel", durum: "geldi", medya: [], kart: [], gonderen: uid, hata: 0, bildirildi: false, kacirma: 0 };
   for (const md of [...bekleyen, ...dosyalar]) if (!x.medya.some((y) => y.uid === md.uid)) x.medya.push({ file_id: md.file_id, tur: md.tur, belge: md.belge || false, boyut: md.boyut || 0, w: md.w || 0, h: md.h || 0, uid: md.uid });
   if (grup) x.bedenGrubu = grup;
   x.sonMedya = bildirimSonra ? simdi : simdi - 120; // kod mesajıyla gelenler hemen hazırlanır
@@ -1707,6 +1743,20 @@ export async function siteSilAdimi(env, simdi) {
 }
 
 // 20:00 — günün özeti; bugün istenip hiç dosyası gelmeyenler "gönderilemedi" listesine (sonra fal.ai).
+// 3 gün üst üste fotoğraf gelmeyen modeller → Patron'a: Sami'nin deposundaki (Vegawin) stok, mağazalar AYRI
+const patronKimligi = (env) => kimlikler(env.MURAT_ID)[0] || null;
+async function bulunamiyorRaporu(env, kodlar, simdi) {
+  const satir = [];
+  for (const k of kodlar.slice(0, 40)) {
+    const b = env.STOK ? await stokIste2(env, "/bilgi", { kod: k }) : null;
+    const st = ((b && b.satirlar) || []).filter((r) => r.adet > 0).map((r) => `${r.magaza === "BLACKROSE" ? "BLACK ROSE" : r.magaza} ${r.adet} adet`);
+    satir.push(`• ${k}: ${st.length ? `Vegawin'de ${st.join(" · ")}` : "Vegawin'de stok YOK (satılmış/düşülmüş olabilir)"}`);
+  }
+  const metin = [`🔎 Selin — ${kodlar.length} model 3 gün üst üste istendi, fotoğrafı gelmedi ("bulunamıyor"):`, ...satir, "", "Vegawin stok gösteriyorsa rafta gerçekten var mı bakılmalı; yoksa Vegawin'den düşülmeli. Fotoğrafı gelirse model kendiliğinden listeye döner."].join("\n");
+  const kime = patronKimligi(env) ? [patronKimligi(env)] : await sahipler(env);
+  for (const k of kime) await tg(env, "sendMessage", { chat_id: k, text: metin });
+  await yazKV(env, "venom:selinBulunamiyor", { zaman: simdi, kodlar }, 30 * 86400);
+}
 export async function gunSonuOzeti(env, simdi) {
   if (saat(simdi) < GUN_SONU_SAATI) return;
   const gun = gunAnahtari(simdi);
@@ -1719,8 +1769,14 @@ export async function gunSonuOzeti(env, simdi) {
   const bugun = istek ? istek.kodlar : [];
   const gelmeyen = bugun.filter((k) => modeller[k] && modeller[k].durum === "istendi");
   const gelen = bugun.filter((k) => modeller[k] && ["geldi", "onayda", "yukleniyor", "sitede", "hazirlanamadi", "eklenmeyecek"].includes(modeller[k].durum));
-  for (const k of gelmeyen) modeller[k].durum = "gonderilemedi";
+  const yarin = [], bulunamiyor = [];
+  for (const k of gelmeyen) {
+    const n = (modeller[k].kacirma || 0) + 1;
+    modeller[k] = { ...modeller[k], kacirma: n, durum: n >= KACIRMA_SINIRI ? "bulunamiyor" : "bekliyor", ...(n >= KACIRMA_SINIRI ? { bulunamiyorZaman: simdi } : {}) };
+    (n >= KACIRMA_SINIRI ? bulunamiyor : yarin).push(k);
+  }
   await yazKV(env, "selin:modeller", modeller);
+  if (bulunamiyor.length) await bulunamiyorRaporu(env, bulunamiyor, simdi).catch(() => null);
   const ozel = Object.entries(modeller).filter(([, m]) => ozelMi(m));
   const say = (d, f = () => true) => ozel.filter(([k, m]) => m.durum === d && f(k, m)).map(([k]) => k);
   const bugunSitede = say("sitede", (k, m) => gunAnahtari(m.zaman || 0) === gun);
@@ -1730,7 +1786,9 @@ export async function gunSonuOzeti(env, simdi) {
     `🌙 Selin — ${gun.split("-").reverse().join(".")} gün sonu`,
     `İstenen: ${bugun.length} · gelen: ${gelen.length} · bugün siteye çıkan: ${bugunSitede.length}${bugunSitede.length ? ` (${bugunSitede.join(", ")})` : ""}`,
     `Onayınızı bekleyen: ${onayda.length}${onayda.length ? ` (${onayda.join(", ")})` : ""}`,
-    `Gönderilemeyen (sonra fal.ai ile): ${gonderilemedi.length}${gonderilemedi.length ? ` — ${gonderilemedi.slice(0, 30).join(", ")}${gonderilemedi.length > 30 ? " …" : ""}` : ""}`,
+    `Fotoğrafı gelmeyen → yarın tekrar listede: ${yarin.length}${yarin.length ? ` (${yarin.join(", ")})` : ""}`,
+    ...(bulunamiyor.length ? [`🔎 3 gün üst üste gelmeyen → "bulunamıyor" (Patron'a rapor gitti): ${bulunamiyor.join(", ")}`] : []),
+    `Eski gönderilemeyen (liste boşalınca sırayla tekrar istenir): ${gonderilemedi.length}`,
   ].join("\n");
   for (const k of kime) await tg(env, "sendMessage", { chat_id: k, text: metin });
 }
@@ -2177,7 +2235,7 @@ export async function guncelleme(u, env) {
   if (komut === "/yok") {
     const modeller = await oku(env, "selin:modeller", {});
     const kodlar = arg.filter((k) => /^\d{3,6}$/.test(k));
-    for (const k of kodlar) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "gonderilemedi", zaman: simdi };
+    for (const k of kodlar) modeller[k] = { ...(modeller[k] || {}), kaynak: "ozel", durum: "gonderilemedi", zaman: simdi, yokDendi: true };
     await yazKV(env, "selin:modeller", modeller);
     return yaz(kodlar.length ? `Tamam: ${kodlar.join(", ")} gönderilemeyenlere alındı (sonra fal.ai ile).${await kalanSatiri(env, simdi, modeller)}` : "Örnek: /yok 3503 3518");
   }
