@@ -323,13 +323,17 @@
   "baslik": "Sheer Sleeve Lace Waist Maxi",
   "kategori": "evening",
   "aciklama": {
-   "en": "A floor-length maxi dress in flowing sheer black fabric, with a gathered high neck and a softly pleated skirt. Full bishop sleeves finish in lace cuffs, while a sequined lace waistband and a buttoned keyhole at the back add quiet detail. Suited to evening events, celebrations and formal gatherings. Made in Istanbul with careful craftsmanship. Colors: black, dark burgundy.",
-   "fr": "Robe longue noire dans un tissu fluide et transparent, au col montant froncé et à la jupe finement plissée. Les manches bouffantes se terminent par des poignets en dentelle, tandis qu'une taille en dentelle pailletée et une ouverture boutonnée au dos apportent une touche raffinée. Idéale pour les soirées, cérémonies et réceptions. Fabriquée à Istanbul avec un soin particulier. Couleurs : noir, bordeaux foncé.",
-   "pt": "Vestido longo preto em tecido fluido e transparente, com gola alta franzida e saia suavemente plissada. As mangas bufantes terminam em punhos de renda, e a cintura em renda com lantejoulas e a abertura abotoada nas costas trazem um toque elegante. Ideal para eventos noturnos, celebrações e ocasiões formais. Produzido em Istambul com acabamento cuidadoso. Cores: preto, bordô escuro."
+   "en": "A floor-length maxi dress in flowing sheer black fabric, with a gathered high neck and a softly pleated skirt. Full bishop sleeves finish in lace cuffs, while a sequined lace waistband and a buttoned keyhole at the back add quiet detail. Suited to evening events, celebrations and formal gatherings. Made in Istanbul with careful craftsmanship. Colors: black, dark burgundy, white.",
+   "fr": "Robe longue noire dans un tissu fluide et transparent, au col montant froncé et à la jupe finement plissée. Les manches bouffantes se terminent par des poignets en dentelle, tandis qu'une taille en dentelle pailletée et une ouverture boutonnée au dos apportent une touche raffinée. Idéale pour les soirées, cérémonies et réceptions. Fabriquée à Istanbul avec un soin particulier. Couleurs : noir, bordeaux foncé, blanc.",
+   "pt": "Vestido longo preto em tecido fluido e transparente, com gola alta franzida e saia suavemente plissada. As mangas bufantes terminam em punhos de renda, e a cintura em renda com lantejoulas e a abertura abotoada nas costas trazem um toque elegante. Ideal para eventos noturnos, celebrações e ocasiões formais. Produzido em Istambul com acabamento cuidadoso. Cores: preto, bordô escuro, branco."
   },
   "bedenler": "38-40-42-44-46-48-50",
   "fotolar": [
    "galeri/3627/1-to0vi3.jpg",
+   "galeri/3627/pelin-to17jf-0.jpg",
+   "galeri/3627/pelin-to17jf-1.jpg",
+   "galeri/3627/pelin-to17jf-2.jpg",
+   "galeri/3627/pelin-to17jf-3.jpg",
    "galeri/3627/pelin-to10d3-0.jpg",
    "galeri/3627/pelin-to10d3-1.jpg",
    "galeri/3627/pelin-to10d3-2.jpg",
@@ -348,7 +352,8 @@
   "eklenme": "2026-11-05",
   "renkler": [
    "siyah",
-   "koyu bordo"
+   "koyu bordo",
+   "beyaz"
   ]
  },
  {
