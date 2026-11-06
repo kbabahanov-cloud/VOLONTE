@@ -1,5 +1,34 @@
 [
  {
+  "kod": "3514",
+  "baslik": "Ruffle Placket Kimono Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing kimono-style kaftan with wide-leg trousers. The stand collar carries a leopard trim, a ruffled button placket frames the front, and a leopard print rises like flames from the hem. Easy to wear for gatherings, celebrations or relaxed elegant days. Made in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant un caftan ample façon kimono à un pantalon large. Le col montant est bordé de léopard, un plastron volanté boutonné anime le devant et l'imprimé léopard monte en flammes depuis l'ourlet. Idéal pour les réceptions, les fêtes ou les journées élégantes et décontractées. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que une um cafetã fluido em estilo quimono a calças de perna larga. A gola alta tem acabamento em leopardo, a carcela com babados e botões valoriza a frente e o padrão de leopardo sobe em chamas a partir da barra. Perfeito para encontros, celebrações ou dias elegantes e descontraídos. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3514/1.jpg",
+   "galeri/3514/2.jpg",
+   "galeri/3514/3.jpg",
+   "galeri/3514/4.jpg",
+   "galeri/3514/5.jpg",
+   "galeri/3514/6.jpg",
+   "galeri/3514/7.jpg",
+   "galeri/3514/8.jpg",
+   "galeri/3514/9.jpg",
+   "galeri/3514/10.jpg"
+  ],
+  "videolar": [
+   "selin/3514/0",
+   "selin/3514/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3517",
   "baslik": "Printed Kimono Pants Set",
   "kategori": "sets",
