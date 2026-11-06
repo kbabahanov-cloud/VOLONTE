@@ -642,7 +642,9 @@
    "galeri/3396/6.jpg",
    "galeri/3396/7.jpg"
   ],
-  "videolar": [],
+  "videolar": [
+   "selin/3396/1"
+  ],
   "gizli": false,
   "eklenme": "2026-11-05"
  },
@@ -2498,6 +2500,7 @@
    "galeri/3582/4.jpg"
   ],
   "videolar": [
+   "selin/3582/2",
    "selin/3582/1"
   ],
   "gizli": false,
