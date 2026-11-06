@@ -1,5 +1,23 @@
 [
  {
+  "kod": "3504",
+  "baslik": "Belted Tailored Trouser Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece trouser suit in warm brown, pairing a single-breasted blazer with wide-leg pressed trousers. The jacket features notch lapels, gold-tone buttons, flap pockets and a slim black belt with a gold buckle that defines the waist. Wear it to the office, meetings or polished evening plans. Made in Istanbul with careful tailoring.",
+   "fr": "Un tailleur pantalon deux pièces dans un brun chaleureux, associant une veste droite à un pantalon large à pli marqué. La veste se distingue par ses revers crantés, ses boutons dorés, ses poches à rabat et une fine ceinture noire à boucle dorée qui marque la taille. Idéal pour le bureau, les rendez-vous ou une soirée élégante. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças em castanho quente, que combina um blazer de abotoamento simples com calças largas de vinco marcado. O casaco tem lapelas entalhadas, botões dourados, bolsos com pala e um cinto preto fino com fivela dourada que define a cintura. Perfeito para o escritório, reuniões ou uma noite elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3504/1.jpg",
+   "galeri/3504/2.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3511",
   "baslik": "Organza Sleeve Wrap Suit",
   "kategori": "sets",
