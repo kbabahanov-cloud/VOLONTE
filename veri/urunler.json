@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3512",
+  "baslik": "Striped Batwing Kaftan Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A flowing two-piece kaftan dress: a sheer tonal-striped outer layer with wide batwing sleeves, worn over a slim sleeveless inner dress. A round neckline, defined waist and side drawstrings let you gather the skirt into soft drapes. Made for evening events, ceremonies and celebrations. Produced in Istanbul with careful finishing.",
+   "fr": "Une robe caftan fluide en deux pièces : une robe extérieure légèrement transparente à rayures ton sur ton et larges manches chauve-souris, portée sur une fine robe intérieure à bretelles. Encolure ronde, taille marquée et cordons latéraux pour draper la jupe à votre goût. Idéale pour les soirées, cérémonies et fêtes. Fabriquée à Istanbul avec soin.",
+   "pt": "Um vestido caftan fluido em duas peças: vestido exterior translúcido com riscas tom sobre tom e mangas morcego amplas, usado sobre um vestido interior justo de alças. Decote redondo, cintura marcada e cordões laterais permitem franzir a saia em drapeados suaves. Pensado para noites, cerimónias e celebrações. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3512/1.jpg",
+   "galeri/3512/2.jpg",
+   "galeri/3512/3.jpg",
+   "galeri/3512/4.jpg",
+   "galeri/3512/5.jpg"
+  ],
+  "videolar": [
+   "selin/3512/0"
+  ],
+  "gizli": true,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3514",
   "baslik": "Ruffle Placket Kimono Set",
   "kategori": "sets",
