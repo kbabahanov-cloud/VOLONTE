@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3625",
+  "baslik": "Lace Tiered Tulle Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length evening look pairing a loose lace overlayer with a tiered tulle skirt. The V-neckline is edged in sequin trim, sheer tulle sleeves flare wide with sequinned hems, and each skirt tier carries the same sparkling border. Made for weddings, receptions and special evenings. Produced in Istanbul with careful finishing.",
+   "fr": "Une tenue de soirée longue qui associe un haut ample en dentelle à une jupe en tulle à volants étagés. Le décolleté en V est bordé de sequins, les manches évasées en tulle transparent se terminent par une finition pailletée, reprise sur chaque volant. Idéale pour les mariages, réceptions et soirées. Fabriquée à Istanbul avec soin.",
+   "pt": "Um look de festa longo que combina uma parte superior ampla em renda com uma saia de tule em camadas. O decote em V tem acabamento em paetês, as mangas largas de tule transparente terminam em barra brilhante, repetida em cada camada da saia. Perfeito para casamentos, recepções e noites especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3625/1.jpg",
+   "galeri/3625/2.jpg",
+   "galeri/3625/3.jpg",
+   "galeri/3625/4.jpg"
+  ],
+  "videolar": [
+   "selin/3625/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3504",
   "baslik": "Belted Tailored Trouser Suit",
   "kategori": "sets",
