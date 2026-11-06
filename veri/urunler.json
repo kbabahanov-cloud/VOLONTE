@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3511",
+  "baslik": "Organza Sleeve Wrap Suit",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sleeveless-cut wrap blazer with wide-leg trousers in a rich red. The jacket features a notched lapel, a slim side tie at the waist and sheer printed organza balloon sleeves finished with structured cuffs. Polished for office days, ceremonies and evening events. Made in Istanbul with careful attention to finish.",
+   "fr": "Un ensemble deux pièces associant une veste portefeuille à des pantalons larges, dans un rouge profond. La veste se distingue par son col cranté, un fin lien noué sur le côté et des manches ballon en organza imprimé, terminées par des poignets nets. Élégant au bureau, lors de cérémonies ou en soirée. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que une um blazer transpassado a calças de perna larga, num vermelho intenso. O blazer tem gola entalhada, um laço fino na lateral da cintura e mangas balão em organza estampada com punhos estruturados. Ideal para o escritório, cerimónias e eventos à noite. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3511/1.jpg",
+   "galeri/3511/2.jpg",
+   "galeri/3511/3.jpg",
+   "galeri/3511/4.jpg",
+   "galeri/3511/5.jpg"
+  ],
+  "videolar": [
+   "selin/3511/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3512",
   "baslik": "Striped Batwing Kaftan Dress",
   "kategori": "evening",
