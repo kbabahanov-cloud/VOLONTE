@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3522",
+  "baslik": "Brooch Detail Blazer Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A navy two-piece suit pairing a single-button tailored blazer with high-waisted wide-leg trousers. Gold-tone brooches in varied shapes decorate the lapels and front, while notched lapels and flap pockets keep the line sharp. Wear it to the office, meetings or evening events, styled over lace or a simple top. Made in Istanbul with careful tailoring.",
+   "fr": "Un tailleur-pantalon bleu marine composé d'un blazer ajusté à un bouton et d'un pantalon large taille haute. Des broches dorées aux formes variées ornent les revers et le devant, tandis que le col cranté et les poches à rabat structurent la silhouette. À porter au bureau, en réunion ou en soirée, sur un haut en dentelle ou un top sobre. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto azul-marinho de duas peças com blazer acinturado de um botão e calça de cintura alta e perna larga. Broches dourados em formas variadas decoram as lapelas e a frente, enquanto a gola entalhada e os bolsos com pala mantêm o corte elegante. Ideal para o escritório, reuniões ou eventos à noite, com renda ou uma blusa simples. Feito em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3522/1.jpg",
+   "galeri/3522/2.jpg",
+   "galeri/3522/3.jpg",
+   "galeri/3522/4.jpg",
+   "galeri/3522/5.jpg"
+  ],
+  "videolar": [
+   "selin/3522/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3528",
   "baslik": "Printed Satin Kimono Set",
   "kategori": "sets",
