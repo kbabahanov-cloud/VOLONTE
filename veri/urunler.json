@@ -1,5 +1,35 @@
 [
  {
+  "kod": "3534",
+  "baslik": "Belted Draped Midi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A sleeveless midi dress with a tailored, blazer-inspired cut and a softly draped front panel that falls into an asymmetric hem. Structured shoulders, a wrap V-neckline, flap pockets and a slim belt define the waist. Easy to wear from the office to dinners and special events. Produced in Istanbul with careful workmanship.",
+   "fr": "Robe midi sans manches à la coupe tailleur, inspirée du blazer, avec un pan drapé sur le devant qui tombe en ourlet asymétrique. Épaules structurées, encolure en V croisée, poches à rabat et fine ceinture marquent la taille. Elle se porte aussi bien au bureau qu'aux dîners et événements. Fabriquée à Istanbul avec soin.",
+   "pt": "Vestido midi sem mangas, de corte alfaiataria inspirado no blazer, com painel drapeado à frente que cai numa bainha assimétrica. Ombros estruturados, decote em V traçado, bolsos com pala e cinto fino marcam a cintura. Ideal do escritório a jantares e ocasiões especiais. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3534/1.jpg",
+   "galeri/3534/2.jpg",
+   "galeri/3534/3.jpg",
+   "galeri/3534/4.jpg",
+   "galeri/3534/5.jpg",
+   "galeri/3534/6.jpg",
+   "galeri/3534/7.jpg",
+   "galeri/3534/8.jpg",
+   "galeri/3534/9.jpg",
+   "galeri/3534/10.jpg"
+  ],
+  "videolar": [
+   "selin/3534/0",
+   "selin/3534/1",
+   "selin/3534/2"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3535",
   "baslik": "Pleated Satin Maxi Set",
   "kategori": "sets",
