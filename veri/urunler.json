@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3332",
+  "baslik": "Embellished Flared Jumpsuit",
+  "kategori": "jumpsuits",
+  "aciklama": {
+   "en": "A long-sleeved jumpsuit with a round neckline, defined waistband and flared legs shaped by front pressed seams. The bodice is scattered with crystal flower appliqués and pearl details, with a concealed back zip for a clean finish. Wear it to evening events, celebrations or elegant dinners. Made in Istanbul with careful workmanship.",
+   "fr": "Une combinaison à manches longues, encolure ronde, taille marquée et jambes évasées soulignées par des coutures nervurées. Le buste est orné de fleurs en cristal et de perles, avec une fermeture éclair invisible au dos. Idéale pour les soirées, cérémonies et dîners élégants. Confectionnée à Istanbul avec un travail soigné.",
+   "pt": "Macacão de mangas compridas com decote redondo, cintura marcada e pernas em boca de sino com pespontos frontais. O corpete leva aplicações de flores em cristal e pérolas, com fecho invisível nas costas. Perfeito para eventos à noite, cerimónias e jantares elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3332/1.jpg",
+   "galeri/3332/2.jpg",
+   "galeri/3332/3.jpg",
+   "galeri/3332/4.jpg",
+   "galeri/3332/5.jpg",
+   "galeri/3332/6.jpg"
+  ],
+  "videolar": [
+   "selin/3332/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3401",
   "baslik": "Printed Wide-Leg Jumpsuit",
   "kategori": "jumpsuits",
