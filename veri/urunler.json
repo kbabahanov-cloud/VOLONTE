@@ -1,5 +1,26 @@
 [
  {
+  "kod": "3528",
+  "baslik": "Printed Satin Kimono Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a long button-front tunic with a flowing kimono-style overlay and matching wide-leg trousers. The mandarin collar, wide draped sleeves and soft watercolour leaf print give it a fluid, polished look with a satin sheen. Easy to wear for daytime events, gatherings and travel. Produced in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant une longue tunique boutonnée à effet kimono et un pantalon large assorti. Le col mao, les larges manches drapées et l'imprimé feuillage aquarelle créent une allure fluide et soignée, au fini satiné. Idéal pour les événements de journée, les réceptions et les voyages. Fabriqué à Istanbul avec un savoir-faire attentif.",
+   "pt": "Um conjunto de duas peças com túnica longa abotoada em estilo quimono e calça pantalona combinando. A gola padre, as mangas amplas e drapeadas e a estampa de folhas em aquarela trazem um visual fluido e elegante, com brilho acetinado. Ideal para eventos diurnos, encontros e viagens. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3528/1.jpg",
+   "galeri/3528/2.jpg",
+   "galeri/3528/3.jpg"
+  ],
+  "videolar": [
+   "selin/3528/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3534",
   "baslik": "Belted Draped Midi Dress",
   "kategori": "dresses",
