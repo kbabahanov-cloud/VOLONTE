@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3535",
+  "baslik": "Pleated Satin Maxi Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece look pairing a long-sleeve sheer mesh top with a flowing pleated maxi skirt. The top features a tonal flocked geometric pattern and a clean round neckline, while the satin-finish skirt sits on a wide smooth waistband and moves beautifully with every step. Ideal for evening events, celebrations and refined occasions. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un haut en tulle transparent à manches longues et une jupe longue plissée fluide. Le haut présente un motif géométrique floqué ton sur ton et une encolure ronde nette, tandis que la jupe à l'aspect satiné repose sur une large ceinture lisse et bouge avec élégance. Idéal pour les soirées, les fêtes et les occasions raffinées. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa de tule transparente de manga comprida com uma saia longa plissada e fluida. A blusa tem um padrão geométrico aveludado no mesmo tom e decote redondo, enquanto a saia com acabamento acetinado assenta num cós largo e liso e acompanha cada movimento. Ideal para eventos à noite, festas e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3535/1.jpg",
+   "galeri/3535/2.jpg",
+   "galeri/3535/3.jpg",
+   "galeri/3535/4.jpg",
+   "galeri/3535/5.jpg",
+   "galeri/3535/6.jpg"
+  ],
+  "videolar": [
+   "selin/3535/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-06"
+ },
+ {
   "kod": "3537",
   "baslik": "Lace Sleeve Vest Set",
   "kategori": "sets",
