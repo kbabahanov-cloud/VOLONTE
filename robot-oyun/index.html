@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <title>Volt Arena</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="oyun"></canvas>
+
+  <div id="hud" hidden>
+    <div class="skor">
+      <div class="takim mavi"><span id="skorMavi">0</span><div class="bar"><i id="barMavi"></i></div></div>
+      <div id="sure">3:00</div>
+      <div class="takim kirmizi"><div class="bar"><i id="barKirmizi"></i></div><span id="skorKirmizi">0</span></div>
+    </div>
+    <div class="durum">
+      <div>CAN <div class="bar can"><i id="barCan"></i></div></div>
+      <div>ISI <div class="bar isi"><i id="barIsi"></i></div></div>
+    </div>
+    <button id="surgeBtn" class="surge" disabled>AŞIRI YÜK <span id="surgeYuzde">0%</span></button>
+    <div id="mesaj"></div>
+  </div>
+
+  <div id="menu" class="ekran">
+    <h1>VOLT ARENA</h1>
+    <p class="alt">3'e 3 robot savaşı · Enerji düğümlerini tut · Silahını ısıtmadan ateş et</p>
+    <div class="kart">
+      <h2>Silah</h2>
+      <div id="silahlar" class="secenekler"></div>
+    </div>
+    <div class="kart">
+      <h2>Atölye <small>Hurda: <b id="hurda">0</b></small></h2>
+      <div id="yukseltmeler" class="yukseltmeler"></div>
+    </div>
+    <button id="basla" class="ana">SAVAŞA GİR</button>
+    <details class="nasil">
+      <summary>Nasıl oynanır?</summary>
+      <p><b>Telefon:</b> sol başparmak = hareket, sağ başparmak = nişan al ve ateş et.<br>
+      <b>Bilgisayar:</b> WASD = hareket, fare = nişan, sol tık = ateş, Boşluk = Aşırı Yük.</p>
+      <p>Ortadaki 3 <b>enerji düğümünü</b> ele geçir; tuttuğun her düğüm puan verir. 100 puana ilk ulaşan kazanır.
+      Silahın mermi bitmez ama <b>ısınır</b>: ısı dolarsa soğuyana kadar ateş edemezsin. Kendi düğümünün üstünde iki kat hızlı soğursun.
+      Düşman yok ettikçe ve düğüm tuttukça <b>Aşırı Yük</b> dolar: 6 saniye boyunca %50 fazla hasar ve %25 hız.</p>
+    </details>
+  </div>
+
+  <div id="sonuc" class="ekran" hidden>
+    <h1 id="sonucBaslik">ZAFER</h1>
+    <p id="sonucDetay"></p>
+    <button id="tekrar" class="ana">ATÖLYEYE DÖN</button>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
