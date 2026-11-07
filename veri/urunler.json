@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3110",
+  "baslik": "Satin Wrap Midi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A satin midi dress with a tailored wrap bodice and a softly pleated skirt. Notched lapels, a single-button wrap front and sheer balloon sleeves with gathered cuffs shape the look, while an open cut-out at the back adds a refined touch. Suited to office days, ceremonies and elegant daytime events. Available as a single piece in size 38, made in Istanbul with careful workmanship.",
+   "fr": "Une robe midi en satin au buste croisé bien structuré, prolongé par une jupe finement plissée. Revers crantés, fermeture croisée à un bouton et manches bouffantes transparentes resserrées aux poignets dessinent la silhouette, tandis qu'une découpe dans le dos apporte une note raffinée. Idéale pour le bureau, les cérémonies et les sorties de journée élégantes. Disponible en pièce unique, taille 38, fabriquée à Istanbul avec soin.",
+   "pt": "Um vestido midi em cetim com corpete transpassado estruturado e saia plissada e fluida. Lapelas entalhadas, frente transpassada com um botão e mangas balão transparentes com punhos franzidos definem o visual, enquanto um recorte nas costas acrescenta um toque refinado. Ideal para o escritório, cerimónias e eventos diurnos elegantes. Disponível em peça única, tamanho 38, produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3110/1.jpg",
+   "galeri/3110/2.jpg",
+   "galeri/3110/3.jpg",
+   "galeri/3110/4.jpg",
+   "galeri/3110/5.jpg"
+  ],
+  "videolar": [
+   "selin/3110/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-07"
+ },
+ {
   "kod": "3536",
   "baslik": "Printed Tunic Pants Set",
   "kategori": "sets",
