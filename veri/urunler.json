@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3219",
+  "baslik": "Pleated Sheer Top Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a sheer pleated top with high-waisted wide-leg trousers. The top's fan-shaped pleats create a soft cape effect over a draped inner layer, while the trousers feature an asymmetric wrap front and a lace-up detail at the back waist. Elegant for events, receptions and polished daytime looks. Made in Istanbul with careful craftsmanship.",
+   "fr": "Un ensemble deux pièces associant un haut plissé transparent à un pantalon large taille haute. Les plis en éventail du haut dessinent un effet cape léger sur une doublure drapée, tandis que le pantalon se distingue par un devant portefeuille asymétrique et un laçage au dos de la taille. Idéal pour les cérémonies, réceptions et tenues de jour soignées. Fabriqué à Istanbul avec un savoir-faire attentif.",
+   "pt": "Um conjunto de duas peças que combina uma blusa plissada transparente com calça pantalona de cintura alta. As pregas em leque da blusa criam um suave efeito de capa sobre uma camada interna drapeada, e a calça traz frente transpassada assimétrica e amarração nas costas da cintura. Elegante para eventos, recepções e looks diurnos sofisticados. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3219/1.jpg",
+   "galeri/3219/2.jpg",
+   "galeri/3219/3.jpg",
+   "galeri/3219/4.jpg",
+   "galeri/3219/5.jpg"
+  ],
+  "videolar": [
+   "selin/3219/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-09"
+ },
+ {
   "kod": "3516",
   "baslik": "Cropped Trench Dress Set",
   "kategori": "sets",
