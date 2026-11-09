@@ -1,5 +1,28 @@
 [
  {
+  "kod": "3501",
+  "baslik": "Ombre Cape Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a flowing cape-style top with wide-leg trousers, finished in a soft powder blue ombre. The top features a printed band collar, a contrast button placket with long tie ends, and a sheer layer that drapes longer at the back, while a delicate vine print rises from the hems. Easy to wear for celebrations, family gatherings and elegant daytime occasions. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces qui associe un haut fluide façon cape à un pantalon large, dans un dégradé bleu poudré tout en douceur. Le haut se distingue par son col officier imprimé, sa patte boutonnée contrastée prolongée de longs pans et son voile plus long au dos, tandis qu'un fin motif de feuillage remonte depuis les ourlets. Idéal pour les cérémonies, les réunions de famille et les sorties élégantes en journée. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa fluida em estilo capa com calça de perna larga, num degradê azul pó suave. A blusa tem gola padre estampada, carcela de botões em contraste com pontas longas e uma camada leve que cai mais comprida nas costas, enquanto uma delicada estampa de ramos sobe a partir das barras. Perfeito para celebrações, encontros de família e ocasiões elegantes durante o dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3501/1.jpg",
+   "galeri/3501/2.jpg",
+   "galeri/3501/3.jpg",
+   "galeri/3501/4.jpg",
+   "galeri/3501/5.jpg"
+  ],
+  "videolar": [
+   "selin/3501/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-09"
+ },
+ {
   "kod": "3510",
   "baslik": "Flame Print Cape Set",
   "kategori": "sets",
