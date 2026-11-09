@@ -82,7 +82,8 @@ const SABAH_SAATI = 8; // paylaşım bu saatte başlar (ilk tur / hatırlatma da
 const AKSAM_SAATI = 20; // paylaşımlar en geç bu saatte biter
 const GUNLUK_SINIR = 10;
 const GEC_GUN = 7; // "❌ Geç" denen model bu kadar gün önerilmez
-export const TAMAMLA_SON_SAAT = 15; // 9 Kasım: "Geç" yerine ek öneriler en geç bu saate kadar (10 paylaşım 21:00'e sığsın)
+// 9 Kasım (Patron): sabit saat sınırı YOK — her an "21:00'e kadar kaç paylaşım sığar" hesaplanır (60–90 dk arayla, ortalama 75 dk)
+export const ORT_ARALIK_DK = 75;
 const TUR_ADET = 10; // bir turda toplanacak onay sayısı
 const BEKLEME_GUN = 30; // bu kadar gündür paylaşılmayan modeller önerilir
 const BEKLESIN_GUN = 7; // "Beklesin" denen model bu kadar gün sonra tekrar sorulur
@@ -560,7 +561,7 @@ const YARDIM = [
   "Komut yazmadan da konuşabilirsiniz: \"bu turda kaç onay var\", \"3357 beklesin\", \"3357'yi sil\", \"bu hafta kaç paylaşım yaptık\". Paylaşma ve silme için yine düğmeyle onay isterim.",
   "",
   "Kanala yapılan her paylaşımı otomatik kaydediyorum.",
-  `Tur: her sabah ${SABAH_SAATI}:00'de uzun süredir paylaşılmayan ${TUR_ADET} modeli bütün paylaşım tarihleriyle gönderirim; onayladığınız aynı gün ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla paylaşılır (günde en fazla ${GUNLUK_SINIR}). Günlük hedef ${GUNLUK_SINIR} onay: ❌ Geç denen kadar yeni model toplu kartta gelir (${TAMAMLA_SON_SAAT}:00'e kadar); geç denen ${GEC_GUN} gün önerilmez. ${AKSAM_SAATI}:00'de paylaşılamayanlar sıradan çıkar, ileride yeniden sorulur.`,
+  `Tur: her sabah ${SABAH_SAATI}:00'de uzun süredir paylaşılmayan ${TUR_ADET} modeli bütün paylaşım tarihleriyle gönderirim; onayladığınız aynı gün ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla paylaşılır (günde en fazla ${GUNLUK_SINIR}). Günlük hedef ${GUNLUK_SINIR} onay: ❌ Geç denen kadar yeni model toplu kartta gelir (21:00'e kaç paylaşım sığıyorsa o kadar); geç denen ${GEC_GUN} gün önerilmez. ${AKSAM_SAATI}:00'de paylaşılamayanlar sıradan çıkar, ileride yeniden sorulur.`,
 ].join("\n");
 
 export async function sonPaylasimlar(env) {
@@ -1876,7 +1877,7 @@ const PAYLASILMAMIS_GUNLUK = 2;
 // biri listenin başında (sabah), biri sonunda (akşam); diğerleri normal kuralla.
 export function gunlukSecim(sec, son, adet = GUNLUK_SINIR) {
   const hic = sec(999).filter((k) => !son[k]);
-  const iki = hic.slice(0, PAYLASILMAMIS_GUNLUK);
+  const iki = hic.slice(0, Math.min(PAYLASILMAMIS_GUNLUK, adet));
   const normal = sec(adet - iki.length, hic);
   return [...iki.slice(0, 1), ...normal, ...iki.slice(1)];
 }
@@ -1888,10 +1889,15 @@ export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
   const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
   const { son } = await telegramTarihleriAl(env);
   const sec = (adet, disari = []) => gununModelleri({ site, stok, tg: son, haric: [...haric, ...disari, ...INDIRIMLI], simdi, adet }).map((u) => String(u.kod));
+  let yerYok = false;
   if (!gruplar) {
     // Kullanıcı kararı (31 Ekim): stokta olup Telegram'da HİÇ paylaşılmamış modeller (sitede medyası olanlar) günde en fazla 2:
     // biri listenin başında (sabah), biri sonunda (akşam). Liste bitene kadar. Diğer 8 normal kuralla; 2000 hariç.
-    gruplar = [{ baslik: null, kodlar: gunlukSecim(sec, son) }];
+    // 9 Kasım (Patron): dünden kalan onaylılar 09:00'da ilk sırada → sabah önerisi 21:00'e sığan kadar (en fazla 10)
+    const kalanYeni = kuyruk.filter((o) => o.yeni).length;
+    const adet = Math.max(0, Math.min(GUNLUK_SINIR, siganPaylasim(simdi, (await yayinKapisi(env, simdi)).sonraki) - kalanYeni));
+    yerYok = !adet;
+    gruplar = [{ baslik: null, kodlar: adet ? gunlukSecim(sec, son, adet) : [] }];
   }
   else {
     // Deneme: elle verilen kodlar (stoğu olmayan çıkar) ya da { otomatik: n } → kuralla seçilen n model (diğer gruplar ve "haric" dışında).
@@ -1908,6 +1914,7 @@ export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
     tur.durum = "bitti";
     tur.bitis = simdi;
     await env.KAYIT.put("tur", JSON.stringify(tur));
+    if (yerYok) return herkese(env, `Bugün yeni öneri yok: dünden kalan onaylı paylaşımlar 09:00'dan itibaren ilk sırada ve 21:00'e kadar yer dolu.`);
     return herkese(env, `Bugün önerecek model yok (stokta + sitede + ${PAYLASIM_ARASI_GUN} gündür paylaşılmamış model kalmadı). Yarın sabah tekrar bakacağım.`);
   }
   for (const k of kodlar) tur.ogeler[k] = { paket: null, mesajlar: [], karar: null, kim: null };
@@ -1949,7 +1956,7 @@ export async function yeniTurAdimi(env, simdi) {
   const giris = tur.karsilastirma
     ? `🆕 Kemal — YENİ DÜZEN denemesi (${tur.no}. tur). Aşağıdaki gönderiler kanalda tam olarak böyle görünecek (fiyat yok, sadece İngilizce + Fransızca, düğmeler tıklanabilir).`
     : `🆕 Günaydın! Kemal — bugünün modelleri (${tur.no}. tur): stokta + sitede + en az ${PAYLASIM_ARASI_GUN} gündür paylaşılmamış, en uzun süredir paylaşılmayan önce.`;
-  const aciklama = `${giris}\n✅ Paylaş → sıraya girer (${SABAH_SAATI}:00–${AKSAM_SAATI}:00, ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla, günde en fazla ${GUNLUK_SINIR}; akşam onaylanan ertesi sabah paylaşılır, stoğu biterse paylaşılmaz)\n✏️ Düzelt → renk / kumaş / durum / yazıyı siz yazarsınız, yeni önizleme gelir\n❌ Geç → ${GEC_GUN} gün önerilmez; yerine yeni model toplu kartta gelir (${TAMAMLA_SON_SAAT}:00'e kadar). Günlük hedef: ${GUNLUK_SINIR} onay.\nKanalda hiçbir şey onaysız paylaşılmaz.${hatalar.length ? `\n⚠️ Hazırlanamayan: ${hatalar.join(", ")}` : ""}`;
+  const aciklama = `${giris}\n✅ Paylaş → sıraya girer (${SABAH_SAATI}:00–${AKSAM_SAATI}:00, ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla, günde en fazla ${GUNLUK_SINIR}; akşam onaylanan ertesi sabah paylaşılır, stoğu biterse paylaşılmaz)\n✏️ Düzelt → renk / kumaş / durum / yazıyı siz yazarsınız, yeni önizleme gelir\n❌ Geç → ${GEC_GUN} gün önerilmez; yerine yeni model toplu kartta gelir (21:00'e sığacak kadar). Günlük hedef: ${GUNLUK_SINIR} onay; bugün sığmayan onaylar ertesi sabah 09:00'da ilk sırada.\nKanalda hiçbir şey onaysız paylaşılmaz.${hatalar.length ? `\n⚠️ Hazırlanamayan: ${hatalar.join(", ")}` : ""}`;
   const ogeler = [{ baslik: aciklama }];
   for (const g of tur.gruplar) {
     const hazir = g.kodlar.filter((k) => tur.ogeler[k] && tur.ogeler[k].paket);
@@ -2038,12 +2045,20 @@ async function yeniTurDugmesi(cq, env) {
 // "Geç" denen kadar yeni model TEK toplu kartta önerilir (onay + bekleyen ≤ 10); 10 onaya ulaşınca o gün yeni öneri yok.
 // Ek öneriler en geç 15:00'e kadar (09–21 arası 60–90 dk arayla 10 paylaşım sığsın). Geç = 7 gün önerilmez (atlananlar).
 const TAMAMLA_BEKLE_DK = 10; // son "Geç"ten bu kadar sonra (ya da bekleyen kart kalmayınca) toplu kart gider
-export function tamamlamaIhtiyaci(tur, simdi) {
+// Bugün 21:00'e kadar kaç paylaşım sığar: ilk paylaşım "ilk" anında (yayın kapısının sıradaki zamanı), sonra ortalama 75 dk arayla
+export function siganPaylasim(simdi, ilk) {
+  const gunBasi = simdi - ((simdi + SAAT_FARKI) % 86400);
+  const bit = gunBasi + YAYIN_BIT * 3600;
+  const t = Math.max(simdi, ilk || 0, gunBasi + YAYIN_BAS * 3600);
+  return t >= bit ? 0 : 1 + Math.floor((bit - t) / (ORT_ARALIK_DK * 60));
+}
+// bos: bugün 21:00'e kadar boş paylaşım yeri (sığan − sırada bekleyen onaylılar); öneri en fazla bu kadar ve toplam 10 onaya kadar
+export function tamamlamaIhtiyaci(tur, simdi, bos = Infinity) {
   const og = Object.values(tur.ogeler || {});
   const onay = (tur.onaylar || []).length;
   const bekleyen = og.filter((o) => !o.karar && !o.hata).length;
-  const eksik = Math.max(0, GUNLUK_SINIR - onay - bekleyen);
-  const zaman = !bekleyen || (tur.sonGec && simdi - tur.sonGec >= TAMAMLA_BEKLE_DK * 60);
+  const eksik = Math.max(0, Math.min(GUNLUK_SINIR - onay - bekleyen, bos - bekleyen));
+  const zaman = !bekleyen || !tur.sonGec || simdi - tur.sonGec >= TAMAMLA_BEKLE_DK * 60;
   return { onay, bekleyen, eksik, hazir: eksik > 0 && onay < GUNLUK_SINIR && Boolean(zaman) };
 }
 export function topluKart(tur, dalga, simdi) {
@@ -2092,11 +2107,12 @@ export async function turTamamla(env, simdi) {
   tur.dalgalar = tur.dalgalar || [];
   let d = tur.dalgalar.find((x) => x.durum === "hazirlaniyor");
   if (!d) {
-    if (tur.tukendi || saat(simdi) >= TAMAMLA_SON_SAAT || saat(simdi) < SABAH_SAATI) return false;
-    const ih = tamamlamaIhtiyaci(tur, simdi);
+    if (tur.tukendi || saat(simdi) < SABAH_SAATI || saat(simdi) >= YAYIN_BIT) return false;
+    const kuyruk = await kuyrukListesi(env);
+    const bos = siganPaylasim(simdi, (await yayinKapisi(env, simdi)).sonraki) - kuyruk.length;
+    const ih = tamamlamaIhtiyaci(tur, simdi, bos);
     if (!ih.hazir) return false;
     const site = await siteUrunleriAl(env);
-    const kuyruk = await kuyrukListesi(env);
     const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
     const haric = [...Object.keys(tur.ogeler), ...kuyruk.map((o) => o.kod), ...Object.entries(atlananlar).filter(([, t]) => t > simdi).map(([k]) => k), ...INDIRIMLI];
     const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};

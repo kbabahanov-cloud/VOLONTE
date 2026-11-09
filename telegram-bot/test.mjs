@@ -2231,7 +2231,7 @@ test("9 Kasım model kartı fotoğrafı: site yoksa kanal; kanaldaki SOLD OUT g�
 });
 
 // ---------- 9 Kasım (Patron): günlük hedef 10 onaylı paylaşım ----------
-import { tamamlamaIhtiyaci, topluKart, turTamamla } from "./worker.js";
+import { tamamlamaIhtiyaci, topluKart, turTamamla, siganPaylasim } from "./worker.js";
 test("10 onay hedefi: geç kadar ek öneri, onay+bekleyen ≤ 10; 10 onayda dur; son geçten 10 dk sonra (ya da bekleyen kalmayınca)", () => {
   const s = ist(10);
   const og = (n, karar) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`${karar || "b"}${i}`, { karar, paket: {} }]));
@@ -2242,9 +2242,20 @@ test("10 onay hedefi: geç kadar ek öneri, onay+bekleyen ≤ 10; 10 onayda dur;
   assert.equal(tamamlamaIhtiyaci({ ...tur, ogeler: { ...og(3, "y1"), ...og(7, "yg") }, sonGec: s - 60 }, s).hazir, true); // bekleyen yok → hemen
   assert.equal(tamamlamaIhtiyaci({ onaylar: Array(10).fill("x"), ogeler: { ...og(10, "y1"), ...og(5, "yg") }, sonGec: s - 3600 }, s).hazir, false); // 10 onay → yeni öneri yok
   assert.equal(tamamlamaIhtiyaci({ onaylar: [], ogeler: og(10, null), sonGec: s - 3600 }, s).eksik, 0);
+  // sabit saat yok: 21:00'e sığan kadar (boş yer = sığan − sırada bekleyen)
+  assert.equal(tamamlamaIhtiyaci(tur, s, 4).eksik, 3); // 4 yer, 1 bekleyen kart → 3 yeni
+  assert.equal(tamamlamaIhtiyaci(tur, s, 1).hazir, false);
+  assert.equal(tamamlamaIhtiyaci({ ...tur, sonGec: undefined }, s).hazir, true); // eski "geç"ler (saat bilinmiyor) beklemez
+});
+test("21:00'e kaç paylaşım sığar (60–90 dk, ortalama 75)", () => {
+  assert.equal(siganPaylasim(ist(16, 35), ist(16, 35)), 4); // 16:35 → 16:35, 17:50, 19:05, 20:20
+  assert.equal(siganPaylasim(ist(8, 0), 0), 10); // sabah: 09:00'dan 21:00'e
+  assert.equal(siganPaylasim(ist(16, 35), ist(17, 40)), 3); // son paylaşımdan 60 dk sonra başlar
+  assert.equal(siganPaylasim(ist(20, 50), ist(20, 50)), 1);
+  assert.equal(siganPaylasim(ist(21, 5), ist(9, 0, 1)), 0);
 });
 
-test("geç → toplu ek öneri kartı (tek albüm + tek kart, numaralı düğmeler); karar kartı günceller; 15:00'ten sonra ek öneri yok", async () => {
+test("geç → toplu ek öneri kartı (tek albüm + tek kart, numaralı düğmeler); karar kartı günceller; 21:00'ten sonra ek öneri yok", async () => {
   const o = await yeniOrtam();
   await rotasyon(o.env, ist(8, 0));
   const tur0 = JSON.parse(o.depo.get("tur"));
@@ -2291,9 +2302,9 @@ test("geç → toplu ek öneri kartı (tek albüm + tek kart, numaralı düğmel
     assert.match(son.govde.text, /3600 .*✅ Murat onayladı/);
     assert.match(son.govde.text, /3601 .*❌ Murat: geç/);
     assert.equal(son.govde.reply_markup.inline_keyboard.length, 1); // sadece 3602 kaldı
-    // 15:00'ten sonra yeni ek öneri yok (geç olsa da)
+    // 21:00'ten sonra yeni ek öneri yok (sığmaz)
     o.gonderilen.length = 0;
-    assert.equal(await turTamamla(o.env, ist(15, 5)), false);
+    assert.equal(await turTamamla(o.env, ist(21, 5)), false);
     assert.equal(o.gonderilen.length, 0);
   } finally { SITE_TEST.splice(SITE_TEST.length - ek.length, ek.length); }
 });
@@ -2321,4 +2332,19 @@ test("Venom emri 'öner 3411' → bugünün turuna ek dalga, toplu kartla Merdan
   assert.equal(await turTamamla(o.env, ist(9, 1)), true);
   const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "222");
   assert.match(kart.govde.text, /ek öneri \(1 model\): Venom'un önerisi/);
+});
+
+test("dünden kalan onaylılar: ertesi sabah önce onlar; sabah önerisi 21:00'e sığan − kalan kadar", async () => {
+  const o = await yeniOrtam();
+  for (let i = 0; i < 9; i++) o.depo.set(`kuyruk:${4000 + i}`, JSON.stringify({ kod: String(4000 + i), yeni: true, zaman: ist(20, 30) + i, tur: 1 }));
+  await rotasyon(o.env, ist(8, 0, 1));
+  const tur = JSON.parse(o.depo.get("tur"));
+  assert.equal(Object.keys(tur.ogeler).length, 1); // 10 yer − 9 kalan = 1 öneri
+  assert.ok(o.depo.get("kuyruk:4000")); // dünkü onaylılar silinmedi
+  for (let i = 0; i < 10; i++) o.depo.set(`kuyruk:${5000 + i}`, JSON.stringify({ kod: String(5000 + i), yeni: true, zaman: ist(20, 40) + i, tur: 1 }));
+  o.depo.delete("tur");
+  o.gonderilen.length = 0;
+  await rotasyon(o.env, ist(8, 0, 2));
+  assert.equal(JSON.parse(o.depo.get("tur")).durum, "bitti");
+  assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /dünden kalan onaylı paylaşımlar 09:00'dan itibaren ilk sırada/.test(m.govde.text)));
 });
