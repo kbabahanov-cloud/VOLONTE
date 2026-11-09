@@ -45,7 +45,7 @@ function ortam() {
       return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: c.arac ? "tool_use" : "end_turn", content, usage: { input_tokens: 10, output_tokens: 5 } });
     }
     const metod = u.split("/").pop();
-    const govde = istek.body instanceof FormData ? { chat_id: istek.body.get("chat_id") } : istek.body ? JSON.parse(istek.body) : {};
+    const govde = istek.body instanceof FormData ? Object.fromEntries([...istek.body.entries()].map(([k, v]) => [k, typeof v !== "string" ? "<dosya>" : ["reply_markup", "media"].includes(k) ? JSON.parse(v) : v])) : istek.body ? JSON.parse(istek.body) : {};
     g.push({ metod, govde });
     if (metod === "getWebhookInfo") return Response.json({ ok: true, result: { url: "https://venom.test/telegram" } });
     return Response.json({ ok: true, result: { message_id: 100 + g.length } });
@@ -217,7 +217,7 @@ test("hatalar Patron'a değil Claude Code'a: araç hatası venom:bot:hata'ya, Pa
   const o = ortam();
   o.env.STOK = { idFromName: () => "x", get: () => ({ fetch: async () => { throw new Error("depo kapalı"); } }) };
   o.cevaplar.push({ arac: "stok_sorgu", girdi: { kod: "3557" } }, { text: "Şu an bakamadım Patron." });
-  await yazi(o, PATRON, "3557");
+  await yazi(o, PATRON, "3557 için bir değerlendirme yap"); // (9 Kasım: sadece "3557" artık ücretsiz model kartı)
   const h = JSON.parse(o.depo.get("venom:bot:hata"));
   assert.match(h[0].yer, /arac:stok_sorgu/);
   assert.match(h[0].hata, /depo kapalı/);
@@ -283,11 +283,11 @@ test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; 
   assert.equal(patronaGiden(o).filter((x) => /%80/.test(x.govde.text)).length, 1); // bir kez
   o.depo.set(`venom-harcama:${ay}`, "30");
   const n = o.claude.length;
-  await yazi(o, PATRON, "stok 3557");
+  await yazi(o, PATRON, "3557 için yorum yap"); // (9 Kasım: "stok 3557" ücretsiz model kartıdır, sınırdan etkilenmez)
   assert.equal(o.claude.length, n);
   assert.match(patronaGiden(o).at(-1).govde.text, /Venom yapay zekâ sınırı \(30 \$\) doldu/);
   o.depo.set("venom:bot:sinir", "50");
-  await yazi(o, PATRON, "stok 3557");
+  await yazi(o, PATRON, "3557 için yorum yap");
   assert.equal(o.claude.length, n + 1);
 });
 
@@ -572,7 +572,7 @@ test("ANLAMA (6 Kasım, D8–D10): üretim / paylaş / açıklamasız dosya ayr�
   const foto = (fid) => guncelleme({ update_id: uid++, message: { message_id: 3, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: fid }] } }, o.env);
   await foto("Q1");
   const k = sonKart(o);
-  assert.deepEqual(k.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["🎬 Pelin kullansın", "📣 Paylaş", "💾 Sadece kaydet"]);
+  assert.deepEqual(k.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["🎬 Pelin kullansın", "📣 Paylaş", "💾 Sadece kaydet", "📦 Hangi model / stok?"]);
   await bas(o, k.govde.reply_markup.inline_keyboard[1][0].callback_data); // sadece kaydet
   assert.match(o.depo.get("venom:bot:kayitliMedya"), /Q1/);
   // Paylaş → kod + renk sorusu → "3627 beyaz" → paylaşım (kapalı: DURAKLATILDI ama anlama satırı var)
@@ -850,4 +850,82 @@ test("9 Kasım REPETE: Kemal'den gelen 'Repete al' taslağı Patron'a HEMEN onay
   assert.deepEqual(k.govde.reply_markup.inline_keyboard[0].map((b) => b.text), ["✅ Onayla", "✏️ Düzelt", "❌ İptal"]);
   assert.ok(!o.depo.has("venom:repeteTaslak"));
   assert.equal(o.samiG.filter((x) => String(x.govde.chat_id) === FUAT).length, 0);
+});
+
+test("9 Kasım KISA MODEL KARTI: '3629 kaç adet var?' ve sesli '36 29' → tek mesaj: markalı fotoğraf + ≤6 satır (kendi mağazası, 7 gün, bitiş, fabrika) + düğmeler; fiyat/kâr yok", async () => {
+  const { kodlariBul, modelSorusuMu, kartSatirlari } = await import("./venom-model.js");
+  assert.deepEqual(kodlariBul("36 29 kaç adet var"), ["3629"]);
+  assert.deepEqual(modelSorusuMu("3629 kaç adet var?"), ["3629"]);
+  assert.deepEqual(modelSorusuMu("3629"), ["3629"]);
+  assert.equal(modelSorusuMu("3629 paylaş"), null);
+  assert.equal(modelSorusuMu("3627 beyaz"), null);
+  const o = ortam();
+  await o.ayar("x", 1);
+  await o.stok.fetch(new Request("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", urunler: [{ kod: "3629", adet: 11, fiyat: 40 }], simdi: ist(9, 9) }) }));
+  await o.stok.fetch(new Request("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", urunler: [{ kod: "3629", adet: 3, fiyat: 40 }], simdi: ist(9, 9) }) }));
+  await o.stok.fetch(new Request("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun: "2026-11-08", kalemler: [{ kod: "3629", adet: 5 }] }) }));
+  o.depo.set("venom:siteDefteri", JSON.stringify({ modeller: { 3629: { kod: "3629", marka: "BLACKROSE", foto: 6 } } }));
+  const istenen = [];
+  o.env.KEMAL_W = { modelFoto: async (kod) => { istenen.push(kod); return { ok: true, kaynak: "site", bayt: new Uint8Array([1, 2, 3]) }; } };
+  const gercek = Date.now; Date.now = () => ist(9, 15) * 1000;
+  try { await yazi(o, PATRON, "36 29 kaç adet var"); } finally { Date.now = gercek; }
+  assert.deepEqual(istenen, ["3629"]);
+  assert.equal(o.claude.length, 0); // Claude'a gitmedi (ücretsiz)
+  const f = o.g.find((x) => x.metod === "sendPhoto");
+  assert.equal(f.govde.photo, "<dosya>");
+  assert.equal(f.govde.protect_content, "true"); // iletilemez (satış adedi gizli)
+  const satir = f.govde.caption.split("\n");
+  assert.ok(satir.length <= 6);
+  assert.equal(satir[0], "📦 3629 · BLACK ROSE");
+  assert.match(satir[1], /^Stok: 11 adet \(BLACK ROSE Vegawin\) · son 7 gün 5 satış/); // VOLONTE'nin 3'ü EKLENMEZ
+  assert.match(f.govde.caption, /Fabrikada bekleyen sipariş yok/);
+  assert.ok(!/\$|fiyat|kâr|müşteri/i.test(f.govde.caption));
+  assert.deepEqual(f.govde.reply_markup.inline_keyboard.flat().map((b) => b.callback_data), ["vmk:p:3629", "vmk:r:3629", "vmk:v:3629"]);
+  // 🔁 Repete al → ASLA doğrudan sipariş: Fuat'a gidecek taslak onay kartı
+  o.g.length = 0;
+  await bas(o, "vmk:r:3629");
+  const k = patronaGiden(o).find((x) => /Fuat'a gidecek mesaj/.test(x.govde.text));
+  assert.match(k.govde.text, /3629 modelinden repete rica ediyoruz/);
+  assert.equal(o.samiG.length, 0);
+  // 📣 Kanalda paylaş → renk sorusu (Kemal akışı; Venom kontrolü + 09–21 kuralı Kemal'de)
+  o.g.length = 0;
+  await bas(o, "vmk:p:3629");
+  assert.match(patronaGiden(o)[0].govde.text, /3629 hangi renk Patron\?/);
+  // fotoğraf yok + sitede yok → Selin'in listesine
+  assert.deepEqual(kartSatirlari({ kod: "3700", marka: "VOLONTE", stok: { VOLONTE: 0 }, s7: 0, s14: 0, gun14: 14, fs: [], sitede: false, fotoYok: true }).at(-1), "📷 Fotoğraf yok — Selin'in fotoğraf listesine ekledim.");
+});
+
+test("9 Kasım: birden fazla kod → tek albüm + kısa liste, her model için numaralı düğmeler; kodsuz fotoğraf kanaldan iletilmişse ücretsiz bulunur, değilse maliyet sorulur", async () => {
+  const o = ortam();
+  for (const [kod, adet] of [["3629", 11], ["3627", 4]]) await o.stok.fetch(new Request("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", urunler: [{ kod, adet, fiyat: 40 }], simdi: ist(9, 9) }) }));
+  o.depo.set("venom:siteDefteri", JSON.stringify({ modeller: { 3629: { kod: "3629", marka: "BLACKROSE" }, 3627: { kod: "3627", marka: "BLACKROSE" } } }));
+  o.env.KEMAL_W = { modelFoto: async () => ({ ok: true, kaynak: "site", bayt: new Uint8Array([1]) }), fotoTani: async () => ({ ok: true, guven: "orta", en_iyi: "3627", adaylar: ["3627", "3629"], aciklama: "benzer kesim" }) };
+  await yazi(o, PATRON, "3629 ve 3627 stok?");
+  const alb = o.g.find((x) => x.metod === "sendMediaGroup");
+  assert.deepEqual(alb.govde.media.map((m) => m.caption), ["1 · 3629", "2 · 3627"]);
+  const liste = patronaGiden(o).at(-1);
+  assert.match(liste.govde.text, /^📦 2 model:\n1\. 3629 · BLACK ROSE[\s\S]*2\. 3627 · BLACK ROSE/);
+  assert.ok(liste.govde.reply_markup.inline_keyboard.flat().some((b) => b.text === "2· 🔁 Repete al" && b.callback_data === "vmk:r:3627"));
+  // kanaldan iletilmiş kodsuz fotoğraf → kodlar dizininden (ücretsiz)
+  o.depo.set("kanal", JSON.stringify({ id: -1001 }));
+  o.depo.set("kodlar", JSON.stringify({ 3627: [{ ids: [700, 701], tarih: ist(5, 10) }] }));
+  o.g.length = 0;
+  await guncelleme({ update_id: 99001, message: { message_id: 5, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, caption: "bu kaç adet?", forward_origin: { type: "channel", chat: { id: -1001 }, message_id: 701 }, photo: [{ file_id: "F1", file_unique_id: "U1" }] } }, o.env);
+  assert.match(o.g.find((x) => x.metod === "sendPhoto").govde.caption, /^📦 3627 · BLACK ROSE/);
+  // bilinmeyen fotoğraf → stok SÖYLENMEZ, maliyet sorulur; onaylayınca emin değilse "bu mu?"
+  o.g.length = 0;
+  await guncelleme({ update_id: 99002, message: { message_id: 6, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, caption: "bu kaç adet?", photo: [{ file_id: "F2", file_unique_id: "U2" }] } }, o.env);
+  const soru = patronaGiden(o)[0];
+  assert.match(soru.govde.text, /ücretsiz yoldan bulamadım/);
+  assert.ok(!/adet \(/.test(soru.govde.text));
+  const t = soru.govde.reply_markup.inline_keyboard[0][0];
+  assert.match(t.text, /Yapay zekâyla bul \(~0,10 \$\)/);
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (u, i) => (String(u).includes("/file/bot") ? new Response(new Uint8Array([9, 9])) : String(u).endsWith("/getFile") ? Response.json({ ok: true, result: { file_path: "a.jpg" } }) : asil(u, i));
+  o.g.length = 0;
+  try { await bas(o, t.callback_data); } finally { globalThis.fetch = asil; }
+  const bumu = patronaGiden(o).at(-1);
+  assert.match(bumu.govde.text, /Emin değilim — bu mu\?/);
+  assert.deepEqual(bumu.govde.reply_markup.inline_keyboard[0].map((b) => b.callback_data), ["vmk:k:3627", "vmk:k:3629"]);
+  assert.ok(!o.g.some((x) => x.metod === "sendPhoto")); // seçilmeden kart (stok) yok
 });

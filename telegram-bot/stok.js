@@ -397,6 +397,18 @@ export class StokDeposu {
       gizli: this.hepsi("SELECT kod, durum FROM karar"),
     };
   }
+  // 9 Kasım (Patron): Venom kısa model kartı — tek model: mağaza mağaza stok ve satış (ASLA toplanmaz), açık fabrika siparişi
+  modelOzet({ kod, bas7, bas14, bitis }) {
+    const k = stokKodu(kod);
+    const sat = (bas) => Object.fromEntries(this.hepsi("SELECT magaza, SUM(adet) AS a FROM satis WHERE kod = ? AND gun >= ? AND gun <= ? GROUP BY magaza", k, bas, bitis).map((r) => [r.magaza, Number(r.a) || 0]));
+    const fs = [];
+    for (const id of JSON.parse(this.ayarOku("fs:acik") || "[]").slice(-80)) {
+      const r = this.ayarOku(`fs:${id}`); if (!r) continue;
+      const x = JSON.parse(r);
+      if (!x.deneme && String(x.kod) === k) fs.push({ durum: x.durum, gonderim: x.gonderim, hazirGun: x.hazirGun || null, cevaplayan: x.cevaplayan || null, renkler: x.renkler || [] });
+    }
+    return { kod: k, satirlar: this.hepsi("SELECT magaza, adet FROM urun WHERE kod = ?", k), s7: sat(bas7), s14: sat(bas14), ilkGun: (this.tek("SELECT MIN(gun) AS g FROM satis") || {}).g || null, fs, karar: this.tek("SELECT durum FROM karar WHERE kod = ?", k) || null };
+  }
   repeteKarar(k) {
     const l = JSON.parse(this.ayarOku("repete:kararlar") || "[]");
     l.push(k);
@@ -490,6 +502,7 @@ export class StokDO {
     if (yol === "/sorgu-liste") return cevap(d.sorguListe(g.basla, g.bitis));
     if (yol === "/iki-magaza") return cevap(d.ikiMagaza());
     if (yol === "/repete-veri") return cevap(d.repeteVeri(g));
+    if (yol === "/model-ozet") return cevap(d.modelOzet(g));
     if (yol === "/repete-karar") return cevap(d.repeteKarar(g));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());

@@ -2203,3 +2203,29 @@ test("9 Kasım REPETE: Patron 'Repete al' basar → karar kaydı + Fuat taslağ�
   assert.deepEqual(v.kararlar.map((k) => [k.kod, k.karar]), [["3627", "r"]]);
   assert.ok(v.urun.some((r) => r.kod === "3627" && r.magaza === "VOLONTE" && r.adet === 4));
 });
+
+test("9 Kasım model kartı fotoğrafı: site yoksa kanal; kanaldaki SOLD OUT görseli ATLANIR, gizlenen paylaşımın arşivdeki orijinali kullanılır; hiçbiri yoksa fotoğraf yok", async () => {
+  const { venomModelFoto } = await import("./worker.js");
+  const o = rotasyonOrtami();
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kemal:soldout:uid", "SOLDOUT-U");
+  o.depo.set("kodlar", JSON.stringify({ 3629: [{ ids: [900], tarih: ist(1, 10) }] }));
+  o.depo.set("silinen:3629", JSON.stringify({ kod: "3629", kopya: [{ kanal: 880, arsiv: 77, gizlendi: true }], arsivKanal: -200 }));
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    const a = String(url);
+    if (a.endsWith("/forwardMessage")) { const g = JSON.parse(istek.body); const uid = g.message_id === 900 ? "SOLDOUT-U" : "GERCEK-U"; return Response.json({ ok: true, result: { message_id: 5000 + g.message_id, photo: [{ file_id: `F${g.message_id}`, file_unique_id: uid, width: 800 }] } }); }
+    if (a.endsWith("/getFile")) return Response.json({ ok: true, result: { file_path: "x.jpg" } });
+    if (a.includes("/file/bot")) return new Response(new Uint8Array([7, 7, 7]));
+    return asil(url, istek);
+  };
+  let r;
+  try { r = await venomModelFoto(o.env, "3629"); } finally { globalThis.fetch = asil; }
+  assert.equal(r.ok, true);
+  assert.equal(r.kaynak, "kanal");
+  assert.deepEqual([...r.bayt], [7, 7, 7]); // SOLD OUT değil, arşivdeki orijinal (IMAGES yok → damgasız)
+  o.depo.delete("silinen:3629");
+  globalThis.fetch = async (url, istek) => (String(url).endsWith("/forwardMessage") ? Response.json({ ok: true, result: { message_id: 1, photo: [{ file_id: "S", file_unique_id: "SOLDOUT-U" }] } }) : asil(url, istek));
+  try { r = await venomModelFoto(o.env, "3629"); } finally { globalThis.fetch = asil; }
+  assert.equal(r.ok, false);
+});

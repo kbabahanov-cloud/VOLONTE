@@ -1317,8 +1317,10 @@ export async function istekAdaylari(env, modeller, sitede = new Set()) {
   const stok = await stokIste2(env, "/stoktakiler");
   const kodlar = stok.map((r) => String(r.kod));
   const uygun = (k) => !sitede.has(k) && !(modeller[k] && modeller[k].durum === "sitede") && !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
-  const oncelik = ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k));
-  const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
+  // 9 Kasım (Patron): Venom'un model kartında "fotoğraf yok" çıkan modeller listenin EN BAŞINA (KV "venom:selinFotoIste", 14 gün)
+  const venomIste = ((await env.KAYIT.get("venom:selinFotoIste", "json").catch(() => null)) || []).filter((x) => Date.now() / 1000 - (x.zaman || 0) < 14 * 86400).map((x) => String(x.kod));
+  const oncelik = [...new Set([...venomIste.filter((k) => kodlar.includes(k) && uygun(k)), ...ONCELIKLI.filter((k) => kodlar.includes(k) && uygun(k))])];
+  const diger = kodlar.filter((k) => !ONCELIKLI.includes(k) && !venomIste.includes(k) && uygun(k)).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a));
   // Celal'in modelleri (Vegawin kodu "CELAL" ile biten; köprü sadece işaret gönderir): listede EN SONA (kullanıcı kararı 30 Ekim).
   const celal = new Set(stok.filter((r) => r.tedarikci === "CELAL").map((r) => String(r.kod)));
   const sirali = [...oncelik, ...diger];

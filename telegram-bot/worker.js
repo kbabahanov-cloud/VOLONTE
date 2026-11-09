@@ -1554,6 +1554,59 @@ async function repeteRaporDugmesi(cq, env) {
   return cevapla(islem === "b" ? `${kod}: bekle — 7 gün sormam` : `${kod}: alma — 30 gün sormam`);
 }
 
+// ---------- 9 Kasım (Patron): Venom KISA MODEL KARTI için fotoğraf ve (onaylı, ücretli) fotoğraftan tanıma ----------
+// Fotoğraf: sitedeki ön fotoğraf; yoksa kanaldaki son paylaşımın fotoğrafı (arşive iletilip indirilir); üstüne "MARKA · kod"
+export async function venomModelFoto(env, kod) {
+  const marka = await modelMarkasi(env, String(kod)).catch(() => "VOLONTE");
+  const site = await siteUrunleriAl(env).catch(() => []);
+  const sitedeki = await markaliOnFoto(env, site, { kod: String(kod), marka }).catch(() => null);
+  if (sitedeki) return { ok: true, kaynak: "site", bayt: sitedeki, marka };
+  const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
+  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {}, kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
+  if (kanal && arsiv) {
+    const tg = (m, g) => telegram(env, m, g);
+    // 9 Kasım: SOLD OUT görseli (gizlenmiş eski paylaşım) ASLA model fotoğrafı sayılmaz
+    let soldout = await env.KAYIT.get("kemal:soldout:uid");
+    if (!soldout) { const fid = await env.KAYIT.get("kemal:soldout:fileId"); const g = fid ? await tg("getFile", { file_id: fid }).catch(() => null) : null; soldout = (g && g.ok && g.result.file_unique_id) || ""; if (soldout) await env.KAYIT.put("kemal:soldout:uid", soldout); }
+    // Önce kanaldaki paylaşımlar, sonra gizlenen/silinen paylaşımların arşivdeki ORİJİNALLERİ
+    const sil = (await env.KAYIT.get(`silinen:${kod}`, "json").catch(() => null)) || null;
+    const kaynaklar = [...modelSecenekleri(String(kod), kodlar, kodsuz).slice(0, 3).flatMap((sec) => (sec.ids || []).slice(0, 4).map((id) => [kanal.id, id])),
+      ...(sil && sil.arsivKanal ? (sil.kopya || []).slice(-6).map((x) => [sil.arsivKanal.id || sil.arsivKanal, x.arsiv]) : [])];
+    for (const [kaynak, id] of kaynaklar.slice(0, 14)) {
+      {
+        const r = await tg("forwardMessage", { chat_id: arsiv.id, from_chat_id: kaynak, message_id: id, disable_notification: true }).catch(() => null);
+        if (!r || !r.ok) continue;
+        await tg("deleteMessage", { chat_id: arsiv.id, message_id: r.result.message_id }).catch(() => null);
+        const p = r.result.photo && r.result.photo[r.result.photo.length - 1];
+        if (!p || (soldout && p.file_unique_id === soldout)) continue;
+        const bayt = await dosyaBaytIndir(env, tg, p.file_id).catch(() => null);
+        if (!bayt) continue;
+        const damgali = env.IMAGES ? await markaBas(env, bayt, p.width || 1080, String(kod), marka).catch(() => bayt) : bayt;
+        return { ok: true, kaynak: "kanal", bayt: damgali, marka };
+      }
+    }
+  }
+  return { ok: false, marka };
+}
+// Ücretli tanıma (Patron maliyetini görüp onayladıktan sonra Venom çağırır): en fazla 3 aday + güven. Stok SÖYLENMEZ.
+export async function venomFotoTani(env, b64, ipucu = "") {
+  const simdi = Math.floor(Date.now() / 1000);
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, hata: "yapay zekâ bağlı değil" };
+  if (await sinirAsildiMi(env, simdi)) return { ok: false, hata: "aylık yapay zekâ sınırı doldu" };
+  const tarifler = (await env.KAYIT.get("tarifler", "json")) || {};
+  const silinen = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};
+  const katalog = Object.entries(tarifler).filter(([k, v]) => !silinen[k] && !/kıyafet yok/i.test(v.t) && !kodsuzMu(k));
+  if (!katalog.length) return { ok: false, hata: "fotoğraf kataloğu hazır değil" };
+  const tg = (m, g) => telegram(env, m, g);
+  const secilen = (await adaySec(env, b64, katalog.map(([k, v]) => `${k} | ${v.t}`), ipucu)).filter((k) => tarifler[k]);
+  if (!secilen.length) return { ok: true, adaylar: [], guven: "dusuk", aciklama: "katalogda benzeyen model yok" };
+  const adaylar = [];
+  for (const k of secilen.slice(0, TANIMA_ADAY)) { try { adaylar.push({ kimlik: k, b64: await dosyaIndir(env, tg, tarifler[k].f) }); } catch { /* atla */ } }
+  const s2 = await karsilastir(env, b64, adaylar, ipucu);
+  const gecerli = [...new Set([s2.en_iyi, ...(s2.siralama || []), ...secilen].filter((k) => k && tarifler[k]))];
+  return { ok: true, en_iyi: s2.en_iyi || null, guven: s2.guven, adaylar: gecerli.slice(0, 3), aciklama: String(s2.aciklama || "").slice(0, 200) };
+}
+
 // 9 Kasım: YAYIN KAPISI — şu an kanala paylaşılabilir mi? (09–21 arası, son paylaşımdan ≥ 60 dk, sıradaki zamanı gelmiş)
 export async function yayinKapisi(env, simdi) {
   if (env.YAYIN_KAPISI === "0") return { acik: true, sonraki: simdi }; // sadece testler (gerçek saatten bağımsız)
