@@ -71,14 +71,13 @@ export const MANKENLER = {
   dolgun: { ad: "Dolgun (Büyük seri)", tarif: "a curvy plus-size (EU size 48-50) modern woman in her late 20s with warm brown skin and long dark hair, confident and elegant" },
 };
 // Seriler (3 Kasım, Patron): küçük seri 38-44 ve büyük seri 44-50 — her serinin kalıcı yüzü ayrı ("pelin:secim".yuzler)
-export const SERILER = { kucuk: { ad: "Küçük seri (38-44)" }, buyuk: { ad: "Büyük seri (44-50)" } };
+export const SERILER = { kucuk: { ad: "Küçük seri (38-44)" }, buyuk: { ad: "Büyük beden (dolgun)" } };
 // Ortam rolleri (3 Kasım, Patron): katalog fotoğrafı (renk doğruluğu), video, sadece kampanya videosu
 export const ORTAM_ROLLERI = { katalog: "katalog fotoğrafları", video: "videolar", kampanya: "sadece kampanya videoları" };
-// Sitedeki bedenlerden seri: hepsi ≥44 → büyük; diğerleri küçük seri yüzüyle
-export function seriBul(bedenler) {
-  const n = (String(bedenler || "").match(/\b\d{2}\b/g) || []).map(Number).filter((x) => x >= 32 && x <= 60);
-  return n.length && Math.min(...n) >= 44 ? "buyuk" : "kucuk";
-}
+import { seriBul, mankenSatiri } from "./manken.js";
+export { seriBul, mankenSatiri }; // 9 Kasım (Patron, KESİN): büyük bedeni olan bütün modeller dolgun büyük beden manken
+// Yüzün adresi: kayıtlı Telegram dosyası (anahtar) ya da kalıcı kopya (url)
+const yuzAdres = (env, y) => (y && y.url) || dosyaAdresi(env, y && y.anahtar);
 export const seriYuzu = (secim, seri) => (secim && secim.yuzler && (secim.yuzler[seri] || secim.yuzler.kucuk || secim.yuzler.buyuk)) || (secim && secim.yuz) || null;
 // Rolü olan ortam; eski kayıtta rol yoksa sırayla (kampanya ortamı günlük üretimde kullanılmaz)
 export function rolOrtami(secim, rol, i = 0) {
@@ -733,6 +732,10 @@ export async function pelinCron(env, simdi) {
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinIsKomut" = { isId, islem: "katalogdan", muzik: { url, ad }, deneme } →
   // o işin ONAYLI katalog fotoğrafından yeni video işi + maliyet kartı (Patron onaylarsa başlar)
   try { const ik = await env.KAYIT.get("venom:pelinIsKomut", "json"); if (ik && ik.isId) { await env.KAYIT.delete("venom:pelinIsKomut"); if (ik.islem === "askiEtiketsiz") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.ad && x.ad.sonuc) { const y = { ...x, adSonuc: null }; await askiDetayIlerle(env, y, simdi, x.paket.marka, { etiketsiz: true }); await env.KAYIT.put("venom:pelinAskiEtiketsiz", JSON.stringify({ ek: (y.adSonuc && y.adSonuc.ek) || [], kesOn: (x.ad.sonuc.kesOn || {}).url || null, kesArka: (x.ad.sonuc.kesArka || {}).url || null }), { expirationTtl: 3 * 86400 }); } } else if (ik.islem === "eskiKapat") { for (const id of (ik.isIdler || []).slice(0, 30)) { const x = await oku(env, `pelin:is:${id}`, null); if (x && ["onay", "uyari", "foto_onay", "senaryo_onay"].includes(x.durum)) { x.durum = "iptal"; x.gecmis = [...(x.gecmis || []), [simdi, `geçersiz — ${String(ik.neden || "Patron isteği").slice(0, 120)}`]]; await kaydet(env, `pelin:is:${x.id}`, x); } } } else if (ik.islem === "videoGonder") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && (x.paketKopya || (x.paket && x.paket.video))) await tgDosya(env, "sendVideo", "video", x.paketKopya || x.paket.video, { chat_id: murat(env), caption: ik.yazi || `🎬 ${x.kod}`, supports_streaming: true }); } else if (ik.islem === "videoDuzelt") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.paket && x.paket.video) { x.duzeltSonra = x.durum; x.duzeltKontrol = Boolean(ik.kontrol); x.paketFal = await falGonder(env, VIDEO_YAZI.olcek, { video_url: x.paket.video, width: 1080, height: 1920, mode: "stretch", crf: 20, codec: "libx264", preset: "medium" }); x.durum = "video_duzelt"; x.bekleZaman = simdi; await kaydet(env, `pelin:is:${x.id}`, x); const l = await oku(env, "pelin:isler", []); if (!l.includes(x.id)) { l.push(x.id); await kaydet(env, "pelin:isler", l.slice(-200)); } } } else if (ik.islem === "askiDetayGoster") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.durum === "aski_kontrol") { x.adKontrol = false; await paketOnizleme(env, x, x.paket.marka); x.durum = "paket_onay"; await kaydet(env, `pelin:is:${x.id}`, x); } } else if (ik.islem === "askiDetayTekrar") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.ad && x.ad.sonuc) { if (ik.yeniKesim) { for (const [kk, f] of [["kesOn", "on"], ["kesArka", "arka"]]) if (x.ad.kaynak[f]) { x.ad.istek[kk] = await falGonder(env, KESIM.uc, { image_url: dosyaAdresi(env, x.ad.kaynak[f]), prompt: KESIM.istem, autocrop: KESIM.autocrop }); delete x.ad.sonuc[kk]; x.maliyet = yuvarla((x.maliyet || 0) + KESIM.fiyat); await harcamaYaz(env, KESIM.fiyat, simdi); } x.ad.zaman = simdi; } x.durum = "aski_detay"; x.adSonuc = null; x.paketOnayIste = true; x.adKontrol = Boolean(ik.kontrol); await kaydet(env, `pelin:is:${x.id}`, x); } } else if (ik.islem === "askiDetay") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.paket && x.video) { await askiDetayBaslat(env, x, simdi); x.durum = "aski_detay"; x.bekleZaman = simdi; x.gecmis = [...(x.gecmis || []), [simdi, "askı ön/arka + detay kolajı (gerçek fotoğraftan) başladı"]]; if (!x.paket.formatlar) x.paket.formatlar = await instagramKirp(env, x.sahne || x.foto, x.kod, x.paket.marka).catch(() => null); await kaydet(env, `pelin:is:${x.id}`, x); const l = await oku(env, "pelin:isler", []); if (!l.includes(x.id)) { l.push(x.id); await kaydet(env, "pelin:isler", l.slice(-200)); } } } else if (ik.islem === "paketYenile") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.video) { if (ik.aski) x.set = { ...(x.set || {}), aski: ik.aski === "yok" ? "yok" : dosyaAdresi(env, ik.aski) }; x.paketKontrol = Boolean(ik.kontrol); x.paketMod = ik.mod || null; x.durum = "paket_gonder"; x.paket = null; x.gecmis = [...(x.gecmis || []), [simdi, "paket yenileniyor (yazı videonun tamamına, gerçek askı fotoğrafı)"]]; await kaydet(env, `pelin:is:${x.id}`, x); const l = await oku(env, "pelin:isler", []); if (!l.includes(x.id)) { l.push(x.id); await kaydet(env, "pelin:isler", l.slice(-200)); } } } else if (ik.islem === "paketBitir") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.durum === "paket_kontrol") { x.paketKontrol = false; await patronaPaketGonder(env, x, x.paket.marka); await teslimEt(env, x, simdi); await yaz(env, murat(env), `📦 ${x.kod}: düzeltilmiş paket hazır ("${MARKALAR[x.paket.marka].ad} · ${x.kod}" videonun tamamında + gerçek askı fotoğrafı). Kemal şimdi YENİ SON YAYIN ONAYI kartını getirecek; eski kart geçersiz.`); } } else if (ik.islem === "setVePaket") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && x.video) { await paketeAl(env, x, simdi); await yaz(env, murat(env), `📸 ${x.kod}: eksik fotoğraf seti üretiliyor (~${para(SET_FIYAT)}); ardından marka yazısı basılıp Kemal son yayın onay kartını getirecek. Video yeniden üretilmez.`); } } else if (ik.islem === "bildir") { const x = await oku(env, `pelin:is:${ik.isId}`, null); if (x && ["onay", "uyari"].includes(x.durum)) { if (ik.onEk) await yaz(env, murat(env), ik.onEk); await isBildir(env, x); await kaydet(env, `pelin:is:${x.id}`, x); } } else await katalogdanVideoKarti(env, ik, simdi); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinIsKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  // 9 Kasım (Patron): KV "venom:pelinBuyukYuz" = { isId } → o işin onaylı ön fotoğrafı kalıcı kopya (pelinmedya, süresiz) + "büyük beden yüzü"
+  try { const by = await env.KAYIT.get("venom:pelinBuyukYuz", "json"); if (by && by.isId) { await env.KAYIT.delete("venom:pelinBuyukYuz"); await env.KAYIT.put("venom:pelinBuyukYuzSonuc", JSON.stringify(await buyukYuzKaydet(env, by, simdi)), { expirationTtl: 7 * 86400 }); } } catch (e) { await env.KAYIT.put("venom:pelinBuyukYuzSonuc", JSON.stringify({ ok: false, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+  // 9 Kasım (Patron): KV "venom:pelinIptal" = { idler: [...], neden } → işler iptal (para harcanmaz; kartları kapanır)
+  try { const ip = await env.KAYIT.get("venom:pelinIptal", "json"); if (ip && Array.isArray(ip.idler)) { await env.KAYIT.delete("venom:pelinIptal"); const c = []; for (const id of ip.idler.slice(0, 10)) { const x = await oku(env, `pelin:is:${id}`, null); if (!x) { c.push(`${id}: yok`); continue; } if (["iptal", "onaylandi", "gonderildi"].includes(x.durum)) { c.push(`${id}: zaten ${x.durum}`); continue; } x.durum = "iptal"; (x.gecmis = x.gecmis || []).push([simdi, `iptal (Patron: ${ip.neden || "gerek kalmadı"})`]); await kaydet(env, `pelin:is:${id}`, x); await acikKartSil(env, id); c.push(`${id}: iptal`); } await env.KAYIT.put("venom:pelinIptalSonuc", JSON.stringify({ zaman: simdi, c }), { expirationTtl: 7 * 86400 }); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinIptal", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   // Tek seferlik (Claude Code, Patron isteğiyle): KV "venom:pelinKomut" = { metin } → Patron yazmış gibi kart hazırlanır (kart yine Patron onayı ister)
   try { const pk = await env.KAYIT.get("venom:pelinKomut", "json"); if (pk && /^\/(uret|maliyettesti)\b/.test(String(pk.metin))) { await env.KAYIT.delete("venom:pelinKomut"); const p = murat(env); await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: pk.metin, sonSenaryo: Boolean(pk.sonSenaryo) }, simdi, /^\/maliyettesti/.test(pk.metin)); } } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "pelinKomut", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
   if (env.STOK) { try { await eskiTeslimSor(env, simdi); } catch (e) { await env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: simdi, yol: "eskiTeslim", hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } }
@@ -782,7 +785,7 @@ Sade, kısa, samimi Türkçe konuş (Rusça yazılırsa Rusça). Sohbet gibi kon
 Kesin kurallar (asla esnemez): kıyafetin rengi, deseni ve kesimi asla değişmez; manken yüzleri hep aynı; fiyat, maliyet, alış fiyatı, kâr ve stok hiçbir görsele/yazıya girmez; videoya AI notu basılmaz; videonun son karesinde modelin MARKASI (VOLONTE ya da BLACK ROSE — model kartında, Sami'nin deposundan) ve altında model kodu (fiyat ve başka yazı yok). Markayı ASLA tahmin etme; VOLONTE ve BLACK ROSE iki ayrı mağazadır, karıştırılmaz. Onaysız harcama yok: her üretimden önce maliyet önizlemesi gider, sadece Murat onaylar. Para harcayan bir işi sen başlatamazsın; sadece "kurulum_karti" (yüz + ortam kurulumu) ya da "uretim_karti" (model kodlarıyla üretim / maliyet testi) ile Patron'a ✅ Onayla / ❌ İptal düğmeli maliyet kartı gönderebilirsin. Eski deneme akışı ("fal hazır", kör test, askı/kumaş denemesi) TAMAMEN KALDIRILDI; ondan söz etme.
 Üretim akışı (2 Kasım, Patron): /uret <kod> → ürün fotoğrafı (önce Patron/Hemra'nın gönderdiği, yoksa site) → sabit yüzle fotoğraf → aynı fotoğraftan 6 sn video → kalite kontrol (sen + ikinci göz OpenAI) → renk/desen/kesim farkı varsa otomatik yeniden; 2 denemede olmazsa Patron'a ⚠️ → Patron [✅ Onayla] [🔄 Yeniden üret] [❌ İptal] → onaylanınca Selin siteye, Kemal kanala. /maliyettesti 5 kod → model başı maliyet raporu. Örnek video ("bunun gibi yap, 3557"): kamera, ışık, hız, poz ve ortam havasını tarif olarak çıkarırsın; birebir kopya yok, başkasının yüzü/logosu/müziği yok; beğenilen tarif şablon olur (/sablonlar).
 Yapay zekâ yüzden kişi tanıyamaz; "ünlüye benziyor mu" kontrolünü kullanıcının gözü yapar — bunu dürüstçe söyle.
-Yüzler (3 Kasım): her serinin KALICI yüzü var (küçük seri 38-44, büyük seri 44-50); model hangi seriyse o yüz kullanılır. Kayıtlı yüzü değiştirmek için: yuz_duzenle_karti (kimlik aynı kalır, sadece istenen değişir; maliyet kartı → Patron önce görür, beğenirse kaydeder) ya da Patron'un gönderdiği fotoğraf (Pelin'e fotoğrafı "yüz" yazısıyla atar → hangi seri sorulur). Patron açıkça yeni yüz istemedikçe kurulum_karti KULLANMA (o tamamen yeni yüzler üretir).
+Yüzler (9 Kasım, Patron): büyük bedeni (46+) olan BÜTÜN modeller (38-50 dahil) büyük beden (dolgun) yüzüyle — 5 Kasım onaylı 3627 beyaz ön fotoğrafındaki manken; sadece küçük seri (38-44) modeller küçük seri yüzüyle. Kayıtlı yüzü değiştirmek için: yuz_duzenle_karti (kimlik aynı kalır, sadece istenen değişir; maliyet kartı → Patron önce görür, beğenirse kaydeder) ya da Patron'un gönderdiği fotoğraf (Pelin'e fotoğrafı "yüz" yazısıyla atar → hangi seri sorulur). Patron açıkça yeni yüz istemedikçe kurulum_karti KULLANMA (o tamamen yeni yüzler üretir).
 Ortamlar rollü: katalog fotoğrafı ortamı (renk doğruluğu), video ortamı, sadece kampanya videosu ortamı. Değiştirmek için ortam_ayarla.
 Ürün fotoğrafları: Patron/Hemra fotoğrafı yazısında model koduyla atar ("3627 ön", "3627 arka", "3627 kırmızı"; albümde ilk fotoğrafa yazmak yeter: 1. ön, 2. arka). Bunlar üretimde siteden önce kullanılır; "dosya olarak" gönderilirse renk daha net kalır. Kontrol: urun_fotolari.
 Renk: Patron "3627 kırmızı" derse uretim_karti'ya renkler ile ver; sadece o renk üretilir ve kontrol o rengi arar.
@@ -1047,7 +1050,7 @@ export async function modelKarti(env, chat, kod) {
   const metin = [
     `🏷 MARKA: ${MARKALAR[b.marka] ? `${MARKALAR[b.marka].ad} (${b.markaKaynak || "kayıtlı"})` : "kayıtlı değil — ilk üretimde Sami'nin deposundan bakılır"}`,
     `🗂 MODEL KARTI — ${kod}${site && site.baslik ? ` (${site.baslik})` : ""}`,
-    `Seri: ${SERILER[seri].ad}${b.seri ? "" : " (siteden tahmin; kalıcı değil)"} · yüz: ${yuzAdi(seriYuzu(secim, seri))}`,
+    `${mankenSatiri(seri, (site || {}).bedenler)}${b.seri ? "" : " (bedenlerden)"} · ${yuzAdi(seriYuzu(secim, seri))}`,
     `Renk: ${b.renk || "kayıtlı değil (bütün renkler)"}`,
     `Boy: ${boyYazi(b)}`,
     ...(b.anlama && Object.keys(b.anlama).length ? Object.entries(b.anlama).map(([r, an]) => `Model kuralı (${r === "genel" ? "bütün renkler" : r}): ${(modelKurallari(an, r === "genel" ? null : r) || {}).tr || "—"}`) : [`Astar: ${b.astarTr || "not yok"} (anlama kartı henüz onaylanmadı)`]),
@@ -1815,7 +1818,7 @@ async function uretKomutu(env, m, simdi, test = false) {
   onay.ust = [
     `🏷 Marka: ${kodlar.map((k) => `${k} = ${MARKALAR[(boylar[k] || {}).marka] ? MARKALAR[boylar[k].marka].ad : "?"}`).join(", ")} (videonun tamamında sağ altta, fotoğraflarda sağ altta)`,
     `💰 ${test ? "MALİYET TESTİ" : "Üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}${sablonAd ? ` (kayıtlı şablon: ${sablonAd})` : ""} · ${seviye === "premium" ? "PREMIUM" : "standart"}`,
-    `Yüz: ${kodlar.map((k) => `${k} ${seriler[k] === "buyuk" ? "büyük seri" : "küçük seri"} (${yuzAdi(seriYuzu(secim, seriler[k]))})`).join(", ")}`,
+    `👤 Manken: ${kodlar.map((k) => `${k} ${seriler[k] === "buyuk" ? "büyük beden (dolgun)" : "küçük seri"} (${yuzAdi(seriYuzu(secim, seriler[k]))})`).join(", ")}`,
     ...(Object.keys(renkler).length ? [`Renk: ${Object.entries(renkler).map(([k, rk]) => `${k} sadece ${rk}`).join(", ")}`] : []),
     `Ürün fotoğrafı: ${kodlar.map((k) => `${k} ${foto[k].kaynak === "patron" ? `sizin gönderdiğiniz (${foto[k].roller.map((x, i) => fotoEtiketi({ rol: x, etiket: (foto[k].etiketler || [])[i] })).join(", ")})` : foto[k].urller.length ? "site" : "YOK ⚠️"}`).join(", ")}`,
     `Boy: ${kodlar.map((k) => `${k} ${boyYazi(boylar[k])}`).join(", ")}`,
@@ -2240,7 +2243,7 @@ function hfYedegeGec(is, arac, neden, simdi) {
 }
 async function uretimAdimi(env, is, simdi) {
   const secim = await oku(env, "pelin:secim", null);
-  const yuz = dosyaAdresi(env, seriYuzu(secim, is.seri || "kucuk").anahtar);
+  const yuz = yuzAdres(env, seriYuzu(secim, is.seri || "kucuk"));
   const arac = is.arac || aracSec(secim);
   const bekle = async () => {
     const s = await falDurum(env, is.fal).catch((e) => ({ bitti: false, hata: String(e.message) }));
@@ -3101,6 +3104,22 @@ export async function yuzleriGoster(env, chat) {
   return { ...r, metin: media.map((x) => x.caption).join(" · ") };
 }
 
+export async function buyukYuzKaydet(env, { isId, ad }, simdi) {
+  const is = await oku(env, `pelin:is:${isId}`, null);
+  if (!is) return { ok: false, hata: "iş yok" };
+  const adaylar = [is.foto, is.paket && is.paket.on, is.paket && is.paket.set && is.paket.set.on, is.set && is.set.on].filter((x) => typeof x === "string" && /^https:/.test(x));
+  let r = null, kaynak = null;
+  for (const u of adaylar) { const x = await fetch(u).catch(() => null); if (x && x.ok) { r = x; kaynak = u; break; } }
+  if (!r) return { ok: false, hata: `ön fotoğraf indirilemedi (${adaylar.length} adres denendi)` };
+  const id = crypto.randomUUID().replace(/-/g, "");
+  await env.KAYIT.put(`pelinmedya:${id}`, await r.arrayBuffer(), { metadata: { tur: r.headers.get("content-type") || "image/jpeg" } }); // süresiz
+  const secim = (await oku(env, "pelin:secim", null)) || {};
+  const yuzler = { ...(secim.yuzler || {}) };
+  const { onceki: _o, ...eski } = yuzler.buyuk || {};
+  yuzler.buyuk = { manken: "dolgun", ad: ad || `${is.kod} ${is.renk || ""} onaylı büyük beden yüzü`.replace(/\s+/g, " "), url: `${env.SELF_URL || "https://volonte-pelin.volonte.workers.dev"}/medya/${id}`, kaynak: `${is.kod} ${is.renk || ""} ön fotoğrafı (Patron onaylı)`.replace(/\s+/g, " "), zaman: simdi, onceki: eski };
+  await kaydet(env, "pelin:secim", { ...secim, yuzler, zaman: simdi });
+  return { ok: true, url: yuzler.buyuk.url, ad: yuzler.buyuk.ad, kaynak };
+}
 // Tek seferlik kayıt (Claude Code hazırlar: KV "venom:pelinYuzKaydi" = { yuzler: { kucuk|buyuk: { url, manken, ad, kaynak } },
 // ortamRolleri: { "<id>": "katalog"|"video"|"kampanya" }, notlar: [..], duzenle: { seri, talimat, istem } }) → fotoğraflar Telegram'a
 // yüklenir (kalıcı dosya kimliği), "pelin:secim" yazılır, Patron'a TEK mesaj: fotoğraflar + özet (+ düzenleme kartı).
@@ -3160,7 +3179,7 @@ async function yuzDuzenBaslat(env, j, simdi) {
   const y = secim && secim.yuzler ? secim.yuzler[j.seri] : null;
   if (!y) return "kayıtlı yüz yok";
   if ((await buAyHarcanan(env, simdi)) + GORSEL.fiyat > AYLIK_SINIR_USD) return `aylık ${AYLIK_SINIR_USD} $ sınırı aşılır`;
-  j.fal = await falGonder(env, GORSEL.duzenle, { prompt: yuzDuzenIstemi(j.istem), image_urls: [dosyaAdresi(env, y.anahtar)], num_images: 1, aspect_ratio: "3:4", resolution: "1K", output_format: "jpeg" });
+  j.fal = await falGonder(env, GORSEL.duzenle, { prompt: yuzDuzenIstemi(j.istem), image_urls: [yuzAdres(env, y)], num_images: 1, aspect_ratio: "3:4", resolution: "1K", output_format: "jpeg" });
   await harcamaYaz(env, GORSEL.fiyat, simdi);
   Object.assign(j, { durum: "bekle", bekleZaman: simdi, eskiFileId: y.fileId, deneme: (j.deneme || 0) + 1 });
   await kaydet(env, `pelin:yuzDuzen:${j.id}`, j, 7 * 86400);

@@ -46,13 +46,18 @@ export async function stokSorulariGonder(env, simdi, tg) {
     ].join("\n");
     const sec = kanal && modelSecenekleri(s.kod, kodlar, {})[0];
     const mesajlar = [];
-    for (const kisi of stokKararcilari(env)) {
+    // 9 Kasım (ekip düzeni): VOLONTE stok → Aziz, Black Rose → Merdan (doğrudan); kimlik yoksa / gönderilemezse Hemra
+    const hedef = s.magaza === "BLACKROSE" ? String(env.BR_SORUMLU || "") : String(env.AZIZ_ID || "");
+    const yedek = String(env.HEMRA_ID || env.FABRIKA_SORUMLU || "");
+    const alicilar = hedef ? [hedef] : stokKararcilari(env);
+    for (let kisi of alicilar) {
       let r = sec ? await tg(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal.id, message_id: sec.ids[0], caption: metin, reply_markup: stokKlavye(s.kod) }) : { ok: false };
       let tur = "c";
       if (!r.ok) {
         r = await tg(env, "sendMessage", { chat_id: kisi, text: metin, reply_markup: stokKlavye(s.kod) });
         tur = "t";
       }
+      if (!r.ok && hedef && yedek && kisi !== yedek) { kisi = yedek; r = sec ? await tg(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal.id, message_id: sec.ids[0], caption: metin, reply_markup: stokKlavye(s.kod) }) : { ok: false }; tur = "c"; if (!r.ok) { r = await tg(env, "sendMessage", { chat_id: kisi, text: metin, reply_markup: stokKlavye(s.kod) }); tur = "t"; } }
       if (r.ok) mesajlar.push([kisi, r.result.message_id, tur, metin]);
     }
     await stokIste(env, "/soru-gonderildi", { kod: s.kod, mesajlar });

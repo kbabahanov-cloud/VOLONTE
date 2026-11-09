@@ -1,6 +1,7 @@
 // VENOM KISA MODEL KARTI (9 Kasım, Patron): "3629 kaç adet var?", sesli "36 29" ya da kodsuz fotoğraf → tek mesajda kısa kart.
-// Bu dosya saf yardımcılar (test edilebilir): koddan anlama, kart metni (en fazla 6 satır), gizlilik süzgeci.
+// Bu dosya saf yardımcılar (test edilebilir): koddan anlama, kart metni (en fazla 7 satır; 9 Kasım: manken satırı), gizlilik süzgeci.
 // Kartta ASLA: fiyat, alış, kâr, ciro, müşteri adı (bunlar sadece ofiste Patron şifresiyle). Repete ASLA doğrudan sipariş değil.
+import { mankenSatiri } from "./manken.js";
 const MARKA_AD = { BLACKROSE: "BLACK ROSE", VOLONTE: "VOLONTE" };
 const gunYaz = (t) => { const d = new Date((t + 3 * 3600) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}`; };
 const gunStr = (g) => (g ? `${String(g).slice(8, 10)}.${String(g).slice(5, 7)}` : "");
@@ -44,8 +45,9 @@ export function kartSatirlari(o) {
   const ne = f && ({ bekliyor: "cevap bekliyor", gelecek: "gelecek", repete: "repete olacak", bitti: "fabrika bitti dedi" }[f.durum] || f.durum);
   satirlar.push(f ? `Fabrika: ${gunYaz(f.gonderim)} sipariş · ${ne}${f.hazirGun ? ` (${gunStr(f.hazirGun)} hazır)` : ""}` : "Fabrikada bekleyen sipariş yok");
   satirlar.push(o.sitede ? "Sitede: var" : "Sitede: yok");
+  if (o.manken) satirlar.push(mankenSatiri(o.manken, o.bedenler)); // 9 Kasım: hangi manken (tek satır)
   if (o.fotoYok) satirlar.push("📷 Fotoğraf yok — Selin'in fotoğraf listesine ekledim.");
-  return satirlar.slice(0, 6);
+  return satirlar.slice(0, 7);
 }
 // Düğmeler (Detay: ofisteki model sayfası hazır olunca açılır — şimdilik gizli)
 export const kartDugmeleri = (kod, onek = "") => [

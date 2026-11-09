@@ -735,6 +735,13 @@ export async function fabrikaDugmesi(env, cq, tg, simdi) {
     if (!aday) return cevapla("Bu istek artık geçerli değil.");
     await env.KAYIT.delete(`sami:fabrikaAday:${ek}`);
     const benim = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
+    if (islem === "f") { // 9 Kasım (Patron): sadece fiyat yetkisi — başka HİÇBİR şey gitmez (stok, alış, kâr, satış, kasa, müşteri, görev, kart yok)
+      const l = ((await env.KAYIT.get("sami:fiyatKisiler", "json")) || []).filter((k) => String(k.id) !== String(ek));
+      await env.KAYIT.put("sami:fiyatKisiler", JSON.stringify([...l, { id: Number(ek), ad: aday.ad, zaman: simdi }]));
+      await cevapla("Eklendi");
+      await tg(env, "sendMessage", { chat_id: Number(ek), text: "Merhaba! Model kodunu yazın (ör. 3394), satış fiyatını söyleyeyim." });
+      return tg(env, "editMessageText", { ...benim, text: `💲 ${aday.ad} eklendi: SADECE fiyat sorabilir (kod yazınca satış fiyatı). Başka hiçbir bilgi gitmez.` });
+    }
     if (islem === "h") {
       await cevapla("Eklenmedi");
       return tg(env, "editMessageText", { ...benim, text: `❌ ${aday.ad} fabrika listesine eklenmedi.` });
@@ -776,6 +783,32 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
 }
 
 // Yetkisiz kişi yazınca: fabrika kişisiyse kısa cevap; değilse /start ile Murat'a sorulur (bir kez).
+// ---------- 9 Kasım (Patron): JANET – SADECE FİYAT ----------
+export async function fiyatKisisiMi(env, id) {
+  let l = null; try { l = await env.KAYIT.get("sami:fiyatKisiler", "json"); } catch { l = null; }
+  if (typeof l === "string") { try { l = JSON.parse(l); } catch { l = null; } }
+  return Array.isArray(l) && l.some((k) => String(k.id) === String(id));
+}
+const fiyatYaz = (n) => `${(Math.round(Number(n) * 100) / 100).toFixed(2).replace(".", ",")} $`;
+// "3394" / "fiyat 3394" / "3394 fiyat" / "price 3394" / "prix 3394" / "3394 3627 price" → her kod ayrı satır; başka metin → kısa yönlendirme
+export function fiyatSorusu(metin) {
+  const t = String(metin || "").toLocaleLowerCase("tr").replace(/\b(fiyat[ıi]?|fiyatlar[ıi]?|price|prices|prix|ne\s*kadar)\b/g, " ").replace(/[,.;:?!/]+/g, " ");
+  const kodlar = t.match(/\b\d{3,6}\b/g) || [];
+  return kodlar.length && !t.replace(/\b\d{3,6}\b/g, "").trim() ? [...new Set(kodlar)].slice(0, 15) : null;
+}
+export async function fiyatCevabi(env, m, tg) {
+  const kodlar = fiyatSorusu(m.text);
+  if (!kodlar) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Sadece model kodunu yazın (ör. 3394 ya da 3394 fiyat); satış fiyatını söylerim." });
+  const satir = [];
+  for (const kod of kodlar) {
+    const b = await stokIste(env, "/bilgi", { kod }).catch(() => null);
+    const l = ((b && b.satirlar) || []).filter((r) => r.fiyat != null && Number(r.fiyat) > 0);
+    if (!l.length) { satir.push(`${kod}: bu kod yok`); continue; }
+    const fiyatlar = [...new Set(l.map((r) => Number(r.fiyat)))];
+    satir.push(fiyatlar.length === 1 ? `${kod}: ${fiyatYaz(fiyatlar[0])}` : `${kod}: ${l.map((r) => `${String(r.magaza).toUpperCase() === "BLACKROSE" ? "BLACK ROSE" : r.magaza} ${fiyatYaz(r.fiyat)}`).join(" · ")}`);
+  }
+  return tg(env, "sendMessage", { chat_id: m.chat.id, text: satir.join("\n") });
+}
 export async function yabanciMesaji(env, m, tg) {
   if (await fabrikaKisisiMi(env, m.from.id)) {
     if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return;
@@ -784,13 +817,14 @@ export async function yabanciMesaji(env, m, tg) {
     return tg(env, "sendMessage", { chat_id: m.chat.id, text: `Bu bot size sadece ${celalMi ? "sizden istenen modellerin listesini" : "VOLONTE fabrika eksik listesini"} gönderir. Repete gelince: "3394 geldi" ya da "3394 repete geldi siyah 10 bej 6" yazabilirsiniz.${sorgu ? "\nBlack Rose stoğu için: /stok 3900 (onaylanınca cevap gelir)." : ""}` });
   }
   if (!/^\/start\b/i.test(String(m.text || "").trim())) return;
-  if (await env.KAYIT.get(`sami:fabrikaAday:${m.from.id}`)) return;
+  const eskiAday = await env.KAYIT.get(`sami:fabrikaAday:${m.from.id}`, "json").catch(() => null);
+  if (eskiAday && eskiAday.v2) return; // 9 Kasım: eski kart "sadece fiyat" seçeneği olmadan gitmişse bir kez yeniden sorulur
   const ad = [m.from.first_name, m.from.last_name].filter(Boolean).join(" ") || m.from.username || String(m.from.id);
-  await env.KAYIT.put(`sami:fabrikaAday:${m.from.id}`, JSON.stringify({ ad, kullanici: m.from.username || null }), { expirationTtl: 30 * 86400 });
+  await env.KAYIT.put(`sami:fabrikaAday:${m.from.id}`, JSON.stringify({ ad, kullanici: m.from.username || null, v2: true }), { expirationTtl: 30 * 86400 });
   await tg(env, "sendMessage", {
     chat_id: murat(env),
     text: `🏭 ${ad}${m.from.username ? ` (@${m.from.username})` : ""} Sami'ye /start yazdı. Kim olarak eklensin?`,
-    reply_markup: { inline_keyboard: [[{ text: "🏭 Fabrikaya ekle", callback_data: `fa:e:${m.from.id}` }, { text: "👤 Celal olarak ekle", callback_data: `fa:c:${m.from.id}` }], [{ text: "❌ Ekleme", callback_data: `fa:h:${m.from.id}` }]] },
+    reply_markup: { inline_keyboard: [[{ text: "🏭 Fabrikaya ekle", callback_data: `fa:e:${m.from.id}` }, { text: "👤 Celal olarak ekle", callback_data: `fa:c:${m.from.id}` }], [{ text: "💲 Mağaza: sadece fiyat (Janet)", callback_data: `fa:f:${m.from.id}` }], [{ text: "❌ Ekleme", callback_data: `fa:h:${m.from.id}` }]] },
   });
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Merhaba! İsteğiniz yöneticiye iletildi; onaylanınca eksik listelerini buradan alacaksınız." });
 }

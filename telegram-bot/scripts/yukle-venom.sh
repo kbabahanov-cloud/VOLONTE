@@ -10,7 +10,7 @@ HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-venom
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
 source scripts/kimlikler.sh
-KIMLIK=$(kimlik_bagla MURAT_ID FUAT_ID NURI_ID BR_SORUMLU HEMRA_ID FABRIKA_SORUMLU)
+KIMLIK=$(kimlik_bagla MURAT_ID FUAT_ID NURI_ID BR_SORUMLU HEMRA_ID FABRIKA_SORUMLU AZIZ_ID)
 META=$(mktemp)
 GIZLI=""
 if [ "$ILK" = "evet" ]; then

@@ -12,6 +12,7 @@ export function kisiAdi(env, id) {
   if (kimlikler(env.MURAT_ID).includes(s)) return "Patron";
   if (s === String(env.HEMRA_ID || "") || s === String(env.FABRIKA_SORUMLU || "")) return "Hemra";
   if (s === String(env.BR_SORUMLU || "")) return "Merdan";
+  if (kimlikler(env.AZIZ_ID).includes(s)) return "Aziz";
   if (kimlikler(env.FUAT_ID).includes(s)) return "Fuat";
   if (kimlikler(env.NURI_ID).includes(s)) return "Nuri";
   return "ekip";

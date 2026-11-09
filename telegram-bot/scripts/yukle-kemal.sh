@@ -13,7 +13,7 @@ rm -f test-dist.mjs
 HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-asistan
 source scripts/kimlikler.sh
-KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS MURAT_ID FABRIKA_SORUMLU)
+KIMLIK=$(kimlik_bagla ALLOWED_IDS EKIP_IDS MURAT_ID FABRIKA_SORUMLU AZIZ_ID)
 META=$(mktemp)
 # StokDO (Sayım Sami, SQLite) ilk kez eklenirken göç (v1 → v2) bir kez gönderilir.
 ETIKET=$(curl -sS "https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts" | python3 -c 'import sys,json;print(next((s.get("migration_tag") or "") for s in json.load(sys.stdin)["result"] if s["id"]=="volonte-asistan"))')

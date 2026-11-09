@@ -1269,3 +1269,56 @@ test("bakiye: 'Higgsfield'a 20 $ yükledim' kaydedilir; yüklenen − sonradan h
   assert.equal(r.harcama.toplam, 19.363);
   assert.match(r.bakiye.falNot, /sorgulanamıyor/);
 });
+
+test("manken kuralı: büyük bedeni olan bütün modeller (38-50 dahil) dolgun büyük beden; sadece 38-44 küçük seri; model kartında tek satır", async () => {
+  const { seriBul, mankenSatiri } = await import("./manken.js");
+  assert.equal(seriBul("38-40-42-44-46-48-50"), "buyuk");
+  assert.equal(seriBul("44-46-48-50"), "buyuk");
+  assert.equal(seriBul("38-40-42-44"), "kucuk");
+  assert.equal(seriBul(""), "kucuk");
+  assert.equal(mankenSatiri("buyuk", "38-50"), "👤 Manken: büyük beden (dolgun) yüzü — bedenler 38-50");
+  const { kartSatirlari } = await import("./venom-model.js");
+  const l = kartSatirlari({ kod: "3627", marka: "BLACKROSE", stok: { BLACKROSE: 11 }, s7: 4, s14: 8, gun14: 14, fs: [], sitede: true, manken: "buyuk", bedenler: "38-40-42-44-46-48-50" });
+  assert.equal(l.at(-1), "👤 Manken: büyük beden (dolgun) yüzü — bedenler 38-40-42-44-46-48-50");
+  const { buyukYuzKaydet } = await import("./pelin.js");
+  const depo = new Map([["pelin:is:3627-x", JSON.stringify({ kod: "3627", renk: "beyaz", foto: "https://fal/on.jpg" })], ["pelin:secim", JSON.stringify({ yuzler: { kucuk: { ad: "2 numaralı siyahi kız", anahtar: "a" }, buyuk: { ad: "3 numaralı dolgun kız", anahtar: "c" } } })]]);
+  const env = { SELF_URL: "https://pelin.test", KAYIT: { async get(k, t) { const x = depo.get(k); return x == null ? null : t === "json" ? JSON.parse(x) : x; }, async put(k, x) { depo.set(k, x); } } };
+  const gercek = globalThis.fetch;
+  globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/jpeg" } });
+  try { assert.equal((await buyukYuzKaydet(env, { isId: "3627-x" }, 100)).ok, true); } finally { globalThis.fetch = gercek; }
+  const s = JSON.parse(depo.get("pelin:secim"));
+  assert.match(s.yuzler.buyuk.url, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/);
+  assert.equal(s.yuzler.buyuk.manken, "dolgun");
+  assert.equal(s.yuzler.buyuk.kaynak, "3627 beyaz ön fotoğrafı (Patron onaylı)");
+  assert.equal(s.yuzler.buyuk.onceki.ad, "3 numaralı dolgun kız"); // eski yüz geri alınabilir
+  assert.equal(s.yuzler.kucuk.ad, "2 numaralı siyahi kız");
+});
+
+test("ekip düzeni: Hemra'ya 11:00 toplu liste (4 düğme), seçim → kart seçilen kişiye; izinliyse Merdan; akşam satırı", async () => {
+  const o = ortam();
+  const E = await import("./venom-ekip.js");
+  const K = await import("./venom-kopru.js");
+  const { kartIletAdimi } = await import("./kart-tekrar.js");
+  o.env.AZIZ_ID = "505";
+  const t = ist(10, 11);
+  await E.listeyeEkle(o.env, { tur: "kart", ref: "isd:1", isdId: 1, bot: "kemal", chat: "504", mesaj: 7, kod: "3493", ozet: "3493 (kemal): ⬆️ 3493" }, t);
+  await E.listeyeEkle(o.env, { tur: "kart", ref: "isd:1", isdId: 1, bot: "kemal", chat: "504", mesaj: 7, kod: "3493", ozet: "tekrar" }, t); // aynı iş iki kez yok
+  assert.equal(await E.hemraListesiGonder(o.env, t, { stokIste: async () => [], biriktir: async () => {} }), 1);
+  const g = (await K.kuyruguAl(o.env, "giden"))[0];
+  assert.equal(g.kime, "hemra");
+  assert.match(g.metin, /^📋 Hemra: onaylanmayanlar \/ sorunlu işler \(1\)/);
+  assert.deepEqual(g.klavye.inline_keyboard[0].map((b) => b.text), ["1· 👤 Aziz'e ver", "1· 👤 Merdan'a ver", "1· ✋ Ben hallederim", "1· ❓ Patron'a sor"]);
+  await E.hemraDugmesi(o.env, { id: "q", from: { id: 504 }, data: g.klavye.inline_keyboard[0][1].callback_data, message: { chat: { id: 504 }, message_id: 9, reply_markup: g.klavye } }, o.samiTg);
+  const verilen = [];
+  await E.hemraKararAdimi(o.env, t + 60, { kartIlet: async (x, kim) => { verilen.push([x.kod, kim]); await K.kuyrugaEkle(o.env, `kartIlet:${x.bot}`, { id: "k1", chat: x.chat, mesaj: x.mesaj, hedef: E.kisiId(o.env, kim), kim: "Hemra", ozet: x.ozet }); }, devret: async () => {}, gorevVer: async () => {}, patronaSor: async () => {}, biriktir: async () => {} });
+  assert.deepEqual(verilen, [["3493", "merdan"]]);
+  const kg = [];
+  await kartIletAdimi(o.env, "kemal", async (e, m, gv) => { kg.push({ m, gv }); return { ok: true, result: { message_id: 1 } }; });
+  assert.equal(String(kg[0].gv.chat_id), MERDAN);
+  const l = JSON.parse(o.depo.get("venom:hemraListe"));
+  assert.deepEqual(E.hemraSatirlari(l, t), ["📋 Hemra listesi: 1 iş, 1 dağıtıldı, 0 bekliyor"]);
+  o.depo.set("venom:hemraIzinli", "2026-11-10");
+  assert.equal(await E.koordinator(o.env, t), "merdan");
+  assert.equal(E.markaSorumlusu("VOLONTE"), "aziz");
+  assert.equal(E.markaSorumlusu("BLACKROSE"), "merdan");
+});

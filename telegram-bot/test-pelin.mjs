@@ -293,7 +293,7 @@ test("tek seferlik yüz kaydı: iki seri yüzü fotoğraflarıyla tek mesaj + or
   await cronlar(o, 1);
   const album = o.g.filter((x) => x.metod === "sendMediaGroup");
   assert.equal(album.length, 1);
-  assert.deepEqual(album[0].govde.media.map((x) => [x.media, x.caption]), [["https://fal/yuz2.jpg", "👤 Küçük seri (38-44): 2 numaralı siyahi kız"], ["https://fal/yuz3.jpg", "👤 Büyük seri (44-50): 3 numaralı dolgun kız"]]);
+  assert.deepEqual(album[0].govde.media.map((x) => [x.media, x.caption]), [["https://fal/yuz2.jpg", "👤 Küçük seri (38-44): 2 numaralı siyahi kız"], ["https://fal/yuz3.jpg", "👤 Büyük beden (dolgun): 3 numaralı dolgun kız"]]);
   const s = JSON.parse(o.depo.get("pelin:secim"));
   assert.equal(s.yuzler.kucuk.fileId, "YUZ0");
   assert.equal(s.yuzler.buyuk.fileId, "YUZ1");
@@ -301,7 +301,7 @@ test("tek seferlik yüz kaydı: iki seri yüzü fotoğraflarıyla tek mesaj + or
   assert.ok(!o.depo.has("venom:pelinYuzKaydi") && !o.depo.has(`pelin:sohbet:${MURAT}`));
   const mesaj = o.g.filter((x) => x.metod === "sendMessage" && !/HAFTALIK PELİN RAPORU/.test(x.govde.text)); // pazartesi haftalık rapor da çıkabilir (gerçek tarih)
   assert.equal(mesaj.length, 1); // fotoğraflar + TEK mesaj
-  assert.match(mesaj[0].govde.text, /Küçük seri \(38-44\): 2 numaralı siyahi kız[\s\S]*Büyük seri \(44-50\): 3 numaralı dolgun kız[\s\S]*14:33[\s\S]*Siyah Altın Lüks → katalog fotoğrafları[\s\S]*Live Your Life Şehir → videolar[\s\S]*Retro Neon → sadece kampanya videoları[\s\S]*ten rengini biraz koyulaştır[\s\S]*0,15 \$/);
+  assert.match(mesaj[0].govde.text, /Küçük seri \(38-44\): 2 numaralı siyahi kız[\s\S]*Büyük beden \(dolgun\): 3 numaralı dolgun kız[\s\S]*14:33[\s\S]*Siyah Altın Lüks → katalog fotoğrafları[\s\S]*Live Your Life Şehir → videolar[\s\S]*Retro Neon → sadece kampanya videoları[\s\S]*ten rengini biraz koyulaştır[\s\S]*0,15 \$/);
   assert.equal(o.falIstek.length, 0); // onaysız harcama yok
   await cronlar(o, 1);
   assert.equal(o.g.filter((x) => x.metod === "sendMediaGroup").length, 1); // bir kez
@@ -327,7 +327,7 @@ test("tek seferlik yüz kaydı: iki seri yüzü fotoğraflarıyla tek mesaj + or
   assert.equal(s2.yuzler.buyuk.duzenleme, "ten rengini biraz koyulaştır");
   assert.equal(s2.yuzler.buyuk.onceki.fileId, "YUZ1");
   assert.equal(s2.yuzler.kucuk.fileId, "YUZ0"); // küçük seri dokunulmadı
-  assert.match(o.g.at(-1).govde.text, /Büyük seri \(44-50\) yüzü artık düzenlenmiş hâli/);
+  assert.match(o.g.at(-1).govde.text, /Büyük beden \(dolgun\) yüzü artık düzenlenmiş hâli/);
 });
 
 test("Patron'un fotoğrafı → yüz olarak kaydet (seri sorulur); Hemra'nın fotoğrafı yüz olmaz; kodlu fotoğraf ürün fotoğrafıdır", async () => {
@@ -339,7 +339,7 @@ test("Patron'un fotoğrafı → yüz olarak kaydet (seri sorulur); Hemra'nın fo
   await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][1].callback_data);
   const s = JSON.parse(o.depo.get("pelin:secim"));
   assert.equal(s.yuzler.buyuk.fileId, `FOTO-${MURAT}`);
-  assert.match(o.g.at(-1).govde.text, /Büyük seri \(44-50\) yüzü = bu fotoğraf/);
+  assert.match(o.g.at(-1).govde.text, /Büyük beden \(dolgun\) yüzü = bu fotoğraf/);
   await foto(HEMRA, "yüz");
   assert.ok(!/kalıcı yüz/.test(o.g.at(-1).govde.text || ""));
   await foto(MURAT, "3557");
@@ -359,7 +359,7 @@ test("üretim rollerle: büyük seri modeli büyük seri yüzüyle; katalog foto
     o.claude.cevaplar = Array.from({ length: 4 }, () => claudeJsonCevap(GECTI));
     await cronlar(o, 12);
   };
-  assert.match(kart.text, /Yüz: 3557 büyük seri \(3 numaralı dolgun kız\), 3601 küçük seri \(2 numaralı siyahi kız\)/);
+  assert.match(kart.text, /👤 Manken: 3557 büyük beden \(dolgun\) \(3 numaralı dolgun kız\), 3601 küçük seri \(2 numaralı siyahi kız\)/);
   assert.match(kart.text, /Ortam: katalog fotoğrafı Siyah Altın Lüks · video: seçtiğiniz şablon/);
   assert.deepEqual(kart.reply_markup.inline_keyboard[2].map((d) => d.text), ["Siyah-Altın", "Şehir", "Parıltı", "Romantik"]);
   await bas(o, MURAT, `pc:s:${kartId(kart)}:sehir`); // Şehir şablonu → ayrı video karesi, fiyat kartta
@@ -463,7 +463,7 @@ test("3627 kırmızı: Patron'un fotoğrafları (siteden önce) + sadece kırmı
   o.claude.cevaplar = Array.from({ length: 6 }, () => claudeJsonCevap(GECTI));
   await cronlar(o, 16);
   const edit = uretimEdit(o);
-  assert.deepEqual(edit[0].govde.image_urls, ["https://pelin.test/dosya/" + "a".repeat(32), `https://pelin.test/dosya/${on}`, `https://pelin.test/dosya/${arka}`]); // site değil, Patron'un ön + arka
+  assert.deepEqual(edit[0].govde.image_urls, ["https://pelin.test/dosya/" + "c".repeat(32), `https://pelin.test/dosya/${on}`, `https://pelin.test/dosya/${arka}`]); // site değil, Patron'un ön + arka
   assert.match(edit[0].govde.prompt, /image 2 = FRONT view, image 3 = BACK view[\s\S]*red \(kırmızı\) color variant ONLY/);
   assert.match(edit[1].govde.prompt, /city street golden hour[\s\S]*red \(kırmızı\) color variant ONLY/);
   const kontrol = o.claude.filter((x) => JSON.stringify(x.messages).includes("İSTENEN RENK: kırmızı"));
@@ -535,7 +535,7 @@ test("boy: ilk üretimden önce Pelin tahmin edip tek tuşla sorar → kalıcı 
   assert.match(kart.text, /Renk: 3700 sadece koyu bordo/);
   assert.match(kart.text, /Boy: 3700 bilek \(ayakkabı görünür, etek yere değmez\) · referans var/);
   assert.match(kart.text, /Kadraj: tam boy \(baş ve ayakkabı kesilmez\) · sade, zarif ayakkabı/);
-  assert.match(kart.text, /3700 büyük seri \(3 numaralı dolgun kız\)/);
+  assert.match(kart.text, /3700 büyük beden \(dolgun\) \(3 numaralı dolgun kız\)/);
   // ikinci üretimde boy sorulmaz
   await yazi(o, MURAT, "/uret 3700 beyaz");
   assert.match(o.g.at(-1).govde.text, /Renk: 3700 sadece beyaz[\s\S]*Boy: 3700 bilek/);
@@ -656,7 +656,7 @@ test("örnek video 'bunun gibi yap, büyük 3627 koyu bordo' → tarif → ▶�
   await bas(o, MURAT, t.govde.reply_markup.inline_keyboard[0][1].callback_data);
   const kart = o.g.at(-1).govde.text;
   assert.match(kart, /şablon: salon/);
-  assert.match(kart, /3627 büyük seri/);
+  assert.match(kart, /3627 büyük beden \(dolgun\)/);
   assert.match(kart, /Renk: 3627 sadece koyu bordo/);
   assert.match(kart, /video örnek videonun ortamı \(salon\)/);
 });
@@ -733,7 +733,7 @@ test("boy güçlendirme: istemin başında LENGTH RULE + FORBIDDEN; system_promp
   o.depo.set("venom:pelinKomut", JSON.stringify({ metin: "/uret büyük:3627 koyu bordo şablon:romantik" }));
   await cronlar(o, 1); // kart Patron'a (Patron onaylar)
   const kart = o.g.filter((x) => x.govde && x.govde.reply_markup).at(-1).govde;
-  assert.match(kart.text, /3627 büyük seri[\s\S]*Renk: 3627 sadece koyu bordo[\s\S]*Boy: 3627 bilek[\s\S]*örnek videonun ortamı \(romantik\)/);
+  assert.match(kart.text, /3627 büyük beden \(dolgun\)[\s\S]*Renk: 3627 sadece koyu bordo[\s\S]*Boy: 3627 bilek[\s\S]*örnek videonun ortamı \(romantik\)/);
   assert.ok(!o.depo.has("venom:pelinKomut"));
   assert.equal(o.falIstek.length, 0);
   await onayla(o, kartId(kart), "hf_kling4", null); // kayıtlı örnek şablon (romantik) → şablon düğmesi zorunlu değil
@@ -1044,12 +1044,12 @@ test("3627 model kartı: seri/renk/boy/astar kalıcı; '3627 kart' tek ekran; bi
   o.depo.set("pelin:isler", JSON.stringify(["3627-eski"]));
   await yazi(o, MURAT, "3627 kart");
   const kartEkran = o.g.filter((x) => /MODEL KARTI — 3627/.test(x.govde.text || "")).at(-1).govde.text;
-  assert.match(kartEkran, /Seri: Büyük seri \(44-50\) · yüz: 3 numaralı dolgun kız\nRenk: koyu bordo\nBoy: bilek altı \(bileği hafif örter, ayakkabı görünür, yere değmez\)\nModel kuralı \(koyu bordo\): üst gövde ve kollar şeffaf şifon[\s\S]*Fotoğraflar: 1\. manken ön, 2\. askı ön, 3\. detay[\s\S]*Son şablon: Siyah-Altın[\s\S]*Son senaryo: 0-2 sn: iki yavaş adım/);
+  assert.match(kartEkran, /👤 Manken: büyük beden \(dolgun\) yüzü[^\n]* · 3 numaralı dolgun kız\nRenk: koyu bordo\nBoy: bilek altı \(bileği hafif örter, ayakkabı görünür, yere değmez\)\nModel kuralı \(koyu bordo\): üst gövde ve kollar şeffaf şifon[\s\S]*Fotoğraflar: 1\. manken ön, 2\. askı ön, 3\. detay[\s\S]*Son şablon: Siyah-Altın[\s\S]*Son senaryo: 0-2 sn: iki yavaş adım/);
   assert.ok(o.g.some((x) => x.metod === "sendMediaGroup" && x.govde.media.map((m) => m.caption).join("|") === "3627 · 1. manken ön|3627 · 2. askı ön|3627 · 3. detay"));
   // kart: seri + renk karttan (yazıda yok); son senaryo; araç + şablon seçmeli
   await guncelleme({ message: { message_id: 40, date: 1, chat: { id: MURAT, type: "private" }, from: { id: MURAT, first_name: "M" }, text: "3627 üret" } }, o.env);
   const kart = o.g.at(-1).govde;
-  assert.match(kart.text, /Yüz: 3627 büyük seri \(3 numaralı dolgun kız\)\nRenk: 3627 sadece koyu bordo\nÜrün fotoğrafı: 3627 sizin gönderdiğiniz \(manken ön, askı ön, detay\)\nBoy: 3627 bilek altı[\s\S]*Model kuralı \(3627\): üst gövde ve kollar şeffaf şifon; etek iki kat: üstte şifon, altında aynı renkte \(koyu bordo\) opak astar — bacaklar asla görünmez; göğüste SADECE siyah içlik/);
+  assert.match(kart.text, /👤 Manken: 3627 büyük beden \(dolgun\) \(3 numaralı dolgun kız\)\nRenk: 3627 sadece koyu bordo\nÜrün fotoğrafı: 3627 sizin gönderdiğiniz \(manken ön, askı ön, detay\)\nBoy: 3627 bilek altı[\s\S]*Model kuralı \(3627\): üst gövde ve kollar şeffaf şifon; etek iki kat: üstte şifon, altında aynı renkte \(koyu bordo\) opak astar — bacaklar asla görünmez; göğüste SADECE siyah içlik/);
   assert.match(kart.text, /📝 Senaryo: fotoğraf hazır olunca Nora yazar/); // "son senaryo" istenmedi
   o.depo.set("venom:pelinKomut", JSON.stringify({ metin: "/uret 3627", sonSenaryo: true }));
   await cronlar(o, 1);

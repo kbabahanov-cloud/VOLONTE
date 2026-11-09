@@ -14,6 +14,7 @@ export const KISILER = {
   fuat: { ad: "Fuat", e: "Fuat'a", in: "Fuat'ın", dis: true, id: (env) => kimlikler(env.FUAT_ID)[0] },
   nuri: { ad: "Nuri", e: "Nuri'ye", in: "Nuri'nin", dis: true, id: (env) => kimlikler(env.NURI_ID)[0] },
   merdan: { ad: "Merdan", e: "Merdan'a", in: "Merdan'ın", dis: false, id: (env) => kimlikler(env.BR_SORUMLU)[0] },
+  aziz: { ad: "Aziz", e: "Aziz'e", in: "Aziz'in", dis: false, id: (env) => kimlikler(env.AZIZ_ID)[0] }, // 9 Kasım: VOLONTE stoğu
   hemra: { ad: "Hemra", e: "Hemra'ya", in: "Hemra'nın", dis: false, id: (env) => kimlikler(env.HEMRA_ID)[0] || kimlikler(env.FABRIKA_SORUMLU)[0] },
 };
 

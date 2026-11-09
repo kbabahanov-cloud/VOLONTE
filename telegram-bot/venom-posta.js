@@ -88,7 +88,7 @@ const IZIN_KALIP = [
   ["cozulemeyen", /çözemedi|çözülemedi|çözemedik|çözemedim|karar(ınız)? (lazım|gerek)|ne denendi/i],
   ["para", /\$|ücretli|ücret|maliyet|para harca|bütçe|harcama onayı|pelin[^\n]{0,40}(üret|video|fotoğraf)|üretime başla|üretilsin mi/i],
   ["repete", /repete|hızlı satan|stok bit(iyor|mek üzere)|bitmek üzere|tükeniyor/i],
-  ["onay", /🗑|\bsil(me|insin|inecek|eyim|elim|inmesi)?\b|silinsin|kaldırılsın|kural (değiş|ekle)|fabrika|sipariş|fuat|nuri|mutabakat/i],
+  ["onay", /🗑|\bsil(me|insin|inecek|eyim|elim|inmesi)?\b|silinsin|kaldırılsın|kural (değiş|ekle)|fabrika|sipariş|fuat|nuri|mutabakat|kim olarak eklensin|yetki/i],
 ];
 // Kart metninden izin nedeni (bulunamazsa null → Patron'a gitmez, Venom'un çözüm kuyruğuna)
 export function izinBul(metin, kaynak = null) {

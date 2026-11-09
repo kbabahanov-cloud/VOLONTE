@@ -173,7 +173,7 @@ export class StokDeposu {
       else this.sql.exec("UPDATE karar SET durum = 'soru', mesajlar = NULL, zaman = ? WHERE kod = ?", simdi, kod);
     }
     return this.hepsi("SELECT kod FROM karar WHERE durum = 'soru' AND mesajlar IS NULL ORDER BY zaman LIMIT ?", enFazla)
-      .map(({ kod }) => ({ kod, adet: this.toplam(kod), ad: (this.tek("SELECT ad FROM urun WHERE kod = ? LIMIT 1", kod) || {}).ad || "" }));
+      .map(({ kod }) => { const m = this.hepsi("SELECT DISTINCT magaza FROM urun WHERE kod = ?", kod).map((x) => String(x.magaza || "").toUpperCase().replace(/\s+/g, "")); return { kod, adet: this.toplam(kod), ad: (this.tek("SELECT ad FROM urun WHERE kod = ? LIMIT 1", kod) || {}).ad || "", magaza: m.length === 1 ? m[0] : m.includes("VOLONTE") ? "VOLONTE" : m[0] || null }; });
   }
 
   soruGonderildi(kod, mesajlar) {

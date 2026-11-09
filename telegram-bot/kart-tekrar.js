@@ -9,7 +9,7 @@ const stokIsteOrtak = async (env, yol, govde = {}) => (await env.STOK.get(env.ST
 const SAAT_FARKI = 3 * 3600;
 const kml = (x) => String(x || "").split(",").map((y) => y.trim()).filter(Boolean);
 // Merdan / Hemra (ve ekip) kimlikleri — Patron hariç (Patron'a kart tekrarı yok)
-export const ekipKimlikleri = (env) => { const p = kml(env.MURAT_ID); return [...new Set([env.ALLOWED_IDS, env.EKIP_IDS, env.FABRIKA_SORUMLU, env.BR_SORUMLU, env.HEMRA_ID, env.SAHIP_IDS].flatMap(kml))].filter((x) => !p.includes(x)); };
+export const ekipKimlikleri = (env) => { const p = kml(env.MURAT_ID); return [...new Set([env.ALLOWED_IDS, env.EKIP_IDS, env.FABRIKA_SORUMLU, env.BR_SORUMLU, env.HEMRA_ID, env.SAHIP_IDS, env.AZIZ_ID].flatMap(kml))].filter((x) => !p.includes(x)); };
 export const KART_TEKRAR_SN = 3 * 3600;
 export const GUNCEL = "kt:-"; // "⏩ Güncel kart aşağıda" (işlevsiz düğme; botlar "Güncel kart aşağıda" der)
 const gun = (t) => new Date((t + SAAT_FARKI) * 1000).getUTCDay();
@@ -101,6 +101,20 @@ export async function kartTekrarAdimi(env, bot, tg, simdi, { stokIste = stokIste
     n += bilgiler.length;
   }
   return n;
+}
+// 9 Kasım (ekip düzeni): Hemra'nın seçtiği kişiye kartın KENDİSİ — StokDO kuyruğu "kartIlet:<bot>" ({ chat, mesaj, isdId, hedef, kim })
+export async function kartIletAdimi(env, bot, tg, { stokIste = stokIsteOrtak } = {}) {
+  const l = await stokIste(env, "/kuyruk-al", { ad: `kartIlet:${bot}` }).catch(() => []);
+  for (const x of Array.isArray(l) ? l : []) {
+    const b = await kartBilgisi(env, { chat: x.chat, mesaj: x.mesaj, cb: x.cb || "", ozet: x.ozet || "" });
+    const kl = { inline_keyboard: acik(b.klavye) };
+    const bas = `📋 ${x.kim || "Hemra"} sana verdi:\n`;
+    if (b.foto) await tg(env, "sendPhoto", { chat_id: x.hedef, photo: b.foto, caption: (bas + b.metin).slice(0, 1024), reply_markup: kl });
+    else if (b.eski && x.chat && x.mesaj) await tg(env, "copyMessage", { chat_id: x.hedef, from_chat_id: x.chat, message_id: x.mesaj, reply_markup: kl });
+    else await tg(env, "sendMessage", { chat_id: x.hedef, text: (bas + (b.metin || x.ozet || "")).slice(0, 4000), reply_markup: kl, disable_web_page_preview: true });
+    if (x.isdId) await stokIste(env, "/isd-isaretle", { idler: [x.isdId], alan: "durum", deger: "devredildi" }).catch(() => null);
+  }
+  return Array.isArray(l) ? l.length : 0;
 }
 // Akşam özeti (Venom): tekrar gönderildiği hâlde hâlâ cevapsız kartlar → "Cevapsız: kim, hangi kart"
 export function cevapsizSatiri(bekleyen, adlar, simdi) {

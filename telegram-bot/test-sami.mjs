@@ -585,7 +585,7 @@ test("Celal: listede Celal notu (iki kart notu); onayda CELAL modeli SADECE Cela
   // Celal /start → Murat "Celal olarak ekle"
   await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Celal" }, text: "/start" } }, o.env);
   const soru = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111");
-  assert.deepEqual(soru.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🏭 Fabrikaya ekle", "👤 Celal olarak ekle", "❌ Ekleme"]);
+  assert.deepEqual(soru.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🏭 Fabrikaya ekle", "👤 Celal olarak ekle", "💲 Mağaza: sadece fiyat (Janet)", "❌ Ekleme"]);
   await g2({ callback_query: { id: "c", from: { id: 111 }, data: "fa:c:777", message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
   assert.equal(JSON.parse(o.depo.get("sami:fabrikaKisiler")).find((k) => k.id === 777).grup, "celal");
   const g = [];
@@ -1608,4 +1608,31 @@ test("onay merdiveni (fabrika): kart bir kez yeniden fabrikaya (⏩ eski kart), 
   o.g.length = 0;
   await f.siparisTakip(o.env, ist(10, 10, 5), tgt);
   assert.equal(cagri(o.g, "sendMessage").filter((x) => /onay vermedi/.test(x.govde.text)).length, 0); // bir kez
+});
+
+// 9 Kasım (Patron): JANET – sadece fiyat; ekip düzeni stok yönlendirmesi
+test("Janet: Patron 'sadece fiyat' der → kod yazınca satış fiyatı (tek satır, kod başına); başka hiçbir şey yok", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { MURAT_ID: "111", FABRIKA_SORUMLU: "333" });
+  await o.yaz("VOLONTE", [{ kod: "3394", adet: 4, fiyat: 33.94 }], ist(8));
+  assert.deepEqual(f.fiyatSorusu("3394"), ["3394"]);
+  assert.deepEqual(f.fiyatSorusu("fiyat 3394"), ["3394"]);
+  assert.deepEqual(f.fiyatSorusu("3394 price"), ["3394"]);
+  assert.deepEqual(f.fiyatSorusu("prix 3394"), ["3394"]);
+  assert.deepEqual(f.fiyatSorusu("3394 3627 price"), ["3394", "3627"]);
+  assert.equal(f.fiyatSorusu("3394 stok kaç"), null);
+  await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Janet" }, text: "/start" } }, o.env);
+  const kart = cagri(o.g, "sendMessage").find((x) => /Sami'ye \/start yazdı/.test(x.govde.text));
+  const fb = kart.govde.reply_markup.inline_keyboard.flat().find((b) => /sadece fiyat/.test(b.text)).callback_data;
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 111, first_name: "Murat" }, data: fb, message: { chat: { id: 111 }, message_id: 5 } } }, o.env);
+  assert.ok(await f.fiyatKisisiMi(o.env, 777));
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Janet" }, text: "3394 3627 price" } }, o.env);
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "3394: 33,94 $\n3627: bu kod yok");
+  await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Janet" }, text: "/stok 3394" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /^Sadece model kodunu yazın/);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => /adet|stok:|kâr|alış|kasa|müşteri/i.test(x.govde.text) && String(x.govde.chat_id) === "777"));
 });

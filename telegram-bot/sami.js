@@ -35,8 +35,9 @@ import { patronMu, geriKuyrugu } from "./sil.js";
 import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
-import { kartTekrarAdimi, GUNCEL } from "./kart-tekrar.js";
-import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji } from "./fabrika.js";
+import { hemraDugmesi } from "./venom-ekip.js";
+import { kartTekrarAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
+import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -89,6 +90,7 @@ export default {
     const simdi = Math.floor(Date.now() / 1000);
     if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
+    if (env.BOT_TOKEN) try { await kartIletAdimi(env, "sami", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
     if (env.BOT_TOKEN) try { await kartTekrarAdimi(env, "sami", tg, simdi); } catch { /* 9 Kasım: onay merdiveni (görev kartları dahil) */ }
     if (await durdurulduMu(env, "sami")) return; // 6 Kasım: durduruldu → zamanlı işler (mesaj/yazma) bekler
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
@@ -161,7 +163,8 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
     if (String(cq.data || "").startsWith("oz:")) return isOzetiDugmesi(env, cq, tg, simdiD); // Fuat'a iş özeti (sadece Patron)
     if (String(cq.data || "").startsWith("ad:")) return adetDugmesi(env, cq, tg, simdiD); // Fuat'a adet listesi (sadece Patron)
-    if (/^v[gd]:/.test(String(cq.data || ""))) return gorevDugmesi(env, cq, tg); // 9 Kasım: Venom görev kartı (Hemra / Merdan)
+    if (/^v[gd]:/.test(String(cq.data || ""))) return gorevDugmesi(env, cq, tg);
+    if (/^hl:/.test(String(cq.data || ""))) return hemraDugmesi(env, cq, tg); // 9 Kasım: Hemra'nın toplu listesi // 9 Kasım: Venom görev kartı (Hemra / Merdan)
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
     if (String(cq.data || "").startsWith("sz:")) return stokKarari(cq, env, tg);
     if (String(cq.data || "").startsWith("sq:")) return stokSorguDugmesi(env, cq, tg, simdiD);
@@ -174,6 +177,7 @@ export async function guncelleme(u, env) {
   const m = u.message;
   if (!m || !m.from || m.chat.type !== "private") return;
   if (await odemeMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Patron: /odeme + dekont (sadece Patron)
+  if (await fiyatKisisiMi(env, m.from.id)) return fiyatCevabi(env, m, tg); // 9 Kasım: Janet — SADECE fiyat, başka hiçbir şey
   if (await gorevAciklamaMesaji(env, m, tg)) return; // 9 Kasım: Venom görevi — ✏️ açıklama
   if (!izinli(m.from.id, env)) {
     if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması

@@ -28,7 +28,7 @@ export const SECIMLER = {
   video: [["c", "🎥 Bugün çekerim"], ["f", "🏭 Fabrikada"], ["b", "❌ Satıldı/bitti"], ["y", "🔍 Bulamadım"], ["a", "✏️ Açıklama yaz"]],
   genel: [["h", "✅ Hallettim"], ["y", "🔍 Yapamadım"], ["a", "✏️ Açıklama yaz"]],
 };
-export const secimAdi = (kalip, s) => ((SECIMLER[kalip] || SECIMLER.genel).find(([k]) => k === s) || [s, s])[1];
+export const secimAdi = (kalip, s) => (s === "z" ? "👤 Aziz'e verildi" : ((SECIMLER[kalip] || SECIMLER.genel).find(([k]) => k === s) || [s, s])[1]);
 const COZULEMEDI = new Set(["y"]); // "Bulamadım / Yapamadım" → çözülemeyen
 
 // Görevin son saati: verilen saat (bugün) geçtiyse ya da 2 saatten az kaldıysa ertesi iş günü aynı saat (pazar atlanır)
@@ -130,6 +130,7 @@ async function gorevKapat(env, g, simdi, f) {
   const cozulmeyen = g.kalemler.filter((k) => COZULEMEDI.has(k.secim));
   if (!cozulmeyen.length) return;
   const satir = cozulmeyen.slice(0, 12).map((k) => `• ${k.kod}: ${k.kim} "${secimAdi(g.kalip, k.secim).replace(/^\S+\s/, "")}"${k.aciklama ? ` — ${k.aciklama}` : ""}`);
+  if (f.listeyeEkle) { for (const k of cozulmeyen.slice(0, 12)) await f.listeyeEkle({ tur: "gorev", ref: `gv:${g.id}:${k.kod}`, gid: g.id, kod: k.kod, ozet: `${k.kod}: ${k.kim} "${secimAdi(g.kalip, k.secim).replace(/^\S+\s/, "")}"${k.aciklama ? ` — ${k.aciklama.slice(0, 50)}` : ""} (${g.baslik.slice(0, 40)})` }).catch(() => null); return; } // 9 Kasım: Patron'a değil Hemra'nın listesine
   await f.patronaKart(`🧭 Çözülemedi — ${g.baslik}\nNe denendi: ${kimler(g).join(" ve ")}'ya ${gunSaatYaz(g.zaman)}'de görev verildi${g.hatirlatma ? `, ${g.hatirlatma} kez hatırlatıldı` : ""}.\nNeden olmadı:\n${satir.join("\n")}\nKarar lazım: ne yapalım? (📝 Karar yaz → Hemra ve Merdan'a "Patron kararı" olarak giderim.)`,
     { inline_keyboard: [[{ text: "📝 Karar yaz", callback_data: `vgk:${g.id}:k` }, { text: "✅ Gördüm, kapat", callback_data: `vgk:${g.id}:x` }]] }).catch(() => null);
 }
@@ -165,7 +166,8 @@ export async function cozumAdimi(env, simdi, f) {
       await f.biriktir(`✅ Hallettik: ${c.ozet.slice(0, 90)} — ${d.kim} karar verdi.`).catch(() => null); await f.defter(`devredilen iş kapandı: ${c.ozet.slice(0, 120)} (${d.kim})`, null).catch(() => null); await sayac(env, "kendi", simdi); }
   }
   const mesai = !pazar(simdi) && saat(simdi) >= 9 && saat(simdi) < 20;
-  for (const c of l.filter((x) => x.durum === "acik" || x.durum === "devredildi")) {
+  for (const c of l.filter((x) => x.durum === "acik" || x.durum === "devredildi" || x.durum === "listede")) {
+    if (c.durum === "listede") { if (simdi - c.zaman > 5 * 86400) { c.durum = "kapandi"; degisti = true; } continue; }
     if (c.durum === "acik") {
       if (!c.klavye) { // 1) sebebi öğren: düğmesiz = bilgi → özete; Venom kendi kapatır
         c.durum = "kapandi"; c.kapanis = simdi; c.adimlar.push({ zaman: simdi, ne: "bilgi: Patron'a gitmedi, özete alındı" }); degisti = true;
@@ -174,7 +176,12 @@ export async function cozumAdimi(env, simdi, f) {
         continue;
       }
       if (!mesai) continue;
-      // 3) karar gerektiren bot kartı → Hemra ve Merdan'a (düğmeleri aynen)
+      // 3) 9 Kasım (ekip düzeni): karar gerektiren bot kartı → koordinatörün (Hemra) TOPLU LİSTESİNE; kimin yapacağını Hemra seçer
+      if (f.listeyeEkle) {
+        await f.listeyeEkle({ tur: "cozum", ref: `cz:${c.id}`, cid: c.id, ozet: `${c.kaynak}: ${c.ozet.slice(0, 90)}` });
+        c.durum = "listede"; c.adimlar.push({ zaman: simdi, ne: "Hemra'nın listesine" }); degisti = true;
+        continue;
+      }
       for (const kisi of GOREV_KISILER) await kuyrugaEkle(env, "giden", { id: `cv-${c.id}-${kisi}`, kime: kisi, tur: "gorev", metin: `${GOREV_KISILER.map((k) => KISILER[k].ad).join(", ")}: ${c.kaynak[0].toUpperCase()}${c.kaynak.slice(1)}'den karar bekleyen iş (Patron'a gelmez, siz karar verin):\n\n${c.metin || c.ozet}\n\nİkinizden birinin seçimi yeter.`.slice(0, 4000), klavye: devirKlavye(c) }).catch(() => null);
       c.durum = "devredildi"; c.devir = simdi; c.hatirlatma = 0; c.adimlar.push({ zaman: simdi, ne: "Hemra ve Merdan'a verildi" }); degisti = true;
       await f.biriktir(`🧭 ${c.ozet.slice(0, 80)} — Merdan ve Hemra'ya verdim, ${saatYaz(simdi + 3 * 3600)}'de kontrol edeceğim.`).catch(() => null);
@@ -186,6 +193,16 @@ export async function cozumAdimi(env, simdi, f) {
     if (simdi - c.devir > 3 * 86400) { c.durum = "kapandi"; c.kapanis = simdi; c.adimlar.push({ zaman: simdi, ne: "3 gün cevapsız — kapandı (akşam özetinde yazıldı)" }); degisti = true; }
   }
   if (degisti) await kaydet(env, "venom:cozum", l.filter((x) => ["acik", "devredildi"].includes(x.durum) || simdi - x.zaman < 7 * 86400).slice(-200), 14 * 86400);
+}
+// 9 Kasım (ekip düzeni): Hemra'nın seçtiği kişiye devret (düğmeleri aynen)
+export async function cozumDevret(env, cid, kim, simdi) {
+  const l = await oku(env, "venom:cozum", []);
+  const c = l.find((x) => x.id === cid);
+  if (!c || !c.klavye || !KISILER[kim]) return false;
+  await kuyrugaEkle(env, "giden", { id: `cv-${c.id}-${kim}`, kime: kim, tur: "gorev", metin: `${KISILER[kim].ad}: ${c.kaynak[0].toUpperCase()}${c.kaynak.slice(1)}'den iş (Hemra sana verdi):\n\n${c.metin || c.ozet}`.slice(0, 4000), klavye: devirKlavye(c) });
+  c.durum = "devredildi"; c.devir = simdi; c.adimlar.push({ zaman: simdi, ne: `${KISILER[kim].ad}'a verildi (Hemra)` });
+  await kaydet(env, "venom:cozum", l, 14 * 86400);
+  return true;
 }
 // Devredilen kartın düğmeleri: Hemra/Merdan için vd:<cid>:<rid> (Sami üzerinden), Patron için orijinal vr:<rid>
 function devirKlavye(c, patrona = false) {
