@@ -929,3 +929,58 @@ test("9 Kasım: birden fazla kod → tek albüm + kısa liste, her model için n
   assert.deepEqual(bumu.govde.reply_markup.inline_keyboard[0].map((b) => b.callback_data), ["vmk:k:3627", "vmk:k:3629"]);
   assert.ok(!o.g.some((x) => x.metod === "sendPhoto")); // seçilmeden kart (stok) yok
 });
+
+test("9 Kasım İŞ DEFTERİ: bot kartı/kararı deftere yazılır; 'Kemal bugün ne yaptı?' defterden sayı+kod+kimde bekliyor; deneme sayılmaz; kayıt yoksa 'bilmiyorum'; herkes tek mesaj", async () => {
+  const o = ortam();
+  const { defterTg, defterKarar, defterIs, _defterOnbellekSifirla } = await import("./is-defteri.js");
+  _defterOnbellekSifirla();
+  const kenv = { STOK: o.env.STOK, KAYIT: o.env.KAYIT };
+  const kb = (d) => ({ inline_keyboard: [[{ text: "✅", callback_data: d }]] });
+  const gercek = Date.now; Date.now = () => ist(9, 9) * 1000;
+  await defterTg(kenv, "kemal", "sendMessage", { chat_id: "504", text: "⬆️ 3411 · Elbise", reply_markup: kb("y1:9:3411") }, { ok: true, result: { message_id: 1 } });
+  await defterTg(kenv, "kemal", "sendMessage", { chat_id: MERDAN, text: "⬆️ 3411 · Elbise", reply_markup: kb("y1:9:3411") }, { ok: true, result: { message_id: 2 } });
+  await defterTg(kenv, "kemal", "sendMessage", { chat_id: "504", text: "⬆️ 3510 · Takım", reply_markup: kb("y1:9:3510") }, { ok: true, result: { message_id: 3 } });
+  await defterTg(kenv, "kemal", "sendMessage", { chat_id: "504", text: "🧪 DENEME 9999", reply_markup: kb("y1:9:9999") }, { ok: true, result: { message_id: 4 } });
+  await defterKarar(kenv, "kemal", { data: "y1:9:3411", from: { id: 504, first_name: "Hemra" } });
+  await defterIs(kenv, "kemal", "kanala paylaşıldı", { kod: "3539" });
+  Date.now = () => ist(9, 15) * 1000;
+  try {
+    await yazi(o, PATRON, "Kemal bugün ne yaptı?");
+    const c = patronaGiden(o).at(-1).govde.text;
+    assert.match(c, /^Kemal bugün:/);
+    assert.match(c, /3 kart \(Hemra 2, Merdan 1\), 2 tanesi cevaplandı/); // aynı düğmeli kart iki kişiye: ilk basan ikisini de kapatır
+    assert.match(c, /kanala paylaşıldı: 3539/);
+    assert.match(c, /Hemra'da 1 kart bekliyor: 3510/);
+    assert.ok(!/9999/.test(c)); // deneme sayılmaz
+    assert.equal(o.claude.length, 0); // ücretsiz
+    await yazi(o, PATRON, "Nora bugün ne yaptı?");
+    assert.match(patronaGiden(o).at(-1).govde.text, /Nora: bugün için kayıt yok — bilmiyorum\./);
+    await yazi(o, PATRON, "herkes bugün ne yaptı?");
+    const h = patronaGiden(o).at(-1).govde.text.split("\n");
+    assert.equal(h[0], "Bugün herkes:");
+    assert.deepEqual(h.slice(1).map((x) => x.split(":")[0]), ["Kemal", "Selin", "Pelin", "Nora", "Sami"]);
+  } finally { Date.now = gercek; }
+});
+
+test("9 Kasım: 3 saattir bekleyen kart → Hemra'ya BİR kez hatırlatma (Sami üzerinden); tekrar kart (mutabakat) birleşir; cuma sağlık satırı", async () => {
+  const o = ortam();
+  const { defterTg, _defterOnbellekSifirla } = await import("./is-defteri.js");
+  _defterOnbellekSifirla();
+  const gercek = Date.now;
+  Date.now = () => ist(10, 9, 10) * 1000; // salı 09:10 kart gitti
+  try { await defterTg({ STOK: o.env.STOK, KAYIT: o.env.KAYIT }, "kemal", "sendMessage", { chat_id: "504", text: "⬆️ 3411", reply_markup: { inline_keyboard: [[{ text: "✅", callback_data: "y1:1:3411" }]] } }, { ok: true, result: { message_id: 1 } }); } finally { Date.now = gercek; }
+  await venomCron(o.env, ist(10, 13, 1)); // 3 saatten sonra
+  const giden = await kuyruguAl(o.env, "giden");
+  assert.equal(giden.length, 1);
+  assert.equal(giden[0].kime, "hemra");
+  assert.match(giden[0].metin, /^Hemra, Kemal'de 1 kart cevabınızı bekliyor: 3411\. Bakabilir misiniz\?/);
+  await venomCron(o.env, ist(10, 14, 1));
+  assert.equal((await kuyruguAl(o.env, "giden")).length, 0); // bir kez
+  // tekrar kart: aynı mutabakat 12 saat içinde ikinci kez → birleşir
+  const { postaKarar, gonderildiKaydet } = await import("./venom-posta.js");
+  await gonderildiKaydet(o.env, { kaynak: "sami", tur: "kart", metin: "📋 Mutabakat – 07.11 · Fuat'a gidecek", id: 5 }, ist(10, 10));
+  assert.equal((await postaKarar(o.env, { kaynak: "venom", metin: "📋 Fuat'a gidecek mutabakat (birebir)", kart: true }, ist(10, 11))).kategori, "tekrar kart (birleştirildi)");
+  // cuma 20:00 özeti: tek satır sağlık
+  const m = await (await import("./venom-bot.js")).aksamOzeti(o.env, ist(13, 20, 1));
+  assert.match(m, /🩺 Bu hafta: \d+ hatayı kendim düzelttim · \d+ mesaj size kurala uymadan geldi · /);
+});

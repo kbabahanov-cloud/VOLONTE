@@ -10,6 +10,7 @@
 //  Fabrika kişileri /start yazınca Murat'a sorulur; eklenen kişi sadece listeyi alır, başka komut kullanamaz.
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
+import { defterIs } from "./is-defteri.js";
 import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI } from "./stok.js";
@@ -841,6 +842,7 @@ export function takipZamani(rec) {
 }
 // Tek çağrıda: kayıt + açıklar + takip dizini + haftalık özet (Cloudflare istek sınırı).
 async function siparisYaz(env, rec) {
+  if (rec._defter !== rec.durum && !rec.deneme) { rec._defter = rec.durum; await defterIs(env, "sami", `fabrika siparişi ${rec.kod}: ${{ bekliyor: "fabrikaya gitti, cevap bekleniyor", gelecek: "gelecek", repete: "repete olacak", geldi: "geldi", bitti: "fabrika bitti dedi", kapandi: "kapandı" }[rec.durum] || rec.durum}`, { kod: rec.kod }); }
   const ozet = { kod: rec.kod, beden: rec.beden || null, renkler: rec.renkler, grup: rec.grup, tur: rec.tur, durum: rec.durum, gonderim: rec.gonderim, cevaplayan: rec.cevaplayan || null, hazirGun: rec.hazirGun || null, geldi: rec.geldiZaman || null };
   await stokIste(env, "/fs-yaz", { rec, kapali: ["geldi", "kapandi"].includes(rec.durum), takip: takipZamani(rec), hafta: rec.deneme ? null : pazartesi(rec.gonderim), ozet });
 }

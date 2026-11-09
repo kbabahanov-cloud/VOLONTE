@@ -98,6 +98,10 @@ export async function postaKarar(env, ileti, simdi) {
   const kural = kurallar.find((k) => kuralEslesir(k, { ...ileti, kategori: kat }));
   if (kural) return { karar: "biriktir", tur, kategori: kat, kural: kural.id };
   if (tur === "kart") {
+    // 9 Kasım (E11): aynı kart 12 saat içinde tekrar gelirse birleşir (ör. Fuat mutabakatı iki kez)
+    const ilk = ilkSatir(ileti.metin), mut = /mutabakat/i.test(String(ileti.metin || ""));
+    const son12 = (await oku(env, "venom:posta:gonderilen", [])).filter((x) => x.tur === "kart" && simdi - x.zaman < 12 * 3600);
+    if (son12.some((x) => (x.kaynak === (ileti.kaynak || "venom") && x.ozet === ilk) || (mut && /mutabakat/i.test(x.ozet)))) return { karar: "biriktir", tur, kategori: "tekrar kart (birleştirildi)" };
     const n = (await bugunGonderilen(env, simdi)).filter((x) => x.tavan).length;
     return { karar: n < POSTA_TAVAN ? "gonder" : "sira", tur, kategori: kat };
   }
@@ -106,6 +110,10 @@ export async function postaKarar(env, ileti, simdi) {
 }
 export async function gonderildiKaydet(env, { kaynak, tur, kategori: kat, metin, id = null }, simdi) {
   const l = await oku(env, "venom:posta:gonderilen", []);
+  if (kaynak && kaynak !== "venom" && tur === "cevap") { // 9 Kasım (E10): bottan gelip kart/kritik olmadan geçen mesaj (sızıntı adayı)
+    const d = new Date((simdi + 3 * 3600) * 1000), g = (d.getUTCDay() + 6) % 7, hk = `venom:posta:sizinti:${new Date(d.getTime() - g * 86400000).toISOString().slice(0, 10)}`;
+    await env.KAYIT.put(hk, String((Number(await env.KAYIT.get(hk).catch(() => 0)) || 0) + 1), { expirationTtl: 14 * 86400 }).catch(() => null);
+  }
   const tavan = !["kritik", "cevap"].includes(tur);
   await kaydet(env, "venom:posta:gonderilen", [...l, { zaman: simdi, kaynak: kaynak || "venom", tur, kategori: kat || kategori(metin), ozet: ilkSatir(metin), id, tavan }].slice(-200), 3 * 86400);
 }

@@ -14,6 +14,7 @@
 // Ayarlar: BOT_TOKEN, WEBHOOK_SECRET (secret) · ALLOWED_IDS, EKIP_IDS, SELF_URL, GITHUB_REPO (düz metin) ·
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
+import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { acikSessizlik } from "./magaza-saat.js";
 import { durdurulduMu } from "./durdurma.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj } from "./tek-kapi.js";
@@ -46,8 +47,10 @@ const izinli = (id, env) => kisiler(env).includes(String(id));
 
 async function tg(env, metod, govde) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "sami", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
-  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g));
-  return tgGercek(env, metod, govde);
+  if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "sami", metod, govde, r); return r; }
+  const r = await tgGercek(env, metod, govde);
+  await defterTg(env, "sami", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
+  return r;
 }
 async function tgGercek(env, metod, govde) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
@@ -146,6 +149,7 @@ async function sorular(env, simdi) {
 export async function guncelleme(u, env) {
   if (u.callback_query) {
     const cq = u.callback_query;
+    await defterKarar(env, "sami", cq); // 9 Kasım: iş defteri
     const simdiD = Math.floor(Date.now() / 1000);
     // Fabrika düğmeleri: fabrika kişileri de basabilir (sadece bunlar)
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));

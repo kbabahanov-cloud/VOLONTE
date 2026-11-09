@@ -51,6 +51,11 @@ const TABLOLAR = [
   `CREATE TABLE IF NOT EXISTS arsiv (sira INTEGER PRIMARY KEY AUTOINCREMENT, zaman INTEGER NOT NULL, tur TEXT NOT NULL, mt TEXT,
      icerik TEXT NOT NULL, onceki TEXT NOT NULL, muhur TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS arsiv_dosya (mt TEXT NOT NULL, tur TEXT NOT NULL, zaman INTEGER NOT NULL, muhur TEXT NOT NULL, veri TEXT NOT NULL)`,
+  // 9 Kasım (Patron): İŞ DEFTERİ — botların yaptığı HER iş (mesaj, kart, karar, iş, hata). Venom "kim ne yaptı"yı buradan bilir.
+  `CREATE TABLE IF NOT EXISTS isd (id INTEGER PRIMARY KEY AUTOINCREMENT, zaman INTEGER NOT NULL, bot TEXT NOT NULL, tur TEXT NOT NULL,
+     kime TEXT, kod TEXT, ozet TEXT, chat TEXT, mesaj INTEGER, durum TEXT, sonuc TEXT, deneme INTEGER DEFAULT 0, hatirlatildi INTEGER, cb TEXT)`,
+  `CREATE INDEX IF NOT EXISTS isd_zaman ON isd (zaman)`,
+  `CREATE INDEX IF NOT EXISTS isd_kart ON isd (chat, mesaj)`,
   `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
   `CREATE INDEX IF NOT EXISTS olay_zaman ON olay (zaman)`,
   `CREATE INDEX IF NOT EXISTS paylasim_zaman ON paylasim (zaman)`,
@@ -409,6 +414,37 @@ export class StokDeposu {
     }
     return { kod: k, satirlar: this.hepsi("SELECT magaza, adet FROM urun WHERE kod = ?", k), s7: sat(bas7), s14: sat(bas14), ilkGun: (this.tek("SELECT MIN(gun) AS g FROM satis") || {}).g || null, fs, karar: this.tek("SELECT durum FROM karar WHERE kod = ?", k) || null };
   }
+  // ---- 9 Kasım: İŞ DEFTERİ ----
+  // kayit: { zaman, bot, tur: "kart"|"mesaj"|"is"|"karar"|"hata", kime, kod, ozet, chat, mesaj, deneme }
+  // "karar" (düğmeye basıldı) aynı sohbetteki aynı mesajın kartını kapatır (durum bitti, sonuc = kim + ne)
+  isdYaz(kayitlar) {
+    for (const k of (kayitlar || []).slice(0, 50)) {
+      const z = Number(k.zaman) || Math.floor(Date.now() / 1000);
+      if (k.tur === "karar" && k.cb) { // düğme verisiyle eşleşen bekleyen kart(lar) kapanır (aynı kart iki kişiye gittiyse ikisi de: ilk basan geçerli)
+        this.sql.exec("UPDATE isd SET durum = 'bitti', sonuc = ? WHERE tur = 'kart' AND durum = 'bekliyor' AND cb LIKE ?", String(k.sonuc || k.ozet || "").slice(0, 200), `%|${String(k.cb).replace(/[%_|]/g, "")}|%`);
+      }
+      this.sql.exec("INSERT INTO isd (zaman, bot, tur, kime, kod, ozet, chat, mesaj, durum, sonuc, deneme, cb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        z, String(k.bot || "?"), String(k.tur || "is"), k.kime != null ? String(k.kime) : null, k.kod ? String(k.kod) : null, String(k.ozet || "").slice(0, 300),
+        k.chat != null ? String(k.chat) : null, k.mesaj != null ? Number(k.mesaj) : null, k.tur === "kart" ? "bekliyor" : null, k.sonuc ? String(k.sonuc).slice(0, 200) : null, k.deneme ? 1 : 0,
+        k.tur === "kart" && (k.cbler || []).length ? `|${k.cbler.map((x) => String(x).replace(/[%_|]/g, "")).join("|")}|` : null);
+    }
+    if (Math.random() < 0.02) this.sql.exec("DELETE FROM isd WHERE zaman < ?", Math.floor(Date.now() / 1000) - 35 * 86400);
+    return { ok: true };
+  }
+  isdOku({ basla = 0, bitis = 9e9, bot = null, denemeDahil = false }) {
+    const q = `SELECT * FROM isd WHERE zaman >= ? AND zaman <= ?${bot ? " AND bot = ?" : ""}${denemeDahil ? "" : " AND deneme = 0"} ORDER BY zaman LIMIT 2000`;
+    return bot ? this.hepsi(q, basla, bitis, bot) : this.hepsi(q, basla, bitis);
+  }
+  isdBekleyen({ bot = null, enEski = 0 }) {
+    const q = `SELECT * FROM isd WHERE tur = 'kart' AND durum = 'bekliyor' AND deneme = 0 AND zaman >= ?${bot ? " AND bot = ?" : ""} ORDER BY zaman`;
+    return bot ? this.hepsi(q, enEski, bot) : this.hepsi(q, enEski);
+  }
+  isdIsaretle({ idler = [], alan = "hatirlatildi", deger = null }) {
+    const izin = { hatirlatildi: "hatirlatildi", durum: "durum" };
+    if (!izin[alan]) return { ok: false };
+    for (const id of idler.slice(0, 200)) this.sql.exec(`UPDATE isd SET ${izin[alan]} = ? WHERE id = ?`, deger ?? Math.floor(Date.now() / 1000), Number(id));
+    return { ok: true };
+  }
   repeteKarar(k) {
     const l = JSON.parse(this.ayarOku("repete:kararlar") || "[]");
     l.push(k);
@@ -503,6 +539,10 @@ export class StokDO {
     if (yol === "/iki-magaza") return cevap(d.ikiMagaza());
     if (yol === "/repete-veri") return cevap(d.repeteVeri(g));
     if (yol === "/model-ozet") return cevap(d.modelOzet(g));
+    if (yol === "/isd-yaz") return cevap(d.isdYaz(g.kayitlar));
+    if (yol === "/isd-oku") return cevap(d.isdOku(g));
+    if (yol === "/isd-bekleyen") return cevap(d.isdBekleyen(g));
+    if (yol === "/isd-isaretle") return cevap(d.isdIsaretle(g));
     if (yol === "/repete-karar") return cevap(d.repeteKarar(g));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());

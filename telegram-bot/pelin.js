@@ -16,6 +16,7 @@
 // Ayarlar (Cloudflare volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY (secret, kullanıcı girer), WEBHOOK_SECRET (kurulumda
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
+import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { ORTAK_KURALLAR } from "./kurallar.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
@@ -235,8 +236,10 @@ const yonetici = (env, id) => muratMi(env, id) || kimlikler(env.ALLOWED_IDS).inc
 // ---------- Telegram ----------
 export async function tg(env, metod, govde) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "pelin", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
-  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "pelin", metod, govde, (m, g) => tgGercek(env, m, g));
-  return tgGercek(env, metod, govde);
+  if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "pelin", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "pelin", metod, govde, r); return r; }
+  const r = await tgGercek(env, metod, govde);
+  await defterTg(env, "pelin", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
+  return r;
 }
 async function tgGercek(env, metod, govde) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde) });
@@ -928,6 +931,7 @@ export async function guncelleme(u, env) {
   const simdi = Math.floor(Date.now() / 1000);
   if (u.callback_query) {
     const cq = u.callback_query;
+    await defterKarar(env, "pelin", cq); // 9 Kasım: iş defteri
     const v = String(cq.data || "");
     if (/^pk:/.test(v)) return kurulumDugmesi(env, cq, simdi);
     if (/^pu:/.test(v)) return uretimDugmesi(env, cq, simdi);

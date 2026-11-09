@@ -37,6 +37,7 @@
 //     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
+import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
@@ -98,6 +99,10 @@ export async function venomMesaj(env, metin) {
   if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
   else await guncellemeIsle(update, env);
   return true;
+}
+export async function venomOzet(env) {
+  if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/ozet", { method: "POST", body: "{}" })).json();
+  return kemalOzet(env, Math.floor(Date.now() / 1000));
 }
 export async function venomDugme(env, data, rid) {
   const update = sahteDugme(env, data, rid);
@@ -237,7 +242,7 @@ export async function guncellemeIsle(update, env) {
     return tepkiKaydet(env, t.message_id, (t.reactions || []).reduce((top, r) => top + (r.total_count || 0), 0));
   }
   if (update.message) return mesajIsle(update.message, env);
-  if (update.callback_query) return dugmeIsle(update.callback_query, env);
+  if (update.callback_query) { await defterKarar(env, "kemal", update.callback_query); return dugmeIsle(update.callback_query, env); }
 }
 
 async function anaKanalMi(chat, env) {
@@ -712,6 +717,7 @@ export async function kanaldaPaylas(env, kod, ids, simdi, beden = null, { zamanl
   // Son paylaşım tarihi ayrı tutulur; kod dizinine gerçek kimlikler channel_post ile girer.
   const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
   sonpaylasim[kod] = simdi;
+  await defterIs(env, "kemal", "kanala paylaşıldı (eski paylaşımdan)", { kod });
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
   // Kanalın /hafta sayısı (gun:) channel_post ile artar; burada sadece botun günlük sınır sayacı.
   await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
@@ -1607,6 +1613,21 @@ export async function venomFotoTani(env, b64, ipucu = "") {
   return { ok: true, en_iyi: s2.en_iyi || null, guven: s2.guven, adaylar: gecerli.slice(0, 3), aciklama: String(s2.aciklama || "").slice(0, 200) };
 }
 
+// ---------- 9 Kasım (Patron): Venom "Kemal, şu an ne durumda?" — canlı özet (tur, kuyruk, bugünkü paylaşım) ----------
+export async function kemalOzet(env, simdi) {
+  const tur = await env.KAYIT.get("tur", "json").catch(() => null);
+  const og = tur && tur.ogeler ? Object.entries(tur.ogeler) : [];
+  const cevap = og.filter(([, o]) => o.karar);
+  const say = {}; for (const [, o] of cevap) say[o.karar] = (say[o.karar] || 0) + 1;
+  const ad = { y1: "paylaş", yd: "düzelt", yg: "geç", yb: "beklesin" };
+  const kuyruk = await kuyrukListesi(env).catch(() => []);
+  const bekleyen = og.filter(([, o]) => !o.karar && o.paket).map(([k]) => k);
+  return {
+    tur: tur ? { no: tur.no, gun: turGunu(tur), soruldu: og.length, cevaplandi: cevap.length, kararlar: Object.fromEntries(Object.entries(say).map(([k, n]) => [ad[k] || k, n])), bekleyen } : null,
+    kuyruk: kuyruk.map((o) => o.kod), bugunPaylasim: await bugunSayac(env, simdi).catch(() => 0),
+  };
+}
+
 // 9 Kasım: YAYIN KAPISI — şu an kanala paylaşılabilir mi? (09–21 arası, son paylaşımdan ≥ 60 dk, sıradaki zamanı gelmiş)
 export async function yayinKapisi(env, simdi) {
   if (env.YAYIN_KAPISI === "0") return { acik: true, sonraki: simdi }; // sadece testler (gerçek saatten bağımsız)
@@ -1622,6 +1643,7 @@ export async function yayinKapisi(env, simdi) {
 async function yayiniErtele(env, oge, simdi) {
   await env.KAYIT.put(`kuyruk:${oge.kod}`, JSON.stringify({ ...oge, tur: true, zaman: simdi, ertelendi: true, sinirsiz: true }));
   const k = await yayinKapisi(env, simdi);
+  await defterIs(env, "kemal", `kanal kuyruğuna alındı (${tarihYaz(k.sonraki)} civarı gider)`, { kod: oge.kod });
   return { ok: true, ertelendi: true, saat: k.sonraki, hata: null };
 }
 export const ertelemeMetni = (p, kod) => `⏳ ${kod}: onaylandı, kuyruğa alındı — kanala ${tarihYaz(p.saat)} civarı gider (paylaşımlar 09:00–21:00, en az ${YAYIN_ARA_DK} dk arayla).`;
@@ -2070,6 +2092,7 @@ export async function akisDenemesi(env, simdi = Math.floor(Date.now() / 1000)) {
 // "Bugün zaten paylaşıldı" bir iş değildir: kimseye mesaj yok, sadece kayıt.
 async function kontrolBildir(env, kod, kontrol, simdi) {
   await engelKaydet(env, "kemal", kod, kontrol.sorunlar, simdi);
+  await defterIs(env, "kemal", `Venom kontrolü durdurdu: ${kontrol.sorunlar.join("; ").slice(0, 150)}`, { kod });
   const is = kontrol.sorunlar.filter((x) => !/zaten paylaşıldı/.test(x));
   if (!is.length) return;
   for (const kisi of yeniModelAlicilar(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: `🛑 Venom kontrolü — ${kod} kanala GİTMEDİ (kendim düzeltemedim):\n• ${is.join("\n• ")}\nDüzeltip Kemal'e "${kod} paylaş" yazabilirsiniz.` }).catch(() => null);
@@ -2100,6 +2123,7 @@ export async function kendiDuzelt(env, paket, kontrol, { renk = null, simdi = Ma
   const k2 = await kanalKontrol(env, p, { renk, simdi });
   const l = (await env.KAYIT.get("venom:kontrol:duzeltme", "json").catch(() => null)) || [];
   await env.KAYIT.put("venom:kontrol:duzeltme", JSON.stringify([...l, { zaman: simdi, kod: String(p.kod), notlar, ok: k2.ok }].slice(-60)), { expirationTtl: 7 * 86400 }).catch(() => null);
+  await defterIs(env, "kemal", `kendim düzelttim: ${notlar.join("; ")}`, { kod: String(p.kod) });
   return { paket: p, kontrol: { ...k2, satir: k2.ok ? `✅ Venom kontrolü tamam (kendim düzelttim: ${notlar.join("; ")})` : k2.satir }, notlar };
 }
 // Sıradaki yeni düzen paylaşımı: stok hâlâ varsa kanala gönderir; tarih Sami'nin deposuna (tablo) yazılır.
@@ -2134,6 +2158,7 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   }
   const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
   sonpaylasim[paket.kod] = simdi;
+  await defterIs(env, "kemal", "kanala paylaşıldı", { kod: paket.kod });
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
   if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
@@ -2981,6 +3006,7 @@ export class KatalogDO {
     const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, KEMAL_YEREL), KEMAL_ICERDE: true };
     const simdi = Math.floor(Date.now() / 1000);
     if (yol === "/kemal/ofis-sohbet") return Response.json(await ofisSohbet(env, await istek.json(), simdi));
+    if (yol === "/kemal/ozet") return Response.json(await kemalOzet(env, simdi)); // 9 Kasım: Venom'un canlı sorusu
     if (yol === "/kemal/guncelleme") await guncellemeIsle(await istek.json(), env);
     else if (yol === "/kemal/cron") {
       await durumKontrol(env);
@@ -3488,8 +3514,10 @@ function asistanYardimcilari(env) {
 // 5 Kasım (Patron): TEK KAPI — Patron'un kişisel hesabına giden her şey Venom'a aktarılır (tek-kapi.js)
 async function telegram(env, metod, govde) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "kemal", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
-  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "kemal", metod, govde, (m, g) => telegramGercek(env, m, g));
-  return telegramGercek(env, metod, govde);
+  if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "kemal", metod, govde, (m, g) => telegramGercek(env, m, g)); await defterTg(env, "kemal", metod, govde, r); return r; }
+  const r = await telegramGercek(env, metod, govde);
+  await defterTg(env, "kemal", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
+  return r;
 }
 async function telegramGercek(env, metod, govde) {
   const token = String(env.BOT_TOKEN || "").trim();

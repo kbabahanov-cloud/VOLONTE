@@ -12,6 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
+import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
@@ -60,8 +61,10 @@ const yazKV = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { ex
 
 async function tg(env, metod, govde, deneme = 0) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "selin", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
-  if (govde && (await patronaGider(env, govde.chat_id))) return venomaAktar(env, "selin", metod, govde, (m, g) => tgGercek(env, m, g));
-  return tgGercek(env, metod, govde, deneme);
+  if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "selin", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "selin", metod, govde, r); return r; }
+  const r = await tgGercek(env, metod, govde, deneme);
+  await defterTg(env, "selin", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
+  return r;
 }
 async function tgGercek(env, metod, govde, deneme = 0) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
@@ -121,7 +124,7 @@ export async function venomDugme(env, data, rid) {
 export async function venomSelin(env, yol, kod) {
   if (env.SELIN) return (await selinNesne(env).fetch(`https://selin${yol}`, { method: "POST", body: JSON.stringify({ kod }) })).json();
   const simdi = Math.floor(Date.now() / 1000);
-  return yol === "/venom/durum" ? venomModelDurumu(env, kod, simdi) : venomTaslakBaslat(env, kod, simdi);
+  return yol === "/venom/durum" ? venomModelDurumu(env, kod, simdi) : yol === "/venom/ozet" ? selinOzet(env, simdi) : venomTaslakBaslat(env, kod, simdi);
 }
 
 export default {
@@ -251,6 +254,7 @@ export class SelinDO {
       case "/sitevideo": return siteVideo(env, url.searchParams.get("id"), istek.headers.get("x-aralik") || null);
       case "/kare-geldi": return kareGeldi(env, await istek.json().catch(() => ({})), simdi);
       case "/venom/durum": return Response.json(await venomModelDurumu(env, (await istek.json()).kod, simdi));
+      case "/venom/ozet": return Response.json(await selinOzet(env, simdi)); // 9 Kasım
       case "/venom/taslak": return Response.json(await venomTaslakBaslat(env, (await istek.json()).kod, simdi));
       default: await hazirlaGuvenli(env, simdi); return new Response("ok");
     }
@@ -819,6 +823,7 @@ export async function siteyeYaz(env, dosyalar, liste, mesaj) {
   const commit = await gh(env, "/git/commits", { method: "POST", body: JSON.stringify({ message: mesaj, tree: yeniAgac.sha, parents: [ref.object.sha] }) });
   await gh(env, "/git/refs/heads/main", { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
   try { await siteDefteriYenile(env, Math.floor(Date.now() / 1000), { liste }); } catch { /* gece yeniden sayılır */ } // 6 Kasım: defter anında
+  await defterIs(env, "selin", `site: ${String(mesaj).replace(/^Selin: /, "").slice(0, 160)}`); // 9 Kasım: iş defteri
   return commit.sha;
 }
 
@@ -1371,6 +1376,17 @@ export async function listeTamamla(env, gun, ist, simdi) {
 // (sadece /sahip ile kayıtlı hesaplara = 0091; SAHIP_IDS'teki Merdan'a tekrar gitmez). Model durumları DEĞİŞMEZ.
 // Sonuç (kodlar + her modelin durumu) "venom:selinIstekTekrarSonuc".
 // VENOM (5 Kasım): bir model neden taslak çıkmadı / nerede? + taslak başlat (fotoğrafı gelmişse)
+// 9 Kasım (Patron): Venom "Selin, şu an ne durumda?" — bugünkü fotoğraf listesi, durumlar, GÖNDERİLEMEYENLER (kod + sebep)
+const TAKILAN_SEBEP = { gonderilemedi: "eski listede fotoğraf gelmedi", bulunamiyor: "3 gün üst üste fotoğraf gelmedi", hazirlanamadi: "taslak hazırlanamadı (hata)", istendi: "fotoğraf istendi, gelmedi", bekliyor: "dün gelmedi, bugün tekrar istendi" };
+export async function selinOzet(env, simdi) {
+  const modeller = await oku(env, "selin:modeller", {});
+  const say = {};
+  for (const m of Object.values(modeller)) if (m && m.durum) say[m.durum] = (say[m.durum] || 0) + 1;
+  const ist = await oku(env, `selin:istek:${gunAnahtari(simdi)}`, null);
+  const takilan = Object.entries(modeller).filter(([, m]) => m && ["gonderilemedi", "bulunamiyor", "hazirlanamadi"].includes(m.durum))
+    .map(([kod, m]) => ({ kod, durum: m.durum, sebep: [TAKILAN_SEBEP[m.durum], m.not].filter(Boolean).join(" — ") })).slice(0, 40);
+  return { bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan };
+}
 export async function venomModelDurumu(env, kod, simdi) {
   kod = String(kod || "").replace(/\D/g, "");
   const modeller = await oku(env, "selin:modeller", {});
@@ -2703,7 +2719,7 @@ async function kareSecildi(env, cq, kod, n, kim, simdi, cevapla) {
 // ---------- 4) Telegram: düğmeler ve komutlar ----------
 
 export async function guncelleme(u, env) {
-  if (u.callback_query) return dugme(u.callback_query, env);
+  if (u.callback_query) { await defterKarar(env, "selin", u.callback_query); return dugme(u.callback_query, env); }
   if (u.my_chat_member) return grupUyeligi(u.my_chat_member, env, "selin", "🌸 Selin (site)", tg);
   const m = u.message;
   if (!m || m.chat.type !== "private" || !m.from) return;
