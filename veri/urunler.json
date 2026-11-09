@@ -1,5 +1,25 @@
 [
  {
+  "kod": "3510",
+  "baslik": "Flame Print Cape Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a white cape-sleeve blouse with a long pleated skirt. The blouse has a neat stand collar, covered buttons and a fitted waist under a flowing cape back, while the skirt carries a bold flame print rising from the hem. Made for celebrations, receptions and refined daytime events. Produced in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces qui associe une blouse blanche à manches cape et une longue jupe plissée. La blouse présente un col montant net, des boutons recouverts et une taille ajustée sous un dos cape fluide, tandis que la jupe porte un imprimé flammes affirmé qui monte depuis l'ourlet. Idéal pour les fêtes, réceptions et sorties élégantes en journée. Fabriqué à Istanbul avec des finitions soignées.",
+   "pt": "Um conjunto de duas peças que combina uma blusa branca com mangas em capa e uma saia longa plissada. A blusa tem gola alta discreta, botões forrados e cintura ajustada sob uma capa fluida nas costas, enquanto a saia traz um marcante estampado de chamas que sobe a partir da bainha. Perfeito para festas, receções e eventos elegantes de dia. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3510/1.jpg",
+   "galeri/3510/2.jpg"
+  ],
+  "videolar": [
+   "selin/3510/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-09"
+ },
+ {
   "kod": "3529",
   "baslik": "Ruffle Sleeve Wrap Set",
   "kategori": "sets",
