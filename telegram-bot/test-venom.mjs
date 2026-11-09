@@ -976,13 +976,30 @@ test("9 Kasım: 3 saattir bekleyen kart → Hemra'ya BİR kez hatırlatma (Sami 
   const gercek = Date.now;
   Date.now = () => ist(10, 9, 10) * 1000; // salı 09:10 kart gitti
   try { await defterTg({ STOK: o.env.STOK, KAYIT: o.env.KAYIT }, "kemal", "sendMessage", { chat_id: "504", text: "⬆️ 3411", reply_markup: { inline_keyboard: [[{ text: "✅", callback_data: "y1:1:3411" }]] } }, { ok: true, result: { message_id: 1 } }); } finally { Date.now = gercek; }
-  await venomCron(o.env, ist(10, 13, 1)); // 3 saatten sonra
-  const giden = await kuyruguAl(o.env, "giden");
-  assert.equal(giden.length, 1);
-  assert.equal(giden[0].kime, "hemra");
-  assert.match(giden[0].metin, /^Hemra, Kemal'de 1 kart cevabınızı bekliyor: 3411\. Bakabilir misiniz\?/);
-  await venomCron(o.env, ist(10, 14, 1));
-  assert.equal((await kuyruguAl(o.env, "giden")).length, 0); // bir kez
+  // 9 Kasım (ONAY MERDİVENİ): Venom yazılı hatırlatma GÖNDERMEZ; kartın KENDİSİ bottan bir kez yeniden gider (mesai 3 saat)
+  await venomCron(o.env, ist(10, 13, 1));
+  assert.equal((await kuyruguAl(o.env, "giden")).length, 0);
+  const { kartTekrarAdimi, GUNCEL, mesaiSuresi, cevapsizSatiri } = await import("./kart-tekrar.js");
+  const kg = [];
+  const ktg = async (e, m, g) => { kg.push({ m, g, sessiz: e.__kartTekrar }); return { ok: true, result: { message_id: 900 } }; };
+  const env2 = { ...o.env, HEMRA_ID: "504" };
+  assert.equal(await kartTekrarAdimi(env2, "kemal", ktg, ist(10, 12, 5)), 0); // 3 saat dolmadı
+  assert.equal(await kartTekrarAdimi(env2, "kemal", ktg, ist(10, 12, 15)), 1);
+  const yeni = kg.find((x) => x.m === "sendMessage");
+  assert.equal(yeni.g.chat_id, "504");
+  assert.match(yeni.g.text, /^🔁 Hatırlatma — cevabınızı bekliyor:\n⬆️ 3411/);
+  assert.equal(yeni.g.reply_markup.inline_keyboard[0][0].callback_data, "y1:1:3411"); // aynı düğme → aynı sonuç
+  const eski = kg.find((x) => x.m === "editMessageReplyMarkup");
+  assert.deepEqual(eski.g.reply_markup.inline_keyboard[0], [{ text: "⏩ Güncel kart aşağıda", callback_data: GUNCEL }]);
+  assert.equal(eski.g.reply_markup.inline_keyboard[1][0].callback_data, "y1:1:3411"); // eski düğmeler de çalışır
+  assert.ok(kg.every((x) => x.sessiz)); // tekrar yeni kart sayılmaz (defter)
+  kg.length = 0;
+  assert.equal(await kartTekrarAdimi(env2, "kemal", ktg, ist(10, 17)), 0); // en fazla 2 gönderim
+  assert.equal(await kartTekrarAdimi(env2, "kemal", ktg, ist(14, 12)), 0);
+  // akşam: hâlâ cevapsız → tek satır
+  const bek = await (await o.env.STOK.get().fetch("https://stok/isd-bekleyen", { method: "POST", body: JSON.stringify({ enEski: 0 }) })).json();
+  assert.equal(cevapsizSatiri(bek, { 504: "Hemra" }, ist(10, 20)), "📌 Cevapsız: Hemra — Kemal 3411");
+  assert.equal(mesaiSuresi(ist(13, 19), ist(16, 10)), 2 * 3600); // cuma 19:00 → pazartesi 10:00 = 1+1 saat (hafta sonu sayılmaz)
   // tekrar kart: aynı mutabakat 12 saat içinde ikinci kez → birleşir
   const { postaKarar, gonderildiKaydet } = await import("./venom-posta.js");
   await gonderildiKaydet(o.env, { kaynak: "sami", tur: "kart", metin: "📋 Mutabakat – 07.11 · Fuat'a gidecek", id: 5 }, ist(10, 10));
@@ -1076,15 +1093,10 @@ test("görev: iki kişiye düğmeli kart; biri seçince iki kopya güncellenir; 
   const gg = l.find((x) => x.id === g.id);
   assert.deepEqual(gg.kalemler.slice(0, 3).map((k) => [k.secim, k.kim]), [["c", "Hemra"], ["a", "Merdan"], ["y", "Merdan"]]);
   assert.equal(gg.kalemler[1].aciklama, "Bu model mağazada yok, depoda bakacağım");
-  // süre doldu: 18:00 → 1. hatırlatma, 20:00 sonrası mesai yok, ertesi 09:00 → 2., 11:00+ → yapılmadı
+  // 9 Kasım (onay merdiveni): yazılı hatırlatma YOK (kartın kendisi Sami'den 3 saat sonra tekrar gider); süre dolunca "yapılmadı"
   await G.gorevAdimi(o.env, ist(10, 18, 5), f);
-  let giden = await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden");
-  assert.equal(giden.filter((x) => x.tur === "hatirlatma").length, 2);
-  assert.match(giden.find((x) => x.tur === "hatirlatma").metin, /1\. hatırlatma — Selin: 12 modelin fotoğrafı yok: süre 18:00'de doldu, 9 model cevapsız: 3043/);
-  await G.gorevAdimi(o.env, ist(10, 19), f);
-  assert.equal((await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden")).length, 0); // 2 saat dolmadı
-  await G.gorevAdimi(o.env, ist(11, 9), f);
-  l = await G.gorevAdimi(o.env, ist(11, 11, 5), f);
+  assert.equal((await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden")).length, 0);
+  l = await G.gorevAdimi(o.env, ist(10, 18, 10), f);
   assert.equal(l.find((x) => x.id === g.id).durum, "yapilmadi");
   assert.match(G.yapilmayanSatiri(l), /📌 Yapılmayan görevler: Merdan\+Hemra — Selin: 12 modelin fotoğrafı yok \(9\/12 cevapsız\)/);
   // kalanlar cevaplanınca görev kapanır; "bulamadım" → Patron'a TEK kart (çözülemeyen)
@@ -1092,11 +1104,11 @@ test("görev: iki kişiye düğmeli kart; biri seçince iki kopya güncellenir; 
   l = await G.gorevAdimi(o.env, ist(11, 12), f);
   assert.equal(l.find((x) => x.id === g.id).durum, "bitti");
   assert.equal(kartlar.length, 1);
-  assert.match(kartlar[0].metin, /🧭 Çözülemedi — Selin: 12 modelin fotoğrafı yok\nNe denendi: Merdan ve Hemra'ya 10\.11 10:00'de görev verildi, 2 kez hatırlatıldı\.\nNeden olmadı:\n• 3042: Merdan "Bulamadım"/);
+  assert.match(kartlar[0].metin, /🧭 Çözülemedi — Selin: 12 modelin fotoğrafı yok\nNe denendi: Merdan ve Hemra'ya 10\.11 10:00'de görev verildi\.\nNeden olmadı:\n• 3042: Merdan "Bulamadım"/);
   // Patron "📝 Karar yaz" → yazdığı Patron kararı olarak kaydedilir ve iki kişiye gider
   const kg = await G.patronKarari(o.env, g.id, "3042'yi listeden çıkarın", ist(11, 13));
   assert.equal(kg.patronKarari.metin, "3042'yi listeden çıkarın");
-  giden = await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden");
+  const giden = await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden");
   assert.equal(giden.filter((x) => /📌 Patron kararı — Selin: 12 modelin fotoğrafı yok:\n3042'yi listeden çıkarın/.test(x.metin)).length, 2);
   assert.match(JSON.parse(o.depo.get("venom:bot:kararlar")).at(-1).metin, /^Patron kararı \(Selin/);
 });
@@ -1125,15 +1137,15 @@ test("çözüm kuyruğu: izinsiz bot kartı Merdan + Hemra'ya düğmeleriyle dev
   await G.cozumAdimi(o.env, ist(10, 15), f);
   assert.deepEqual(botaGelen, ["so:3001"]);
   assert.equal(JSON.parse(o.depo.get("venom:cozum"))[0].durum, "kapandi");
-  // ikinci kart: kimse basmıyor → 13:00 ve 15:00 hatırlatma, 17:00 → Patron'a TEK kart (orijinal düğmeler)
+  // ikinci kart: kimse basmıyor → yazılı hatırlatma ve Patron'a kart YOK (kart Sami'den bir kez tekrar gider; akşam "Cevapsız" satırı); 3 gün sonra kapanır
   await v.aktarilanGonder(o.env, { bot: "sami", metod: "sendMessage", metin: "📦 3332 ne yapalım?", butonlar: [[{ text: "⏳ Bekle", callback_data: "sq:3332:b" }]], medya: [] });
   await G.cozumAdimi(o.env, ist(10, 10), f);
   await K.kuyruguAl(o.env, "giden");
-  for (const [h, n] of [[13, 1], [15, 2]]) { await G.cozumAdimi(o.env, ist(10, h, 1), f); const hk = await K.kuyruguAl(o.env, "giden"); assert.equal(hk.length, 2); assert.match(hk[0].metin, new RegExp(`${n}\\. hatırlatma`)); }
-  await G.cozumAdimi(o.env, ist(10, 17, 2), f);
-  assert.equal(kartlar.length, 1);
-  assert.match(kartlar[0].metin, /🧭 Çözülemedi: 📦 3332 ne yapalım\?\nNe denendi: 10\.11 10:00'de Hemra ve Merdan'a verildi, 2 kez hatırlatıldı; cevap gelmedi\./);
-  assert.match(kartlar[0].klavye.inline_keyboard[0][0].callback_data, /^vr:/);
+  for (const h of [13, 15, 17]) await G.cozumAdimi(o.env, ist(10, h, 1), f);
+  assert.equal((await K.kuyruguAl(o.env, "giden")).length, 0);
+  assert.equal(kartlar.length, 0);
+  await G.cozumAdimi(o.env, ist(13, 11), f);
+  assert.equal(JSON.parse(o.depo.get("venom:cozum")).find((x) => /3332/.test(x.ozet)).durum, "kapandi");
   // düğmesiz izinsiz mesaj → özete
   await v.tg(o.env, "sendMessage", { chat_id: PATRON, text: "ℹ️ bilgi notu" });
   await G.cozumAdimi(o.env, ist(10, 18), f);
@@ -1172,4 +1184,27 @@ test("bota emir: 10 dk sonra iş defterinden kontrol; iz yoksa bir kez tekrar, o
   assert.deepEqual(gl[2].kalemler.map((k) => k.kod), ["907", "3396", "3582", "3618"]);
   assert.equal(gl[2].kalip, "video");
   assert.equal(patronaGiden(o).length, 0); // Patron'a hiçbir şey gitmedi
+});
+
+test("onay merdiveni: aynı kişide birden çok bekleyen kart → TEK mesajda toplu (albüm + numaralı düğmeler)", async () => {
+  const o = ortam();
+  const { defterTg, _defterOnbellekSifirla } = await import("./is-defteri.js");
+  const { kartTekrarAdimi } = await import("./kart-tekrar.js");
+  _defterOnbellekSifirla();
+  const gercek = Date.now;
+  Date.now = () => ist(10, 9, 0) * 1000;
+  try {
+    await defterTg({ STOK: o.env.STOK, KAYIT: o.env.KAYIT }, "selin", "sendPhoto", { chat_id: MERDAN, photo: "https://x/3493.jpg", caption: "📝 3493 taslak", reply_markup: { inline_keyboard: [[{ text: "✅ Onayla, siteye yükle", callback_data: "so:3493" }, { text: "❌ Ekleme", callback_data: "sx:3493" }]] } }, { ok: true, result: { message_id: 11 } });
+    await defterTg({ STOK: o.env.STOK, KAYIT: o.env.KAYIT }, "selin", "sendPhoto", { chat_id: MERDAN, photo: "https://x/3529.jpg", caption: "📝 3529 taslak", reply_markup: { inline_keyboard: [[{ text: "✅ Onayla, siteye yükle", callback_data: "so:3529" }]] } }, { ok: true, result: { message_id: 12 } });
+  } finally { Date.now = gercek; }
+  const kg = [];
+  const ktg = async (e, m, g) => { kg.push({ m, g }); return { ok: true, result: { message_id: 900 } }; };
+  assert.equal(await kartTekrarAdimi(o.env, "selin", ktg, ist(10, 12, 5)), 2);
+  const alb = kg.find((x) => x.m === "sendMediaGroup");
+  assert.deepEqual(alb.g.media.map((m) => [m.media, m.caption]), [["https://x/3493.jpg", "1 · 3493"], ["https://x/3529.jpg", "2 · 3529"]]);
+  const toplu = kg.find((x) => x.m === "sendMessage");
+  assert.match(toplu.g.text, /^🔁 Hatırlatma — 2 kart cevabınızı bekliyor:\n1\. 📝 3493 taslak\n2\. 📝 3529 taslak/);
+  assert.deepEqual(toplu.g.reply_markup.inline_keyboard.flat().map((b) => [b.text, b.callback_data]), [["1· ✅ Onayla, siteye yükle", "so:3493"], ["1· ❌ Ekleme", "sx:3493"], ["2· ✅ Onayla, siteye yükle", "so:3529"]]);
+  assert.equal(kg.filter((x) => x.m === "editMessageReplyMarkup").length, 2);
+  assert.equal(kg.filter((x) => x.m === "sendMessage").length, 1); // tek mesaj
 });

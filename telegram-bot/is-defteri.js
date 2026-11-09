@@ -4,6 +4,7 @@
 //  2) Gelen her düğme basışı (kim, ne) — botun düğme girişi; aynı düğmeli kart "bitti" olur
 // Ayrıca anlamlı işler (kanala paylaştı, siteye ekledi, fabrika siparişi, Venom kontrolü) defterIs ile.
 // Deneme/test işleri işaretlenir (sayılmaz). Defter yazılamazsa iş DURMAZ (sessizce geçer).
+import { kopyaKaydet } from "./kart-tekrar.js";
 const SESSIZ = new Set(["sendChatAction", "answerCallbackQuery", "getFile", "getChat", "getMe", "getWebhookInfo", "setWebhook", "deleteWebhook", "deleteMessage",
   "editMessageReplyMarkup", "editMessageText", "editMessageCaption", "editMessageMedia", "forwardMessage", "copyMessages", "setMyCommands", "pinChatMessage",
   "unpinChatMessage", "getChatMember", "setMessageReaction", "getUpdates", "answerInlineQuery", "getChatAdministrators", "setChatMenuButton", "sendDocument"]);
@@ -26,7 +27,7 @@ export async function defterYaz(env, kayit) {
 export const defterIs = (env, bot, ozet, { kod = null, kime = null, deneme = false } = {}) => defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "is", ozet, kod: kod || kodBulDefter(ozet), kime, deneme: deneme || denemeMi(ozet) });
 // Telegram çağrısından sonra: mesaj / kart kaydı
 export async function defterTg(env, bot, metod, govde, sonuc) {
-  if (!env || !env.STOK || !govde || SESSIZ.has(metod) || (sonuc && sonuc.ok === false)) return;
+  if (!env || !env.STOK || !govde || SESSIZ.has(metod) || (sonuc && sonuc.ok === false) || env.__kartTekrar) return; // kart tekrarı yeni kart sayılmaz
   const chat = govde.chat_id != null ? String(govde.chat_id) : null;
   if (!chat) return;
   const k = await kanallar(env);
@@ -34,6 +35,7 @@ export async function defterTg(env, bot, metod, govde, sonuc) {
   const metin = String(govde.text || govde.caption || (Array.isArray(govde.media) && govde.media[0] && govde.media[0].caption) || "");
   const cbler = ((govde.reply_markup && govde.reply_markup.inline_keyboard) || []).flat().map((b) => b && b.callback_data).filter(Boolean);
   const r = sonuc && sonuc.result;
+  if (cbler.length) await kopyaKaydet(env, metod, govde, sonuc).catch(() => null); // 9 Kasım: kartın kendisi yeniden gönderilebilsin
   const botAd = bot === "pelin" && /\bNora\b|senaryo/i.test(metin) ? "nora" : bot;
   await defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot: botAd, tur: cbler.length ? "kart" : "mesaj", kime: chat, kod: kodBulDefter(metin), ozet: metin.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(" · ").slice(0, 200) || metod, chat, mesaj: r && !Array.isArray(r) ? r.message_id : null, cbler, deneme: denemeMi(metin) });
 }

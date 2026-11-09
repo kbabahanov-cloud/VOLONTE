@@ -15,6 +15,7 @@
 import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
+import { kartTekrarAdimi, GUNCEL } from "./kart-tekrar.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
 import { siteKontrol, engelKaydet, markaKesin } from "./yayin-kontrol.js";
@@ -179,6 +180,7 @@ export default {
     if (!env.BOT_TOKEN) return;
     try { await patronDenemesi(env, "Selin", tg); } catch { /* */ }
     try { await birikimAdimi(env, "selin", Math.floor(Date.now() / 1000), tg); } catch { /* bir sonraki çalışmada */ }
+    try { await kartTekrarAdimi(env, "selin", tg, Math.floor(Date.now() / 1000)); } catch { /* 9 Kasım: onay merdiveni; bir sonraki çalışmada */ }
     if (env.SELIN) {
       const nesne = selinNesne(env);
       const cagir = async (yol) => {
@@ -2721,6 +2723,7 @@ async function kareSecildi(env, cq, kod, n, kim, simdi, cevapla) {
 // ---------- 4) Telegram: düğmeler ve komutlar ----------
 
 export async function guncelleme(u, env) {
+  if (u.callback_query && u.callback_query.data === GUNCEL) return tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "⏩ Güncel kart aşağıda" });
   if (u.callback_query) { await defterKarar(env, "selin", u.callback_query); return dugme(u.callback_query, env); }
   if (u.my_chat_member) return grupUyeligi(u.my_chat_member, env, "selin", "🌸 Selin (site)", tg);
   const m = u.message;

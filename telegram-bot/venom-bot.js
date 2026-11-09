@@ -30,6 +30,7 @@ import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
 import { botSorusu, botCevabi, herkesCevabi, canliSatirlar, takilanlar, hedefSatiri, BOTLAR as DEFTER_BOTLAR, kisiAdi as defterKisi } from "./venom-defter.js";
 import { defterYaz } from "./is-defteri.js";
+import { cevapsizSatiri } from "./kart-tekrar.js";
 import { gorevAc, gorevAdimi, cozumAdimi, yapilmayanSatiri, patronKarari, haftaSayilari, sayac as mudurSayac, sonSaat } from "./venom-gorev.js";
 import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
 export { KISILER };
@@ -110,6 +111,38 @@ const mudurAraclari = (env, simdi) => ({
   defter: (ozet, kod) => defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: String(ozet).slice(0, 200), kod: kod || null }),
   botaDugme: async (rid) => { const k = await oku(env, `venom:bot:dugme:${rid}`, null); return k ? botaSor(env, k.bot, "dugme", k.data, rid) : null; },
 });
+// 9 Kasım (ONAY MERDİVENİ): akşam 20:00 — tekrar gönderildiği hâlde cevapsız kartlar + fabrikanın 2 iş günü cevap vermediği siparişler
+async function merdivenSatirlari(env, simdi) {
+  const ad = {};
+  for (const [k, a] of [["HEMRA_ID", "Hemra"], ["FABRIKA_SORUMLU", "Hemra"], ["BR_SORUMLU", "Merdan"]]) for (const x of String(env[k] || "").split(",").map((y) => y.trim()).filter(Boolean)) ad[x] = a;
+  const bekleyen = env.STOK ? await stokIste(env, "/isd-bekleyen", { enEski: simdi - 3 * 86400 }).catch(() => []) : [];
+  const satir = [cevapsizSatiri(Array.isArray(bekleyen) ? bekleyen : [], ad, simdi)];
+  const ekibe = await oku(env, "fabrika:ekibe", []);
+  if (ekibe.length && env.STOK) {
+    const veri = await stokIste(env, "/repete-veri", {}).catch(() => null);
+    const acik = ((veri && veri.fs) || []).filter((f) => f.durum === "bekliyor");
+    const hala = ekibe.filter((e) => acik.some((f) => String(f.kod) === String(e.kod) && Number(f.gonderim) === Number(e.gonderim)));
+    const gy = (t) => { const x = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${x.slice(8, 10)}.${x.slice(5, 7)}`; };
+    if (hala.length) satir.push(`🏭 Fabrika cevap vermedi (Merdan ve Hemra'ya bildirildi): ${hala.slice(0, 10).map((e) => `${e.kod} (${gy(e.gonderim)})`).join(", ")}${hala.length > 10 ? " …" : ""}`);
+  }
+  return satir.filter(Boolean);
+}
+// Bir kez (Claude Code): şu an bekleyen kartlar yeni kurala — eski yazılı hatırlatma sayılmaz (kart bir kez yeniden gider);
+// Patron'daki "Fuat'a hatırlatma" taslağı kapanır (fabrika hatırlatması artık kendiliğinden, Patron onayı istemeden)
+async function merdivenGoc(env, simdi) {
+  const bekleyen = env.STOK ? await stokIste(env, "/isd-bekleyen", { enEski: simdi - 3 * 86400 }).catch(() => []) : [];
+  const ekip = new Set(["HEMRA_ID", "FABRIKA_SORUMLU", "BR_SORUMLU"].flatMap((k) => String(env[k] || "").split(",").map((y) => y.trim()).filter(Boolean)));
+  const idler = (Array.isArray(bekleyen) ? bekleyen : []).filter((r) => ekip.has(String(r.kime)) && Number(r.hatirlatildi)).map((r) => r.id);
+  if (idler.length) await stokIste(env, "/isd-isaretle", { idler, alan: "hatirlatildi", deger: 0 }).catch(() => null);
+  const t = await oku(env, "venom:merdivenTaslak", null);
+  let iptal = 0;
+  if (t && t.isId) {
+    const is = await oku(env, `venom:bot:is:${t.isId}`, null);
+    if (is && is.durum === "bekliyor") { is.durum = "iptal"; await kaydet(env, `venom:bot:is:${t.isId}`, is, 7 * 86400); iptal = 1; }
+    if (t.mesaj) await tg(env, "editMessageText", { chat_id: patron(env), message_id: t.mesaj, text: "⏩ Fuat hatırlatması artık otomatik: kart fabrikaya kendiliğinden bir kez yeniden gidiyor, hâlâ cevap yoksa Merdan ve Hemra'ya. Onayınız gerekmiyor." }).catch(() => null);
+  }
+  return { sifirlanan: idler.length, taslakIptal: iptal };
+}
 // 9 Kasım (sert müdür E): İLK UYGULAMALAR — KV "venom:ilkGorevler" (Claude Code bir kez koyar). Görevler Merdan + Hemra'ya (Sami'den).
 const MERDAN_VIDEO = ["907", "3396", "3582", "3618"]; // Patron'un listesi (9 Kasım)
 export async function ilkGorevler(env, simdi) {
@@ -1237,7 +1270,8 @@ export async function venomCron(env, simdi) {
   // 9 Kasım (Patron): botlar günde 2 kez Venom'a rapor verir (09:00, 19:30) — Patron'a ayrı gitmez, özete girer
   if (saat(simdi) >= 9 && saat(simdi) < 9.6 && (await ilkKezBugun(env, `botRapor:s:${gunAnahtari(simdi)}`))) { try { await botRaporuAl(env, simdi, "sabah"); } catch (e) { await hataYaz(env, "botRapor", e); } }
   if (saat(simdi) >= 19.5 && saat(simdi) < 20 && (await ilkKezBugun(env, `botRapor:a:${gunAnahtari(simdi)}`))) { try { await botRaporuAl(env, simdi, "aksam"); } catch (e) { await hataYaz(env, "botRapor", e); } }
-  if (haftaIci(simdi) && saat(simdi) >= 9 && saat(simdi) < 20 && new Date(simdi * 1000).getUTCMinutes() < 5) { try { await takilanHatirlat(env, simdi); } catch (e) { await hataYaz(env, "takilan", e); } }
+  // 9 Kasım (ONAY MERDİVENİ): takılan kart için yazılı hatırlatma YOK — kartın kendisini her bot kendi gönderir (kart-tekrar.js)
+  try { if (await env.KAYIT.get("venom:merdivenGoc")) { await env.KAYIT.delete("venom:merdivenGoc"); await kaydet(env, "venom:merdivenGocSonuc", { zaman: simdi, sonuc: await merdivenGoc(env, simdi) }, 7 * 86400); } } catch (e) { await hataYaz(env, "merdivenGoc", e); }
   // 9 Kasım (Patron): köprü SADECE hafta içi 09–20 izlenir; açıkken 1 saatten uzun sinyal yoksa kritik uyarı (bir kez)
   if (haftaIci(simdi) && new Date(simdi * 1000).getUTCMinutes() % 15 < 5) { try { await kopruIzle(env, simdi); } catch (e) { await hataYaz(env, "kopruIzle", e); } }
   // Cloudflare %80 uyarısı: günde bir kez (pazar da)
@@ -1293,9 +1327,10 @@ export async function aksamOzeti(env, simdi) {
   const cuma = new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() === 5 ? [await saglikSatiri(env, simdi).catch(() => null), await mudurSatiri(env, simdi).catch(() => null)].filter(Boolean) : [];
   const hedef = hedefSatiri(await botaSor(env, "kemal", "ozet").catch(() => null), gunAnahtari(simdi)); // 9 Kasım: günlük 10 onay hedefi
   const yapilmayan = yapilmayanSatiri(await oku(env, "venom:gorevler", [])); // 9 Kasım (sert müdür C)
+  const cevapsiz = await merdivenSatirlari(env, simdi).catch(() => []); // 9 Kasım (onay merdiveni): Cevapsız kartlar + fabrika
   const metin = ozetKisalt(satir[0] || `🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, [
     { satirlar: [hedef].filter(Boolean), enFazla: 1 },
-    { satirlar: [yapilmayan].filter(Boolean), enFazla: 1 },
+    { satirlar: [yapilmayan, ...cevapsiz].filter(Boolean), enFazla: 3 },
     { satirlar: cuma, enFazla: 2 },
     { satirlar: [birikimSatiri(bir)].filter(Boolean), enFazla: 1 },
     { satirlar: kontrol, enFazla: 1 },

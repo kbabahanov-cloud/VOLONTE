@@ -1558,3 +1558,54 @@ test("/ciro: sadece Patron; her mağaza ayrı bölüm, toplam yok; satış (21) 
   assert.ok(!/10,00 \$/.test(t)); // satış dışı (alış tarafı) tutar gösterilmez
   assert.ok(!/TOPLAM|toplam ciro|fark/i.test(t.replace("iptal edilen", "")));
 });
+
+// 9 Kasım (Patron): ONAY MERDİVENİ — fabrika: 24 saat (iş günü) → aynı kart bir kez Fuat'a; 24 saat daha → Merdan + Hemra'ya kopya + 📞
+test("onay merdiveni (fabrika): kart bir kez yeniden fabrikaya (⏩ eski kart), sonra Merdan + Hemra'ya bildirim + kart + 📞 Aradım", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", BR_SORUMLU: "222" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }]));
+  await o.yaz("VOLONTE", [{ kod: "3194", adet: 4, fiyat: 70 }], ist(8));
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: "fabrika:2026-10-28", v: JSON.stringify({ asama: "onayda", liste: [{ kod: "3194", renkler: [{ renk: "siyah", adet: 10 }] }] }) }) });
+  const gercek = Date.now;
+  const bas = (kim, data) => g2({ callback_query: { id: "c", from: { id: kim, first_name: { 555: "Nuri", 333: "Hemra", 222: "Merdan" }[kim] || "X" }, data, message: { chat: { id: kim }, message_id: 1 } } }, o.env);
+  Date.now = () => ist(10) * 1000; // çarşamba 10:00
+  try { await bas(333, "fb:o:2026-10-28"); } finally { Date.now = gercek; }
+  const id = cagri(o.g, "copyMessage")[0].govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  const tgt = async (e, m, g) => { o.g.push({ metod: m, govde: g }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  assert.equal(f.isGunuSonra(ist(10), 86400), ist(10, 0, 1));
+  assert.equal(f.isGunuSonra(Date.UTC(2026, 9, 30, 15) / 1000, 86400), Date.UTC(2026, 10, 2, 15) / 1000); // cuma 18:00 → pazartesi 18:00
+  o.g.length = 0;
+  await f.siparisTakip(o.env, ist(9, 50, 1), tgt); // 24 saat dolmadı
+  assert.equal(cagri(o.g, "copyMessage").length, 0);
+  await f.siparisTakip(o.env, ist(10, 5, 1), tgt);
+  const tekrar = cagri(o.g, "copyMessage");
+  assert.equal(tekrar.length, 1);
+  assert.equal(String(tekrar[0].govde.chat_id), "555");
+  assert.equal(tekrar[0].govde.caption, "⏰ Hatırlatma: lütfen onay verin\n3194 · siyah 10");
+  assert.ok(!/\$|fiyat|stok|satış|kâr/i.test(tekrar[0].govde.caption));
+  const kapat = cagri(o.g, "editMessageReplyMarkup")[0];
+  assert.equal(kapat.govde.reply_markup.inline_keyboard[0][0].text, "⏩ Güncel kart aşağıda");
+  assert.equal(kapat.govde.reply_markup.inline_keyboard[1][0].callback_data, `fc:g:${id}`); // eski düğme aynı sonuç
+  o.g.length = 0;
+  await f.siparisTakip(o.env, ist(11, 0, 1), tgt);
+  assert.equal(cagri(o.g, "copyMessage").length, 0); // en fazla 1 yeniden gönderim
+  await f.siparisTakip(o.env, ist(10, 10, 2), tgt); // cuma: 24 saat daha
+  const ekip = cagri(o.g, "sendMessage").filter((x) => /Fabrika şu siparişlere onay vermedi/.test(x.govde.text));
+  assert.deepEqual(ekip.map((x) => String(x.govde.chat_id)).sort(), ["222", "333"]);
+  assert.match(ekip[0].govde.text, /🏭 Fabrika şu siparişlere onay vermedi: 3194 \(28\.10\)\. Bilginiz olsun, lütfen arayın\./);
+  assert.equal(cagri(o.g, "copyMessage").length, 2);
+  const ara = cagri(o.g, "editMessageReplyMarkup").find((x) => x.govde.reply_markup.inline_keyboard.flat().some((b) => b.callback_data === `fc:a:${id}`));
+  assert.ok(ara);
+  assert.equal(JSON.parse(o.depo.get("fabrika:ekibe"))[0].kod, "3194");
+  // 📞 Aradım → cevap yazılır, siparişe not
+  o.g.length = 0;
+  await bas(333, `fc:a:${id}`);
+  assert.match(cagri(o.g, "sendMessage")[0].govde.text, /fabrikanın cevabını tek mesajla yazın/);
+  await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "Fuat'ı aradım, cuma hazır olacakmış" } }, o.env);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /3194: fabrikanın cevabı kaydedildi/);
+  o.g.length = 0;
+  await f.siparisTakip(o.env, ist(10, 10, 5), tgt);
+  assert.equal(cagri(o.g, "sendMessage").filter((x) => /onay vermedi/.test(x.govde.text)).length, 0); // bir kez
+});

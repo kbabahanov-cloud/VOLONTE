@@ -35,7 +35,8 @@ import { patronMu, geriKuyrugu } from "./sil.js";
 import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
-import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi } from "./fabrika.js";
+import { kartTekrarAdimi, GUNCEL } from "./kart-tekrar.js";
+import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -88,6 +89,7 @@ export default {
     const simdi = Math.floor(Date.now() / 1000);
     if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
+    if (env.BOT_TOKEN) try { await kartTekrarAdimi(env, "sami", tg, simdi); } catch { /* 9 Kasım: onay merdiveni (görev kartları dahil) */ }
     if (await durdurulduMu(env, "sami")) return; // 6 Kasım: durduruldu → zamanlı işler (mesaj/yazma) bekler
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
@@ -153,6 +155,7 @@ export async function guncelleme(u, env) {
     await defterKarar(env, "sami", cq); // 9 Kasım: iş defteri
     const simdiD = Math.floor(Date.now() / 1000);
     // Fabrika düğmeleri: fabrika kişileri de basabilir (sadece bunlar)
+    if (cq.data === GUNCEL) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "⏩ Güncel kart aşağıda" });
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
@@ -177,6 +180,7 @@ export async function guncelleme(u, env) {
     if (await stokSorguMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat/Nuri: Black Rose stok sorgusu (Hemra onaylı)
     return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
   }
+  if (await aramaNotuMesaji(env, m, tg)) return; // 9 Kasım: "📞 Aradım, şu cevap geldi"
   if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000))) return; // Hemra'nın eksik listesi
   if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return; // "3394 repete geldi …"
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();

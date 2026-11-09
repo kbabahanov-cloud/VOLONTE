@@ -112,15 +112,9 @@ export async function gorevAdimi(env, simdi, f) {
   for (const g of l.filter((x) => ["acik", "yapilmadi"].includes(x.durum))) {
     const kalan = cevapsiz(g);
     if (!kalan.length) { await gorevKapat(env, g, simdi, f); degisti = true; continue; }
-    if (!mesai || simdi < g.son) continue;
-    const zaman = g.son + g.hatirlatma * HATIRLATMA_ARA;
-    if (simdi < zaman) continue;
-    if (g.hatirlatma < 2) {
-      g.hatirlatma += 1; degisti = true;
-      const metin = `⏰ ${g.hatirlatma}. hatırlatma — ${g.baslik}: süre ${saatYaz(g.son)}'de doldu, ${kalan.length} model cevapsız: ${kalan.slice(0, 15).map((k) => k.kod).join(", ")}${kalan.length > 15 ? " …" : ""}. Bugün düğmeden seçin; ${g.hatirlatma === 2 ? "bu son hatırlatma, akşam Patron'a yapılmayan görev olarak yazılacak." : `${saatYaz(simdi + HATIRLATMA_ARA)}'de tekrar kontrol edeceğim.`}`;
-      for (const kisi of g.kimler) await kuyrugaEkle(env, "giden", { id: `gh-${g.id}-${kisi}-${g.hatirlatma}`, kime: kisi, metin, tur: "hatirlatma" }).catch(() => null);
-      await f.biriktir(`⏰ ${g.baslik}: ${kimler(g).join(" ve ")}'ya ${g.hatirlatma}. hatırlatma (${kalan.length} model cevapsız).`).catch(() => null);
-    } else if (g.durum !== "yapilmadi") { g.durum = "yapilmadi"; degisti = true; }
+    // 9 Kasım (onay merdiveni): hatırlatma = KARTIN KENDİSİ, 3 saat (mesai) sonra bir kez — Sami yapar (kart-tekrar.js).
+    // Süre dolduğunda hâlâ cevapsızsa görev "yapılmadı" → akşam özetinde tek satır. Ara mesaj yok.
+    if (simdi >= g.son && g.durum !== "yapilmadi") { g.durum = "yapilmadi"; degisti = true; }
   }
   if (degisti) await kaydet(env, "venom:gorevler", l, 30 * 86400);
   return l;
@@ -186,17 +180,9 @@ export async function cozumAdimi(env, simdi, f) {
       await sayac(env, "gorev", simdi);
       continue;
     }
-    // 4) takip: 3 saatte bir hatırlat (2 kez), sonra 7) Patron'a TEK kart
-    if (!mesai || simdi - (c.devir + (c.hatirlatma || 0) * 2 * 3600) < 3 * 3600) continue;
-    if ((c.hatirlatma || 0) < 2) {
-      c.hatirlatma = (c.hatirlatma || 0) + 1; degisti = true;
-      for (const kisi of GOREV_KISILER) await kuyrugaEkle(env, "giden", { id: `ch-${c.id}-${kisi}-${c.hatirlatma}`, kime: kisi, tur: "hatirlatma", metin: `⏰ ${c.hatirlatma}. hatırlatma: "${c.ozet.slice(0, 120)}" hâlâ kararınızı bekliyor. Düğmeden seçin.${c.hatirlatma === 2 ? " Son hatırlatma; cevap gelmezse Patron'a götüreceğim." : ""}` }).catch(() => null);
-      c.adimlar.push({ zaman: simdi, ne: `${c.hatirlatma}. hatırlatma` });
-    } else {
-      c.durum = "patronda"; degisti = true;
-      c.adimlar.push({ zaman: simdi, ne: "çözülemedi → Patron'a tek kart" });
-      await f.patronaKart(`🧭 Çözülemedi: ${c.ozet}\nNe denendi: ${gunSaatYaz(c.devir)}'de Hemra ve Merdan'a verildi, 2 kez hatırlatıldı; cevap gelmedi.\nKarar sizde:`, devirKlavye(c, true)).catch(() => null);
-    }
+    // 4) takip: kartın kendisi 3 saat (mesai) sonra bir kez yeniden gider (Sami, kart-tekrar.js); yine cevap yoksa akşam özetinde
+    //    "Cevapsız" satırı. 3 gün sonra kapanır (Patron'a ara mesaj yok).
+    if (simdi - c.devir > 3 * 86400) { c.durum = "kapandi"; c.kapanis = simdi; c.adimlar.push({ zaman: simdi, ne: "3 gün cevapsız — kapandı (akşam özetinde yazıldı)" }); degisti = true; }
   }
   if (degisti) await kaydet(env, "venom:cozum", l.filter((x) => ["acik", "devredildi"].includes(x.durum) || simdi - x.zaman < 7 * 86400).slice(-200), 14 * 86400);
 }

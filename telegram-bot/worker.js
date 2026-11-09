@@ -56,6 +56,7 @@ import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce } from "./yayin-kontrol.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
+import { kartTekrarAdimi, GUNCEL } from "./kart-tekrar.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
@@ -161,6 +162,7 @@ export default {
   async scheduled(event, env) {
     try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
+    try { await kartTekrarAdimi(env, "kemal", telegram, Math.floor(Date.now() / 1000)); } catch (e) { await env.KAYIT.put("kemal:kartTekrarHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); } // 9 Kasım: onay merdiveni
     if (env.KATALOG) {
       const nesne = kemalNesne(env);
       await nesne.fetch("https://kemal/kemal/cron", { method: "POST" });
@@ -252,6 +254,7 @@ export async function guncellemeIsle(update, env) {
     return tepkiKaydet(env, t.message_id, (t.reactions || []).reduce((top, r) => top + (r.total_count || 0), 0));
   }
   if (update.message) return mesajIsle(update.message, env);
+  if (update.callback_query && update.callback_query.data === GUNCEL) return telegram(env, "answerCallbackQuery", { callback_query_id: update.callback_query.id, text: "⏩ Güncel kart aşağıda" });
   if (update.callback_query) { await defterKarar(env, "kemal", update.callback_query); return dugmeIsle(update.callback_query, env); }
 }
 

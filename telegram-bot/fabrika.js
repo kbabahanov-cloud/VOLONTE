@@ -11,6 +11,7 @@
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
 import { defterIs } from "./is-defteri.js";
+import { mesaiMi, isGunuSuresi, GUNCEL } from "./kart-tekrar.js";
 import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI } from "./stok.js";
@@ -831,9 +832,15 @@ async function girisSorumlusu(env, rec) {
   if (magazalar.size === 1 && magazalar.has("BLACKROSE")) return String(env.BR_SORUMLU || "") || sorumlu(env);
   return rec.sorumlu ? String(rec.sorumlu) : sorumlu(env);
 }
+// 9 Kasım (Patron, ONAY MERDİVENİ): iş günü 24 saat sonraki ilk mesai anı (hafta içi 09–20)
+export function isGunuSonra(bas, sn = 86400) {
+  for (let t = bas + sn; t < bas + 14 * 86400; t += 900) if (isGunuSuresi(bas, t) >= sn && mesaiMi(t)) return t;
+  return bas + sn;
+}
 export function takipZamani(rec) {
   const l = [];
-  if (rec.durum === "bekliyor" && !rec.hatirlatildi) l.push(rec.gonderim + 86400);
+  if (rec.durum === "bekliyor" && !rec.hatirlatildi) l.push(isGunuSonra(rec.gonderim));
+  if (rec.durum === "bekliyor" && rec.hatirlatildi && !rec.ekibe && !rec.deneme) l.push(isGunuSonra(rec.hatirlatmaZaman || rec.gonderim + 86400));
   if (rec.durum === "repete" && rec.hazirZaman && !rec.hazirSoruldu) l.push(rec.hazirZaman);
   if (["gelecek", "repete"].includes(rec.durum) && rec.hazirGun && !rec.teslimHatirlatildi) l.push(gunBasi(rec.hazirGun) + 10 * 3600);
   if (rec.durum === "bitti" && rec.karar === "beklesin" && !rec.tekrarSoruldu && rec.beklesinZaman) l.push(rec.beklesinZaman);
@@ -906,6 +913,65 @@ async function fabrikayaGonder(env, rec, tg, site = null) {
   return { giden, kisi: kisiler.length };
 }
 
+// 9 Kasım (ONAY MERDİVENİ): kartın kendisi yeniden — her sipariş kendi kartında (cevaptan sonra "kaç günde hazır?" o kartta sorulur),
+// birden çok sipariş varsa tek başlık mesajının altında arka arkaya. Eski kartın üstüne "⏩ Güncel kart aşağıda" (düğmeler aynen çalışır).
+async function kartKopyala(env, tg, rec, [chat, mesaj, tur], hedef, baslik) {
+  const metin = `${baslik}\n${siparisMetni(rec)}`;
+  const kl = klavye(rec);
+  const r = tur === "foto"
+    ? await tg(env, "copyMessage", { chat_id: hedef, from_chat_id: chat, message_id: mesaj, caption: metin.slice(0, 1024), reply_markup: kl })
+    : await tg(env, "sendMessage", { chat_id: hedef, text: metin, reply_markup: kl });
+  return r && r.ok ? [hedef, r.result.message_id, tur] : null;
+}
+async function eskiKartKapat(env, tg, rec, mesajlar) {
+  for (const [chat, mesaj] of mesajlar) try { await tg(env, "editMessageReplyMarkup", { chat_id: chat, message_id: mesaj, reply_markup: { inline_keyboard: [[{ text: "⏩ Güncel kart aşağıda", callback_data: GUNCEL }], ...klavye(rec).inline_keyboard] } }); } catch { /* eski kart */ }
+}
+const gunGos = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}`; };
+export async function fabrikayaTekrar(env, recler, tg) {
+  const kisiye = {};
+  for (const rec of recler) for (const m of rec.mesajlar) (kisiye[m[0]] = kisiye[m[0]] || []).push([rec, m]);
+  for (const [chat, l] of Object.entries(kisiye)) {
+    if (l.length > 1) await tg(env, "sendMessage", { chat_id: chat, text: `⏰ Hatırlatma: lütfen onay verin — ${l.length} sipariş cevabınızı bekliyor (aşağıda).` });
+    for (const [rec, m] of l) {
+      const yeni = await kartKopyala(env, tg, rec, m, chat, `${rec.deneme ? DENEME : ""}⏰ Hatırlatma: lütfen onay verin`);
+      if (yeni) { await eskiKartKapat(env, tg, rec, [m]); rec.mesajlar.push(yeni); }
+    }
+  }
+  for (const rec of recler) { rec.log.push("⏰ Kart fabrikaya bir kez yeniden gönderildi"); await siparisYaz(env, rec); }
+}
+export async function ekibeFabrikaBildir(env, recler, tg, simdi) {
+  const ekip = bildirilecekler(env);
+  const liste = recler.map((r) => `${r.kod} (${gunGos(r.gonderim)})`).join(", ");
+  for (const kisi of ekip) {
+    await tg(env, "sendMessage", { chat_id: kisi, text: `🏭 Fabrika şu siparişlere onay vermedi: ${liste}. Bilginiz olsun, lütfen arayın. Cevap gelince kartın altındaki düğmeden seçin.` });
+    for (const rec of recler) {
+      const kaynak = rec.mesajlar.find((m) => !ekip.includes(String(m[0]))) || rec.mesajlar[0];
+      if (!kaynak) continue;
+      const yeni = await kartKopyala(env, tg, rec, kaynak, kisi, `🏭 Fabrika onay vermedi (gönderim ${gunGos(rec.gonderim)})`);
+      if (!yeni) continue;
+      rec.mesajlar.push(yeni);
+      try { await tg(env, "editMessageReplyMarkup", { chat_id: kisi, message_id: yeni[1], reply_markup: { inline_keyboard: [...klavye(rec).inline_keyboard, [{ text: "📞 Aradım, şu cevap geldi", callback_data: `fc:a:${rec.id}` }]] } }); } catch { /* */ }
+    }
+  }
+  const l = (await env.KAYIT.get("fabrika:ekibe", "json").catch(() => null)) || [];
+  await env.KAYIT.put("fabrika:ekibe", JSON.stringify([...l.filter((x) => simdi - x.zaman < 14 * 86400), ...recler.map((r) => ({ id: r.id, kod: r.kod, gonderim: r.gonderim, zaman: simdi }))].slice(-100)), { expirationTtl: 15 * 86400 });
+  for (const rec of recler) { rec.log.push("🏭 Merdan ve Hemra'ya bildirildi (fabrika 2 iş günü cevap vermedi)"); await siparisYaz(env, rec); }
+}
+// [📞 Aradım, şu cevap geldi] → yazdığı cevap siparişe not olarak düşer
+export async function aramaNotuMesaji(env, m, tg) {
+  if (!m.text || m.text.startsWith("/")) return false;
+  const b = await env.KAYIT.get(`fabrikaArama:${m.from.id}`, "json").catch(() => null);
+  if (!b) return false;
+  await env.KAYIT.delete(`fabrikaArama:${m.from.id}`).catch(() => null);
+  const rec = await siparisOku(env, b.id);
+  if (!rec) return false;
+  const kim = kisiAd(m.from);
+  rec.aramaNotu = { kim, metin: m.text.slice(0, 400), zaman: Math.floor(Date.now() / 1000) };
+  rec.log.push(`📞 ${kim} aradı: ${m.text.slice(0, 200)}`);
+  await siparisYaz(env, rec);
+  await tg(env, "sendMessage", { chat_id: m.chat.id, text: `✅ ${rec.kod}: fabrikanın cevabı kaydedildi. Duruma göre karttaki düğmeye de basın (Gelecek / Repete / Bitti).` });
+  return true;
+}
 async function mesajlariGuncelle(env, rec, ek, tg) {
   const metin = `${siparisMetni(rec)}${ek ? `\n\n${ek}` : ""}`;
   for (const [chat, mesaj, tur] of rec.mesajlar) {
@@ -949,6 +1015,11 @@ export async function siparisDugmesi(env, cq, tg, simdi, yetkili) {
   if (kisi && kisiGrubu(kisi) !== (rec.grup || "fabrika") && !bildirilecekler(env, rec).includes(String(cq.from.id))) return cevapla("Bu model size ait değil.");
   const kim = kisiAd(cq.from);
   const benim = cq.message ? { chat_id: cq.message.chat.id, message_id: cq.message.message_id } : null;
+  if (islem === "a") { // 9 Kasım: Merdan/Hemra fabrikayı aradı
+    await env.KAYIT.put(`fabrikaArama:${cq.from.id}`, JSON.stringify({ id: rec.id }), { expirationTtl: 3600 });
+    await cevapla("Cevabı yazın");
+    return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `📞 ${rec.kod}: fabrikanın cevabını tek mesajla yazın (1 saat içinde).` });
+  }
   if (islem === "y") {
     rec.fotoYanlis = [...new Set([...(rec.fotoYanlis || []), kim])];
     await siparisYaz(env, rec);
@@ -1128,14 +1199,22 @@ export async function siparisTakip(env, simdi, tg) {
     await ayarYaz(env, "fs:takipGoc", 1);
   }
   const takip = await ayarOku(env, "fs:takip", {});
-  const zamani = Object.entries(takip).filter(([, t]) => t <= simdi).sort((a, b) => a[1] - b[1]).slice(0, 8).map(([id]) => id);
+  if (!(await ayarOku(env, "fs:merdivenGoc", null))) { // 9 Kasım: bir kez — açık siparişler yeni merdivene (takip zamanları yeniden)
+    for (const id of (await ayarOku(env, "fs:acik", [])).slice(0, 120)) { const r = await siparisOku(env, id); if (r) await siparisYaz(env, r); }
+    await ayarYaz(env, "fs:merdivenGoc", 1);
+  }
+  const zamani = Object.entries(takip).filter(([, t]) => t <= simdi).sort((a, b) => a[1] - b[1]).slice(0, 12).map(([id]) => id);
+  const fuataTekrar = [], ekibe = [];
   for (const id of zamani) {
     const rec = await siparisOku(env, id);
     if (!rec) continue;
     const kisiler = rec.mesajlar.map(([chat, mesaj]) => [chat, mesaj]);
-    if (rec.durum === "bekliyor" && simdi - rec.gonderim >= 86400 && !rec.hatirlatildi) {
-      rec.hatirlatildi = true;
-      for (const [chat, mesaj] of kisiler) await tg(env, "sendMessage", { chat_id: chat, text: `${rec.deneme ? DENEME : ""}⏰ ${rec.kod}: cevabınızı bekliyoruz (✅ Gelecek / 🔁 Repete / ❌ Bitti).`, reply_to_message_id: mesaj });
+    if (rec.durum === "bekliyor" && !rec.hatirlatildi) {
+      // ONAY MERDİVENİ 2: iş günü 24 saat cevap yok → AYNI KART "Hatırlatma: lütfen onay verin" başlığıyla BİR KEZ (Patron'a yeniden sorulmaz)
+      if (mesaiMi(simdi) && isGunuSuresi(rec.gonderim, simdi) >= 86400) { rec.hatirlatildi = true; rec.hatirlatmaZaman = simdi; fuataTekrar.push(rec); }
+    } else if (rec.durum === "bekliyor" && rec.hatirlatildi && !rec.ekibe && !rec.deneme) {
+      // ONAY MERDİVENİ 3: 24 saat daha yok → Merdan ve Hemra'ya bildirim + kartın kopyası + [📞 Aradım, şu cevap geldi]
+      if (mesaiMi(simdi) && isGunuSuresi(rec.hatirlatmaZaman || rec.gonderim + 86400, simdi) >= 86400) { rec.ekibe = simdi; ekibe.push(rec); }
     } else if (["gelecek", "repete"].includes(rec.durum) && rec.hazirGun && !rec.teslimHatirlatildi && simdi >= gunBasi(rec.hazirGun) + 10 * 3600) {
       rec.teslimHatirlatildi = true;
       await bildir(env, rec, `📦 ${rec.kod} bugün hazır olmalıydı (${rec.cevaplayan || "fabrika"} ${gunGoster(rec.hazirGun)} demişti). Geldi mi?`, tg, { reply_markup: { inline_keyboard: [[{ text: "📦 Geldi", callback_data: `fc:k:${rec.id}` }]] } });
@@ -1161,8 +1240,11 @@ export async function siparisTakip(env, simdi, tg) {
       rec.karar = null;
       rec.kararMesajlari = await bildir(env, rec, `⏳ ${rec.kod} – 7 gün doldu. Fabrika bitti demişti. Ne yapalım?`, tg, { reply_markup: kararKlavye(rec.id) });
     }
+    if (fuataTekrar.includes(rec) || ekibe.includes(rec)) continue; // gönderimden sonra yazılır
     await siparisYaz(env, rec); // takip dizini güncellenir (iş bittiyse çıkar)
   }
+  if (fuataTekrar.length) await fabrikayaTekrar(env, fuataTekrar, tg);
+  if (ekibe.length) await ekibeFabrikaBildir(env, ekibe, tg, simdi);
   for (const did of await ayarOku(env, "fabrika:denemeler", [])) {
     const k = await env.KAYIT.get(`venom:deneme:${did}`, "json");
     if (k && !k.ozet && simdi - k.basla > 48 * 3600) await denemeOzeti(env, did, tg, "sure");
