@@ -1264,7 +1264,10 @@ test("stok köprüsü: anahtarsız veri alınmaz; ilk veride soru yok; adet 0'a 
   await kopru(o.env, [{ kod: "3100", ad: "ELBISE", adet: 4, fiyat: 25 }]);
   o.gonderilen.length = 0;
   await guncellemeIsle({ message: { message_id: 3, date: 1, chat: ozel(111), from: { id: 111 }, text: "/stok 3100" } }, o.env);
-  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /📦 3100 — ELBISE\n• VOLONTE: 4 adet · 25 \$[\s\S]*Toplam: 4 → görünür/);
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /📦 3100 — ELBISE\n• VOLONTE: 4 adet \([\s\S]*Toplam: 4 → görünür/); // 9 Kasım: fiyat sadece Patron'a
+  o.gonderilen.length = 0;
+  await guncellemeIsle({ message: { message_id: 4, date: 1, chat: ozel(111), from: { id: 111 }, text: "/stok 3100" } }, { ...o.env, MURAT_ID: "111" });
+  assert.match(cagrilar(o.gonderilen, "sendMessage")[0].govde.text, /• VOLONTE: 4 adet · 25 \$/);
 });
 
 test("stok köprüsü: Sil gizler (stok gelse de); Beklesin 7 gün sonra tekrar sorar; ekip de cevaplayabilir", async () => {

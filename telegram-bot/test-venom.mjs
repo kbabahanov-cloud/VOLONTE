@@ -1322,3 +1322,15 @@ test("ekip düzeni: Hemra'ya 11:00 toplu liste (4 düğme), seçim → kart seç
   assert.equal(E.markaSorumlusu("VOLONTE"), "aziz");
   assert.equal(E.markaSorumlusu("BLACKROSE"), "merdan");
 });
+
+test("/rol Janet fiyat: Sami listelerinde rol değişir (fabrikadan çıkar, sadece fiyat)", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 1, ad: "Fuat" }, { id: 2, ad: "🤍", kullanici: "bloom_m0", grup: "fabrika" }]));
+  assert.match(await v.rolDegistir(o.env, "@bloom_m0", "fiyat", 100), /sadece fiyat/);
+  assert.deepEqual(JSON.parse(o.depo.get("sami:fabrikaKisiler")).map((k) => k.ad), ["Fuat"]);
+  assert.equal(JSON.parse(o.depo.get("sami:fiyatKisiler"))[0].id, 2);
+  await yazi(o, PATRON, "/rol Fuat fabrika");
+  assert.match(patronaGiden(o).at(-1).govde.text, /Fuat → fabrika/);
+  assert.match(await v.rolDegistir(o.env, "Yok", "fiyat", 100), /listelerinde yok/);
+});

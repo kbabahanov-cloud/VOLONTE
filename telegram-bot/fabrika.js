@@ -735,6 +735,13 @@ export async function fabrikaDugmesi(env, cq, tg, simdi) {
     if (!aday) return cevapla("Bu istek artık geçerli değil.");
     await env.KAYIT.delete(`sami:fabrikaAday:${ek}`);
     const benim = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
+    if (islem === "s") { // 9 Kasım (Patron): mağaza stok (VOLONTE) — stok kartları, fiyat/satış/para yok
+      const l = ((await env.KAYIT.get("sami:stokKisiler", "json")) || []).filter((k) => String(k.id) !== String(ek));
+      await env.KAYIT.put("sami:stokKisiler", JSON.stringify([...l, { id: Number(ek), ad: aday.ad, zaman: simdi }]));
+      await cevapla("Eklendi");
+      await tg(env, "sendMessage", { chat_id: Number(ek), text: "Merhaba! VOLONTE stok kartları (stok bitti, bulunamadı, sayım, fotoğrafsız modeller) size buradan gelecek." });
+      return tg(env, "editMessageText", { ...benim, text: `📦 ${aday.ad} eklendi: mağaza stok (VOLONTE). Fiyat, satış, para bilgisi gitmez.` });
+    }
     if (islem === "f") { // 9 Kasım (Patron): sadece fiyat yetkisi — başka HİÇBİR şey gitmez (stok, alış, kâr, satış, kasa, müşteri, görev, kart yok)
       const l = ((await env.KAYIT.get("sami:fiyatKisiler", "json")) || []).filter((k) => String(k.id) !== String(ek));
       await env.KAYIT.put("sami:fiyatKisiler", JSON.stringify([...l, { id: Number(ek), ad: aday.ad, zaman: simdi }]));
@@ -823,8 +830,8 @@ export async function yabanciMesaji(env, m, tg) {
   await env.KAYIT.put(`sami:fabrikaAday:${m.from.id}`, JSON.stringify({ ad, kullanici: m.from.username || null, v2: true }), { expirationTtl: 30 * 86400 });
   await tg(env, "sendMessage", {
     chat_id: murat(env),
-    text: `🏭 ${ad}${m.from.username ? ` (@${m.from.username})` : ""} Sami'ye /start yazdı. Kim olarak eklensin?`,
-    reply_markup: { inline_keyboard: [[{ text: "🏭 Fabrikaya ekle", callback_data: `fa:e:${m.from.id}` }, { text: "👤 Celal olarak ekle", callback_data: `fa:c:${m.from.id}` }], [{ text: "💲 Mağaza: sadece fiyat (Janet)", callback_data: `fa:f:${m.from.id}` }], [{ text: "❌ Ekleme", callback_data: `fa:h:${m.from.id}` }]] },
+    text: `🏭 ${ad}${m.from.username ? ` (@${m.from.username})` : ""} Sami'ye /start yazdı. Kim olarak eklensin?\n• Fabrika (Fuat'ın ekibi): fabrika eksik listesi + sipariş kartları\n• Celal'in ekibi: sadece Celal modelleri\n• Mağaza: stok (VOLONTE) — stok bitti / bulunamadı / sayım / fotoğrafsız VOLONTE kartları (fiyat, satış, para yok)\n• Mağaza: sadece fiyat — kod yazınca satış fiyatı, başka hiçbir şey\nYanlış seçilirse Venom'a: /rol <ad> fiyat | stok | fabrika | celal | sil`,
+    reply_markup: { inline_keyboard: [[{ text: "🏭 Fabrika (Fuat'ın ekibi)", callback_data: `fa:e:${m.from.id}` }, { text: "👤 Celal'in ekibi", callback_data: `fa:c:${m.from.id}` }], [{ text: "📦 Mağaza: stok (VOLONTE)", callback_data: `fa:s:${m.from.id}` }, { text: "💲 Mağaza: sadece fiyat", callback_data: `fa:f:${m.from.id}` }], [{ text: "❌ Ekleme", callback_data: `fa:h:${m.from.id}` }]] },
   });
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Merhaba! İsteğiniz yöneticiye iletildi; onaylanınca eksik listelerini buradan alacaksınız." });
 }

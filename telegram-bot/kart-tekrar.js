@@ -116,6 +116,16 @@ export async function kartIletAdimi(env, bot, tg, { stokIste = stokIsteOrtak } =
   }
   return Array.isArray(l) ? l.length : 0;
 }
+// Bir kez (Claude Code): KV "venom:kisiKontrol:<bot>" = ["AZIZ_ID", …] → bu bot o kişiye ulaşabiliyor mu (kişi /start yazmış mı)?
+// Sonuç "venom:kisiKontrolSonuc:<bot>" = { AZIZ_ID: true|false } (kimlik yazılmaz)
+export async function kisiKontrolAdimi(env, bot, tg) {
+  const l = await env.KAYIT.get(`venom:kisiKontrol:${bot}`, "json").catch(() => null);
+  if (!Array.isArray(l)) return;
+  await env.KAYIT.delete(`venom:kisiKontrol:${bot}`).catch(() => null);
+  const c = {};
+  for (const ad of l.slice(0, 8)) { const id = kml(env[ad])[0]; if (!id) { c[ad] = "kayıt yok"; continue; } const r = await tg({ ...env, __kartTekrar: true }, "sendChatAction", { chat_id: id, action: "typing" }).catch(() => null); c[ad] = Boolean(r && r.ok); }
+  await env.KAYIT.put(`venom:kisiKontrolSonuc:${bot}`, JSON.stringify({ zaman: Math.floor(Date.now() / 1000), c }), { expirationTtl: 86400 });
+}
 // Akşam özeti (Venom): tekrar gönderildiği hâlde hâlâ cevapsız kartlar → "Cevapsız: kim, hangi kart"
 export function cevapsizSatiri(bekleyen, adlar, simdi) {
   const kisi = {};

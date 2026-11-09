@@ -1230,6 +1230,9 @@ export async function guncelleme(u, env) {
   if (soru && renkBilinir(String(m.text || m.caption || "").trim())) { await env.KAYIT.delete("venom:bot:paylasSoru").catch(() => null); return yaz(env, await paylasBaslat(env, { ...soru, renk: String(m.text || m.caption).trim() }, simdi)); }
   const niyet = paylasNiyeti(m.text || m.caption || metin);
   if (niyet) return hizliPaylas(env, niyet, simdi, m.text || m.caption || metin);
+  const rl = String(m.text || "").trim().match(/^\/rol\s+(\S+)\s+(fiyat|stok|fabrika|celal|sil|çıkar)\b/i); // 9 Kasım: "/rol Janet fiyat" — Sami'deki kişinin rolü
+  if (rl) return yaz(env, await rolDegistir(env, rl[1], rl[2].toLocaleLowerCase("tr"), simdi));
+  if (/^\/ekip\b/i.test(String(m.text || "").trim())) return yaz(env, await ekipMetni(env)); // 9 Kasım: herkesin rolü
   if (/hemra\S*\s+(?:bugün\s+)?izinli/i.test(metin)) { await env.KAYIT.put("venom:hemraIzinli", gunAnahtari(simdi), { expirationTtl: 2 * 86400 }); return yaz(env, "Tamam: bugün koordinasyon Merdan'da; listeler ona gider."); } // 9 Kasım (ekip düzeni): yedek
   const yk = yuklemeCoz(metin); // 9 Kasım: "Higgsfield'a 50 $ yükledim" → bakiye takibi
   if (yk) {
@@ -1283,6 +1286,8 @@ export async function venomCron(env, simdi) {
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   // 9 Kasım (Patron): Higgsfield / fal bakiyesi 5 $ altına inince ÖNCEDEN uyar (günde bir; üretim yarıda kalmasın)
   if (saat(simdi) >= 9 && saat(simdi) < 21 && new Date(simdi * 1000).getUTCMinutes() < 5) { try { await bakiyeUyarisi(env, simdi); } catch (e) { await hataYaz(env, "bakiye", e); } }
+  // Bir kez (Claude Code): KV "venom:kisiMesajlari" = "<ad>" → bugün o kişiye giden her şey (zaman, bot, tür, özet) → "venom:kisiMesajlariSonuc"
+  try { const km = await env.KAYIT.get("venom:kisiMesajlari"); if (km) { await env.KAYIT.delete("venom:kisiMesajlari"); const adlar = await kisiAdlari(env); const e2 = { ...env, __adlar: adlar }; const [b, s2] = donemAraligi(simdi, "bugün"); const r = (await stokIste(env, "/isd-oku", { basla: b, bitis: s2 }).catch(() => [])) || []; await kaydet(env, "venom:kisiMesajlariSonuc", { zaman: simdi, ad: km, l: r.filter((x) => defterKisi(e2, x.kime) === km).map((x) => ({ saat: tarihSaat(x.zaman).slice(11, 16), bot: x.bot, tur: x.tur, ozet: String(x.ozet || "").slice(0, 120) })) }, 7200); } } catch (e) { await hataYaz(env, "kisiMesajlari", e); }
   try { if (await env.KAYIT.get("venom:defterDoldur")) { await env.KAYIT.delete("venom:defterDoldur"); await kaydet(env, "venom:defterDoldurSonuc", { zaman: simdi, sonuc: await defterDoldur(env, simdi) }, 7 * 86400); } } catch (e) { await hataYaz(env, "defterDoldur", e); }
   // 9 Kasım (Claude Code): KV "venom:soruDeneme" = ["Sinem bugün …?", …] → defter cevapları KV "venom:soruDenemeSonuc" (Patron'a gitmez)
   try { const sd = await oku(env, "venom:soruDeneme", null); if (sd) { await env.KAYIT.delete("venom:soruDeneme"); const c = []; for (const q of [].concat(sd).slice(0, 5)) { const bs2 = botSorusu(q); c.push({ soru: q, cevap: (await kisiCevabiMetni(env, q, simdi)) || (bs2 ? (await Promise.all(bs2.botlar.map((b) => botRaporuMetni(env, b, bs2.gun, simdi)))).join("\n\n") : "(bot / kişi sorusu değil)") }); } await kaydet(env, "venom:soruDenemeSonuc", { zaman: simdi, c }, 7200); } } catch (e) { await hataYaz(env, "soruDeneme", e); }
@@ -1623,9 +1628,41 @@ export async function defterDoldur(env, simdi) {
   for (let i = 0; i < k.length; i += 40) await stokIste(env, "/isd-yaz", { kayitlar: k.slice(i, i + 40) }).catch(() => null);
   return { t0, ...say, pelinRaporu: Boolean(r) };
 }
+// 9 Kasım (Patron): "/rol <ad> fiyat|fabrika|celal|sil" — Sami'nin kişi listelerinde rol değişir (fabrika eksik listesi / sadece fiyat)
+export async function rolDegistir(env, ad, rol, simdi) {
+  if (/^aziz$/i.test(ad) && env.AZIZ_ID) return rol === "stok" ? "Aziz zaten VOLONTE stok sorumlusu (stok bitti / bulunamadı / sayım / fotoğrafsız VOLONTE / görev kartları; fiyat, satış, para yok)." : "Aziz'in rolü ekip kaydında (gizli kayıt) tanımlı; değiştirmek için Claude Code'a söyleyin.";
+  const fab = (await oku(env, "sami:fabrikaKisiler", [])) || [], fiy = (await oku(env, "sami:fiyatKisiler", [])) || [], stk = (await oku(env, "sami:stokKisiler", [])) || [];
+  const es = (k) => String(k.ad || "").toLocaleLowerCase("tr").startsWith(String(ad).toLocaleLowerCase("tr")) || String(k.kullanici || "").toLowerCase() === String(ad).replace(/^@/, "").toLowerCase();
+  const k = fab.find(es) || fiy.find(es) || stk.find(es);
+  if (!k) return `"${ad}" Sami'nin listelerinde yok. Önce Sami'ye /start yazsın, kart size gelir.`;
+  const kayit = { id: k.id, ad: k.ad, kullanici: k.kullanici || null, zaman: simdi };
+  const yeniFab = fab.filter((x) => String(x.id) !== String(k.id)), yeniFiy = fiy.filter((x) => String(x.id) !== String(k.id)), yeniStk = stk.filter((x) => String(x.id) !== String(k.id));
+  if (rol === "stok") yeniStk.push(kayit);
+  await kaydet(env, "sami:stokKisiler", yeniStk);
+  if (rol === "fabrika" || rol === "celal") yeniFab.push({ ...kayit, grup: rol === "celal" ? "celal" : "fabrika" });
+  if (rol === "fiyat") yeniFiy.push(kayit);
+  await kaydet(env, "sami:fabrikaKisiler", yeniFab);
+  await kaydet(env, "sami:fiyatKisiler", yeniFiy);
+  return `Tamam: ${k.ad} → ${{ fiyat: "mağaza, sadece fiyat (kod yazınca satış fiyatı; başka hiçbir şey gitmez)", stok: "mağaza stok (VOLONTE; fiyat, satış, para yok)", fabrika: "fabrika (Fuat'ın ekibi)", celal: "Celal'in ekibi", sil: "listelerden çıkarıldı", çıkar: "listelerden çıkarıldı" }[rol]}.`;
+}
+// 9 Kasım (Patron): "/ekip" — herkesin rolü tek listede (kimlik yazılmaz)
+export async function ekipMetni(env) {
+  const fab = (await oku(env, "sami:fabrikaKisiler", [])) || [], fiy = (await oku(env, "sami:fiyatKisiler", [])) || [], stk = (await oku(env, "sami:stokKisiler", [])) || [];
+  const var_ = (k) => String(env[k] || "").trim() !== "";
+  const s = ["👥 Ekip ve roller:",
+    "• Patron — her şeyin son kararı; fiyat, kâr, para sadece sizde",
+    `• Hemra — koordinatör (Venom'un muhatabı, 11:00 / 16:00 toplu liste)${var_("HEMRA_ID") || var_("FABRIKA_SORUMLU") ? "" : " ⚠️ kayıtlı değil"}`,
+    `• Merdan — Black Rose (stok, fotoğraf, video, Black Rose kartları); Hemra izinliyse yedek koordinatör${var_("BR_SORUMLU") ? "" : " ⚠️ kayıtlı değil"}`,
+    `• Aziz — VOLONTE stok (stok bitti, bulunamadı, sayım, fotoğrafsız VOLONTE, görev kartları; fiyat/satış/para yok)${var_("AZIZ_ID") ? "" : " ⚠️ kayıtlı değil"}`,
+    ...stk.map((k) => `• ${k.ad} — mağaza stok (VOLONTE)`),
+    ...fiy.map((k) => `• ${k.ad} — mağaza, sadece fiyat (Sami'de kod → satış fiyatı)`),
+    ...fab.map((k) => `• ${k.ad} — ${k.grup === "celal" ? "Celal'in ekibi (sadece Celal modelleri)" : "fabrika (Fuat'ın ekibi): eksik listesi + sipariş kartları"}`),
+    "Değiştirmek için: /rol <ad> fiyat | stok | fabrika | celal | sil"];
+  return s.join("\n");
+}
 // 9 Kasım (Patron): kişi adları — fabrika kişileri (Sinem, Fuat, Nuri, Celal) Sami'nin kaydından; kimlikler sadece eşleşme için
 export async function kisiAdlari(env) {
-  const l = (await oku(env, "sami:fabrikaKisiler", [])) || [];
+  const l = [...((await oku(env, "sami:fabrikaKisiler", [])) || []), ...((await oku(env, "sami:fiyatKisiler", [])) || [])];
   const adlar = {};
   for (const k of Array.isArray(l) ? l : []) if (k && k.id != null && k.ad) adlar[String(k.id)] = String(k.ad).split(" ")[0];
   return adlar;

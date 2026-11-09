@@ -47,7 +47,8 @@ export async function stokSorulariGonder(env, simdi, tg) {
     const sec = kanal && modelSecenekleri(s.kod, kodlar, {})[0];
     const mesajlar = [];
     // 9 Kasım (ekip düzeni): VOLONTE stok → Aziz, Black Rose → Merdan (doğrudan); kimlik yoksa / gönderilemezse Hemra
-    const hedef = s.magaza === "BLACKROSE" ? String(env.BR_SORUMLU || "") : String(env.AZIZ_ID || "");
+    const stokKisi = ((await env.KAYIT.get("sami:stokKisiler", "json").catch(() => null)) || [])[0];
+    const hedef = s.magaza === "BLACKROSE" ? String(env.BR_SORUMLU || "") : String(env.AZIZ_ID || (stokKisi && stokKisi.id) || "");
     const yedek = String(env.HEMRA_ID || env.FABRIKA_SORUMLU || "");
     const alicilar = hedef ? [hedef] : stokKararcilari(env);
     for (let kisi of alicilar) {
@@ -106,7 +107,7 @@ export async function stokGoster(msg, env, tg) {
   const karar = b.karar ? { soru: "stok bitti, cevap bekliyor", repete: `repete olacak (${b.karar.kim})`, gizli: `silindi/gizli (${b.karar.kim})`, beklesin: `beklesin (${b.karar.kim})` }[b.karar.durum] : null;
   return yaz([
     `📦 ${kod} — ${b.satirlar[0].ad || ""}`,
-    ...b.satirlar.map((x) => `• ${x.magaza}: ${x.adet} adet${x.fiyat != null ? ` · ${x.fiyat} $` : ""} (${tarihYaz(x.guncel)})`),
+    ...b.satirlar.map((x) => `• ${x.magaza}: ${x.adet} adet${x.fiyat != null && kimlikler(env.MURAT_ID).includes(String(msg.from && msg.from.id)) ? ` · ${x.fiyat} $` : ""} (${tarihYaz(x.guncel)})`), // 9 Kasım: fiyat SADECE Patron'a
     `Toplam: ${b.toplam} → ${b.toplam > 0 && !(b.karar && b.karar.durum === "gizli") ? "görünür" : "gizli (sitede ve Telegram'da görünmez)"}`,
     karar ? `Durum: ${karar}` : null,
   ].filter(Boolean).join("\n"));

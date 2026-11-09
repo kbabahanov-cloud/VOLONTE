@@ -36,7 +36,7 @@ import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
 import { hemraDugmesi } from "./venom-ekip.js";
-import { kartTekrarAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
+import { kartTekrarAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -90,6 +90,7 @@ export default {
     const simdi = Math.floor(Date.now() / 1000);
     if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
+    try { await kisiKontrolAdimi(env, "sami", tg); } catch { /* 9 Kasım: kişi /start kontrolü */ }
     if (env.BOT_TOKEN) try { await kartIletAdimi(env, "sami", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
     if (env.BOT_TOKEN) try { await kartTekrarAdimi(env, "sami", tg, simdi); } catch { /* 9 Kasım: onay merdiveni (görev kartları dahil) */ }
     if (await durdurulduMu(env, "sami")) return; // 6 Kasım: durduruldu → zamanlı işler (mesaj/yazma) bekler

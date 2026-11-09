@@ -585,7 +585,7 @@ test("Celal: listede Celal notu (iki kart notu); onayda CELAL modeli SADECE Cela
   // Celal /start → Murat "Celal olarak ekle"
   await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Celal" }, text: "/start" } }, o.env);
   const soru = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111");
-  assert.deepEqual(soru.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🏭 Fabrikaya ekle", "👤 Celal olarak ekle", "💲 Mağaza: sadece fiyat (Janet)", "❌ Ekleme"]);
+  assert.deepEqual(soru.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🏭 Fabrika (Fuat'ın ekibi)", "👤 Celal'in ekibi", "📦 Mağaza: stok (VOLONTE)", "💲 Mağaza: sadece fiyat", "❌ Ekleme"]);
   await g2({ callback_query: { id: "c", from: { id: 111 }, data: "fa:c:777", message: { chat: { id: 111 }, message_id: 1 } } }, o.env);
   assert.equal(JSON.parse(o.depo.get("sami:fabrikaKisiler")).find((k) => k.id === 777).grup, "celal");
   const g = [];
