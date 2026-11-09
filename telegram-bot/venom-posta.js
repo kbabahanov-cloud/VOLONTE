@@ -77,6 +77,28 @@ export function kuralEslesir(kural, ileti) {
 // 9 Kasım: Hemra/Merdan'ın karar kartları (stok sz:, fabrika fk:, Kemal günlük y1/yd/yg, yeni model/repete rp*) Patron'a anında GİTMEZ
 // (kaynakta zaten onlara gidiyor; yine de Venom'a düşerse güvenlik ağı: özete sayı)
 export const PERSONEL_KARTI = /^(sz|fk|y1|yd|yg|rp1|rpd|rpx|rpb):/;
+// ---------- 9 Kasım (Patron): İZİN LİSTESİ — Patron'a SADECE bunlar gider (kural kitabının en üstü) ----------
+// a) para · b) repete / hızlı satan / stok bitiyor raporu · c) silme, kural değişikliği, fabrikaya sipariş onayı
+// d) Venom'un ve Hemra/Merdan'ın çözemediği iş · e) Patron'un kendi sorusunun cevabı · f) kritik acil
+// + rapor: Patron'un istediği günde 2 özet (09:40 / 20:00) ve cuma raporu. Etiketsiz mesaj kod düzeyinde GÖNDERİLEMEZ.
+export const IZINLER = ["para", "repete", "onay", "cozulemeyen", "cevap", "kritik", "rapor"];
+export const IZIN_AD = { para: "para harcanacak iş", repete: "repete / stok raporu", onay: "silme / kural / fabrika sipariş onayı", cozulemeyen: "çözülemeyen iş", cevap: "Patron'un sorusunun cevabı", kritik: "kritik acil", rapor: "günlük özet" };
+const IZIN_KALIP = [
+  ["kritik", KRITIK],
+  ["cozulemeyen", /çözemedi|çözülemedi|çözemedik|çözemedim|karar(ınız)? (lazım|gerek)|ne denendi/i],
+  ["para", /\$|ücretli|ücret|maliyet|para harca|bütçe|harcama onayı|pelin[^\n]{0,40}(üret|video|fotoğraf)|üretime başla|üretilsin mi/i],
+  ["repete", /repete|hızlı satan|stok bit(iyor|mek üzere)|bitmek üzere|tükeniyor/i],
+  ["onay", /🗑|\bsil(me|insin|inecek|eyim|elim|inmesi)?\b|silinsin|kaldırılsın|kural (değiş|ekle)|fabrika|sipariş|fuat|nuri|mutabakat/i],
+];
+// Kart metninden izin nedeni (bulunamazsa null → Patron'a gitmez, Venom'un çözüm kuyruğuna)
+export function izinBul(metin, kaynak = null) {
+  const t = String(metin || "");
+  if (kaynak === "pelin") return "para"; // Pelin'in kartları ücretli üretimin onayı (Patron onaylı iş)
+  if (/SON YAYIN ONAYI/.test(t)) return "cevap"; // Patron'un kendi paylaşım isteğinin son onayı
+  for (const [ad, re] of IZIN_KALIP) if (re.test(t)) return ad;
+  return null;
+}
+const TUR_IZIN = { kritik: "kritik", cevap: "cevap", ozet: "rapor" };
 // ---------- karar ----------
 // ileti: { kaynak, metin, tur?: "kart"|"kritik"|"cevap"|"bilgi"|"rapor", kart?: boolean }
 export function turBul(ileti) {
@@ -93,38 +115,41 @@ export async function bugunGonderilen(env, simdi) {
 export async function postaKarar(env, ileti, simdi) {
   const tur = turBul(ileti);
   const kat = kategori(ileti.metin);
-  if (tur === "kritik" || tur === "cevap") return { karar: "gonder", tur, kategori: kat };
+  if (tur === "kritik" || tur === "cevap") return { karar: "gonder", tur, kategori: kat, izin: TUR_IZIN[tur] };
   const kurallar = await kurallariOku(env);
   const kural = kurallar.find((k) => kuralEslesir(k, { ...ileti, kategori: kat }));
   if (kural) return { karar: "biriktir", tur, kategori: kat, kural: kural.id };
   if (tur === "kart") {
+    // 9 Kasım (sert müdür A): izin listesinde olmayan kart Patron'a GİTMEZ → Venom çözer (görev / bota emir)
+    const izin = IZINLER.includes(ileti.izin) ? ileti.izin : izinBul(ileti.metin, ileti.kaynak);
+    if (!izin) return { karar: "cozum", tur, kategori: kat };
     // 9 Kasım (E11): aynı kart 12 saat içinde tekrar gelirse birleşir (ör. Fuat mutabakatı iki kez)
     const ilk = ilkSatir(ileti.metin), mut = /mutabakat/i.test(String(ileti.metin || ""));
     const son12 = (await oku(env, "venom:posta:gonderilen", [])).filter((x) => x.tur === "kart" && simdi - x.zaman < 12 * 3600);
     if (son12.some((x) => (x.kaynak === (ileti.kaynak || "venom") && x.ozet === ilk) || (mut && /mutabakat/i.test(x.ozet)))) return { karar: "biriktir", tur, kategori: "tekrar kart (birleştirildi)" };
     const n = (await bugunGonderilen(env, simdi)).filter((x) => x.tavan).length;
-    return { karar: n < POSTA_TAVAN ? "gonder" : "sira", tur, kategori: kat };
+    return { karar: n < POSTA_TAVAN ? "gonder" : "sira", tur, kategori: kat, izin };
   }
-  if (tur === "ozet") return { karar: "gonder", tur, kategori: "rapor" };
+  if (tur === "ozet") return { karar: "gonder", tur, kategori: "rapor", izin: "rapor" };
   return { karar: "biriktir", tur, kategori: kat };
 }
-export async function gonderildiKaydet(env, { kaynak, tur, kategori: kat, metin, id = null }, simdi) {
+export async function gonderildiKaydet(env, { kaynak, tur, kategori: kat, metin, id = null, izin = null }, simdi) {
   const l = await oku(env, "venom:posta:gonderilen", []);
   if (kaynak && kaynak !== "venom" && tur === "cevap") { // 9 Kasım (E10): bottan gelip kart/kritik olmadan geçen mesaj (sızıntı adayı)
     const d = new Date((simdi + 3 * 3600) * 1000), g = (d.getUTCDay() + 6) % 7, hk = `venom:posta:sizinti:${new Date(d.getTime() - g * 86400000).toISOString().slice(0, 10)}`;
     await env.KAYIT.put(hk, String((Number(await env.KAYIT.get(hk).catch(() => 0)) || 0) + 1), { expirationTtl: 14 * 86400 }).catch(() => null);
   }
   const tavan = !["kritik", "cevap"].includes(tur);
-  await kaydet(env, "venom:posta:gonderilen", [...l, { zaman: simdi, kaynak: kaynak || "venom", tur, kategori: kat || kategori(metin), ozet: ilkSatir(metin), id, tavan }].slice(-200), 3 * 86400);
+  await kaydet(env, "venom:posta:gonderilen", [...l, { zaman: simdi, kaynak: kaynak || "venom", tur, kategori: kat || kategori(metin), ozet: ilkSatir(metin), id, tavan, ...(izin ? { izin } : {}) }].slice(-200), 3 * 86400);
 }
 export async function biriktir(env, { kaynak, metin, tur, kategori: kat, kural = null }, simdi) {
   const k = `venom:posta:${gunAnahtari(simdi)}`;
   const l = await oku(env, k, []);
   await kaydet(env, k, [...l, { zaman: simdi, kaynak: kaynak || "venom", tur: tur || "bilgi", kategori: kat || kategori(metin), ozet: ilkSatir(metin), ...(kural ? { kural } : {}) }].slice(-300), 3 * 86400);
 }
-export async function siraya(env, { kaynak, metin, klavye, medya }, simdi) {
+export async function siraya(env, { kaynak, metin, klavye, medya, izin = null }, simdi) {
   const l = await oku(env, "venom:posta:kartSira", []);
-  await kaydet(env, "venom:posta:kartSira", [...l, { zaman: simdi, kaynak, metin: String(metin || "").slice(0, 600), klavye: klavye || null, medya: (medya || [])[0] || null }].slice(-30), 3 * 86400);
+  await kaydet(env, "venom:posta:kartSira", [...l, { zaman: simdi, kaynak, metin: String(metin || "").slice(0, 600), klavye: klavye || null, medya: (medya || [])[0] || null, izin }].slice(-30), 3 * 86400);
 }
 // Saatte bir: tavan dolduktan sonra gelen kartlar TEK mesajda (her kartın düğmeleri numarasıyla)
 export async function kartSiraMesaji(env) {
@@ -140,7 +165,7 @@ export async function kartSiraMesaji(env) {
     if (x.medya && x.medya.media && /^https?:/.test(x.medya.media)) klavye.push([{ text: `${i + 1}· 🖼 görsel`, url: x.medya.media }]);
   });
   if (l.length > parca.length) { satir.push(`…ve ${l.length - parca.length} kart daha (sıradaki saatte).`); await kaydet(env, "venom:posta:kartSira", l.slice(parca.length), 3 * 86400); }
-  return { metin: satir.join("\n"), klavye: klavye.slice(0, 90) };
+  return { metin: satir.join("\n"), klavye: klavye.slice(0, 90), izin: (parca.find((x) => x.izin) || {}).izin || "onay" };
 }
 
 // ---------- özet ----------

@@ -21,6 +21,13 @@ export const kuyrugaEkle = (env, ad, kayit) => stokIste(env, "/kuyruk-ekle", { a
 export const kuyruguAl = async (env, ad) => { const l = await stokIste(env, "/kuyruk-al", { ad }); return Array.isArray(l) ? l : []; };
 export const sonucBildir = (env, id, ok, aciklama) => kuyrugaEkle(env, "sonuc", { id: `${id}:${ok ? 1 : 0}`, isId: id, ok, aciklama: String(aciklama).slice(0, 1500) });
 
+// 9 Kasım (sert müdür C): görev kartının kopyaları (Hemra + Merdan) — biri basınca ikisi de güncellenir (venom-gorev.js)
+async function gorevMesajiKaydet(env, is, r, hedef) {
+  const anahtar = is.gorev ? `gorevmsg:vg:${is.gorev}:${is.parca || 0}` : `gorevmsg:${String(is.id).replace(/-[a-z]+$/, "")}`;
+  const l = (await env.KAYIT.get(anahtar, "json").catch(() => null)) || [];
+  await env.KAYIT.put(anahtar, JSON.stringify([...l, [(r.result.chat && r.result.chat.id) || hedef, r.result.message_id]].slice(-6)), { expirationTtl: 14 * 86400 });
+  if (is.gorev && !(await env.KAYIT.get(`gorevklavye:${is.gorev}:${is.parca || 0}`).catch(() => null))) await env.KAYIT.put(`gorevklavye:${is.gorev}:${is.parca || 0}`, JSON.stringify(is.klavye.inline_keyboard), { expirationTtl: 14 * 86400 });
+}
 // Sami: Venom'dan gelen dış mesajları gönderir (Patron kartı onaylamış ve "Emin misiniz?" demiş olarak gelir)
 export async function venomGidenAdimi(env, simdi, tg) {
   const isler = await kuyruguAl(env, "giden");
@@ -39,8 +46,9 @@ export async function venomGidenAdimi(env, simdi, tg) {
         const yasak = k.dis ? fuatSuzgec(is.metin) : ekipSuzgec(is.metin);
         if (yasak) { await arsiv(env, "venom-engel", is.id, { kime: is.kime, neden: yasak }, simdi); await sonucBildir(env, is.id, false, `${k.e} mesaj GİTMEDİ: gizli bilgi içeriyor (${yasak.join(", ")}).`); continue; }
       }
-      const r = await tg(env, "sendMessage", { chat_id: hedef, text: String(is.metin).slice(0, 4000), disable_web_page_preview: true });
+      const r = await tg(env, "sendMessage", { chat_id: hedef, text: String(is.metin).slice(0, 4000), disable_web_page_preview: true, ...(is.klavye ? { reply_markup: is.klavye } : {}) });
       if (r && r.ok) await arsiv(env, "venom-gitti", is.id, { kime: is.kime, metin: is.metin, mesaj: r.result.message_id }, simdi);
+      if (r && r.ok && is.klavye) await gorevMesajiKaydet(env, is, r, hedef).catch(() => null); // 9 Kasım: görev kartı kopyaları (Hemra + Merdan)
       await sonucBildir(env, is.id, Boolean(r && r.ok), r && r.ok ? `${is.tur === "hatirlatma" ? "Hatırlatma" : "Mesaj"} ${k.e} gitti (Sami).` : `${k.e} gönderilemedi (Sami'ye /start yazmamış olabilir).`);
     } catch (e) {
       await sonucBildir(env, is.id, false, `İş yapılamadı (${is.kime || is.tur}); hata Claude Code'a iletildi.`).catch(() => null);

@@ -23,13 +23,14 @@ import { renkBilinir, renkDilleri } from "./site-renk.js";
 import { ORTAK_KURALLAR, BOT_YETENEKLERI, VENOM_KURALLARI, MARKA_KARARLARI } from "./kurallar.js";
 import { isKaydet, isCevap, isHatirlat, bitmeyenIsler, hataAlarmi, hataSayilari, geriAlBul, satisUyarisi, stokBitiyor, paylasilmayanlar, paraOzeti, hatirlaticiEkle, vadesiGelenler, yedekAl, gunA } from "./venom-yonetim.js";
 import { durYaz, durDurumu, _durOnbellekSifirla } from "./durdurma.js";
-import { postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, PERSONEL_KARTI, kategori as postaKategori } from "./venom-posta.js";
+import { IZINLER, postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, PERSONEL_KARTI, kategori as postaKategori } from "./venom-posta.js";
 import { kopruSustu, haftaIci } from "./magaza-saat.js";
 import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri } from "./venom-model.js";
 import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
 import { botSorusu, botCevabi, herkesCevabi, canliSatirlar, takilanlar, hedefSatiri, BOTLAR as DEFTER_BOTLAR, kisiAdi as defterKisi } from "./venom-defter.js";
 import { defterYaz } from "./is-defteri.js";
+import { gorevAc, gorevAdimi, cozumAdimi, yapilmayanSatiri, patronKarari, haftaSayilari, sayac as mudurSayac, sonSaat } from "./venom-gorev.js";
 import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
 export { KISILER };
 
@@ -46,26 +47,129 @@ const kacis = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").repl
 const oku = async (env, k, bos) => (await env.KAYIT.get(k, "json")) ?? bos;
 const kaydet = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { expirationTtl: ttl } : undefined);
 
+// 9 Kasım (Patron, sert müdür A): Patron'a giden HER gönderim izin etiketi taşır (govde.izin ya da env.__izin = Patron'la sohbet).
+// Etiketsiz gönderim KOD DÜZEYİNDE engellenir → Venom'un çözüm kuyruğu (venom:cozum). Etiket Telegram'a gitmez (gizli).
+const PATRONA_GONDERIM = /^(send(?!ChatAction)\w+|copyMessages?|forwardMessages?)$/;
+async function izinKapisi(env, metod, chatId, izin, ozet) {
+  if (!patronMu(env, chatId) || !PATRONA_GONDERIM.test(metod)) return true;
+  const gun = gunAnahtari(Math.floor(Date.now() / 1000));
+  if (IZINLER.includes(izin)) {
+    const k = `venom:izin:log:${gun}`;
+    const l = await oku(env, k, []).catch(() => []);
+    await kaydet(env, k, [...l, { zaman: Math.floor(Date.now() / 1000), izin, metod, ozet: String(ozet || "").slice(0, 100) }].slice(-300), 8 * 86400).catch(() => null);
+    return true;
+  }
+  if (env.IZIN_KAPISI === "0") return true; // sadece eski testler
+  await cozumeEkle(env, { kaynak: "venom", metin: String(ozet || `(${metod})`), sebep: "izin nedeni yok — Patron'a gönderilmedi" }, Math.floor(Date.now() / 1000)).catch(() => null);
+  return false;
+}
 export async function tg(env, metod, govde) {
+  if (govde && typeof govde === "object" && !(govde instanceof FormData)) {
+    const { izin, ...temiz } = govde;
+    if (!(await izinKapisi(env, metod, temiz.chat_id, izin || env.__izin, temiz.text || temiz.caption || (temiz.media && temiz.media[0] && temiz.media[0].caption) || `(${metod})`))) return { ok: false, engellendi: true, description: "izin nedeni yok (Patron'a gönderilmedi)" };
+    govde = temiz;
+  }
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde) });
   return r.json().catch(() => ({ ok: false }));
 }
 // 9 Kasım: Patron'a giden her mesaj kayıtlı (sayım + "bunu bana gönderme" için). ek.posta = { tur, kaynak } (varsayılan: cevap)
+const TUR_IZIN = { cevap: "cevap", kritik: "kritik", ozet: "rapor", rapor: "rapor" };
 async function yaz(env, text, ek = {}) {
   const { posta, ...geri } = ek || {};
-  const r = await tg(env, "sendMessage", { chat_id: patron(env), text: String(text).slice(0, 4000), disable_web_page_preview: true, ...geri });
-  if (r && r.ok) await gonderildiKaydet(env, { kaynak: (posta && posta.kaynak) || "venom", tur: (posta && posta.tur) || "cevap", metin: text, id: r.result && r.result.message_id }, Math.floor(Date.now() / 1000)).catch(() => null);
+  const izin = (posta && (posta.izin || TUR_IZIN[posta.tur])) || env.__izin || null; // etiketsiz → kapıda durur
+  const r = await tg(env, "sendMessage", { chat_id: patron(env), text: String(text).slice(0, 4000), disable_web_page_preview: true, ...geri, izin });
+  if (r && r.ok) await gonderildiKaydet(env, { kaynak: (posta && posta.kaynak) || "venom", tur: (posta && posta.tur) || "cevap", metin: text, id: r.result && r.result.message_id, izin }, Math.floor(Date.now() / 1000)).catch(() => null);
   return r;
 }
 // 9 Kasım (Patron): otomatik bildirimler POSTANEDEN geçer — kart/kritik anında, gerisi Venom'da birikir (09:40 / 20:00 özet)
-async function bildir(env, metin, { kaynak = "venom", tur = null, kart = false, ek = {}, simdi = Math.floor(Date.now() / 1000) } = {}) {
+async function bildir(env, metin, { kaynak = "venom", tur = null, kart = false, izin = null, ek = {}, simdi = Math.floor(Date.now() / 1000) } = {}) {
   if (!metin) return null;
-  const k = await postaKarar(env, { kaynak, metin, tur, kart }, simdi);
+  const k = await postaKarar(env, { kaynak, metin, tur, kart, izin }, simdi);
   if (k.karar === "biriktir") return biriktir(env, { kaynak, metin, tur: k.tur, kategori: k.kategori, kural: k.kural }, simdi);
-  if (k.karar === "sira") return siraya(env, { kaynak, metin, klavye: ek.reply_markup || null }, simdi);
-  return yaz(env, metin, { ...ek, posta: { kaynak, tur: k.tur } });
+  if (k.karar === "cozum") return cozumeEkle(env, { kaynak, metin, sebep: "izin listesinde yok" }, simdi);
+  if (k.karar === "sira") return siraya(env, { kaynak, metin, klavye: ek.reply_markup || null, izin: k.izin }, simdi);
+  return yaz(env, metin, { ...ek, posta: { kaynak, tur: k.tur, izin: k.izin } });
+}
+// 9 Kasım (sert müdür D): Patron'a gitmeyen sorunlar Venom'un ÇÖZÜM KUYRUĞUNA (venom-cozum.js işler: görev / bota emir / tek kart)
+async function cozumeEkle(env, { kaynak, metin, sebep, klavye = null }, simdi) {
+  if (klavye && !(klavye.inline_keyboard || []).length) klavye = null;
+  const l = await oku(env, "venom:cozum", []);
+  const ozet = String(metin || "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 3).join(" · ").slice(0, 300);
+  if (l.some((x) => x.durum === "acik" && x.ozet === ozet)) return null; // aynı sorun tekrar eklenmez
+  const kayit = { id: kisaId(), zaman: simdi, kaynak: kaynak || "venom", ozet, metin: String(metin || "").slice(0, 3000), klavye, sebep, durum: "acik", adimlar: [{ zaman: simdi, ne: `geldi: ${sebep}` }] };
+  await kaydet(env, "venom:cozum", [...l.filter((x) => x.durum === "acik" || simdi - x.zaman < 7 * 86400), kayit].slice(-200), 14 * 86400);
+  const gk = `venom:izin:engel:${gunAnahtari(simdi)}`;
+  await env.KAYIT.put(gk, String((Number(await env.KAYIT.get(gk).catch(() => 0)) || 0) + 1), { expirationTtl: 8 * 86400 }).catch(() => null);
+  return kayit;
 }
 const hataYaz = (env, yer, e) => hataEkle(env, `venom:${yer}`, e).catch(() => null);
+// 9 Kasım (sert müdür C/D): görev ve çözüm kuyruğunun Venom araçları
+const mudurAraclari = (env, simdi) => ({
+  biriktir: (metin, kaynak) => biriktir(env, { kaynak: kaynak || "venom", metin, tur: "bilgi" }, simdi),
+  patronaKart: (metin, klavye) => bildir(env, metin, { simdi, tur: "kart", izin: "cozulemeyen", ek: { reply_markup: klavye } }),
+  defter: (ozet, kod) => defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: String(ozet).slice(0, 200), kod: kod || null }),
+  botaDugme: async (rid) => { const k = await oku(env, `venom:bot:dugme:${rid}`, null); return k ? botaSor(env, k.bot, "dugme", k.data, rid) : null; },
+});
+// 9 Kasım (sert müdür E): İLK UYGULAMALAR — KV "venom:ilkGorevler" (Claude Code bir kez koyar). Görevler Merdan + Hemra'ya (Sami'den).
+const MERDAN_VIDEO = ["907", "3396", "3582", "3618"]; // Patron'un listesi (9 Kasım)
+export async function ilkGorevler(env, simdi) {
+  const son = sonSaat(simdi, 18);
+  const ne = gunAnahtari(son) === gunAnahtari(simdi) ? "Bugün" : "Yarın";
+  const ilk = (l) => `${l.slice(0, 3).join(", ")}${l.length > 3 ? "…" : ""}`;
+  const sonuc = [];
+  const se = (await botaSor(env, "selin", "ozet")) || {};
+  const tak = se.takilan || [];
+  if (tak.length) { await gorevAc(env, { baslik: `Selin: ${tak.length} modelin fotoğrafı gönderilemedi`, metin: `Selin'de ${tak.length} modelin fotoğrafı yok (${ilk(tak.map((x) => x.kod))}). ${ne} 18:00'e kadar çekilebilenleri gönderin, kalanların sebebini düğmeden seçin.`, kalip: "foto", kalemler: tak.map((x) => ({ kod: x.kod, not: x.sebep })), son, kaynak: "selin" }, simdi); sonuc.push(`Selin gönderilemeyen: ${tak.length}`); }
+  const fb = (se.fotoBekleyen || []).filter((k) => !tak.some((x) => x.kod === k));
+  if (fb.length) { await gorevAc(env, { baslik: `Fotoğrafı olmayan ${fb.length} stok modeli`, metin: `Stokta olup fotoğrafı olmayan ${fb.length} model var (${ilk(fb)}). ${ne} 18:00'e kadar çekilebilenleri gönderin, kalanların sebebini düğmeden seçin.`, kalip: "foto", kalemler: fb.map((kod) => ({ kod })), son, kaynak: "selin" }, simdi); sonuc.push(`fotoğrafsız stok: ${fb.length}`); }
+  const d = await oku(env, "venom:siteDefteri", null);
+  const vb = [...new Set([...MERDAN_VIDEO, ...Object.values((d && d.modeller) || {}).filter((m) => m.videoBekleniyor && !m.gizli).map((m) => String(m.kod))])];
+  await gorevAc(env, { baslik: `Merdan'dan ${vb.length} model videosu bekleniyor`, metin: `${vb.length} modelin videosu bekleniyor (${ilk(vb)}). Merdan, ${ne.toLocaleLowerCase("tr")} 18:00'e kadar çekebildiklerini gönder; kalanların sebebini düğmeden seç. Hemra, sende olan varsa sen de seçebilirsin.`, kalip: "video", kalemler: vb.map((kod) => ({ kod })), son, kaynak: "merdan" }, simdi);
+  sonuc.push(`video: ${vb.length}`);
+  // Fabrikanın cevap vermediği siparişler: Sami takip eder; Fuat'a TEK hatırlatma taslağı Patron onayına (izin: fabrika)
+  const veri = env.STOK ? await stokIste(env, "/repete-veri", {}).catch(() => null) : null;
+  const cevapsiz = ((veri && veri.fs) || []).filter((f) => f.durum === "bekliyor" && simdi - (f.gonderim || simdi) > 86400);
+  if (cevapsiz.length) {
+    const gy = (t) => { const x = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${x.slice(8, 10)}.${x.slice(5, 7)}`; };
+    const metin = `Fuat Bey merhaba, şu siparişler için cevabınızı bekliyoruz: ${cevapsiz.slice(0, 12).map((f) => `${f.kod} (${gy(f.gonderim)})`).join(", ")}. Hangisi ne zaman hazır olur?`;
+    await aracCalistir({ ...env, __sohbette: false }, "mesaj_taslagi", { kime: "fuat", metin }, simdi).catch(() => null);
+    sonuc.push(`fabrika cevapsız: ${cevapsiz.length} (Fuat'a tek taslak Patron onayına)`);
+  }
+  return sonuc;
+}
+// 9 Kasım (sert müdür B): bota verilen emir kontrol edilir (iş defteri). Yapılmadıysa bir kez tekrar; olmazsa Claude Code notu.
+// Kanala paylaşma / silme / üretim emirleri kendiliğinden TEKRARLANMAZ (çift paylaşım olmasın) — sadece not.
+const TEKRARLANMAZ = /payla|sil\b|silin|kaldır|üret|uret|video/i;
+async function emirKaydet(env, bot, metin, simdi) {
+  const l = await oku(env, "venom:emirler", []);
+  const kod = (String(metin).match(/\b\d{3,6}\b/) || [null])[0];
+  await kaydet(env, "venom:emirler", [...l.filter((x) => x.durum === "bekliyor" || simdi - x.zaman < 3 * 86400), { id: kisaId(), bot, metin: String(metin).slice(0, 400), kod, zaman: simdi, ilk: simdi, deneme: 1, durum: "bekliyor" }].slice(-60), 7 * 86400);
+}
+export async function emirAdimi(env, simdi) {
+  const l = await oku(env, "venom:emirler", []);
+  const bekleyen = l.filter((x) => x.durum === "bekliyor" && simdi - x.zaman >= 10 * 60);
+  if (!bekleyen.length) return 0;
+  const kayit = env.STOK ? await stokIste(env, "/isd-oku", { basla: Math.min(...bekleyen.map((x) => x.zaman)), bitis: simdi }).catch(() => []) : [];
+  const satirlar = Array.isArray(kayit) ? kayit : [];
+  for (const e of bekleyen) {
+    const bunun = satirlar.filter((r) => r.bot === e.bot && r.zaman >= e.zaman && !r.deneme);
+    const iz = bunun.filter((r) => r.tur !== "hata" && (!e.kod || String(r.kod || "").includes(e.kod) || String(r.ozet || "").includes(e.kod)));
+    if (iz.length && !bunun.some((r) => r.tur === "hata")) {
+      e.durum = "yapildi"; e.sonuc = String(iz.at(-1).ozet || "").slice(0, 160);
+      await biriktir(env, { kaynak: "venom", metin: `✅ ${BOT_AD[e.bot] || e.bot}'e verdiğim iş yapıldı: "${e.metin.slice(0, 80)}" → ${e.sonuc}`, tur: "bilgi" }, simdi);
+      await mudurSayac(env, "kendi", simdi);
+    } else if (e.deneme < 2 && !TEKRARLANMAZ.test(e.metin)) {
+      e.deneme += 1; e.zaman = simdi;
+      await botaSor(env, e.bot, "mesaj", e.metin);
+    } else {
+      e.durum = "olmadi";
+      await yetenekNotu(env, `Venom emri yapılmadı (${e.deneme} deneme, iş defterinde iz yok): ${e.bot} ← "${e.metin}"`, simdi);
+      await biriktir(env, { kaynak: "venom", metin: `⚠️ ${BOT_AD[e.bot] || e.bot}'e verdiğim "${e.metin.slice(0, 80)}" işi yapılmadı (${e.deneme} deneme); Claude Code'a not ettim.`, tur: "bilgi" }, simdi);
+    }
+  }
+  await kaydet(env, "venom:emirler", l, 7 * 86400);
+  return bekleyen.length;
+}
 
 // ---------- Araçlar ----------
 const ARACLAR = [
@@ -217,8 +321,10 @@ export async function aracCalistir(env, ad, g, simdi) {
   }
   if (ad === "bota_yaz") {
     if (!BOT_BAG[g.bot]) return "Bilinmeyen bot.";
+    if (g.bot === "pelin" && /üret|uret|video|fotoğraf çek|maliyet/i.test(String(g.metin || "")) && !env.__sohbette && env.__izin !== "cevap") return "Pelin'e para gerektiren üretim emri Patron onayı olmadan verilmez (pelin_uret kartı).";
     const r = await botaSor(env, g.bot, "mesaj", String(g.metin || ""));
     if (r) await isKaydet(env, g.bot, String(g.metin || ""), simdi);
+    if (r) await emirKaydet(env, g.bot, String(g.metin || ""), simdi); // 9 Kasım: 10 dk sonra yapıldı mı kontrol
     await kaydet(env, "venom:bot:sonBot", { bot: g.bot, zaman: simdi, metin: `(Venom iletti) ${String(g.metin).slice(0, 200)}` }, 3600);
     return r ? `${BOT_AD[g.bot]}'e iletildi; cevabı/kartı buraya gelecek.` : `${BOT_AD[g.bot]}'e ulaşılamadı.`;
   }
@@ -273,6 +379,13 @@ async function isCalistir(env, is, simdi) {
 export async function dugme(env, cq, simdi) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   if (!patronMu(env, cq.from.id)) return cevap("Sadece Patron.");
+  if (/^vgk:/.test(String(cq.data))) { // 9 Kasım: çözülemeyen görev kartı — Patron kararı
+    const [, gid, h] = String(cq.data).split(":");
+    if (h === "x") { await cevap("Kapatıldı"); const l = await oku(env, "venom:gorevler", []); const g = l.find((x) => x.id === gid); if (g) { g.patronGordu = simdi; await kaydet(env, "venom:gorevler", l, 30 * 86400); } return tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }); }
+    await kaydet(env, "venom:kararBekle", { gid, zaman: simdi }, 3600);
+    await cevap("Kararınızı yazın");
+    return yaz(env, "📝 Kararınızı tek mesajla yazın (1 saat içinde); Hemra ve Merdan'a \"Patron kararı\" olarak gönderip uygulatacağım.");
+  }
   if (/^vr:/.test(String(cq.data))) { // TEK KAPI: başka botun düğmesi → o bota "Patron bastı"
     const rid = String(cq.data).slice(3);
     const k = await oku(env, `venom:bot:dugme:${rid}`, null);
@@ -558,6 +671,19 @@ async function botSor(env, bot, islem, ms = 20000) {
   try { return await Promise.race([b[islem](), new Promise((_, r) => setTimeout(() => r(new Error("cevap vermedi (20 sn)")), ms))]); }
   catch (e) { return { ok: false, sorun: String(e && e.message).slice(0, 120) }; }
 }
+// 9 Kasım (sert müdür F): dün Patron'a izin nedeni olmadan mesaj gitti mi? (Venom'dan gidenlerin hepsi etiketli olmalı; botlar tek kapıdan)
+export async function izinKontrolu(env, simdi) {
+  const dun = gunAnahtari(simdi - 86400);
+  const log = await oku(env, `venom:izin:log:${dun}`, []);
+  const izinsiz = log.filter((x) => !IZINLER.includes(x.izin)).length;
+  const engel = Number(await env.KAYIT.get(`venom:izin:engel:${dun}`).catch(() => 0)) || 0;
+  const tekKapi = (await env.KAYIT.get("venom:tekKapi").catch(() => null)) === "1";
+  if (izinsiz || !tekKapi) {
+    await yetenekNotu(env, `SIZINTI (${dun}): ${izinsiz ? `${izinsiz} mesaj izin nedeni olmadan Patron'a gitti. ` : ""}${tekKapi ? "" : "Tek kapı KAPALI: botlar Patron'a doğrudan yazabilir. "}Aynı gün kapatılmalı.`, simdi);
+    return `❌ İzin kapısı: ${izinsiz ? `dün ${izinsiz} mesaj izinsiz gitti` : ""}${!tekKapi ? `${izinsiz ? "; " : ""}tek kapı kapalı` : ""} — Claude Code'a yazıldı`;
+  }
+  return `✅ İzin kapısı: dün Patron'a izinsiz mesaj gitmedi (${log.length} izinli · ${engel} mesaj durduruldu, Venom çözdü)`;
+}
 export async function gunlukTest(env, simdi) {
   const satir = [];
   for (const bot of ["kemal", "selin", "sami", "pelin"]) {
@@ -569,6 +695,7 @@ export async function gunlukTest(env, simdi) {
   const yaz1 = await env.KAYIT.put("venom:bot:kvTest", String(simdi), { expirationTtl: 3 * 86400 }).then(() => true).catch((e) => String(e && e.message));
   satir.push(yaz1 === true ? "✅ Ortak kayda yazma" : `❌ Ortak kayda (KV) YAZILAMIYOR: ${/limit/i.test(yaz1) ? "Cloudflare günlük ücretsiz yazma sınırı doldu" : yaz1}`);
   try { satir.push((await cfKullanimSatiri(env, simdi)).satir); } catch { /* */ }
+  try { satir.push(await izinKontrolu(env, simdi)); } catch { /* */ }
   const bozuk = satir.filter((x) => x.startsWith("❌")).length;
   return `🧪 Sabah testi (09:30): ${bozuk ? `⚠️ ${bozuk} sorun` : "hepsi çalışıyor"}\n${satir.join("\n")}`;
 }
@@ -634,6 +761,7 @@ export async function pelinFotoIlet(env, g, simdi, bekle = (ms) => new Promise((
 }
 // Patron'un Venom'a gönderdiği medya → Kemal paylaşımı (kemal_paylas). Dosyalar Venom /medya/<id> adresinden (3 gün) Kemal'e
 async function paylasimGonder(env, simdi) {
+  env = { ...env, __izin: "cevap" }; // Patron'un kendi paylaşım isteğinin sonucu / onayı
   const b = await oku(env, "venom:bot:paylasBekle", null);
   if (!b) return;
   const medya = await oku(env, "venom:bot:medya", []);
@@ -658,6 +786,7 @@ async function paylasimGonder(env, simdi) {
 }
 // Kemal'in SON YAYIN kartları Venom'a da gelir: Patron buradan onaylar (Kemal uygular, sonuç "sonuc" kuyruğundan)
 async function onayAktar(env, simdi) {
+  env = { ...env, __izin: "cevap" }; // Patron'un kendi paylaşım isteğinin sonucu / onayı
   for (const o of await kuyruguAl(env, "venomOnay")) {
     if (o.tur !== "kemalYayin") continue;
     const medya = (o.venomMedya && o.venomMedya.length ? o.venomMedya : o.medya || []).slice(0, 10);
@@ -722,13 +851,15 @@ export async function aktarilanGonder(env, k) {
     }
     return biriktir(env, { kaynak: k.bot, metin: k.metin || `📷 ${medya.length} görsel`, tur: karar.tur, kategori: karar.kategori, kural: karar.kural }, simdi);
   }
+  if (karar.karar === "cozum") return cozumeEkle(env, { kaynak: k.bot, metin: k.metin || "📷 görsel", sebep: "bot kartı izin listesinde yok", klavye: k.butonlar && !duzenleme ? { inline_keyboard: await butonCevir(env, k.bot, k.butonlar) } : null }, simdi);
+  env = { ...env, __izin: karar.izin };
   const klavye = k.butonlar && !duzenleme ? { inline_keyboard: await butonCevir(env, k.bot, k.butonlar) } : null;
   const bekleyen = (await oku(env, `venom:posta:medya:${k.bot}`, [])).filter((x) => simdi - x.zaman < 180);
   if (bekleyen.length) await env.KAYIT.delete(`venom:posta:medya:${k.bot}`).catch(() => null);
-  if (karar.karar === "sira") return siraya(env, { kaynak: BOT_AD[k.bot] || k.bot, metin: k.metin, klavye, medya: [...bekleyen.flatMap((x) => x.k.medya || []), ...medya] }, simdi);
+  if (karar.karar === "sira") return siraya(env, { kaynak: BOT_AD[k.bot] || k.bot, metin: k.metin, klavye, medya: [...bekleyen.flatMap((x) => x.k.medya || []), ...medya], izin: karar.izin }, simdi);
   for (const x of bekleyen) await aktarGonder(env, x.k, null);
   const r = await aktarGonder(env, k, klavye);
-  await gonderildiKaydet(env, { kaynak: k.bot, tur: karar.tur, kategori: karar.kategori, metin: k.metin || "📷 görsel", id: r && r.result && r.result.message_id }, simdi).catch(() => null);
+  await gonderildiKaydet(env, { kaynak: k.bot, tur: karar.tur, kategori: karar.kategori, metin: k.metin || "📷 görsel", id: r && r.result && r.result.message_id, izin: karar.izin }, simdi).catch(() => null);
   return r;
 }
 // Kartın albümü 3 dk içinde kart gelmezse bilgi olarak birikir (cron)
@@ -825,7 +956,7 @@ async function kanalIzle(env, post, duzenlendi, simdi) {
   await kaydet(env, "venom:kanal:son", [...l, kayit].slice(-300));
   if (sorunlar.length) {
     const link = kanal && kanal.kullanici ? `https://t.me/${kanal.kullanici}/${post.message_id}` : `#${post.message_id}`;
-    await yaz(env, `⚠️ Kanalda sorun — ${kod || "kodsuz"}${duzenlendi ? " (düzenleme)" : ""}: ${sorunlar.join("; ")}\n${link}\nDüzeltmek için Kemal'e yaptırabilirim.`);
+    await yaz(env, `⚠️ Kanalda sorun — ${kod || "kodsuz"}${duzenlendi ? " (düzenleme)" : ""}: ${sorunlar.join("; ")}\n${link}\nDüzeltmek için Kemal'e yaptırabilirim.`, { posta: { tur: "kritik" } }); // yanlış paylaşım çıktı = kritik (izin f)
   }
 }
 
@@ -922,10 +1053,15 @@ export async function guncelleme(u, env) {
   const simdi = Math.floor(Date.now() / 1000);
   // Telegram aynı güncellemeyi tekrar gönderirse (geç cevap) iş iki kez yapılmasın
   if (u.update_id != null && !(await ilkKezMi(env, u.update_id))) return;
-  if (u.callback_query) return dugme(env, u.callback_query, simdi);
+  if (u.callback_query) return dugme(patronMu(env, u.callback_query.from && u.callback_query.from.id) ? { ...env, __izin: "cevap" } : env, u.callback_query, simdi);
   if (u.channel_post || u.edited_channel_post) return kanalIzle(env, u.channel_post || u.edited_channel_post, Boolean(u.edited_channel_post), simdi).catch((e) => hataYaz(env, "kanal", e));
   const m = u.message;
   if (!m || !m.from || m.chat.type !== "private" || !patronMu(env, m.from.id)) return; // sadece Patron
+  env = { ...env, __izin: "cevap" }; // 9 Kasım (sert müdür A): Patron'un kendi mesajına verilen her cevap "cevap" etiketli
+  { // 9 Kasım (sert müdür C): "📝 Karar yaz" sonrası Patron'un yazdığı = Patron kararı
+    const kb = m.text && !m.text.startsWith("/") ? await oku(env, "venom:kararBekle", null) : null;
+    if (kb) { await env.KAYIT.delete("venom:kararBekle").catch(() => null); const g = await patronKarari(env, kb.gid, m.text, simdi); return yaz(env, g ? `Kaydettim: "Patron kararı". Hemra ve Merdan'a gönderdim, uygulanmasını takip edeceğim.` : "Bu görev artık yok; kararı genel hafızaya yazmamı isterseniz tekrar söyleyin."); }
+  }
   let metin = m.text || m.caption || "";
   // 5 Kasım: fotoğraf/video → son 1 saatin medya listesi (Kemal paylaşımı için)
   const dosya = m.photo ? { tur: "foto", file_id: m.photo[m.photo.length - 1].file_id } : m.video ? { tur: "video", file_id: m.video.file_id } : m.document && /^(image|video)\//.test(m.document.mime_type || "") ? { tur: /^video/.test(m.document.mime_type) ? "video" : "foto", file_id: m.document.file_id } : null;
@@ -1010,12 +1146,17 @@ export async function venomCron(env, simdi) {
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) { await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }
+  // 9 Kasım (sert müdür): görevler (Hemra + Merdan), çözüm kuyruğu, bota verilen emirlerin kontrolü
+  try { await gorevAdimi(env, simdi, mudurAraclari(env, simdi)); } catch (e) { await hataYaz(env, "gorev", e); }
+  try { await cozumAdimi(env, simdi, mudurAraclari(env, simdi)); } catch (e) { await hataYaz(env, "cozum", e); }
+  try { await emirAdimi(env, simdi); } catch (e) { await hataYaz(env, "emir", e); }
+  try { if (await env.KAYIT.get("venom:ilkGorevler")) { await env.KAYIT.delete("venom:ilkGorevler"); await kaydet(env, "venom:ilkGorevlerSonuc", { zaman: simdi, sonuc: await ilkGorevler(env, simdi) }, 7 * 86400); } } catch (e) { await hataYaz(env, "ilkGorevler", e); }
   // Tek seferlik (Claude Code, 5 Kasım): KV "venom:pelinFotoIlet" = pelin_foto_kaydet girdisi → sonuç Patron'a (İLETİLDİ/İLETİLMEDİ)
-  try { const t = await oku(env, "venom:pelinFotoIlet", null); if (t) { await env.KAYIT.delete("venom:pelinFotoIlet"); await yaz(env, await pelinFotoIlet(env, t, simdi, async () => {})); } } catch (e) { await hataYaz(env, "pelinFotoIlet", e); }
+  try { const t = await oku(env, "venom:pelinFotoIlet", null); if (t) { await env.KAYIT.delete("venom:pelinFotoIlet"); await yaz({ ...env, __izin: "cevap" }, await pelinFotoIlet({ ...env, __izin: "cevap" }, t, simdi, async () => {})); } } catch (e) { await hataYaz(env, "pelinFotoIlet", e); }
   // 6 Kasım (Claude Code hazırlar): KV "venom:temizlikKart" = { metin, kanalSil: [{ kod, ids, not }], siteKaldir: [...] } → Patron onay kartı
   try { const t = await oku(env, "venom:temizlikKart", null); if (t) { await env.KAYIT.delete("venom:temizlikKart"); if ((t.kanalDuzelt || []).length) await kartAc(env, { tur: "imzaDuzelt", kanalDuzelt: t.kanalDuzelt }, t.metin, simdi); else if ((t.kanalSil || []).length || (t.siteKaldir || []).length) await kartAc(env, { tur: "temizlik", kanalSil: t.kanalSil || [], siteKaldir: t.siteKaldir || [] }, t.metin, simdi); else await yaz(env, t.metin); } } catch (e) { await hataYaz(env, "temizlikKart", e); }
   // 6 Kasım (B3): KV "venom:kemalPaylasElle" = { kod, renk, beden, liste } → Patron'un istediği paylaşım (duraklatma dışı, açık istek) → yeni SON YAYIN kartı
-  try { const t = await oku(env, "venom:kemalPaylasElle", null); if (t) { await env.KAYIT.delete("venom:kemalPaylasElle"); const ok = await kemaleVer(env, { kod: t.kod, renk: t.renk || null, beden: t.beden || null }, t.liste || [], simdi); await yaz(env, ok ? `🧭 ${t.kod} ${t.renk || ""} → Kemal'e yeni SON YAYIN kartı hazırlatılıyor (alt yazı ${renkDilleri(t.renk || "") ? renkDilleri(t.renk).en : "model kartı"}${t.beden ? `, ${BEDEN_AD[t.beden]}` : ""}, ${(t.liste || []).length} dosya). Kart Venom kontrolüyle buraya gelecek.` : `❌ ${t.kod}: Kemal'e iş gönderilemedi.`); } } catch (e) { await hataYaz(env, "paylasElle", e); }
+  try { const t = await oku(env, "venom:kemalPaylasElle", null); if (t) { await env.KAYIT.delete("venom:kemalPaylasElle"); const ok = await kemaleVer(env, { kod: t.kod, renk: t.renk || null, beden: t.beden || null }, t.liste || [], simdi); await yaz({ ...env, __izin: "cevap" }, ok ? `🧭 ${t.kod} ${t.renk || ""} → Kemal'e yeni SON YAYIN kartı hazırlatılıyor (alt yazı ${renkDilleri(t.renk || "") ? renkDilleri(t.renk).en : "model kartı"}${t.beden ? `, ${BEDEN_AD[t.beden]}` : ""}, ${(t.liste || []).length} dosya). Kart Venom kontrolüyle buraya gelecek.` : `❌ ${t.kod}: Kemal'e iş gönderilemedi.`); } } catch (e) { await hataYaz(env, "paylasElle", e); }
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await bildir(env, `🤖 Selin\n${[].concat(rs).join("\n")}`, { simdi, kaynak: "selin", tur: "bilgi" }); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
   // 9 Kasım (Claude Code): KV "venom:defterDeneme" → herkes raporu KV "venom:defterDenemeSonuc" (Patron'a gitmez)
@@ -1029,7 +1170,7 @@ export async function venomCron(env, simdi) {
       const f = v ? await botaSor(env, "kemal", "modelFoto", v.kod) : null;
       let b64 = null;
       if (f && f.ok && f.bayt) { const by = new Uint8Array(f.bayt); let t = ""; for (let i = 0; i < by.length; i += 0x8000) t += String.fromCharCode.apply(null, by.subarray(i, i + 0x8000)); b64 = btoa(t); }
-      await modelKarti(env, [mk], simdi);
+      await modelKarti({ ...env, __izin: "cevap" }, [mk], simdi);
       await kaydet(env, "venom:modelKartDenemeSonuc", { zaman: simdi, metin: v ? temizSatir(kartSatirlari({ ...v, fotoYok: !b64 })).join("\n") : "bulunamadı", kaynak: f && f.kaynak, foto: b64, dugmeler: v ? kartDugmeleri(v.kod) : [] }, 7200);
     }
   } catch (e) { await hataYaz(env, "modelKartDeneme", e); }
@@ -1050,7 +1191,7 @@ export async function venomCron(env, simdi) {
     const gm = await oku(env, "venom:gizliMesaj", null);
     if (gm) {
       await env.KAYIT.delete("venom:gizliMesaj");
-      const r = await yaz(env, gm.metin, { protect_content: true });
+      const r = await yaz(env, gm.metin, { protect_content: true, posta: { izin: "cevap" } });
       if (r && r.ok) { const l = await oku(env, "venom:silinecekMesaj", []); await kaydet(env, "venom:silinecekMesaj", [...l, { id: r.result.message_id, sil: simdi + (Number(gm.sure) || 3600) }], 2 * 86400); }
       await kaydet(env, "venom:gizliMesajSonuc", { zaman: simdi, ok: Boolean(r && r.ok) }, 86400);
     }
@@ -1068,7 +1209,7 @@ export async function venomCron(env, simdi) {
       const f = new FormData();
       f.append("chat_id", patron(env)); if (pd.aciklama) f.append("caption", String(pd.aciklama).slice(0, 1000));
       f.append("document", new Blob([String(pd.metin)], { type: "text/markdown" }), String(pd.ad || "dosya.md"));
-      await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN).trim()}/sendDocument`, { method: "POST", body: f });
+      await tgForm(env, "sendDocument", f, "cevap");
     }
   } catch (e) { await hataYaz(env, "patronaDosya", e); }
   // 6 Kasım (Claude Code okur, sadece SÜTUN/TABLO adları için): KV "venom:ayarOkuSimdi" = ["mali:kesif:VOLONTE", …] → "venom:ayarOkuSonuc" (1 saat)
@@ -1076,13 +1217,13 @@ export async function venomCron(env, simdi) {
   // 6 Kasım (sadece rapor): iki markanın Vegawin'inde de görünen kodlar → KV venom:ikiMagazaSonuc (Claude Code okur)
   try { if (await env.KAYIT.get("venom:ikiMagazaSimdi")) { await env.KAYIT.delete("venom:ikiMagazaSimdi"); await env.KAYIT.put("venom:ikiMagazaSonuc", JSON.stringify({ zaman: simdi, liste: await stokIste(env, "/iki-magaza", {}) }), { expirationTtl: 7 * 86400 }); } } catch (e) { await hataYaz(env, "ikiMagaza", e); }
   // 6 Kasım: Patron'a "hangi marka?" sorusu, kod başına iki düğme → KV venom:markaKarar (bütün botlar kullanır)
-  try { const t = await oku(env, "venom:markaSor", null); if (t) { await env.KAYIT.delete("venom:markaSor"); await bildir(env, t.metin, { simdi, tur: "kart", ek: { reply_markup: { inline_keyboard: (t.kodlar || []).slice(0, 40).map((k) => [{ text: `${k} = VOLONTE`, callback_data: `vk:${k}:V` }, { text: `${k} = BLACK ROSE`, callback_data: `vk:${k}:B` }]) } } }); } } catch (e) { await hataYaz(env, "markaSor", e); }
-  try { const t = await env.KAYIT.get("venom:patronaYaz"); if (t) { await env.KAYIT.delete("venom:patronaYaz"); await yaz(env, t); } } catch (e) { await hataYaz(env, "patronaYaz", e); }
+  try { const t = await oku(env, "venom:markaSor", null); if (t) { await env.KAYIT.delete("venom:markaSor"); await bildir(env, t.metin, { simdi, tur: "kart", izin: "cevap", ek: { reply_markup: { inline_keyboard: (t.kodlar || []).slice(0, 40).map((k) => [{ text: `${k} = VOLONTE`, callback_data: `vk:${k}:V` }, { text: `${k} = BLACK ROSE`, callback_data: `vk:${k}:B` }]) } } }); } } catch (e) { await hataYaz(env, "markaSor", e); }
+  try { const t = await env.KAYIT.get("venom:patronaYaz"); if (t) { await env.KAYIT.delete("venom:patronaYaz"); await yaz(env, t, { posta: { izin: "cevap" } }); } } catch (e) { await hataYaz(env, "patronaYaz", e); }
   // Tek seferlik (Claude Code): KV "venom:testSimdi" → günlük test şimdi, sonuç KV "venom:testSonuc" (Patron'a mesaj YOK)
   try { if (await env.KAYIT.get("venom:testSimdi")) { await env.KAYIT.delete("venom:testSimdi"); await env.KAYIT.put("venom:testSonuc", JSON.stringify({ zaman: simdi, metin: await gunlukTest(env, simdi) }), { expirationTtl: 86400 }); } } catch (e) { await hataYaz(env, "testSimdi", e); }
   // 6 Kasım: iş takibi (30 dk), Patron hatırlatıcıları
   try { const h = await isHatirlat(env, simdi); if (h) await bildir(env, h, { simdi, tur: "bilgi" }); } catch (e) { await hataYaz(env, "isTakip", e); }
-  try { for (const h of await vadesiGelenler(env, simdi)) { await yaz(env, `⏰ Hatırlatma: ${h.metin}`); if (h.kime) await aracCalistir(env, "mesaj_taslagi", { kime: h.kime, metin: h.metin }, simdi).catch(() => null); } } catch (e) { await hataYaz(env, "hatirlatici", e); }
+  try { for (const h of await vadesiGelenler(env, simdi)) { await yaz(env, `⏰ Hatırlatma: ${h.metin}`, { posta: { izin: "cevap" } }); if (h.kime) await aracCalistir(env, "mesaj_taslagi", { kime: h.kime, metin: h.metin }, simdi).catch(() => null); } } catch (e) { await hataYaz(env, "hatirlatici", e); }
   // gece yedeği (03:00–05:00, bir kez)
   if (saat(simdi) >= 3 && saat(simdi) < 5) { try { if (await ilkKezBugun(env, `yedek:${gunAnahtari(simdi)}`)) await yedekAl(env, simdi); } catch (e) { await hataYaz(env, "yedek", e); } }
   // satış uyarısı (saatte bir), stok bitiyor (günde bir, 10:00 sonrası)
@@ -1092,7 +1233,7 @@ export async function venomCron(env, simdi) {
   // (9 Kasım: pazartesi haftalık özet ayrı mesaj DEĞİL — 09:40 sabah özetinin içinde, ayrıntısı /detay)
   try { await bekleyenMedyaBosalt(env, simdi); } catch (e) { await hataYaz(env, "postaMedya", e); }
   // 9 Kasım: tavandan sonra gelen kartlar saatte bir TEK mesajda
-  if (saat(simdi) >= 8 && saat(simdi) < 22 && new Date(simdi * 1000).getUTCMinutes() < 5) { try { const m = await kartSiraMesaji(env); if (m) await yaz(env, m.metin, { reply_markup: { inline_keyboard: m.klavye }, posta: { tur: "kart" } }); } catch (e) { await hataYaz(env, "kartSira", e); } }
+  if (saat(simdi) >= 8 && saat(simdi) < 22 && new Date(simdi * 1000).getUTCMinutes() < 5) { try { const m = await kartSiraMesaji(env); if (m) await yaz(env, m.metin, { reply_markup: { inline_keyboard: m.klavye }, posta: { tur: "kart", izin: m.izin } }); } catch (e) { await hataYaz(env, "kartSira", e); } }
   // 9 Kasım (Patron): botlar günde 2 kez Venom'a rapor verir (09:00, 19:30) — Patron'a ayrı gitmez, özete girer
   if (saat(simdi) >= 9 && saat(simdi) < 9.6 && (await ilkKezBugun(env, `botRapor:s:${gunAnahtari(simdi)}`))) { try { await botRaporuAl(env, simdi, "sabah"); } catch (e) { await hataYaz(env, "botRapor", e); } }
   if (saat(simdi) >= 19.5 && saat(simdi) < 20 && (await ilkKezBugun(env, `botRapor:a:${gunAnahtari(simdi)}`))) { try { await botRaporuAl(env, simdi, "aksam"); } catch (e) { await hataYaz(env, "botRapor", e); } }
@@ -1149,11 +1290,13 @@ export async function aksamOzeti(env, simdi) {
   const satir = satirlar(gunluk);
   const kontrol = engel.length || duz.length ? [`🛡 Venom kontrolü: ${duz.length} gönderiyi kendim düzelttim · ${engel.length} gönderi durdu (düzeltemediklerim Hemra/Merdan'a gitti)`] : [];
   const botRap = satirlar(((await oku(env, `venom:botRapor:${gunAnahtari(simdi)}:aksam`, null)) || {}).metin).slice(1).map((x) => `📒 ${x}`);
-  const cuma = new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() === 5 ? [await saglikSatiri(env, simdi).catch(() => null)].filter(Boolean) : [];
+  const cuma = new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() === 5 ? [await saglikSatiri(env, simdi).catch(() => null), await mudurSatiri(env, simdi).catch(() => null)].filter(Boolean) : [];
   const hedef = hedefSatiri(await botaSor(env, "kemal", "ozet").catch(() => null), gunAnahtari(simdi)); // 9 Kasım: günlük 10 onay hedefi
+  const yapilmayan = yapilmayanSatiri(await oku(env, "venom:gorevler", [])); // 9 Kasım (sert müdür C)
   const metin = ozetKisalt(satir[0] || `🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, [
     { satirlar: [hedef].filter(Boolean), enFazla: 1 },
-    { satirlar: cuma, enFazla: 1 },
+    { satirlar: [yapilmayan].filter(Boolean), enFazla: 1 },
+    { satirlar: cuma, enFazla: 2 },
     { satirlar: [birikimSatiri(bir)].filter(Boolean), enFazla: 1 },
     { satirlar: kontrol, enFazla: 1 },
     { satirlar: botRap, enFazla: 5 },
@@ -1161,6 +1304,11 @@ export async function aksamOzeti(env, simdi) {
   ]);
   await ozetKaydet(env, "aksam", [gunluk, ozetDetay(bir)], simdi);
   return metin;
+}
+// 9 Kasım (sert müdür F): cuma — Venom'un kendi çözdüğü / Hemra-Merdan'a verilen / Patron'a gelen iş (hedef: Patron'a gelen en aza)
+async function mudurSatiri(env, simdi) {
+  const s = await haftaSayilari(env, simdi);
+  return `🧭 Bu hafta: Venom kendi çözdü ${s.kendi} · Hemra/Merdan'a görev ${s.gorev} · Patron'a gelen iş ${s.patron}.`;
 }
 // 9 Kasım (Patron, E10): cuma tek satır sağlık raporu
 async function saglikSatiri(env, simdi) {
@@ -1277,7 +1425,8 @@ export async function modelVerisi(env, kod, simdi) {
   const veriGun = oz.ilkGun ? Math.round((Date.parse(gunA9(simdi)) - Date.parse(oz.ilkGun)) / 864e5) + 1 : 14;
   return { kod: String(kod), marka, stok, s7, s14, gun14: Math.min(14, Math.max(1, veriGun)), fs: oz.fs || [], sitede: Boolean(sd && !sd.gizli), gizli: oz.karar && oz.karar.durum === "gizli" };
 }
-async function tgForm(env, metod, form) {
+async function tgForm(env, metod, form, izin = null) {
+  if (!(await izinKapisi(env, metod, form.get("chat_id"), izin || env.__izin, form.get("caption") || `(${metod})`))) return { ok: false, engellendi: true, description: "izin nedeni yok" };
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", body: form });
   return r.json().catch(() => ({ ok: false }));
 }
@@ -1437,7 +1586,7 @@ export async function sesliGonder(env, metin, simdi) {
   if (!r || !r.ok) return false;
   const f = new FormData();
   f.append("chat_id", patron(env)); f.append("voice", new Blob([await r.arrayBuffer()], { type: "audio/ogg" }), "rapor.ogg");
-  await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN).trim()}/sendVoice`, { method: "POST", body: f }).catch(() => null);
+  await tgForm(env, "sendVoice", f, "rapor").catch(() => null);
   await venomHarcamaYaz(env, (duz.length / 1e6) * 15, simdi);
   return true;
 }

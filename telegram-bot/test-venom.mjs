@@ -434,7 +434,8 @@ test("VENOM KANAL + SİTE + İŞ DAĞITIMI (5 Kasım): kanal paylaşımı kayded
   // iş dağıtımı: Pelin'e Patron yazmış gibi
   const giden = [];
   o.env.PELIN_W = { mesaj: async (m) => { giden.push(m); return true; } };
-  const by = await aracCalistir(o.env, "bota_yaz", { bot: "pelin", metin: "3627 beyaz üret" }, ist(5, 13));
+  assert.match(await aracCalistir(o.env, "bota_yaz", { bot: "pelin", metin: "3627 beyaz üret" }, ist(5, 13)), /Patron onayı olmadan verilmez/); // Venom kendi başına Pelin'e para işi veremez
+  const by = await aracCalistir({ ...o.env, __izin: "cevap" }, "bota_yaz", { bot: "pelin", metin: "3627 beyaz üret" }, ist(5, 13)); // Patron'un isteği
   assert.deepEqual(giden, ["3627 beyaz üret"]);
   assert.match(by, /Pelin'e iletildi/);
 });
@@ -533,8 +534,10 @@ test("SAĞLAMLAŞTIRMA (6 Kasım) — 'aracım yok' denmez: not alınır; 09:30 
   o.env.KEMAL_W = { saglik: async () => ({ ok: true, bilgi: "kanal bağlı" }) };
   o.env.SELIN_W = { saglik: async () => ({ ok: false, sorunlar: ["site verisi okunamadı"] }) };
   o.env.SAMI_W = { saglik: async () => { throw new Error("bağlanamadı"); } };
+  o.depo.set("venom:tekKapi", "1");
   const t = await gunlukTest(o.env, 1793900000);
   assert.match(t, /⚠️ 3 sorun/);
+  assert.match(t, /✅ İzin kapısı: dün Patron'a izinsiz mesaj gitmedi/);
   assert.match(t, /✅ Kemal — kanal bağlı/);
   assert.match(t, /❌ Selin: site verisi okunamadı/);
   assert.match(t, /❌ Sami: bağlanamadı/);
@@ -760,8 +763,12 @@ test("9 Kasım POSTANE: bilgi birikir, kart ve kritik anında; düzenleme (✏�
   assert.equal(patronaGiden(o).length, 0);
   const gun = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
   assert.equal(JSON.parse(o.depo.get(`venom:posta:${gun}`)).length, 2);
-  // kart → anında (10'a kadar)
-  for (let i = 0; i < 12; i++) await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: `📝 ${3000 + i} taslak onayı`, butonlar: [[{ text: "✅ Onayla", callback_data: `so:${3000 + i}` }]], medya: [] });
+  // 9 Kasım (sert müdür A): izin listesinde OLMAYAN kart Patron'a gitmez → Venom'un çözüm kuyruğu
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 2999 taslak onayı", butonlar: [[{ text: "✅ Onayla", callback_data: "so:2999" }]], medya: [] });
+  assert.equal(patronaGiden(o).length, 0);
+  assert.match(JSON.parse(o.depo.get("venom:cozum"))[0].ozet, /2999 taslak onayı/);
+  // izinli kart (fabrika sipariş onayı) → anında (10'a kadar)
+  for (let i = 0; i < 12; i++) await v.aktarilanGonder(o.env, { bot: "sami", metod: "sendMessage", metin: `🏭 ${3000 + i} fabrika sipariş onayı`, butonlar: [[{ text: "✅ Onayla", callback_data: `so:${3000 + i}` }]], medya: [] });
   assert.equal(patronaGiden(o).length, 10);
   assert.equal(JSON.parse(o.depo.get("venom:posta:kartSira")).length, 2);
   // kritik → tavan dolu olsa da anında
@@ -784,17 +791,17 @@ test("9 Kasım: 'bunu bana gönderme' kalıcı kural olur (son mesajın botu + t
   assert.deepEqual(kuralCoz("Kemal'in paylaşıldı mesajlarını bana gönderme"), { bot: "kemal", kategori: null, kelimeler: ["paylaşıldı"], ornek: null });
   assert.equal(kuralCoz("Fuat'a mesaj gönder"), null);
   // Patron'a bir kart gitti (Selin), Patron "bunu bana gönderme" dedi
-  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3001 taslak onayı", butonlar: [[{ text: "✅", callback_data: "so:3001" }]], medya: [] });
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3001 taslak silme onayı", butonlar: [[{ text: "✅", callback_data: "so:3001" }]], medya: [] });
   o.g.length = 0;
   await yazi(o, PATRON, "bunu bana gönderme");
   assert.match(patronaGiden(o)[0].govde.text, /📝 Kalıcı kural kaydedildi: Selin · "rapor" mesajları|📝 Kalıcı kural kaydedildi: Selin/);
   assert.equal(o.claude.length, 0); // sohbete (Claude'a) gitmedi
   const kurallar = JSON.parse(o.depo.get("venom:bildirimKurallari"));
   assert.equal(kurallar[0].bot, "selin");
-  assert.deepEqual(kurallar[0].kelimeler, ["taslak", "onayı"]); // örnek mesaja bağlı (bütün Selin mesajları değil)
+  assert.deepEqual(kurallar[0].kelimeler, ["taslak", "silme"]); // örnek mesaja bağlı (bütün Selin mesajları değil)
   // aynı türden Selin mesajı artık anında gelmez
   o.g.length = 0;
-  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3002 taslak onayı", butonlar: [[{ text: "✅", callback_data: "so:3002" }]], medya: [] });
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3002 taslak silme onayı", butonlar: [[{ text: "✅", callback_data: "so:3002" }]], medya: [] });
   assert.equal(patronaGiden(o).length, 0);
   // kritik yine gelir
   await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "🔴 Köprü sustu (Selin iletti)", medya: [] });
@@ -992,4 +999,177 @@ test("akşam özeti: 'Bugün X onay / 10, Y geç, Z paylaşıldı.' tek satır (
   assert.equal(hedefSatiri(k, "2026-11-09"), "📣 Bugün 7 onay / 10, 9 geç, 6 paylaşıldı.");
   assert.equal(hedefSatiri({ ...k, tur: { ...k.tur, gun: "2026-11-08" } }, "2026-11-09"), "📣 Bugün 0 onay / 10, 0 geç, 6 paylaşıldı.");
   assert.equal(hedefSatiri(null, "2026-11-09"), null);
+});
+
+// 9 Kasım (Patron): SERT MÜDÜR A — Patron'a sadece izin listesi; etiketsiz gönderim kod düzeyinde durur
+test("izin kapısı: etiketsiz mesaj Patron'a gitmez (çözüm kuyruğu); etiketli gider ve kaydedilir; kart metninden izin nedeni", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const { izinBul } = await import("./venom-posta.js");
+  const r = await v.tg(o.env, "sendMessage", { chat_id: PATRON, text: "✅ 3627 paylaşıldı" });
+  assert.equal(r.ok, false);
+  assert.equal(patronaGiden(o).length, 0);
+  assert.match(JSON.parse(o.depo.get("venom:cozum"))[0].ozet, /3627 paylaşıldı/);
+  const r2 = await v.tg(o.env, "sendMessage", { chat_id: PATRON, text: "🌙 Günün özeti", izin: "rapor" });
+  assert.equal(r2.ok, true);
+  const giden = patronaGiden(o);
+  assert.equal(giden.length, 1);
+  assert.equal(giden[0].govde.izin, undefined); // etiket Telegram'a gitmez
+  const gun = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+  assert.equal(JSON.parse(o.depo.get(`venom:izin:log:${gun}`))[0].izin, "rapor");
+  // Patron dışındakilere kapı yok; yazıyor… (sendChatAction) serbest
+  assert.equal((await v.tg(o.env, "sendMessage", { chat_id: MERDAN, text: "x" })).ok, true);
+  assert.equal((await v.tg(o.env, "sendChatAction", { chat_id: PATRON, action: "typing" })).ok, true);
+  assert.equal(izinBul("🔁 REPETE RAPORU — 09.11"), "repete");
+  assert.equal(izinBul("🗑 3357 silinsin mi?"), "onay");
+  assert.equal(izinBul("✉️ Fuat'a gidecek mesaj"), "onay");
+  assert.equal(izinBul("🎬 Pelin üretim: 3 model, ≈0,60 $"), "para");
+  assert.equal(izinBul("Merdan ve Hemra çözemedi: 3047 fotoğrafı. Ne denendi: …"), "cozulemeyen");
+  assert.equal(izinBul("📝 3001 taslak onayı"), null);
+  assert.equal(izinBul("📦 3332 stok bitti. Ne yapalım?"), null); // Hemra/Merdan'ın işi
+});
+
+// 9 Kasım (Patron): SERT MÜDÜR C/D — Merdan + Hemra'ya görev (Sami'den), model model düğme, hatırlatma, yapılmayan görev, çözülemeyen → Patron'a TEK kart
+test("görev: iki kişiye düğmeli kart; biri seçince iki kopya güncellenir; açıklama; süre dolunca 2 hatırlatma → akşam 'yapılmayan görevler'; bulamadım → Patron'a tek kart", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const G = await import("./venom-gorev.js");
+  const { venomGidenAdimi } = await import("./venom-kopru.js");
+  const t0 = ist(10, 10); // salı 10:00
+  assert.equal(G.sonSaat(t0, 18), ist(10, 18));
+  assert.equal(G.sonSaat(ist(10, 17), 18), ist(11, 18)); // 2 saatten az kaldıysa ertesi gün
+  const kodlar = Array.from({ length: 12 }, (_, i) => String(3040 + i));
+  const g = await G.gorevAc(o.env, { baslik: "Selin: 12 modelin fotoğrafı yok", metin: "Selin'de 12 modelin fotoğrafı yok (3040, 3041, 3042…). Bugün 18:00'e kadar çekilebilenleri gönderin, kalanların sebebini düğmeden seçin.", kalip: "foto", kalemler: kodlar.map((kod) => ({ kod })), son: ist(10, 18) }, t0);
+  assert.equal((await G.gorevAc(o.env, { baslik: "Selin: 12 modelin fotoğrafı yok", kalemler: [] }, t0)).id, g.id); // aynı görev iki kez açılmaz
+  const kart = G.gorevKartlari(g);
+  assert.equal(kart.length, 2); // 10 + 2
+  assert.match(kart[0].metin, /^Merdan, Hemra: Selin'de 12 modelin fotoğrafı yok/);
+  assert.match(kart[0].metin, /⏰ Son saat: 10\.11 18:00 · kart 1\/2/);
+  assert.deepEqual(kart[0].klavye.inline_keyboard[0].map((b) => b.text), ["3040 📷 Bugün çekerim", "3040 🏭 Fabrikada", "3040 ❌ Satıldı/bitti"]);
+  assert.deepEqual(kart[0].klavye.inline_keyboard[1].map((b) => b.text), ["3040 🔍 Bulamadım", "3040 ✏️ Açıklama yaz"]);
+  // Sami gönderir: 2 kişi × 2 kart, düğmeli
+  await venomGidenAdimi(o.env, t0, o.samiTg);
+  const gonder = o.samiG.filter((x) => x.metod === "sendMessage");
+  assert.equal(gonder.length, 4);
+  assert.deepEqual([...new Set(gonder.map((x) => String(x.govde.chat_id)))].sort(), ["503", "504"]);
+  assert.ok(gonder.every((x) => x.govde.reply_markup));
+  // Hemra 3040'a "Bugün çekerim" — iki kopya da güncellenir
+  const ilkKart = gonder[0];
+  const cq = (kim, data, msg = ilkKart) => ({ id: "q", from: { id: kim }, data, message: { chat: { id: msg.govde.chat_id }, message_id: 501, text: msg.govde.text, reply_markup: msg.govde.reply_markup } });
+  o.samiG.length = 0;
+  await G.gorevDugmesi(o.env, cq(504, `vg:${g.id}:0:c`), o.samiTg);
+  const duzen = o.samiG.filter((x) => x.metod === "editMessageReplyMarkup");
+  assert.equal(duzen.length, 2);
+  assert.deepEqual(duzen[0].govde.reply_markup.inline_keyboard[0], [{ text: "✔ 3040: Bugün çekerim (Hemra)", callback_data: "vg:-" }]);
+  // yabancı basamaz
+  o.samiG.length = 0;
+  await G.gorevDugmesi(o.env, cq(777, `vg:${g.id}:1:c`), o.samiTg);
+  assert.match(o.samiG[0].govde.text, /Hemra ve Merdan'ın/);
+  // Merdan 3041 → ✏️ açıklama
+  await G.gorevDugmesi(o.env, cq(503, `vg:${g.id}:1:a`), o.samiTg);
+  assert.equal(await G.gorevAciklamaMesaji(o.env, { from: { id: 503 }, chat: { id: 503 }, text: "Bu model mağazada yok, depoda bakacağım" }, o.samiTg), true);
+  // Merdan 3042 → bulamadım
+  await G.gorevDugmesi(o.env, cq(503, `vg:${g.id}:2:y`), o.samiTg);
+  const f = { biriktir: async () => {}, patronaKart: async (metin, klavye) => kartlar.push({ metin, klavye }), defter: async () => {}, botaDugme: async () => true };
+  const kartlar = [];
+  let l = await G.gorevAdimi(o.env, ist(10, 11), f);
+  const gg = l.find((x) => x.id === g.id);
+  assert.deepEqual(gg.kalemler.slice(0, 3).map((k) => [k.secim, k.kim]), [["c", "Hemra"], ["a", "Merdan"], ["y", "Merdan"]]);
+  assert.equal(gg.kalemler[1].aciklama, "Bu model mağazada yok, depoda bakacağım");
+  // süre doldu: 18:00 → 1. hatırlatma, 20:00 sonrası mesai yok, ertesi 09:00 → 2., 11:00+ → yapılmadı
+  await G.gorevAdimi(o.env, ist(10, 18, 5), f);
+  let giden = await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden");
+  assert.equal(giden.filter((x) => x.tur === "hatirlatma").length, 2);
+  assert.match(giden.find((x) => x.tur === "hatirlatma").metin, /1\. hatırlatma — Selin: 12 modelin fotoğrafı yok: süre 18:00'de doldu, 9 model cevapsız: 3043/);
+  await G.gorevAdimi(o.env, ist(10, 19), f);
+  assert.equal((await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden")).length, 0); // 2 saat dolmadı
+  await G.gorevAdimi(o.env, ist(11, 9), f);
+  l = await G.gorevAdimi(o.env, ist(11, 11, 5), f);
+  assert.equal(l.find((x) => x.id === g.id).durum, "yapilmadi");
+  assert.match(G.yapilmayanSatiri(l), /📌 Yapılmayan görevler: Merdan\+Hemra — Selin: 12 modelin fotoğrafı yok \(9\/12 cevapsız\)/);
+  // kalanlar cevaplanınca görev kapanır; "bulamadım" → Patron'a TEK kart (çözülemeyen)
+  for (let i = 3; i < 12; i++) await G.gorevDugmesi(o.env, cq(504, `vg:${g.id}:${i}:f`), o.samiTg);
+  l = await G.gorevAdimi(o.env, ist(11, 12), f);
+  assert.equal(l.find((x) => x.id === g.id).durum, "bitti");
+  assert.equal(kartlar.length, 1);
+  assert.match(kartlar[0].metin, /🧭 Çözülemedi — Selin: 12 modelin fotoğrafı yok\nNe denendi: Merdan ve Hemra'ya 10\.11 10:00'de görev verildi, 2 kez hatırlatıldı\.\nNeden olmadı:\n• 3042: Merdan "Bulamadım"/);
+  // Patron "📝 Karar yaz" → yazdığı Patron kararı olarak kaydedilir ve iki kişiye gider
+  const kg = await G.patronKarari(o.env, g.id, "3042'yi listeden çıkarın", ist(11, 13));
+  assert.equal(kg.patronKarari.metin, "3042'yi listeden çıkarın");
+  giden = await (await import("./venom-kopru.js")).kuyruguAl(o.env, "giden");
+  assert.equal(giden.filter((x) => /📌 Patron kararı — Selin: 12 modelin fotoğrafı yok:\n3042'yi listeden çıkarın/.test(x.metin)).length, 2);
+  assert.match(JSON.parse(o.depo.get("venom:bot:kararlar")).at(-1).metin, /^Patron kararı \(Selin/);
+});
+
+test("çözüm kuyruğu: izinsiz bot kartı Merdan + Hemra'ya düğmeleriyle devredilir; basınca bota döner; kimse basmazsa 2 hatırlatma → Patron'a tek kart", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const G = await import("./venom-gorev.js");
+  const K = await import("./venom-kopru.js");
+  const botaGelen = [];
+  o.env.SELIN_W = { dugme: async (data, rid) => { botaGelen.push(data); return true; } };
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3001 taslak onayı", butonlar: [[{ text: "✅ Onayla", callback_data: "so:3001" }, { text: "❌ Reddet", callback_data: "sx:3001" }]], medya: [] });
+  assert.equal(patronaGiden(o).length, 0);
+  const f = { biriktir: async (m) => bilgi.push(m), patronaKart: async (metin, klavye) => kartlar.push({ metin, klavye }), defter: async () => {}, botaDugme: async (rid) => { const k = JSON.parse(o.depo.get(`venom:bot:dugme:${rid}`)); return o.env.SELIN_W.dugme(k.data, rid); } };
+  const bilgi = [], kartlar = [];
+  await G.cozumAdimi(o.env, ist(10, 10), f);
+  const giden = await K.kuyruguAl(o.env, "giden");
+  assert.equal(giden.length, 2);
+  assert.match(giden[0].metin, /^Merdan, Hemra: Selin'den karar bekleyen iş \(Patron'a gelmez, siz karar verin\):\n\n📝 3001 taslak onayı/);
+  const tus = giden[0].klavye.inline_keyboard[0][0];
+  assert.match(tus.callback_data, /^vd:/);
+  assert.match(bilgi[0], /Merdan ve Hemra'ya verdim, 13:00'de kontrol edeceğim/);
+  // Merdan "Onayla" bastı (Sami) → Venom bota "Patron bastı" gibi iletir, iş kapanır
+  await G.gorevDugmesi(o.env, { id: "q", from: { id: 503 }, data: tus.callback_data, message: { chat: { id: 503 }, message_id: 7, text: giden[0].metin, reply_markup: giden[0].klavye } }, o.samiTg);
+  assert.match(o.samiG.find((x) => x.metod === "editMessageText").govde.text, /✔ Merdan seçti: ✅ Onayla/);
+  await G.cozumAdimi(o.env, ist(10, 15), f);
+  assert.deepEqual(botaGelen, ["so:3001"]);
+  assert.equal(JSON.parse(o.depo.get("venom:cozum"))[0].durum, "kapandi");
+  // ikinci kart: kimse basmıyor → 13:00 ve 15:00 hatırlatma, 17:00 → Patron'a TEK kart (orijinal düğmeler)
+  await v.aktarilanGonder(o.env, { bot: "sami", metod: "sendMessage", metin: "📦 3332 ne yapalım?", butonlar: [[{ text: "⏳ Bekle", callback_data: "sq:3332:b" }]], medya: [] });
+  await G.cozumAdimi(o.env, ist(10, 10), f);
+  await K.kuyruguAl(o.env, "giden");
+  for (const [h, n] of [[13, 1], [15, 2]]) { await G.cozumAdimi(o.env, ist(10, h, 1), f); const hk = await K.kuyruguAl(o.env, "giden"); assert.equal(hk.length, 2); assert.match(hk[0].metin, new RegExp(`${n}\\. hatırlatma`)); }
+  await G.cozumAdimi(o.env, ist(10, 17, 2), f);
+  assert.equal(kartlar.length, 1);
+  assert.match(kartlar[0].metin, /🧭 Çözülemedi: 📦 3332 ne yapalım\?\nNe denendi: 10\.11 10:00'de Hemra ve Merdan'a verildi, 2 kez hatırlatıldı; cevap gelmedi\./);
+  assert.match(kartlar[0].klavye.inline_keyboard[0][0].callback_data, /^vr:/);
+  // düğmesiz izinsiz mesaj → özete
+  await v.tg(o.env, "sendMessage", { chat_id: PATRON, text: "ℹ️ bilgi notu" });
+  await G.cozumAdimi(o.env, ist(10, 18), f);
+  assert.ok(bilgi.some((x) => /ℹ️ bilgi notu/.test(x)));
+});
+
+test("bota emir: 10 dk sonra iş defterinden kontrol; iz yoksa bir kez tekrar, olmazsa Claude Code notu; paylaş emri tekrarlanmaz; ilk görevler açılır", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const { defterYaz } = await import("./is-defteri.js");
+  const giden = [];
+  o.env.KEMAL_W = { mesaj: async (m) => { giden.push(m); return true; } };
+  const t = ist(10, 10);
+  await v.aracCalistir({ ...o.env, __izin: "cevap" }, "bota_yaz", { bot: "kemal", metin: "3279 alt yazısını düzelt: renk siyah" }, t);
+  await v.aracCalistir({ ...o.env, __izin: "cevap" }, "bota_yaz", { bot: "kemal", metin: "3280 tekrar paylaş" }, t);
+  await v.aracCalistir({ ...o.env, __izin: "cevap" }, "bota_yaz", { bot: "kemal", metin: "3281 yazısını düzelt" }, t);
+  await defterYaz(o.env, { zaman: t + 120, bot: "kemal", tur: "is", ozet: "3281 kanal yazısı düzeltildi", kod: "3281" });
+  assert.equal(await v.emirAdimi(o.env, t + 5 * 60), 0); // 10 dk dolmadı
+  await v.emirAdimi(o.env, t + 11 * 60);
+  let e = JSON.parse(o.depo.get("venom:emirler"));
+  assert.deepEqual(e.map((x) => [x.kod, x.durum, x.deneme]), [["3279", "bekliyor", 2], ["3280", "olmadi", 1], ["3281", "yapildi", 1]]);
+  assert.equal(giden.filter((m) => /3279/.test(m)).length, 2); // bir kez tekrar
+  assert.equal(giden.filter((m) => /3280/.test(m)).length, 1); // paylaşım tekrarlanmaz
+  await v.emirAdimi(o.env, t + 22 * 60);
+  e = JSON.parse(o.depo.get("venom:emirler"));
+  assert.equal(e[0].durum, "olmadi");
+  const not = JSON.parse(o.depo.get("venom:yetenekIstekleri"));
+  assert.ok(not.some((x) => /Venom emri yapılmadı \(2 deneme.*kemal ← "3279 alt yazısını düzelt/.test(x.istek)));
+  // E) ilk görevler: Selin gönderilemeyen + fotoğrafsız stok + Merdan videoları
+  o.env.SELIN_W = { ozet: async () => ({ takilan: [{ kod: "3047", sebep: "gönderilemedi" }, { kod: "3050", sebep: "bulunamıyor" }], fotoBekleyen: ["3189", "3047"] }) };
+  const sonuc = await v.ilkGorevler(o.env, ist(10, 10));
+  assert.deepEqual(sonuc, ["Selin gönderilemeyen: 2", "fotoğrafsız stok: 1", "video: 4"]);
+  const gl = JSON.parse(o.depo.get("venom:gorevler"));
+  assert.deepEqual(gl.map((g) => g.baslik), ["Selin: 2 modelin fotoğrafı gönderilemedi", "Fotoğrafı olmayan 1 stok modeli", "Merdan'dan 4 model videosu bekleniyor"]);
+  assert.match(gl[0].metin, /^Selin'de 2 modelin fotoğrafı yok \(3047, 3050\)\. Bugün 18:00'e kadar çekilebilenleri gönderin, kalanların sebebini düğmeden seçin\.$/);
+  assert.deepEqual(gl[2].kalemler.map((k) => k.kod), ["907", "3396", "3582", "3618"]);
+  assert.equal(gl[2].kalip, "video");
+  assert.equal(patronaGiden(o).length, 0); // Patron'a hiçbir şey gitmedi
 });

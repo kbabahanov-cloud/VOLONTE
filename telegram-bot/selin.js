@@ -1385,7 +1385,9 @@ export async function selinOzet(env, simdi) {
   const ist = await oku(env, `selin:istek:${gunAnahtari(simdi)}`, null);
   const takilan = Object.entries(modeller).filter(([, m]) => m && ["gonderilemedi", "bulunamiyor", "hazirlanamadi"].includes(m.durum))
     .map(([kod, m]) => ({ kod, durum: m.durum, sebep: [TAKILAN_SEBEP[m.durum], m.not].filter(Boolean).join(" — ") })).slice(0, 40);
-  return { bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan };
+  // 9 Kasım (sert müdür E): fotoğrafı istenip henüz gelmeyen stok modelleri (Venom görevi)
+  const fotoBekleyen = Object.entries(modeller).filter(([, m]) => m && ["istendi", "bekliyor"].includes(m.durum)).map(([kod]) => kod).slice(0, 60);
+  return { bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan, fotoBekleyen };
 }
 export async function venomModelDurumu(env, kod, simdi) {
   kod = String(kod || "").replace(/\D/g, "");

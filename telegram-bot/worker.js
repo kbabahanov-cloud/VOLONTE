@@ -97,6 +97,13 @@ export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
 // TEK KAPI: Patron Venom'da Kemal'in düğmesine bastı → aynı yol (sahte callback, Patron'dan). İç giriş: kemal-giris.js
 export async function venomMesaj(env, metin) {
+  // 9 Kasım (sert müdür B): Venom emri "öner 3279 3280" → bugünün turuna ek öneri (toplu kart, Merdan + Hemra)
+  const on = String(metin || "").match(/^\/?(?:öner|oner)\s+([\d\s,]+)$/i);
+  if (on) {
+    const kodlar = [...new Set(on[1].split(/[\s,]+/).filter((k) => /^\d{3,6}$/.test(k)))].slice(0, 10);
+    if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/oner", { method: "POST", body: JSON.stringify({ kodlar }) })).json();
+    return turEkle(env, kodlar, Math.floor(Date.now() / 1000));
+  }
   const update = sahteMesaj(env, metin);
   if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
   else await guncellemeIsle(update, env);
@@ -2042,7 +2049,7 @@ export function tamamlamaIhtiyaci(tur, simdi) {
 export function topluKart(tur, dalga, simdi) {
   const d = tur.dalgalar.find((x) => x.no === dalga);
   const onay = (tur.onaylar || []).length;
-  const satirlar = [`🆕 Kemal — ek öneri (${d.kodlar.length} model): "Geç" denenlerin yerine. Bugün ${onay}/${GUNLUK_SINIR} onay.`, "Albümdeki sıra ile aynı. Düğmeler: ✅ Paylaş · ✏️ Düzelt (tam önizleme gelir) · ❌ Geç (7 gün önerilmez).", ""];
+  const satirlar = [`🆕 Kemal — ek öneri (${d.kodlar.length} model): ${d.venom ? "Venom'un önerisi" : '"Geç" denenlerin yerine'}. Bugün ${onay}/${GUNLUK_SINIR} onay.`, "Albümdeki sıra ile aynı. Düğmeler: ✅ Paylaş · ✏️ Düzelt (tam önizleme gelir) · ❌ Geç (7 gün önerilmez).", ""];
   const klavye = [];
   d.kodlar.forEach((kod, i) => {
     const o = tur.ogeler[kod];
@@ -2061,6 +2068,22 @@ async function topluGuncelle(env, tur, dalga, simdi) {
   if (!d) return;
   const k = topluKart(tur, dalga, simdi);
   for (const [kisi, id] of d.mesajlar || []) await telegram(env, "editMessageText", { chat_id: kisi, message_id: id, ...k, disable_web_page_preview: true });
+}
+// 9 Kasım (sert müdür B): Venom "şu modeli öner" → bugünün turuna ek dalga (sıradaki çalışmada hazırlanır, toplu kartla gider)
+export async function turEkle(env, kodlar, simdi) {
+  const tur = await env.KAYIT.get("tur", "json");
+  if (!tur || !tur.yeni || tur.durum !== "toplaniyor" || turGunu(tur) !== gunAnahtari(simdi)) return { ok: false, hata: "bugünün turu açık değil" };
+  const site = await siteUrunleriAl(env);
+  const yeni = kodlar.map(String).filter((k) => !tur.ogeler[k] && site.some((u) => String(u.kod) === k));
+  if (!yeni.length) return { ok: false, hata: "bu modeller zaten önerildi ya da sitede yok" };
+  tur.dalgalar = tur.dalgalar || [];
+  if (tur.dalgalar.some((d) => d.durum === "hazirlaniyor")) return { ok: false, hata: "bir ek öneri hazırlanıyor; birkaç dakika sonra tekrar" };
+  const d = { no: tur.dalgalar.length + 1, kodlar: yeni, durum: "hazirlaniyor", zaman: simdi, mesajlar: [], venom: true };
+  tur.dalgalar.push(d);
+  for (const k of yeni) tur.ogeler[k] = { paket: null, mesajlar: [], karar: null, kim: null, dalga: d.no };
+  await env.KAYIT.put("tur", JSON.stringify(tur));
+  await defterIs(env, "kemal", `Venom emri: öneriye eklendi`, { kod: yeni.join(",") });
+  return { ok: true, kodlar: yeni };
 }
 // Her 5 dakikada (yeni tur toplanırken): gerekiyorsa ek modelleri seçer, hazırlar ve tek toplu kartla gönderir. true = iş yapıldı.
 export async function turTamamla(env, simdi) {
@@ -3117,6 +3140,7 @@ export class KatalogDO {
     const simdi = Math.floor(Date.now() / 1000);
     if (yol === "/kemal/ofis-sohbet") return Response.json(await ofisSohbet(env, await istek.json(), simdi));
     if (yol === "/kemal/ozet") return Response.json(await kemalOzet(env, simdi)); // 9 Kasım: Venom'un canlı sorusu
+    if (yol === "/kemal/oner") return Response.json(await turEkle(env, (await istek.json()).kodlar || [], simdi)); // 9 Kasım: Venom emri
     if (yol === "/kemal/guncelleme") await guncellemeIsle(await istek.json(), env);
     else if (yol === "/kemal/cron") {
       await durumKontrol(env);

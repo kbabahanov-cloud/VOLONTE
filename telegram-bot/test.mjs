@@ -2309,3 +2309,16 @@ test("toplu kart metni: renk emin değilse ✏️ uyarısı, karar verilen satı
   assert.match(k.text, /2\. 2 — renk ⚠️ emin değilim \(champagne\) → ✏️ · kanalda hiç paylaşılmadı/);
   assert.deepEqual(k.reply_markup.inline_keyboard.map((r) => r[0].callback_data), ["y1:4:2"]);
 });
+
+test("Venom emri 'öner 3411' → bugünün turuna ek dalga, toplu kartla Merdan + Hemra'ya", async () => {
+  const o = await yeniOrtam();
+  await rotasyon(o.env, ist(8, 0));
+  const { venomMesaj } = await import("./worker.js");
+  const gercek = Date.now; Date.now = () => ist(9) * 1000;
+  let r; try { r = await venomMesaj(o.env, "öner 3411 3403"); } finally { Date.now = gercek; }
+  assert.deepEqual(r, { ok: true, kodlar: ["3411"] }); // 3403 zaten turda
+  o.gonderilen.length = 0;
+  assert.equal(await turTamamla(o.env, ist(9, 1)), true);
+  const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "222");
+  assert.match(kart.govde.text, /ek öneri \(1 model\): Venom'un önerisi/);
+});
