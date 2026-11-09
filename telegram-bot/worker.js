@@ -83,7 +83,9 @@ const BEKLEME_GUN = 30; // bu kadar gündür paylaşılmayan modeller önerilir
 const BEKLESIN_GUN = 7; // "Beklesin" denen model bu kadar gün sonra tekrar sorulur
 export const KALICI = 4102444800; // 2100 yılı: "Sil" denen model bir daha önerilmez
 const SILME_ADIM = 20; // bir çalışmada en fazla bu kadar mesaj silinir (Telegram çağrı sınırı 50)
-const ARALIK_DK = [50, 60]; // tur paylaşımları arası (~saatte bir; 08–20 arası günde 10 rahat sığar)
+const ARALIK_DK = [60, 90]; // 9 Kasım (Patron): paylaşımlar gün içine dengeli, 60–90 dk arayla (arka arkaya yığılmaz)
+// 9 Kasım (Patron): kanal paylaşımları SADECE 09:00–21:00 (İstanbul). Gece onaylanan / hazırlanan paylaşım kuyrukta bekler.
+const YAYIN_BAS = 9, YAYIN_BIT = 21, YAYIN_ARA_DK = 60;
 const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim) sıradakiler
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
@@ -656,14 +658,16 @@ async function dugmeIsle(cq, env) {
     await cevapla("Paylaşılamadı.");
     return duzenle(`⚠️ ${onay.kod} paylaşılamadı: ${sonuc.hata}`);
   }
+  if (sonuc.ertelendi) { await cevapla("Kuyruğa alındı"); return duzenle(ertelemeMetni(sonuc, onay.kod)); } // 9 Kasım: gece / çok sık → sıra
   await cevapla("Paylaşıldı ✅");
   return duzenle(`✅ ${onay.kod} kanalda yeniden paylaşıldı.${sonuc.link ? "\n" + sonuc.link : ""}`);
 }
 
 // Kanala yeniden paylaşımın tek yolu. Bot kendi kanal paylaşımlarını güncelleme
 // olarak almadığı için kod dizinini, günlük sayacı ve /hafta sayısını burada günceller.
-export async function kanaldaPaylas(env, kod, ids, simdi, beden = null) {
+export async function kanaldaPaylas(env, kod, ids, simdi, beden = null, { zamanli = false } = {}) {
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
+  if (!zamanli && !(await yayinKapisi(env, simdi)).acik) return yayiniErtele(env, { kod: String(kod), yeni: false, ids, beden, kim: "onaylı" }, simdi);
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ. Black Rose modeli eski gönderiden kopyalanmaz (eski yazıda VOLONTE imzası kalıyordu: 3148, 3246) →
@@ -867,15 +871,15 @@ export async function rotasyon(env, simdi) {
     if (!siliyor) await yeniTurAdimi(env, simdi);
     return;
   }
-  if (s < SABAH_SAATI || s >= AKSAM_SAATI) return;
+  if (s < SABAH_SAATI || s >= YAYIN_BIT) return;
 
   // Günde tek tur: o günün turu yoksa sabah açılır (yeni düzen: stokta + sitede + 14 gündür paylaşılmamış 10 model).
-  if (!tur || turGunu(tur) < gun) {
+  if ((!tur || turGunu(tur) < gun) && s < AKSAM_SAATI) {
     // ESKI_TUR=1: eski düzen (kanal paylaşımı kopyası; sadece testlerde/geri dönüş için).
     if (!siliyor) await (env.ESKI_TUR === "1" ? turBaslat(env, tur, simdi) : yeniTurBaslat(env, tur, simdi));
     return;
   }
-  const paylasti = await siradakiniPaylas(env, simdi);
+  const paylasti = s >= YAYIN_BAS && s < YAYIN_BIT ? await siradakiniPaylas(env, simdi) : false; // 9 Kasım: sadece 09–21
   // Sonradan eklenen / geç /start yazan kişiye bugünün bekleyen modelleri (istek sınırı için
   // paylaşım ya da silme yapılan çalışmada değil).
   if (!paylasti && !siliyor) await turEksikleriGonder(env, 10);
@@ -1390,8 +1394,9 @@ async function siradakiniPaylas(env, simdi) {
   if (await durdurulduMu(env, "kemal")) return; // 6 Kasım: durdurulduysa sıradaki bekler (silinmez)
   const sonraki = Number((await env.KAYIT.get("sonraki")) || 0);
   if (simdi < sonraki) return;
-  if ((await bugunSayac(env, simdi)) >= GUNLUK_SINIR) return;
-  const [oge] = await kuyrukListesi(env);
+  const liste = await kuyrukListesi(env);
+  const oncelik = liste.find((x) => x.sinirsiz); // 9 Kasım: gece onaylanan / ertelenen önce (günlük 10'a sayılmaz)
+  const oge = oncelik || ((await bugunSayac(env, simdi)) >= GUNLUK_SINIR ? null : liste[0]);
   if (!oge) return;
 
   // Önce sıradan çıkar: görev üst üste çalışırsa aynı model iki kez paylaşılmasın.
@@ -1400,7 +1405,7 @@ async function siradakiniPaylas(env, simdi) {
   const aralik = (en + Math.floor(Math.random() * (ek - en + 1))) * 60;
   await env.KAYIT.put("sonraki", String(simdi + aralik));
 
-  const sonuc = oge.yeni ? await yeniKanalaPaylas(env, oge.paket, simdi) : await kanaldaPaylas(env, oge.kod, oge.ids, simdi, oge.beden);
+  const sonuc = oge.yeni ? await yeniKanalaPaylas(env, oge.paket, simdi, { ...(oge.secenek || {}), zamanli: true }) : await kanaldaPaylas(env, oge.kod, oge.ids, simdi, oge.beden, { zamanli: true });
   if (!sonuc.ok && sonuc.stoksuz) await env.KAYIT.delete("sonraki"); // paylaşılmadı: sıradaki beklemesin
   const ad = kodGoster(oge.kod);
   const metin = sonuc.ok
@@ -1424,8 +1429,8 @@ async function kuyrukGoster(sohbet, env) {
   let hak = kalan;
   const satirlar = kuyruk.map((o, i) => {
     let s = saat(t);
-    if (hak <= 0 || s >= AKSAM_SAATI || s < SABAH_SAATI) {
-      t = sabahBaslangici(t, s >= SABAH_SAATI);
+    if (hak <= 0 || s >= YAYIN_BIT || s < YAYIN_BAS) {
+      t = sabahBaslangici(t, s >= YAYIN_BAS);
       hak = GUNLUK_SINIR;
     }
     const satir = `${i + 1}) ${kodGoster(o.kod)}${kodsuzMu(o.kod) ? ` (${tarihUzun(o.tarih)} tarihli)` : ""} — tahmini ${tarihYaz(t)} (${o.kim} onayladı)`;
@@ -1445,8 +1450,26 @@ async function kuyrukGoster(sohbet, env) {
 function sabahBaslangici(t, yarin) {
   const yerel = t + SAAT_FARKI;
   const gunBasi = yerel - (yerel % 86400) + (yarin ? 86400 : 0);
-  return gunBasi + SABAH_SAATI * 3600 - SAAT_FARKI;
+  return gunBasi + YAYIN_BAS * 3600 - SAAT_FARKI;
 }
+// 9 Kasım: YAYIN KAPISI — şu an kanala paylaşılabilir mi? (09–21 arası, son paylaşımdan ≥ 60 dk, sıradaki zamanı gelmiş)
+export async function yayinKapisi(env, simdi) {
+  if (env.YAYIN_KAPISI === "0") return { acik: true, sonraki: simdi }; // sadece testler (gerçek saatten bağımsız)
+  const s = saat(simdi);
+  const son = Math.max(0, ...Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).map(Number).filter(Boolean));
+  const sonraki = Number((await env.KAYIT.get("sonraki").catch(() => 0)) || 0);
+  const acik = s >= YAYIN_BAS && s < YAYIN_BIT && simdi - son >= YAYIN_ARA_DK * 60 && simdi >= sonraki;
+  let t = Math.max(simdi, son + YAYIN_ARA_DK * 60, sonraki);
+  if (saat(t) >= YAYIN_BIT || saat(t) < YAYIN_BAS) t = sabahBaslangici(t, saat(t) >= YAYIN_BAS);
+  return { acik, sonraki: t };
+}
+// Kapı kapalıyken onaylanan paylaşım sıraya girer (öncelikli; günlük 10 sınırına sayılmaz); 09:00'dan itibaren aralıklı gider
+async function yayiniErtele(env, oge, simdi) {
+  await env.KAYIT.put(`kuyruk:${oge.kod}`, JSON.stringify({ ...oge, tur: true, zaman: simdi, ertelendi: true, sinirsiz: true }));
+  const k = await yayinKapisi(env, simdi);
+  return { ok: true, ertelendi: true, saat: k.sonraki, hata: null };
+}
+export const ertelemeMetni = (p, kod) => `⏳ ${kod}: onaylandı, kuyruğa alındı — kanala ${tarihYaz(p.saat)} civarı gider (paylaşımlar 09:00–21:00, en az ${YAYIN_ARA_DK} dk arayla).`;
 
 async function kuyrukIptal(cq, env) {
   const kod = cq.data.slice(3);
@@ -1932,8 +1955,9 @@ async function siteyeVideoBildir(env, kod, mesajlar, simdi, ek = {}) {
   if (!env.STOK || !mesajlar.length) return;
   await kuyrugaEkle(env, "kanalVideo", { id: `kv-${kod}-${mesajlar[0]}`, kod: String(kod), mesajlar: mesajlar.slice(0, 10), zaman: simdi, ...ek }).catch(() => null);
 }
-export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null } = {}) {
+export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null, zamanli = false, kim = null } = {}) {
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
+  if (!zamanli && !(await yayinKapisi(env, simdi)).acik) return yayiniErtele(env, { kod: String(paket.kod), yeni: true, paket, kim: kim || "onaylı", secenek: { sayma: false, stokKontrol, siteVideo, renk, onayliSorunlar } }, simdi);
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ — yanlışsa yayına çıkmaz. Patron (ya da onaylayan) ⚠️'li kartı gördüyse o sorunlar geçer; yeni çıkan sorun durdurur.
@@ -2078,6 +2102,7 @@ async function repeteDugmesi(cq, env) {
   await cevapla("Paylaşılıyor");
   const p = await yeniKanalaPaylas(env, rec.paket, simdi, { sayma: false, stokKontrol: false, onayliSorunlar: rec.kontrolSorunlar || [] });
   if (rec.tur === "yeni") await yeniModelSay(env, p.ok ? "onay" : "durdu", simdi);
+  if (p.ertelendi) return hepsi(`✅ ${kim} onayladı. ${ertelemeMetni(p, rec.kod)}`);
   return hepsi(p.ok ? `✅ ${kim} onayladı — kanalda paylaşıldı${p.link ? `: ${p.link}` : ""}. Telegram son paylaşım tarihi güncellendi.${p.markaNotu ? ` ⚠️ ${p.markaNotu}` : ""}` : `⚠️ Paylaşılamadı: ${p.hata}`);
 }
 
@@ -2253,13 +2278,14 @@ async function yayinOnayUygula(env, id, islem) {
   const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null, beden: x.beden || null, durum: x.yeniRenk ? "yenirenk" : null });
   const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false, siteVideo: false, renk: x.renk || null, onayliSorunlar: k.kontrolSorunlar || [] }); // site işi aşağıda (pelinSite, dosyadan)
   if (!g.ok) return `⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`;
+  const ertelendi = g.ertelendi ? ` ${ertelemeMetni(g, x.kod)}` : ""; // 9 Kasım: kanal sıraya; site yine şimdi (dosyadan)
   // 5 Kasım: Selin videoyu DOSYADAN (videoUrl) koyar; kanal mesajı yedek. Fotoğraflar: ön + set (hepsi).
   const http = (a) => /^https?:\/\//.test(String(a || ""));
   const videoKanalda = !g.markaNotu || !/video eklenemedi/.test(g.markaNotu);
-  const site = { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: videoKanalda && x.video ? g.ids[0] : null, videoUrl: http(x.video) ? x.video : null,
+  const site = { id: x.id, kod: String(x.kod), kanal: g.kanal, videoMesaj: videoKanalda && x.video && g.ids ? g.ids[0] : null, videoUrl: http(x.video) ? x.video : null,
     foto: http(x.foto) ? x.foto : null, fotolar: [...(x.siteFotolar || []), ...(x.set || []).map((y) => y.url)].filter(http), marka: x.marka || null, renk: x.renk || null, zaman: simdi };
   const s = await kuyrugaEkle(env, "pelinSite", site).then(() => true).catch(() => false);
-  return `📣 ${x.kod}: Patron onayıyla kanalda${g.link ? `: ${g.link}` : ""}. ${s ? `Selin siteye ekliyor (video ${site.videoUrl || site.videoMesaj ? "+" : "yok"}, ${[site.foto, ...site.fotolar].filter(Boolean).length} fotoğraf).` : "⚠️ Selin'e iş iletilemedi — site eklenmedi."}`;
+  return `📣 ${x.kod}: Patron onayıyla ${g.ertelendi ? "kanal kuyruğunda" : "kanalda"}${g.link ? `: ${g.link}` : ""}.${ertelendi} ${s ? `Selin siteye ekliyor (video ${site.videoUrl || site.videoMesaj ? "+" : "yok"}, ${[site.foto, ...site.fotolar].filter(Boolean).length} fotoğraf).` : "⚠️ Selin'e iş iletilemedi — site eklenmedi."}`;
 }
 
 // 5 Kasım (Patron): Patron'un gönderdiği fotoğraf/videoyla paylaşım: fotoğraflara "MARKA · kod" (marka Sami/model kartı), renk model
@@ -2620,6 +2646,7 @@ async function repetePaylasKarari(cq, env) {
   await env.KAYIT.put(`venom:rp:${id}`, JSON.stringify(r), { expirationTtl: 30 * 86400 });
   await cevapla("Paylaşılıyor");
   const p = await yeniKanalaPaylas(env, r.paket, simdi, { sayma: false, stokKontrol: false, onayliSorunlar: r.kontrolSorunlar || [] });
+  if (p.ertelendi) return hepsi(`✅ ${kim} onayladı. ${ertelemeMetni(p, r.kod)}`);
   return hepsi(p.ok ? `✅ ${kim} onayladı — kanalda paylaşıldı (yeni düzen)${p.link ? `: ${p.link}` : ""}.` : `⚠️ Paylaşılamadı: ${p.hata}`);
 }
 

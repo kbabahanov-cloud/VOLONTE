@@ -347,7 +347,7 @@ test("fabrika: satış girişi 10 dk değişmeyince (saat şartı yok) Hemra'ya;
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 555, first_name: "Nuri" }, data: `fc:g:${nid}`, message: { chat: { id: 555 }, message_id: nuri.mesajId || 0 } } }, o.env);
   await g2({ callback_query: { id: "c", from: { id: 555, first_name: "Nuri" }, data: `fc:t:${nid}:3`, message: { chat: { id: 555 }, message_id: 0 } } }, o.env);
-  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "111" && /Nuri · 3183 → 3 günde hazır \(31\.10\.2026\)/.test(x.govde.text)));
+  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "333" && /Nuri · 3183 → 3 günde hazır \(31\.10\.2026\)/.test(x.govde.text)));
   const { siparisTakip, haftalikMetin } = await import("./fabrika.js");
   const tgt = (e, m, gv) => { o.g.push({ metod: m, govde: gv }); return { ok: true, result: { message_id: 9 } }; };
   o.g.length = 0;
@@ -355,7 +355,7 @@ test("fabrika: satış girişi 10 dk değişmeyince (saat şartı yok) Hemra'ya;
   assert.ok(!o.g.some((x) => /hazır olmalıydı/.test(x.govde.text || "")));
   await siparisTakip(o.env, ist(10, 5, 3), tgt);
   const hz = cagri(o.g, "sendMessage").filter((x) => /3183 bugün hazır olmalıydı \(Nuri 31\.10\.2026 demişti\)\. Geldi mi\?/.test(x.govde.text));
-  assert.deepEqual(hz.map((x) => x.govde.chat_id).sort(), ["111", "333"]);
+  assert.deepEqual(hz.map((x) => x.govde.chat_id).sort(), ["333"]); // 9 Kasım: Patron'a değil
   // ertesi gün: 3183 tekrar listede → son istenen hazır öneri + "Önceki gibi iste"; 12 satış → 🔥
   g.length = 0;
   await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", gun: "2026-10-29", kalemler: [{ kod: "3183", adet: 12 }] }) });
@@ -431,7 +431,7 @@ test("fabrika siparişi: model başına mesaj (kanal fotoğrafı + ⚠️ düğm
   // ⚠️ fotoğraf yanlış → Murat + Hemra
   o.g.length = 0;
   await bas(555, `fc:y:${id}`);
-  assert.deepEqual(cagri(o.g, "sendMessage").map((x) => x.govde.chat_id).sort(), ["111", "333"]);
+  assert.deepEqual(cagri(o.g, "sendMessage").map((x) => x.govde.chat_id).sort(), ["333"]); // 9 Kasım: Patron'a değil, Hemra/Merdan'a
   assert.match(cagri(o.g, "sendMessage")[0].govde.text, /3194 fotoğrafı yanlış dendi \(Nuri\)/);
   // yetkisiz kişi basamaz
   o.g.length = 0;
@@ -446,7 +446,7 @@ test("fabrika siparişi: model başına mesaj (kanal fotoğrafı + ⚠️ düğm
   assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /size ait değil/);
   o.g.length = 0;
   await bas(556, `fc:s:${id}:5`);
-  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111").govde.text, /Sinem · 3194 → Repete, 5 gün/);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /Sinem · 3194 → Repete, 5 gün/);
   assert.ok(cagri(o.g, "editMessageCaption").every((x) => /Sinem cevapladı: Repete olacak — 5 gün/.test(x.govde.caption)));
   // süre dolunca bir kez "hazır mı?"
   o.g.length = 0;
@@ -469,7 +469,7 @@ test("fabrika siparişi: model başına mesaj (kanal fotoğrafı + ⚠️ düğm
   o.g.length = 0;
   await bas(555, `fc:b:${id2}`);
   const karar = cagri(o.g, "sendMessage").filter((x) => /fabrika bitti dedi\. Ne yapalım\?/.test(x.govde.text));
-  assert.equal(karar.length, 2);
+  assert.deepEqual(karar.map((x) => x.govde.chat_id), ["333"]); // 9 Kasım: stok kararı Hemra/Merdan'a (Patron'a değil); Patron yine basabilir
   o.g.length = 0;
   await bas(111, `fk:s:${id2}`, 5); // Patron: TEK onay (2 Kasım) — "Emin misiniz?" sorulmaz
   assert.ok(!cagri(o.g, "editMessageText").some((x) => /Emin misiniz/.test(x.govde.text)));

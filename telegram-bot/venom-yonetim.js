@@ -22,7 +22,7 @@ export async function isCevap(env, bot, simdi) {
   if (!x) return null;
   Object.assign(x, { durum: "bitti", bitis: simdi });
   await kaydet(env, "venom:bot:isler", l, 7 * 86400).catch(() => null);
-  return simdi - (x.zaman || 0) < 2 * 3600 ? x : null; // 9 Kasım: 2 saat içindeki iş → bu mesaj Patron'un isteğinin cevabı (hemen gider)
+  return simdi - (x.zaman || 0) < 30 * 60 ? x : null; // 9 Kasım: 30 dk içindeki iş → Patron'un isteğinin cevabı (hemen gider); 13:09 sızıntısı 2 saatlik pencereden
 }
 export async function isHatirlat(env, simdi) {
   const l = await oku(env, "venom:bot:isler", []);

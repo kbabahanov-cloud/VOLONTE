@@ -23,7 +23,7 @@ import { renkBilinir, renkDilleri } from "./site-renk.js";
 import { ORTAK_KURALLAR, BOT_YETENEKLERI, VENOM_KURALLARI, MARKA_KARARLARI } from "./kurallar.js";
 import { isKaydet, isCevap, isHatirlat, bitmeyenIsler, hataAlarmi, hataSayilari, geriAlBul, satisUyarisi, stokBitiyor, paylasilmayanlar, paraOzeti, hatirlaticiEkle, vadesiGelenler, yedekAl, gunA } from "./venom-yonetim.js";
 import { durYaz, durDurumu, _durOnbellekSifirla } from "./durdurma.js";
-import { postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, kategori as postaKategori } from "./venom-posta.js";
+import { postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, PERSONEL_KARTI, kategori as postaKategori } from "./venom-posta.js";
 import { kopruSustu, haftaIci } from "./magaza-saat.js";
 import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
 export { KISILER };
@@ -697,7 +697,7 @@ export async function aktarilanGonder(env, k) {
   const duzenleme = /^edit/.test(String(k.metod || "")) || /^✏️ /.test(String(k.metin || ""));
   const cevapIs = duzenleme ? null : await isCevap(env, k.bot, simdi).catch(() => null); // iş takibi: bot cevap verdi
   if (k.metin) await kaydet(env, "venom:bot:sonBot", { bot: k.bot, zaman: simdi, metin: String(k.metin).slice(0, 400) }, 3600).catch(() => null);
-  const kart = !duzenleme && (k.butonlar || []).some((r) => (r || []).some((b) => b && b.callback_data));
+  const kart = !duzenleme && (k.butonlar || []).some((r) => (r || []).some((b) => b && b.callback_data && !PERSONEL_KARTI.test(b.callback_data)));
   const medya = (k.medya || []).filter((m) => m && m.media).slice(0, 10);
   // 9 Kasım (Patron): POSTANE — anında sadece kart / kritik / Patron'un isteğinin cevabı; gerisi Venom'da birikir
   const karar = await postaKarar(env, { kaynak: k.bot, metin: k.metin || (medya.length ? `📷 ${medya.length} görsel` : ""), tur: cevapIs ? "cevap" : null, kart }, simdi);

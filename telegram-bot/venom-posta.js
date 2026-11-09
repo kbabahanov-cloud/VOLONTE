@@ -74,6 +74,9 @@ export function kuralEslesir(kural, ileti) {
   return Boolean(kural.bot || kural.kategori || (kural.kelimeler && kural.kelimeler.length));
 }
 
+// 9 Kasım: Hemra/Merdan'ın karar kartları (stok sz:, fabrika fk:, Kemal günlük y1/yd/yg, yeni model/repete rp*) Patron'a anında GİTMEZ
+// (kaynakta zaten onlara gidiyor; yine de Venom'a düşerse güvenlik ağı: özete sayı)
+export const PERSONEL_KARTI = /^(sz|fk|y1|yd|yg|rp1|rpd|rpx|rpb):/;
 // ---------- karar ----------
 // ileti: { kaynak, metin, tur?: "kart"|"kritik"|"cevap"|"bilgi"|"rapor", kart?: boolean }
 export function turBul(ileti) {

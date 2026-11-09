@@ -799,7 +799,9 @@ export async function yabanciMesaji(env, m, tg) {
 export const DENEME = "🧪 DENEME – üretim yapmayın\n";
 const SURELER = { 3: "2-3 gün", 5: "5 gün", 7: "1 hafta", 10: "10 gün" };
 const kisiAd = (f) => [f.first_name, f.last_name].filter(Boolean).join(" ") || f.username || String(f.id);
-const bildirilecekler = (env, rec = null) => [...new Set([murat(env), (rec && rec.sorumlu) || sorumlu(env)])];
+// 9 Kasım (Patron): fabrika/repete kararları ve bilgileri Hemra ve Merdan'a; Patron'a sadece akşam özetinde sayı (Venom).
+// Patron'un ya da mağaza hesabının kendi girdiği bilgi Patron'a geri dönmez.
+const bildirilecekler = (env, rec = null) => [...new Set([(rec && rec.sorumlu) || sorumlu(env), sorumlu(env), String(env.BR_SORUMLU || "")].filter((x) => x && !muratMi(env, x)))];
 const renkSeri = (renkler) => renkler.map((r) => `${r.renk} ${r.adet} seri`).join(", ");
 
 export async function denemeKaydi(env, did, adim) {
@@ -1045,7 +1047,7 @@ export async function kararDugmesi(env, cq, tg, simdi) {
   const [, islem, id] = String(cq.data || "").split(":");
   const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const rec0 = await siparisOku(env, String(cq.data || "").split(":")[2]);
-  if (!bildirilecekler(env, rec0).includes(String(cq.from.id))) return cevapla("Bu karar Murat ve liste sorumlusunda.");
+  if (!bildirilecekler(env, rec0).includes(String(cq.from.id)) && !muratMi(env, cq.from.id)) return cevapla("Bu karar Hemra ve Merdan'da.");
   const rec = await siparisOku(env, id);
   if (!rec || rec.durum !== "bitti") return cevapla("Bu karar artık geçerli değil.");
   if (rec.karar && rec.karar !== "beklesin") return cevapla(`${rec.kararVeren} zaten karar verdi.`);

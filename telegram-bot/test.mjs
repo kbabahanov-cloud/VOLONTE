@@ -13,6 +13,7 @@ function sahteOrtam() {
   const env = {
     BOT_TOKEN: "test-token",
     MESAJ_ARASI_MS: 0,
+    YAYIN_KAPISI: "0", // 9 Kasım: yayın kapısı (09–21, 60 dk) ayrı testte; diğer testler gerçek saatten bağımsız
     ESKI_TUR: "1", // eski tur testleri; yeni düzen testleri bunu siler
     ALTYAZI_ACIK: "1",
     WEBHOOK_SECRET: "gizli123",
@@ -492,7 +493,7 @@ test("çok mesajlı silme 5 dakikalık görevle parça parça biter (gece de)", 
   assert.match(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, /45 mesaj kanaldan silindi/);
 });
 
-test("günde tek tur: onaylanan hemen sıraya girer, 50–60 dk arayla paylaşılır; 10 onay beklenmez, yeni tur açılmaz", async () => {
+test("günde tek tur: onaylanan hemen sıraya girer, 60–90 dk arayla paylaşılır; 10 onay beklenmez, yeni tur açılmaz", async () => {
   const o = turOrtami(25);
   await rotasyon(o.env, o.simdi);
   const kodlar10 = turMesajlari(o.gonderilen).map((k) => k.govde.caption.split(" ")[0]);
@@ -510,7 +511,7 @@ test("günde tek tur: onaylanan hemen sıraya girer, 50–60 dk arayla paylaşı
   assert.equal(ilk.length, 1);
   assert.deepEqual(ilk[0].govde.message_ids, [5240, 5241]); // ilk onaylanan (4024), albümün tamamı
   const ara = Number(o.depo.get("sonraki")) - t;
-  assert.ok(ara >= 50 * 60 && ara <= 60 * 60, `aralık ${ara / 60} dk`);
+  assert.ok(ara >= 60 * 60 && ara <= 90 * 60, `aralık ${ara / 60} dk`); // 9 Kasım: 60–90 dk
   assert.equal(turMesajlari(o.gonderilen).length, 0);
   o.gonderilen.length = 0;
   await rotasyon(o.env, t + 45 * 60);
@@ -1501,16 +1502,16 @@ test("✅ Paylaş sıraya alır, renk emin değilse önce ✏️ Düzelt; düzel
   await bas(o.env, 333, p3403); // ikinci basış işlemez
   // Sıra: kanala yeni düzende (albüm + 👆 düğmeli mesaj)
   o.gonderilen.length = 0;
-  await rotasyon(o.env, ist(8, 5));
+  await rotasyon(o.env, ist(9, 5));
   const kanalda = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100);
   assert.equal(kanalda.length, 1);
   assert.match(kanalda[0].govde.media[0].caption, /<b>✅ CODE: 3520<\/b>/);
   assert.equal(kanalda[0].govde.media[1].media, "https://volonte-selin.volonte.workers.dev/v2/3520/0");
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.chat_id === -100 && m.govde.text === "👆 <b>CODE: 3520</b>"));
   const { stokIste } = await import("./stokbot.js");
-  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3520"], ist(8, 5));
-  // 20:00 gün sonu: onaylanan yeni düzen paylaşımı sıradan çıkmaz, ertesi güne kalır
-  await rotasyon(o.env, ist(20, 0));
+  assert.equal((await stokIste(o.env, "/tg-hepsi"))["3520"], ist(9, 5));
+  // 21:00 sonrası (9 Kasım: paylaşım penceresi 09–21): onaylanan paylaşım sıradan çıkmaz, ertesi sabah 09:00'a kalır
+  await rotasyon(o.env, ist(21, 5));
   assert.ok(o.depo.get("kuyruk:3403"));
 });
 
@@ -1524,7 +1525,7 @@ test("❌ Geç 7 gün; stoğu biten model sıradan paylaşılmaz; eski düzen s�
   await bas(o.env, 111, kontrolDugme(o.gonderilen, "222", "3403", "y1"));
   await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]);
   o.gonderilen.length = 0;
-  await rotasyon(o.env, ist(8, 5));
+  await rotasyon(o.env, ist(9, 5));
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0);
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /stoğu bitti/.test(m.govde.text)));
 });
@@ -2129,4 +2130,26 @@ test("9 Kasım: Venom kendi düzeltir — açıklamadaki başka renk (3557 'blac
   const d2 = await kendiDuzelt(o.env, p2, await kanalKontrol(o.env, p2, { simdi: ist(10) }), { simdi: ist(10) });
   assert.equal(d2.paket.en, "y");
   assert.equal(d2.kontrol.ok, false);
+});
+
+test("9 Kasım YAYIN KAPISI: gece (23:00) onaylanan paylaşım kanala gitmez, kuyruğa girer; 09:00'dan itibaren gider; son paylaşımdan 60 dk geçmeden ikinci gitmez", async () => {
+  const { yayinKapisi, yeniKanalaPaylas } = await import("./worker.js");
+  const o = markaOrtami();
+  delete o.env.YAYIN_KAPISI;
+  const gece = ist(23, 1);
+  assert.equal((await yayinKapisi(o.env, gece)).acik, false);
+  const paket = { kod: "3332", marka: "VOLONTE", renkler: [], en: "Dress.", fr: "Robe.", bedenler: "38-40", medya: [{ type: "photo", media: "https://x/1.jpg" }] };
+  const r = await yeniKanalaPaylas(o.env, paket, gece, { sayma: false, stokKontrol: false });
+  assert.equal(r.ertelendi, true);
+  assert.ok(!cagrilar(o.gonderilen, "sendMediaGroup").length && !cagrilar(o.gonderilen, "sendPhoto").some((m) => m.govde.chat_id === -100));
+  const q = JSON.parse(o.depo.get("kuyruk:3332"));
+  assert.equal(q.sinirsiz, true);
+  assert.equal(new Date((r.saat + 3 * 3600) * 1000).toISOString().slice(11, 16), "09:00"); // ertesi sabah 09:00
+  // gündüz: son paylaşım 30 dk önce → kapı kapalı (yığılma yok); 61 dk sonra açık
+  o.depo.set("sonpaylasim", JSON.stringify({ "3100": ist(12, 0) }));
+  o.depo.delete("sonraki");
+  assert.equal((await yayinKapisi(o.env, ist(12, 30))).acik, false);
+  assert.equal((await yayinKapisi(o.env, ist(13, 1))).acik, true);
+  assert.equal((await yayinKapisi(o.env, ist(21, 0))).acik, false);
+  assert.equal((await yayinKapisi(o.env, ist(8, 59))).acik, false);
 });

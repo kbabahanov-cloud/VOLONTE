@@ -9,6 +9,8 @@ import { patronMu, silKuyrugu } from "./sil.js";
 const SAAT_FARKI = 3 * 3600;
 const kimlikler = (yazi) => String(yazi || "").split(",").map((x) => x.trim()).filter(Boolean);
 export const kisiler = (env) => [...new Set([...kimlikler(env.ALLOWED_IDS), ...kimlikler(env.EKIP_IDS)])];
+// 9 Kasım (Patron): günlük stok kararları (🔁 Repete / 🗑 Sil / ⏳ Beklesin) SADECE Hemra ve Merdan'a; Patron hesaplarına gitmez
+export const stokKararcilari = (env) => { const p = kimlikler(env.MURAT_ID); return [...new Set([String(env.FABRIKA_SORUMLU || ""), String(env.BR_SORUMLU || ""), ...kisiler(env).filter((x) => !p.includes(x))].filter((x) => x && !p.includes(x)))]; };
 export const kisiAdi = (from) => [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || "Biri";
 export function tarihYaz(unix) {
   const s = new Date((unix + SAAT_FARKI) * 1000).toISOString();
@@ -44,7 +46,7 @@ export async function stokSorulariGonder(env, simdi, tg) {
     ].join("\n");
     const sec = kanal && modelSecenekleri(s.kod, kodlar, {})[0];
     const mesajlar = [];
-    for (const kisi of kisiler(env)) {
+    for (const kisi of stokKararcilari(env)) {
       let r = sec ? await tg(env, "copyMessage", { chat_id: kisi, from_chat_id: kanal.id, message_id: sec.ids[0], caption: metin, reply_markup: stokKlavye(s.kod) }) : { ok: false };
       let tur = "c";
       if (!r.ok) {
