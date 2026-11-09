@@ -1208,3 +1208,24 @@ test("onay merdiveni: aynı kişide birden çok bekleyen kart → TEK mesajda to
   assert.equal(kg.filter((x) => x.m === "editMessageReplyMarkup").length, 2);
   assert.equal(kg.filter((x) => x.m === "sendMessage").length, 1); // tek mesaj
 });
+
+test("kim, neye, ne cevap verdi: düğme yazısı + kod deftere; kişi cevabı (aldığı → cevapladığı → cevapsız); sayı = liste", async () => {
+  const o = ortam();
+  const D = await import("./is-defteri.js");
+  const V = await import("./venom-defter.js");
+  const v = await import("./venom-bot.js");
+  D._defterOnbellekSifirla();
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }, { id: 501, ad: "Fuat" }]));
+  const e = { STOK: o.env.STOK, KAYIT: o.env.KAYIT };
+  const kart = (chat, metin, cb, mid) => D.defterTg(e, "sami", "copyMessage", { chat_id: chat, caption: metin, reply_markup: { inline_keyboard: [[{ text: "✅ Gelecek", callback_data: `fc:g:${cb}` }, { text: "❌ Bitti, gelmeyecek", callback_data: `fc:b:${cb}` }]] } }, { ok: true, result: { message_id: mid } });
+  await kart(556, "3628 · siyah 10", "3628-a", 1); await kart(501, "3628 · siyah 10", "3628-a", 2);
+  await kart(556, "3571 · bej 4", "3571-b", 3); await kart(556, "3189 · siyah 2", "3189-c", 4); await kart(556, "3189 · beyaz 2", "3189-d", 5);
+  await D.defterKarar(e, "sami", { data: "fc:g:3628-a", from: { id: 556, first_name: "S" }, message: { caption: "3628 · siyah 10", reply_markup: { inline_keyboard: [[{ text: "✅ Gelecek", callback_data: "fc:g:3628-a" }]] } } });
+  await D.defterKarar(e, "sami", { data: "fc:t:3628-a:3", from: { id: 556 }, message: { caption: "3628 · siyah 10", reply_markup: { inline_keyboard: [[{ text: "3 gün", callback_data: "fc:t:3628-a:3" }]] } } });
+  await D.defterKarar(e, "sami", { data: "fc:b:3571-b", from: { id: 556 }, message: { caption: "3571 · bej 4", reply_markup: { inline_keyboard: [[{ text: "❌ Bitti, gelmeyecek", callback_data: "fc:b:3571-b" }]] } } });
+  const c = await v.kisiCevabiMetni(o.env, "Sinem bugün hangi kartlara ne cevap verdi?", Math.floor(Date.now() / 1000));
+  assert.equal(c, "Sinem bugün:\n• Aldığı kartlar (4): 3628, 3571, 3189 (2 kart)\n• Cevapladıkları (2): 3628: Gelecek, 3 gün · 3571: Bitti, gelmeyecek\n• Cevapsız (2): 3189 (2 kart)");
+  assert.match(await v.kisiCevabiMetni(o.env, "Fuat bugün ne cevap verdi?", Math.floor(Date.now() / 1000)), /Fuat bugün:\n• Aldığı kartlar \(1\): 3628\n• Cevapladıkları \(0\): yok\n• Cevapsız \(0\): yok/); // Sinem cevapladı → Fuat'ın kopyası da kapandı
+  assert.equal(await v.kisiCevabiMetni(o.env, "Kemal bugün ne yaptı?", Math.floor(Date.now() / 1000)), null); // bot sorusu ayrı
+  assert.equal(V.kartListe(["3189", "3189", "3000"]), "3189 (2 kart), 3000");
+});

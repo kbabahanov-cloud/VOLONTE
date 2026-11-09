@@ -40,8 +40,21 @@ export async function defterTg(env, bot, metod, govde, sonuc) {
   await defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot: botAd, tur: cbler.length ? "kart" : "mesaj", kime: chat, kod: kodBulDefter(metin), ozet: metin.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(" · ").slice(0, 200) || metod, chat, mesaj: r && !Array.isArray(r) ? r.message_id : null, cbler, deneme: denemeMi(metin) });
 }
 // Düğmeye basıldı: kim, ne → defter + aynı düğmeli kart kapanır
+// 9 Kasım (Patron): cevabın İÇERİĞİ yazılır — "3628: Gelecek", "3628: 3 gün", "3189: Bugün çekerim" (basılan düğmenin yazısı + model kodu)
+export const dugmeYazisi = (t) => String(t || "").replace(/^\d+·\s*/, "").replace(/^\d{3,6}\s+/, "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
+export function cevapIcerigi(cq) {
+  const data = String(cq.data || "");
+  const tus = ((cq.message && cq.message.reply_markup && cq.message.reply_markup.inline_keyboard) || []).flat().find((b) => b && b.callback_data === data);
+  const metin = String((cq.message && (cq.message.text || cq.message.caption)) || "");
+  const kod = (tus && (String(tus.text).match(/(?<!\d)(\d{3,6})(?!\d)/) || [])[1]) || (data.match(/(?<![\d.])(\d{4})(?!\d)/) || [])[1] || kodBulDefter(metin);
+  return { kod: kod || null, ne: tus ? dugmeYazisi(tus.text) : null };
+}
 export async function defterKarar(env, bot, cq) {
   if (!env || !env.STOK || !cq || !cq.data) return;
   const data = String(cq.data);
-  await defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: cq.from && cq.from.id, kod: (data.match(/(\d{4})/) || [])[1] || null, ozet: data.slice(0, 64), cb: data, sonuc: `${(cq.from && cq.from.first_name) || "biri"}: ${data.slice(0, 40)}` });
+  if (data === "vg:-" || data === "kt:-") return; // işlevsiz düğmeler
+  const { kod, ne } = cevapIcerigi(cq);
+  await defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: cq.from && cq.from.id, kod, ozet: ne ? `${kod ? `${kod}: ` : ""}${ne}`.slice(0, 120) : data.slice(0, 64), cb: data, sonuc: `${(cq.from && cq.from.first_name) || "biri"}: ${ne || data.slice(0, 40)}` });
 }
+// Yazıyla verilen cevap (açıklama, fabrika arama notu, düzeltme): kim, hangi model, ne yazdı
+export const defterCevap = (env, bot, kimId, kod, metin) => defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: kimId, kod: kod || null, ozet: `${kod ? `${kod}: ` : ""}"${String(metin || "").replace(/\s+/g, " ").slice(0, 100)}"` });

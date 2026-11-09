@@ -28,6 +28,7 @@ import { kopruSustu, haftaIci } from "./magaza-saat.js";
 import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri } from "./venom-model.js";
 import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
+import { kisiSorusu, kisiCevabi } from "./venom-defter.js";
 import { botSorusu, botCevabi, herkesCevabi, canliSatirlar, takilanlar, hedefSatiri, BOTLAR as DEFTER_BOTLAR, kisiAdi as defterKisi } from "./venom-defter.js";
 import { defterYaz } from "./is-defteri.js";
 import { cevapsizSatiri } from "./kart-tekrar.js";
@@ -206,7 +207,7 @@ export async function emirAdimi(env, simdi) {
 
 // ---------- Araçlar ----------
 const ARACLAR = [
-  { name: "is_defteri", description: "Botların (kemal, selin, pelin, nora, sami) iş defteri: bugün/dün ne yaptılar, hangi kart kimde bekliyor, hatalar. Botlarla ilgili HER soruda önce buna bak; kayıtta yoksa 'bilmiyorum' de, uydurma. Deneme kayıtları sayılmaz.", input_schema: { type: "object", additionalProperties: false, properties: { bot: { type: "string", enum: ["kemal", "selin", "pelin", "nora", "sami", "hepsi"] }, gun: { type: "string", enum: ["bugun", "dun"] } } } },
+  { name: "is_defteri", description: "Botların (kemal, selin, pelin, nora, sami) iş defteri: bugün/dün ne yaptılar, hangi kart kimde bekliyor, hatalar. Botlarla ilgili HER soruda önce buna bak; kayıtta yoksa 'bilmiyorum' de, uydurma. Deneme kayıtları sayılmaz. Kişi sorusu (Hemra, Merdan, Fuat, Sinem, Nuri ne cevap verdi / hangi kartlar) → kisi ver: aldığı kartlar → cevapları → cevapsız. Sayı ile kod listesi uyuşmalı (aynı kod iki kartsa '3189 (2 kart)').", input_schema: { type: "object", additionalProperties: false, properties: { bot: { type: "string", enum: ["kemal", "selin", "pelin", "nora", "sami", "hepsi"] }, gun: { type: "string", enum: ["bugun", "dun"] }, kisi: { type: "string", description: "Hemra, Merdan, Fuat, Sinem, Nuri…" } } } },
   { name: "stok_sorgu", description: "Bir modelin Vegawin stoğu (her mağaza AYRI). Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "bakiye", description: "Black Rose hesaplarının güncel bakiyesi — iki mağaza AYRI (karşılaştırma yok). Onaysız, sadece Patron'a.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "ciro", description: "Yıllık ciro (satış − iade = net) — her mağaza AYRI, toplam yok. Onaysız, sadece Patron'a.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
@@ -258,6 +259,7 @@ export async function aracCalistir(env, ad, g, simdi) {
   }
   if (ad === "is_defteri") {
     const gun = g.gun === "dun" ? "dün" : "bugün";
+    if (g.kisi) return (await kisiCevabiMetni(env, `${g.kisi} ${gun} ne cevap verdi`, simdi)) || `${g.kisi}: kayıtlı kişi değil.`;
     const { satirlar, canlilar } = await defterVerisi(env, simdi, gun);
     return g.bot && g.bot !== "hepsi" ? botCevabi(env, g.bot, satirlar, canlilar[g.bot], { gun }) : herkesCevabi(env, satirlar, canlilar, { gun });
   }
@@ -1161,6 +1163,8 @@ export async function guncelleme(u, env) {
   if (soru && renkBilinir(String(m.text || m.caption || "").trim())) { await env.KAYIT.delete("venom:bot:paylasSoru").catch(() => null); return yaz(env, await paylasBaslat(env, { ...soru, renk: String(m.text || m.caption).trim() }, simdi)); }
   const niyet = paylasNiyeti(m.text || m.caption || metin);
   if (niyet) return hizliPaylas(env, niyet, simdi, m.text || m.caption || metin);
+  const kc = await kisiCevabiMetni(env, metin, simdi).catch(() => null); // 9 Kasım: "Sinem bugün hangi kartlara ne cevap verdi?"
+  if (kc) return yaz(env, kc);
   const bs = botSorusu(metin); // 9 Kasım: "Kemal bugün ne yaptı?" / "herkes ne yaptı?" → iş defterinden (ücretsiz)
   if (bs) { const { satirlar, canlilar } = await defterVerisi(env, simdi, bs.gun); return yaz(env, bs.herkes ? herkesCevabi(env, satirlar, canlilar, { gun: bs.gun }) : bs.botlar.map((b) => botCevabi(env, b, satirlar, canlilar[b], { gun: bs.gun })).join("\n\n")); }
   const mkod = modelSorusuMu(metin); // 9 Kasım: "3629 kaç adet var?" / sesli "36 29" → kısa model kartı (ücretsiz, Claude'a gitmez)
@@ -1192,6 +1196,8 @@ export async function venomCron(env, simdi) {
   try { const t = await oku(env, "venom:kemalPaylasElle", null); if (t) { await env.KAYIT.delete("venom:kemalPaylasElle"); const ok = await kemaleVer(env, { kod: t.kod, renk: t.renk || null, beden: t.beden || null }, t.liste || [], simdi); await yaz({ ...env, __izin: "cevap" }, ok ? `🧭 ${t.kod} ${t.renk || ""} → Kemal'e yeni SON YAYIN kartı hazırlatılıyor (alt yazı ${renkDilleri(t.renk || "") ? renkDilleri(t.renk).en : "model kartı"}${t.beden ? `, ${BEDEN_AD[t.beden]}` : ""}, ${(t.liste || []).length} dosya). Kart Venom kontrolüyle buraya gelecek.` : `❌ ${t.kod}: Kemal'e iş gönderilemedi.`); } } catch (e) { await hataYaz(env, "paylasElle", e); }
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await bildir(env, `🤖 Selin\n${[].concat(rs).join("\n")}`, { simdi, kaynak: "selin", tur: "bilgi" }); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
+  // 9 Kasım (Claude Code): KV "venom:soruDeneme" = ["Sinem bugün …?", …] → defter cevapları KV "venom:soruDenemeSonuc" (Patron'a gitmez)
+  try { const sd = await oku(env, "venom:soruDeneme", null); if (sd) { await env.KAYIT.delete("venom:soruDeneme"); const c = []; for (const q of [].concat(sd).slice(0, 5)) c.push({ soru: q, cevap: (await kisiCevabiMetni(env, q, simdi)) || "(kişi sorusu değil)" }); await kaydet(env, "venom:soruDenemeSonuc", { zaman: simdi, c }, 7200); } } catch (e) { await hataYaz(env, "soruDeneme", e); }
   // 9 Kasım (Claude Code): KV "venom:defterDeneme" → herkes raporu KV "venom:defterDenemeSonuc" (Patron'a gitmez)
   try { if (await env.KAYIT.get("venom:defterDeneme")) { await env.KAYIT.delete("venom:defterDeneme"); const { satirlar, canlilar } = await defterVerisi(env, simdi, "bugün"); await kaydet(env, "venom:defterDenemeSonuc", { zaman: simdi, kayit: satirlar.length, metin: herkesCevabi(env, satirlar, canlilar, { gun: "bugün" }) }, 7200); } } catch (e) { await hataYaz(env, "defterDeneme", e); }
   // 9 Kasım (Claude Code canlı deneme): KV "venom:modelKartDeneme" = "3629" → gerçek kart Patron'a + aynı içerik KV "venom:modelKartDenemeSonuc" (2 saat)
@@ -1423,6 +1429,21 @@ export async function defterVerisi(env, simdi, gun = "bugün") {
   const satirlar = env.STOK ? await stokIste(env, "/isd-oku", { basla, bitis }).catch(() => []) : [];
   const canlilar = gun === "bugün" ? await canlilarAl(env).catch(() => ({})) : {};
   return { satirlar: Array.isArray(satirlar) ? satirlar : [], canlilar };
+}
+// 9 Kasım (Patron): kişi adları — fabrika kişileri (Sinem, Fuat, Nuri, Celal) Sami'nin kaydından; kimlikler sadece eşleşme için
+export async function kisiAdlari(env) {
+  const l = (await oku(env, "sami:fabrikaKisiler", [])) || [];
+  const adlar = {};
+  for (const k of Array.isArray(l) ? l : []) if (k && k.id != null && k.ad) adlar[String(k.id)] = String(k.ad).split(" ")[0];
+  return adlar;
+}
+// "Sinem / Hemra bugün hangi kartlara ne cevap verdi?" → defterden (ücretsiz). null = kişi sorusu değil
+export async function kisiCevabiMetni(env, metin, simdi) {
+  const adlar = await kisiAdlari(env);
+  const ks = kisiSorusu(metin, ["Hemra", "Merdan", "Fuat", "Nuri", ...Object.values(adlar)]);
+  if (!ks) return null;
+  const { satirlar } = await defterVerisi(env, simdi, ks.gun);
+  return kisiCevabi({ ...env, __adlar: adlar }, ks.kisi, satirlar, { gun: ks.gun, gorevler: await oku(env, "venom:gorevler", []) });
 }
 // 09:00 ve 19:30: botların raporu (Venom'da kalır; Patron'a ayrı gitmez — 09:40 / 20:00 özetine girer)
 async function botRaporuAl(env, simdi, ne) {

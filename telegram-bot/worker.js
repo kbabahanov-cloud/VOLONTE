@@ -37,7 +37,7 @@
 //     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
-import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterCevap } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
@@ -2177,6 +2177,7 @@ async function duzeltmeIsle(msg, env) {
   await env.KAYIT.delete(`duzelt:${msg.from.id}`);
   if (bekleyen.no === "r") return repeteDuzelt(msg, env, bekleyen.id, d);
   const { kod } = bekleyen;
+  await defterCevap(env, "kemal", msg.from.id, kod, `düzeltme: ${msg.text}`).catch(() => null); // 9 Kasım: yazılan cevap deftere
   const simdi = Math.floor(Date.now() / 1000);
   const yazi = (await env.KAYIT.get(`yazi:${kod}`, "json")) || {};
   if (d.renkler) Object.assign(yazi, { renkler: d.renkler, renkEmin: d.renkler.length > 0, renkNotu: "" });

@@ -7,12 +7,24 @@ const kimlikler = (s) => String(s || "").split(",").map((x) => x.trim()).filter(
 export function kisiAdi(env, id) {
   const s = String(id || "");
   if (!s) return "biri";
+  if (env.__adlar && env.__adlar[s]) return env.__adlar[s]; // 9 Kasım: fabrika kişileri (Sinem, Fuat, Nuri, Celal) adıyla
   if (kimlikler(env.MURAT_ID).includes(s)) return "Patron";
   if (s === String(env.HEMRA_ID || "") || s === String(env.FABRIKA_SORUMLU || "")) return "Hemra";
   if (s === String(env.BR_SORUMLU || "")) return "Merdan";
-  if (s === String(env.FUAT_ID || "")) return "Fuat";
-  if (s === String(env.NURI_ID || "")) return "Nuri";
+  if (kimlikler(env.FUAT_ID).includes(s)) return "Fuat";
+  if (kimlikler(env.NURI_ID).includes(s)) return "Nuri";
   return "ekip";
+}
+// 9 Kasım (Patron): kart sayısı ile kod listesi HER ZAMAN uyuşur — aynı koda birden çok kart "3189 (2 kart)", kodsuz kartlar ayrı sayılır
+export function kartListe(kodlar) {
+  const say = new Map();
+  for (const k of kodlar) say.set(k || "", (say.get(k || "") || 0) + 1);
+  const parca = [...say].filter(([k]) => k).map(([k, n]) => (n > 1 ? `${k} (${n} kart)` : k));
+  const kodsuz = say.get("") || 0;
+  if (kodsuz) parca.push(`kodsuz ${kodsuz} kart`);
+  const toplam = [...say.values()].reduce((a, b) => a + b, 0);
+  if (toplam !== kodlar.length) throw new Error("kart sayısı uyuşmuyor"); // kendi kontrolü
+  return parca.join(", ");
 }
 const kodListe = (l, n = 8) => { const u = [...new Set(l.filter(Boolean))]; return u.length ? `${u.slice(0, n).join(", ")}${u.length > n ? ` +${u.length - n}` : ""}` : ""; };
 // satirlar: iş defteri kayıtları (deneme hariç); canli: botun canlı özeti (varsa)
@@ -30,8 +42,8 @@ export function botOzeti(env, bot, satirlar, canli = null) {
   for (const [ne, kodlar] of Object.entries(grup).slice(0, 4)) s.push(`${ne}${kodlar.filter(Boolean).length ? `: ${kodListe(kodlar)}` : ""}${kodlar.length > 1 ? ` (${kodlar.length})` : ""}`);
   if (!kart.length && !is.length && mesaj.length) s.push(`${mesaj.length} mesaj gönderdi`);
   // bekleyen kartlar kimde
-  const bekleyen = {}; for (const k of kart.filter((x) => x.durum === "bekliyor")) (bekleyen[kisiAdi(env, k.kime)] = bekleyen[kisiAdi(env, k.kime)] || []).push(k.kod);
-  for (const [a, kodlar] of Object.entries(bekleyen)) s.push(`${a}'da ${kodlar.length} kart bekliyor${kodListe(kodlar) ? `: ${kodListe(kodlar)}` : ""}`);
+  const bekleyen = {}; for (const k of kart.filter((x) => x.durum === "bekliyor")) (bekleyen[kisiAdi(env, k.kime)] = bekleyen[kisiAdi(env, k.kime)] || []).push(kartAdi(k));
+  for (const [a, kodlar] of Object.entries(bekleyen)) s.push(`${a}'da ${kodlar.length} kart bekliyor: ${kartListe(kodlar)}`);
   if (canli) s.push(...canli);
   s.push(hata.length ? `${hata.length} hata: ${String(hata.at(-1).ozet || "").slice(0, 80)}` : "hata yok");
   return s;
@@ -42,6 +54,45 @@ export function hedefSatiri(k, bugun) {
   const t = k.tur && k.tur.gun === bugun ? k.tur : null;
   const z = Math.max(Number(k.bugunKanal) || 0, Number(k.bugunPaylasim) || 0);
   return `📣 Bugün ${t ? t.onay ?? (t.kararlar || {})["paylaş"] ?? 0 : 0} onay / ${(t && t.hedef) || 10}, ${t ? t.gec ?? (t.kararlar || {})["geç"] ?? 0 : 0} geç, ${z} paylaşıldı.`;
+}
+// Kartın adı: görev kartı (çok modelli) "görev", diğerleri model kodu
+export const kartAdi = (k) => (/\|vg:/.test(String(k.cb || "")) ? "görev kartı" : k.kod || null);
+// Cevabın içeriği: yeni kayıtta "3628: Gelecek"; eski kayıtta düğme verisinden çevrilir
+const ESKI_CEVAP = [[/^fc:g:/, "gelecek"], [/^fc:r:/, "repete olacak"], [/^fc:b:/, "bitti, gelmeyecek"], [/^fc:k:/, "geldi"], [/^fc:y:/, "fotoğraf yanlış"], [/^fc:t:.*:(\d+)$/, "$1 gün"],
+  [/^fc:s:/, "süre seçti"], [/^y1:/, "paylaş"], [/^yd:/, "düzelt"], [/^yg:/, "geç"], [/^so:/, "onayladı"], [/^sx:/, "ekleme"], [/^sz:b:/, "beklesin"], [/^sz:r:/, "repete olacak"], [/^sz:s:/, "sil"],
+  [/^vg:.*:c$/, "bugün çekerim"], [/^vg:.*:f$/, "fabrikada"], [/^vg:.*:b$/, "satıldı/bitti"], [/^vg:.*:y$/, "bulamadım"], [/^vg:.*:h$/, "hallettim"], [/^vd:/, "karar verdi"]];
+export function cevapYazi(r, gorevler = []) {
+  const o = String(r.ozet || "");
+  if (!/^[a-z0-9]{1,4}:/i.test(o) || /^\d{3,6}: /.test(o)) return { kod: (o.match(/^(\d{3,6}): /) || [])[1] || r.kod || null, ne: o.replace(/^\d{3,6}: /, "") };
+  const cb = String(r.cb || o);
+  let kod = r.kod || null;
+  const g = cb.match(/^vg:([^:]+):(\d+):/);
+  if (g) { const gv = gorevler.find((x) => x.id === g[1]); kod = (gv && gv.kalemler[Number(g[2])] && gv.kalemler[Number(g[2])].kod) || kod; }
+  for (const [re, ad] of ESKI_CEVAP) { const m = cb.match(re); if (m) return { kod, ne: ad.replace("$1", m[1] || "") }; }
+  return { kod, ne: "düğmeye bastı" };
+}
+// "Sinem bugün hangi kartlara ne cevap verdi?" / "Hemra bugün ne yaptı?" → { kisi, gun }
+export function kisiSorusu(metin, adlar) {
+  const t = String(metin || "").toLocaleLowerCase("tr");
+  if (!/ne\s*yapt|ne\s*cevap|neye\s*cevap|hangi\s*kart|cevap\s*verdi|ne\s*dedi|cevapla/.test(t)) return null;
+  const ad = [...new Set(adlar)].find((a) => new RegExp(`(^|[^a-zçğıöşü])${a.toLocaleLowerCase("tr")}`).test(t));
+  if (!ad) return null;
+  return { kisi: ad, gun: /\bdün\b/.test(t) ? "dün" : "bugün" };
+}
+// Kişinin günü: aldığı kartlar → cevapladıkları (kod: cevap) → cevapsız. Sayı = liste (kartListe).
+export function kisiCevabi(env, kisi, satirlar, { gun = "bugün", gorevler = [] } = {}) {
+  const benim = (id) => kisiAdi(env, id) === kisi;
+  const kartlar = satirlar.filter((x) => x.tur === "kart" && benim(x.kime));
+  const kararlar = satirlar.filter((x) => x.tur === "karar" && benim(x.kime) && !["vg:-", "kt:-"].includes(String(x.cb || x.ozet)));
+  if (!kartlar.length && !kararlar.length) return `${kisi}: ${gun} için kayıt yok — bilmiyorum.`;
+  const cevap = new Map();
+  for (const r of kararlar) { const c = cevapYazi(r, gorevler); const k = c.kod || "kodsuz"; const l = cevap.get(k) || []; if (!l.includes(c.ne)) l.push(c.ne); cevap.set(k, l); }
+  const cevapsiz = kartlar.filter((x) => x.durum === "bekliyor").map(kartAdi);
+  const s = [`${kisi} ${gun}:`];
+  s.push(`• Aldığı kartlar (${kartlar.length}): ${kartlar.length ? kartListe(kartlar.map(kartAdi)) : "yok"}`);
+  s.push(`• Cevapladıkları (${cevap.size}): ${cevap.size ? [...cevap].map(([k, l]) => `${k}: ${l.join(", ")}`).join(" · ") : "yok"}`);
+  s.push(`• Cevapsız (${cevapsiz.length}): ${cevapsiz.length ? kartListe(cevapsiz) : "yok"}`);
+  return s.join("\n");
 }
 // Canlı özetten kısa satırlar (bot hemen cevap verir)
 export function canliSatirlar(bot, c) {

@@ -10,7 +10,7 @@
 //  Fabrika kişileri /start yazınca Murat'a sorulur; eklenen kişi sadece listeyi alır, başka komut kullanamaz.
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
-import { defterIs } from "./is-defteri.js";
+import { defterIs, defterCevap } from "./is-defteri.js";
 import { mesaiMi, isGunuSuresi, GUNCEL } from "./kart-tekrar.js";
 import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
@@ -968,6 +968,7 @@ export async function aramaNotuMesaji(env, m, tg) {
   const kim = kisiAd(m.from);
   rec.aramaNotu = { kim, metin: m.text.slice(0, 400), zaman: Math.floor(Date.now() / 1000) };
   rec.log.push(`📞 ${kim} aradı: ${m.text.slice(0, 200)}`);
+  await defterCevap(env, "sami", m.from.id, rec.kod, `aradı: ${m.text}`).catch(() => null);
   await siparisYaz(env, rec);
   await tg(env, "sendMessage", { chat_id: m.chat.id, text: `✅ ${rec.kod}: fabrikanın cevabı kaydedildi. Duruma göre karttaki düğmeye de basın (Gelecek / Repete / Bitti).` });
   return true;

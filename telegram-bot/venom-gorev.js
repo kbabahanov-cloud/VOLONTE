@@ -7,6 +7,7 @@
 //   (düğmeleri aynen; basınca bota "Patron bastı" gibi döner); 2 hatırlatmadan sonra kimse basmazsa Patron'a TEK kart.
 // Çözüm basamakları: sebebi öğren → kendin düzelt / bota emir → gerekirse görev → takip → deftere yaz → kapat → çözülemeyeni tek kart.
 import { KISILER, kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
+import { defterCevap } from "./is-defteri.js";
 
 const SAAT_FARKI = 3 * 3600;
 const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
@@ -213,9 +214,9 @@ export async function gorevDugmesi(env, cq, tg) {
   }
   const [, gid, n, s] = p;
   if (s === "a") {
-    await kaydet(env, `gorevAciklama:${cq.from.id}`, { gid, i: Number(n), kim, mesaj: [cq.message.chat.id, cq.message.message_id], data: cq.data }, 3600);
-    await cevap("Açıklamayı yazın");
     const satir = (cq.message.reply_markup.inline_keyboard || []).flat().find((b) => b.callback_data === cq.data);
+    await kaydet(env, `gorevAciklama:${cq.from.id}`, { gid, i: Number(n), kim, mesaj: [cq.message.chat.id, cq.message.message_id], data: cq.data, kod: satir ? satir.text.split(" ")[0] : null }, 3600);
+    await cevap("Açıklamayı yazın");
     return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `✏️ ${satir ? satir.text.split(" ")[0] : "Model"} için açıklamayı tek mesajla yazın (1 saat içinde).` });
   }
   await kuyrugaEkle(env, "gorevCevap", { id: `${gid}:${n}:${cq.from.id}`, gid, i: Number(n), s, kim, zaman: simdi });
@@ -248,6 +249,7 @@ export async function gorevAciklamaMesaji(env, m, tg) {
   const b = await oku(env, `gorevAciklama:${m.from.id}`, null);
   if (!b) return false;
   await env.KAYIT.delete(`gorevAciklama:${m.from.id}`).catch(() => null);
+  await defterCevap(env, "sami", m.from.id, b.kod, m.text).catch(() => null); // 9 Kasım: yazılan cevap deftere
   await kuyrugaEkle(env, "gorevCevap", { id: `${b.gid}:${b.i}:${m.from.id}:a`, gid: b.gid, i: b.i, s: "a", not: m.text.slice(0, 300), kim: b.kim, zaman: Math.floor(Date.now() / 1000) });
   await satirIsaretle(env, tg, { chat: { id: b.mesaj[0] }, message_id: b.mesaj[1], reply_markup: null }, b.data, b.kim, m.text);
   await tg(env, "sendMessage", { chat_id: m.chat.id, text: "✅ Açıklama kaydedildi, Venom'a ilettim." });
