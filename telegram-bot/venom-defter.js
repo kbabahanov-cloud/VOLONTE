@@ -78,19 +78,20 @@ export function kisiSorusu(metin, adlar) {
   if (!/ne\s*yapt|ne\s*cevap|neye\s*cevap|hangi\s*kart|cevap\s*verdi|ne\s*dedi|cevapla/.test(t)) return null;
   const ad = [...new Set(adlar)].find((a) => new RegExp(`(^|[^a-zçğıöşü])${a.toLocaleLowerCase("tr")}`).test(t));
   if (!ad) return null;
-  return { kisi: ad, gun: /\bdün\b/.test(t) ? "dün" : "bugün" };
+  return { kisi: ad, gun: donemBul(t) }; // bugün / dün / bu hafta / geçen hafta / bu ay
 }
 // Kişinin günü: aldığı kartlar → cevapladıkları (kod: cevap) → cevapsız. Sayı = liste (kartListe).
 export function kisiCevabi(env, kisi, satirlar, { gun = "bugün", gorevler = [] } = {}) {
   const benim = (id) => kisiAdi(env, id) === kisi;
   const kartlar = satirlar.filter((x) => x.tur === "kart" && benim(x.kime));
   const kararlar = satirlar.filter((x) => x.tur === "karar" && benim(x.kime) && !["vg:-", "kt:-"].includes(String(x.cb || x.ozet)));
-  if (!kartlar.length && !kararlar.length) return `${kisi}: ${gun} için kayıt yok — bilmiyorum.`;
+  if (!kartlar.length && !kararlar.length) return `${kisi}: ${gun} için kayıt yok — bilmiyorum. Baktığım kaynak: iş defteri (1 Kasım'dan; kartlar, düğme cevapları, fabrika cevapları).`;
   const cevap = new Map();
-  for (const r of kararlar) { const c = cevapYazi(r, gorevler); const k = c.kod || "kodsuz"; const l = cevap.get(k) || []; if (!l.includes(c.ne)) l.push(c.ne); cevap.set(k, l); }
+  const DURUM_TR = { sureSoruluyor: "repete olacak (süre soruluyor)", bekliyor: "cevap bekliyor" };
+  for (const r of kararlar) { const c = cevapYazi(r, gorevler); const ne = DURUM_TR[c.ne] || c.ne; const k = c.kod || "kodsuz"; const l = cevap.get(k) || []; if (!l.includes(ne)) l.push(ne); cevap.set(k, l); }
   const cevapsiz = kartlar.filter((x) => x.durum === "bekliyor").map(kartAdi);
   const s = [`${kisi} ${gun}:`];
-  s.push(`• Aldığı kartlar (${kartlar.length}): ${kartlar.length ? kartListe(kartlar.map(kartAdi)) : "yok"}`);
+  s.push(`• Aldığı kartlar (${kartlar.length}): ${kartlar.length ? kartListe(kartlar.map(kartAdi)) : kararlar.some((r) => r.sonuc === "geçmiş kayıt") ? "kart kaydı yok (defter 9 Kasım 15:19'da açıldı; öncesi için sadece cevaplar kayıtlı)" : "yok"}`);
   s.push(`• Cevapladıkları (${cevap.size}): ${cevap.size ? [...cevap].map(([k, l]) => `${k}: ${l.join(", ")}`).join(" · ") : "yok"}`);
   s.push(`• Cevapsız (${cevapsiz.length}): ${cevapsiz.length ? kartListe(cevapsiz) : "yok"}`);
   return s.join("\n");

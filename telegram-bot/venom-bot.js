@@ -1520,6 +1520,7 @@ export async function botRaporuMetni(env, bot, donem, simdi, { parca = null, sat
     const r = await botaSor(env, "pelin", "rapor", { basla, bitis }).catch(() => null);
     const d = await oku(env, "venom:pelinDurum", null);
     if (bot === "pelin") {
+      if (r && r.isler && !r.isler.length) bolum.push({ baslik: "Üretim", satirlar: [`${donem} üretim yok${r.son ? ` — son iş: ${r.son.kod}${r.son.renk ? ` ${r.son.renk}` : ""} (${gg9(r.son.zaman)}, ${r.son.durum})` : ""}`] });
       if (r && r.isler && r.isler.length) bolum.push({ baslik: "Üretim", satirlar: [`${r.isler.length} iş: ${kodSayili(r.isler.map((x) => x.kod))}`, ...r.isler.slice(0, 10).map((x) => `${x.kod}${x.renk ? ` ${x.renk}` : ""}: ${x.durum}${x.maliyet ? ` · ${usd(x.maliyet)}` : ""} (${gg9(x.zaman)})`)] });
       const h = (r && r.harcama) || null;
       bolum.push({ baslik: "Harcama", satirlar: [h ? `bu ay ${usd(h.toplam)} (fal ${usd(h.fal)} · Higgsfield ${usd(h.hf)} · OpenAI ${usd(h.openai)} · Claude ${usd(h.claude)})${h.donem != null && donem !== "bu ay" ? ` · ${donem}: ~${usd(h.donem)}` : ""}` : d && d.ay != null ? `bu ay ${usd(d.ay)}` : null] });
@@ -1585,7 +1586,9 @@ export async function kisiCevabiMetni(env, metin, simdi) {
   const adlar = await kisiAdlari(env);
   const ks = kisiSorusu(metin, ["Hemra", "Merdan", "Fuat", "Nuri", ...Object.values(adlar)]);
   if (!ks) return null;
-  const { satirlar } = await defterVerisi(env, simdi, ks.gun);
+  const [basla, bitis] = donemAraligi(simdi, ks.gun);
+  const k9 = env.STOK ? await stokIste(env, "/isd-oku", { basla, bitis }).catch(() => []) : [];
+  const satirlar = Array.isArray(k9) ? k9 : [];
   return kisiCevabi({ ...env, __adlar: adlar }, ks.kisi, satirlar, { gun: ks.gun, gorevler: await oku(env, "venom:gorevler", []) });
 }
 // 09:00 ve 19:30: botların raporu (Venom'da kalır; Patron'a ayrı gitmez — 09:40 / 20:00 özetine girer)

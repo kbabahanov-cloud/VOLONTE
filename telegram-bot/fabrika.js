@@ -968,7 +968,7 @@ export async function fabrikaDefterDoldur(env, simdi) {
       const rec = await siparisOku(env, id);
       if (!rec || rec.deneme || rec.gonderim < ilk || rec.gonderim >= t0) continue;
       kayit.push({ zaman: rec.gonderim, bot: "sami", tur: "is", kod: rec.kod, ozet: `fabrika siparişi ${rec.kod}: fabrikaya gitti`, sonuc: "geçmiş kayıt" });
-      if (rec.cevaplayan && (rec.cevapZaman || rec.gonderim) < t0) kayit.push({ zaman: rec.cevapZaman || rec.gonderim + 60, bot: "sami", tur: "karar", kime: rec.cevaplayanId || null, kod: rec.kod, ozet: `${rec.kod}: ${{ gelecek: "Gelecek", repete: "Repete olacak", bitti: "Bitti, gelmeyecek", geldi: "Geldi", kapandi: "Kapandı" }[rec.durum] || rec.durum}${rec.hazirGun ? ` (${String(rec.hazirGun).slice(8, 10)}.${String(rec.hazirGun).slice(5, 7)} hazır)` : ""}`, sonuc: "geçmiş kayıt" });
+      if (rec.cevaplayan && (rec.cevapZaman || rec.gonderim) < t0) kayit.push({ zaman: rec.cevapZaman || rec.gonderim + 60, bot: "sami", tur: "karar", kime: rec.cevaplayanId || null, kod: rec.kod, ozet: `${rec.kod}: ${{ gelecek: "Gelecek", repete: "Repete olacak", sureSoruluyor: "Repete olacak (süre soruluyor)", bitti: "Bitti, gelmeyecek", geldi: "Geldi", kapandi: "Kapandı" }[rec.durum] || rec.durum}${rec.hazirGun ? ` (${String(rec.hazirGun).slice(8, 10)}.${String(rec.hazirGun).slice(5, 7)} hazır)` : ""}`, sonuc: "geçmiş kayıt" });
     }
   }
   for (let i = 0; i < kayit.length; i += 40) await stokIste(env, "/isd-yaz", { kayitlar: kayit.slice(i, i + 40) }).catch(() => null);

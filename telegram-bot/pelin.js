@@ -1104,9 +1104,11 @@ export async function venomRapor(env, g) {
 export async function pelinRapor(env, { basla = 0, bitis = 9e9 } = {}, simdi) {
   const liste = await oku(env, "pelin:isler", []);
   const isler = [], bekleyen = [];
+  let son = null;
   for (const id of [...liste].reverse().slice(0, 150)) {
     const x = await oku(env, `pelin:is:${id}`, null);
     if (!x) continue;
+    if (!son || x.zaman > son.zaman) son = { kod: x.kod, renk: x.renk || null, zaman: x.zaman, durum: durumAd(x.durum) };
     if (x.zaman >= basla && x.zaman <= bitis) isler.push({ kod: x.kod, renk: x.renk || null, durum: durumAd(x.durum), maliyet: Number(x.maliyet) || 0, zaman: x.zaman, arac: ARACLAR[x.arac] ? ARACLAR[x.arac].ad : null });
     if ((BEKLEYEN.includes(x.durum) || CALISAN.includes(x.durum)) && simdi - (x.zaman || 0) < 14 * 86400) bekleyen.push(`${x.kod}${x.renk ? ` ${x.renk}` : ""}: ${durumAd(x.durum)}${(x.sorunlar || []).length ? ` (${String(x.sorunlar[0]).slice(0, 80)})` : ""}`);
   }
@@ -1118,11 +1120,11 @@ export async function pelinRapor(env, { basla = 0, bitis = 9e9 } = {}, simdi) {
   const yk = (await env.KAYIT.get("venom:pelinBakiye", "json").catch(() => null)) || {};
   const tahmin = async (t, tur) => { const y = yk[t]; if (!y || y.tutar == null) return null; let h = 0; const aylar = []; for (let m = (y.aylar || [a])[0]; m <= a && aylar.length < 24; m = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 1)).toISOString().slice(0, 7)) aylar.push(m); for (const m of aylar) h += await n(tur === "hf" ? `pelin-hf:${m}` : `uretim-harcama:${m}`); return yuvarla(Number(y.tutar) - h + Number(y.oncekiHarcama || 0)); };
   const hf = await tahmin("hf", "hf"), fal = await tahmin("fal", "fal");
-  const bakiye = { hf, fal, hfNot: hf == null ? "sorgulanamıyor (Higgsfield bakiye vermiyor; yüklediğiniz tutarı söylerseniz tahmin ederim)" : null, falNot: fal == null ? "sorgulanamıyor (yüklediğiniz tutarı söylerseniz tahmin ederim)" : null, tahmini: true };
+  const bakiye = { hf, fal, hfNot: hf == null ? "sorgulanamıyor (Higgsfield bakiye vermiyor; yüklediğiniz tutarı söylerseniz tahmin ederim)" : null, falNot: fal == null ? "sorgulanamıyor (fal anahtarının bakiye okuma yetkisi yok — 403; yüklediğiniz tutarı söylerseniz tahmin ederim)" : null, tahmini: true };
   const ng = await oku(env, "pelin:noraGecmis", []);
   const noraBekleyen = bekleyen.filter((x) => /Nora senaryosu/.test(x)).map((x) => x.split(":")[0]);
   const nora = { bekleyen: noraBekleyen, yazilan: ng.filter((x) => x.zaman >= basla && x.zaman <= bitis).map((x) => x.kod) };
-  return { isler, bekleyen, harcama, bakiye, nora, noraIsler: ng.map((x) => ({ kod: x.kod, zaman: x.zaman, ozet: `${x.kod}: ${String(x.tr || "").slice(0, 60)}` })) };
+  return { isler, son, bekleyen, harcama, bakiye, nora, noraIsler: ng.map((x) => ({ kod: x.kod, zaman: x.zaman, ozet: `${x.kod}: ${String(x.tr || "").slice(0, 60)}` })) };
 }
 export async function venomFotoKaydet(env, g) {
   if (env.PELIN) { const r = await nesne(env).fetch("https://pelin/venom/foto", { method: "POST", body: JSON.stringify(g || {}) }); return r.json().catch(() => ({ ok: false, mesaj: "Pelin cevap vermedi" })); }
