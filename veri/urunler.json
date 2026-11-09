@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3493",
+  "baslik": "Rose Shoulder Metallic Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A fitted evening dress in a shimmering metallic fuchsia finish, with a sweetheart neckline, thin straps and a midi-length column skirt framed by voluminous gathered side panels. An oversized black rose sits on the shoulder, and the draped panels sweep into a soft high-low train. Made for galas, weddings and formal evenings. Produced in Istanbul with careful workmanship.",
+   "fr": "Une robe de soirée ajustée au fini métallisé fuchsia scintillant, avec décolleté cœur, fines bretelles et jupe droite mi-longue encadrée de volumineux panneaux latéraux froncés. Une grande rose noire orne l'épaule, et les drapés forment une traîne asymétrique tout en souplesse. Idéale pour les galas, mariages et soirées habillées. Confectionnée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido de noite ajustado, com acabamento metalizado fúcsia e brilhante, decote coração, alças finas e saia reta midi emoldurada por volumosos painéis laterais franzidos. Uma grande rosa preta adorna o ombro, e os drapeados formam uma cauda assimétrica e fluida. Perfeito para galas, casamentos e noites formais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3493/1.jpg",
+   "galeri/3493/2.jpg",
+   "galeri/3493/3.jpg",
+   "galeri/3493/4.jpg"
+  ],
+  "videolar": [
+   "selin/3493/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-09"
+ },
+ {
   "kod": "3463",
   "baslik": "Pinstripe Contrast Cuff Suit",
   "kategori": "sets",
