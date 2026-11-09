@@ -2013,7 +2013,7 @@ async function pelinSiteIsle(env, isler, simdi, { firlat = false } = {}) {
       yeni[i] = u;
       notlar.push(`${x.kod}: ${f0 - u.fotolar.length} fotoğraf, ${v0 - u.videolar.length} video kaldırıldı`);
     }
-    if (dosyalar.length || notlar.some((n) => !/0 fotoğraf, 0 video|sitede yok/.test(n))) await siteyeYaz(env, dosyalar, yeni, `Selin: eski markasız medya kaldırıldı (${notlar.join("; ")})`);
+    if (dosyalar.length || notlar.some((n) => !/0 fotoğraf, 0 video|sitede yok/.test(n))) await siteyeYaz(env, dosyalar, yeni, `Selin: Patron onaylı medya kaldırma (${notlar.join("; ")})`);
     await yazKV(env, "venom:siteMedyaKaldirSonuc", { zaman: simdi, notlar }, 3 * 86400);
   }
 }

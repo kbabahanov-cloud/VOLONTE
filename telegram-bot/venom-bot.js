@@ -235,7 +235,7 @@ const ARACLAR = [
   { name: "bota_yaz", description: "Patron'un söylediği işi/cevabı ilgili bota Patron yazmış gibi iletir (yazı). Pelin: fotoğraf/video üretimi ve Nora senaryo; Kemal: kanal paylaşımı ve düzeltme metni; Selin: site; Sami: stok/ekip. Bir bot az önce yazı bekleyen bir soru sorduysa (ör. 'nasıl düzelteyim, yazın') Patron'un cevabını AYNEN o bota ilet. Para harcayan işlerde bot kendi maliyet kartını getirir.", input_schema: { type: "object", additionalProperties: false, required: ["bot", "metin"], properties: { bot: { type: "string", enum: ["pelin", "kemal", "selin", "sami"] }, metin: { type: "string" } } } },
   { name: "kanal_paylasimlari", description: "VOLONTE Telegram kanalındaki son paylaşımlar (Venom kanalda yönetici, sadece okur): zaman, model kodu, medya, yazı ve bulunan sorunlar. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" }, gun: { type: "integer", description: "kaç günlük (varsayılan 1)" } } } },
   { name: "site_kontrol", description: "wearvolonte.com'u okur (değiştirmez): model sayısı, fotoğrafsız/videosuz, yapay zekâ (Pelin) fotoğrafı olanlar, stoğu bitmiş ama sitede görünenler; kod verilirse o modelin ayrıntısı. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" } } } },
-  { name: "site_duzelt", description: "Sitede bir düzeltmeyi Selin'e verir (önce Patron onay kartı): yapay zekâ (Pelin) fotoğraflarını kaldır, fotoğrafları yenile (önbellekteki eski görsel), taslağı yeniden hazırla, açıklamadaki renkleri yaz (renkler). Yeni renk Pelin'den siteye eklenince renk satırı kendiliğinden güncellenir; bu araç ilk rengi kaydetmek/düzeltmek için.", input_schema: { type: "object", additionalProperties: false, required: ["kod", "islem"], properties: { kod: { type: "string" }, islem: { type: "string", enum: ["yapay_zeka_fotolarini_kaldir", "fotolari_yenile", "taslak_yeniden", "renkler"] }, renkler: { type: "array", items: { type: "string" }, description: "islem=renkler: modelin sitedeki BÜTÜN renkleri, Türkçe, sırayla (ör. [\"siyah\", \"koyu bordo\"]); açıklamanın sonundaki renk satırı (EN/FR/PT) buna göre yazılır" } } } },
+  { name: "site_duzelt", description: "Sitede bir düzeltmeyi Selin'e verir (önce Patron onay kartı). yapay_zeka_fotolarini_kaldir SADECE Patron açıkça 'yapay zekâ / Pelin fotoğraflarını kaldır' derse — kendin önerme, başka bir isteği buna çevirme (9 Kasım). İşlemler: yapay zekâ (Pelin) fotoğraflarını kaldır, fotoğrafları yenile (önbellekteki eski görsel), taslağı yeniden hazırla, açıklamadaki renkleri yaz (renkler). Yeni renk Pelin'den siteye eklenince renk satırı kendiliğinden güncellenir; bu araç ilk rengi kaydetmek/düzeltmek için.", input_schema: { type: "object", additionalProperties: false, required: ["kod", "islem"], properties: { kod: { type: "string" }, islem: { type: "string", enum: ["yapay_zeka_fotolarini_kaldir", "fotolari_yenile", "taslak_yeniden", "renkler"] }, renkler: { type: "array", items: { type: "string" }, description: "islem=renkler: modelin sitedeki BÜTÜN renkleri, Türkçe, sırayla (ör. [\"siyah\", \"koyu bordo\"]); açıklamanın sonundaki renk satırı (EN/FR/PT) buna göre yazılır" } } } },
   { name: "yetenek_istegi", description: "Venom'un henüz yapamadığı bir iş için Claude Code'a not bırakır (yeni yetenek isteği).", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string" } } } },
 ];
 
@@ -1187,6 +1187,15 @@ export async function guncelleme(u, env) {
   if (soru && renkBilinir(String(m.text || m.caption || "").trim())) { await env.KAYIT.delete("venom:bot:paylasSoru").catch(() => null); return yaz(env, await paylasBaslat(env, { ...soru, renk: String(m.text || m.caption).trim() }, simdi)); }
   const niyet = paylasNiyeti(m.text || m.caption || metin);
   if (niyet) return hizliPaylas(env, niyet, simdi, m.text || m.caption || metin);
+  const yk = yuklemeCoz(metin); // 9 Kasım: "Higgsfield'a 50 $ yükledim" → bakiye takibi
+  if (yk) {
+    const ay9 = gunAnahtari(simdi).slice(0, 7);
+    const harcanan = Number((await env.KAYIT.get(yk.tur === "hf" ? `pelin-hf:${ay9}` : `uretim-harcama:${ay9}`).catch(() => 0)) || 0);
+    const l = (await oku(env, "venom:pelinBakiye", {})) || {};
+    l[yk.tur] = { tutar: yk.tutar, aylar: [ay9], oncekiHarcama: harcanan, zaman: simdi }; // bundan sonra harcanan düşülür
+    await kaydet(env, "venom:pelinBakiye", l);
+    return yaz(env, `Tamam: ${yk.tur === "hf" ? "Higgsfield" : "fal"} bakiyesi ${usd(yk.tutar)} olarak kaydedildi. Harcandıkça düşerim; 5 $ altına inince önceden uyarırım.`);
+  }
   const kc = await kisiCevabiMetni(env, metin, simdi).catch(() => null); // 9 Kasım: "Sinem bugün hangi kartlara ne cevap verdi?"
   if (kc) return yaz(env, kc);
   const bs = botSorusu(metin); // 9 Kasım: "Kemal bugün ne yaptı?" / "herkes ne yaptı?" → iş defterinden (ücretsiz)
@@ -1224,6 +1233,8 @@ export async function venomCron(env, simdi) {
   try { const t = await oku(env, "venom:kemalPaylasElle", null); if (t) { await env.KAYIT.delete("venom:kemalPaylasElle"); const ok = await kemaleVer(env, { kod: t.kod, renk: t.renk || null, beden: t.beden || null }, t.liste || [], simdi); await yaz({ ...env, __izin: "cevap" }, ok ? `🧭 ${t.kod} ${t.renk || ""} → Kemal'e yeni SON YAYIN kartı hazırlatılıyor (alt yazı ${renkDilleri(t.renk || "") ? renkDilleri(t.renk).en : "model kartı"}${t.beden ? `, ${BEDEN_AD[t.beden]}` : ""}, ${(t.liste || []).length} dosya). Kart Venom kontrolüyle buraya gelecek.` : `❌ ${t.kod}: Kemal'e iş gönderilemedi.`); } } catch (e) { await hataYaz(env, "paylasElle", e); }
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await bildir(env, `🤖 Selin\n${[].concat(rs).join("\n")}`, { simdi, kaynak: "selin", tur: "bilgi" }); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
+  // 9 Kasım (Patron): Higgsfield / fal bakiyesi 5 $ altına inince ÖNCEDEN uyar (günde bir; üretim yarıda kalmasın)
+  if (saat(simdi) >= 9 && saat(simdi) < 21 && new Date(simdi * 1000).getUTCMinutes() < 5) { try { await bakiyeUyarisi(env, simdi); } catch (e) { await hataYaz(env, "bakiye", e); } }
   try { if (await env.KAYIT.get("venom:defterDoldur")) { await env.KAYIT.delete("venom:defterDoldur"); await kaydet(env, "venom:defterDoldurSonuc", { zaman: simdi, sonuc: await defterDoldur(env, simdi) }, 7 * 86400); } } catch (e) { await hataYaz(env, "defterDoldur", e); }
   // 9 Kasım (Claude Code): KV "venom:soruDeneme" = ["Sinem bugün …?", …] → defter cevapları KV "venom:soruDenemeSonuc" (Patron'a gitmez)
   try { const sd = await oku(env, "venom:soruDeneme", null); if (sd) { await env.KAYIT.delete("venom:soruDeneme"); const c = []; for (const q of [].concat(sd).slice(0, 5)) { const bs2 = botSorusu(q); c.push({ soru: q, cevap: (await kisiCevabiMetni(env, q, simdi)) || (bs2 ? (await Promise.all(bs2.botlar.map((b) => botRaporuMetni(env, b, bs2.gun, simdi)))).join("\n\n") : "(bot / kişi sorusu değil)") }); } await kaydet(env, "venom:soruDenemeSonuc", { zaman: simdi, c }, 7200); } } catch (e) { await hataYaz(env, "soruDeneme", e); }
@@ -1515,13 +1526,28 @@ export async function botRaporuMetni(env, bot, donem, simdi, { parca = null, sat
       const bek = [...((r && r.bekleyen) || []), ...((d && d.isler) || []).map((x) => `${x.kod} ${x.durum || ""}`.trim())];
       bolum.push({ baslik: "Bekleyen / yarım", satirlar: bek.length ? [...new Set(bek)].slice(0, 10) : ["bekleyen ya da yarım iş yok"] });
       const b = (r && r.bakiye) || {};
-      bolum.push({ baslik: "Bakiye", satirlar: [`Higgsfield: ${b.hf != null ? usd(b.hf) : b.hfNot || "sorgulanamıyor (API bakiye vermiyor)"}`, `fal: ${b.fal != null ? usd(b.fal) : b.falNot || "sorgulanamıyor"}`] });
+      bolum.push({ baslik: "Bakiye", satirlar: [`Higgsfield: ${b.hf != null ? `~${usd(b.hf)} (tahmini: yüklenen − harcanan)${b.hf < 5 ? " ⚠️ 5 $ altı" : ""}` : b.hfNot || "sorgulanamıyor (API bakiye vermiyor)"}`, `fal: ${b.fal != null ? `~${usd(b.fal)} (tahmini)${b.fal < 5 ? " ⚠️ 5 $ altı" : ""}` : b.falNot || "sorgulanamıyor"}`] });
     } else {
       const n = (r && r.nora) || null;
       bolum.push({ baslik: "Senaryolar", satirlar: n ? [n.bekleyen && n.bekleyen.length ? `bekleyen ${n.bekleyen.length}: ${n.bekleyen.join(", ")}` : "bekleyen senaryo yok", n.yazilan && n.yazilan.length ? `yazılan (${donem}) ${n.yazilan.length}: ${n.yazilan.join(", ")}` : null] : [] });
     }
   }
   return raporMetni(bot, donem, bolum, bakilan);
+}
+export const BAKIYE_ESIK = 5;
+async function bakiyeUyarisi(env, simdi) {
+  const r = await botaSor(env, "pelin", "rapor", { basla: simdi, bitis: simdi });
+  const b = (r && r.bakiye) || {};
+  for (const [t, ad] of [["hf", "Higgsfield"], ["fal", "fal"]]) {
+    if (b[t] == null || b[t] >= BAKIYE_ESIK || !(await ilkKezBugun(env, `bakiye:${t}:${gunAnahtari(simdi)}`))) continue;
+    await bildir(env, `⚠️ ${ad} bakiyesi düşük: tahmini ~${usd(b[t])} (5 $ altı). Pelin'in üretimi yarıda kalmasın diye yükleme gerekebilir. Yükleyince bana "${ad}'a 20 $ yükledim" yazın.`, { simdi, tur: "kart", izin: "para" });
+  }
+}
+// "Higgsfield'a 50 $ yükledim" / "fal'a 20 dolar yükledim" → bakiye takibi (yüklenen − o tarihten beri harcanan)
+export function yuklemeCoz(metin) {
+  const t = String(metin || "").toLocaleLowerCase("tr");
+  const m = t.match(/(higgsfield|higgs|fal)\S*\s+(?:hesab\S*\s+)?(\d+(?:[.,]\d+)?)\s*(?:\$|dolar|usd)?\s*(?:yükledim|yüklendi|ekledim|attım)/);
+  return m ? { tur: /^h/.test(m[1]) ? "hf" : "fal", tutar: Number(m[2].replace(",", ".")) } : null;
 }
 // 9 Kasım (Patron): iş defteri 1 Kasım'dan doldurulur (defter açılmadan önceki kayıtlar): Kemal kanal kaydı, Selin site defteri,
 // Pelin üretim arşivi. Fabrika geçmişini Sami kendisi doldurur. Bir kez (KV "venom:defterDoldur"), sonuç "venom:defterDoldurSonuc".

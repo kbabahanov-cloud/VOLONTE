@@ -1249,9 +1249,23 @@ test("tam cevap: dönem (bu hafta) + bütün kaynaklar; Pelin harcama/bekleyen/b
   assert.match(c, /Pelin — bu hafta:\nÜretim:\n• 1 iş: 3627\n• 3627 beyaz: teslim edildi · 1,20 \$ \(10\.11\)/);
   assert.match(c, /Harcama:\n• bu ay 34,79 \$ \(fal 20,00 \$ · Higgsfield 10,00 \$ · OpenAI 3,00 \$ · Claude 1,79 \$\)/);
   assert.match(c, /Bekleyen \/ yarım:\n• 3629 ön fotoğraf onayı bekliyor/);
-  assert.match(c, /Bakiye:\n• Higgsfield: 12,50 \$\n• fal: sorgulanamıyor/);
+  assert.match(c, /Bakiye:\n• Higgsfield: ~12,50 \$ \(tahmini: yüklenen − harcanan\)\n• fal: sorgulanamıyor/);
   assert.match(c, /Nora — bu hafta:\nSenaryolar:\n• bekleyen 1: 3627 senaryo/);
   assert.equal(o.claude.length, 0); // ücretsiz, şablona sıkışmadan
   delete o.env.PELIN_W;
   assert.match(await v.botRaporuMetni(o.env, "nora", "bu hafta", s), /^Nora bu hafta: hiçbir kaynakta kayıt yok — bilmiyorum\. Baktığım kaynaklar: iş defteri, Nora senaryoları\./);
+});
+
+test("bakiye: 'Higgsfield'a 20 $ yükledim' kaydedilir; yüklenen − sonradan harcanan; 5 $ altı önceden uyarı (para izni)", async () => {
+  const v = await import("./venom-bot.js");
+  assert.deepEqual(v.yuklemeCoz("Higgsfield'a 20 $ yükledim"), { tur: "hf", tutar: 20 });
+  assert.deepEqual(v.yuklemeCoz("fal hesabına 12,5 dolar yükledim"), { tur: "fal", tutar: 12.5 });
+  assert.equal(v.yuklemeCoz("Higgsfield ne kadar?"), null);
+  const { pelinRapor } = await import("./pelin.js");
+  const depo = new Map([["pelin-hf:2026-11", "19.363"], ["venom:pelinBakiye", JSON.stringify({ hf: { tutar: 20, aylar: ["2026-11"], oncekiHarcama: 0 } })]]);
+  const env = { KAYIT: { async get(k, t) { const x = depo.get(k); return x == null ? null : t === "json" ? JSON.parse(x) : x; }, async put(k, x) { depo.set(k, x); } } };
+  const r = await pelinRapor(env, {}, Date.UTC(2026, 10, 9, 14) / 1000);
+  assert.equal(r.bakiye.hf, 0.637);
+  assert.equal(r.harcama.toplam, 19.363);
+  assert.match(r.bakiye.falNot, /sorgulanamıyor/);
 });

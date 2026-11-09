@@ -1094,6 +1094,36 @@ export async function venomDugme(env, data, rid) {
 // 5 Kasım (Patron, B5–B6): Patron'un VENOM'a gönderdiği ürün fotoğrafları → Pelin ürün fotoğrafı ("<kod> <renk> ön/arka").
 // Dosyalar Venom'da KV "pelinmedya:<id>" olarak yazılır (30 gün; Pelin /medya/<id> sunar). sadeceBunlar: o rengin eski kayıtları
 // (ör. site fotoğrafları) silinir → üretimde SADECE bunlar. yenidenBaslat: o kod/renk için bekleyen kartlar iptal + "/uret kod renk".
+// 9 Kasım (Patron): Venom "Pelin bu hafta ne yaptı, ne harcadı, bekleyen, bakiye, Nora senaryosu" → Pelin'in KENDİ kayıtlarından
+const DURUM_AD = { iptal: "iptal", vazgecildi: "vazgeçildi", uyari: "sorunlu — kararınızı bekliyor", foto_onay: "ön fotoğraf onayı bekliyor", senaryo_onay: "Nora senaryosu onay bekliyor", onay: "onay bekliyor", kart: "kart bekliyor", onaylandi: "onaylandı", gonderildi: "teslim edildi", hazir: "hazır", kaydedildi: "kaydedildi", hata: "hata", deneme_begenildi: "deneme beğenildi", paket_onay: "paket onayı bekliyor" };
+const durumAd = (d) => DURUM_AD[d] || (CALISAN.includes(d) ? "üretimde" : d);
+export async function venomRapor(env, g) {
+  if (env.PELIN) { const r = await nesne(env).fetch("https://pelin/venom/rapor", { method: "POST", body: JSON.stringify(g || {}) }); return r.json().catch(() => null); }
+  return pelinRapor(env, g || {}, Math.floor(Date.now() / 1000));
+}
+export async function pelinRapor(env, { basla = 0, bitis = 9e9 } = {}, simdi) {
+  const liste = await oku(env, "pelin:isler", []);
+  const isler = [], bekleyen = [];
+  for (const id of [...liste].reverse().slice(0, 150)) {
+    const x = await oku(env, `pelin:is:${id}`, null);
+    if (!x) continue;
+    if (x.zaman >= basla && x.zaman <= bitis) isler.push({ kod: x.kod, renk: x.renk || null, durum: durumAd(x.durum), maliyet: Number(x.maliyet) || 0, zaman: x.zaman, arac: ARACLAR[x.arac] ? ARACLAR[x.arac].ad : null });
+    if ((BEKLEYEN.includes(x.durum) || CALISAN.includes(x.durum)) && simdi - (x.zaman || 0) < 14 * 86400) bekleyen.push(`${x.kod}${x.renk ? ` ${x.renk}` : ""}: ${durumAd(x.durum)}${(x.sorunlar || []).length ? ` (${String(x.sorunlar[0]).slice(0, 80)})` : ""}`);
+  }
+  const a = ay(simdi), n = async (k) => Number((await env.KAYIT.get(k).catch(() => null)) || 0);
+  const harcama = { fal: await n(`uretim-harcama:${a}`), hf: await n(`pelin-hf:${a}`), openai: await n(`pelin-openai:${a}`), claude: await n(`pelin-claude:${a}`) };
+  harcama.toplam = yuvarla(harcama.fal + harcama.hf + harcama.openai + harcama.claude);
+  harcama.donem = yuvarla(isler.reduce((t, x) => t + x.maliyet, 0));
+  // Bakiye: fal / Higgsfield API bakiye vermiyor → yüklenen tutar (KV venom:pelinBakiye, Patron söyler) − o tarihten beri harcanan (tahmin)
+  const yk = (await env.KAYIT.get("venom:pelinBakiye", "json").catch(() => null)) || {};
+  const tahmin = async (t, tur) => { const y = yk[t]; if (!y || y.tutar == null) return null; let h = 0; const aylar = []; for (let m = (y.aylar || [a])[0]; m <= a && aylar.length < 24; m = new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 1)).toISOString().slice(0, 7)) aylar.push(m); for (const m of aylar) h += await n(tur === "hf" ? `pelin-hf:${m}` : `uretim-harcama:${m}`); return yuvarla(Number(y.tutar) - h + Number(y.oncekiHarcama || 0)); };
+  const hf = await tahmin("hf", "hf"), fal = await tahmin("fal", "fal");
+  const bakiye = { hf, fal, hfNot: hf == null ? "sorgulanamıyor (Higgsfield bakiye vermiyor; yüklediğiniz tutarı söylerseniz tahmin ederim)" : null, falNot: fal == null ? "sorgulanamıyor (yüklediğiniz tutarı söylerseniz tahmin ederim)" : null, tahmini: true };
+  const ng = await oku(env, "pelin:noraGecmis", []);
+  const noraBekleyen = bekleyen.filter((x) => /Nora senaryosu/.test(x)).map((x) => x.split(":")[0]);
+  const nora = { bekleyen: noraBekleyen, yazilan: ng.filter((x) => x.zaman >= basla && x.zaman <= bitis).map((x) => x.kod) };
+  return { isler, bekleyen, harcama, bakiye, nora, noraIsler: ng.map((x) => ({ kod: x.kod, zaman: x.zaman, ozet: `${x.kod}: ${String(x.tr || "").slice(0, 60)}` })) };
+}
 export async function venomFotoKaydet(env, g) {
   if (env.PELIN) { const r = await nesne(env).fetch("https://pelin/venom/foto", { method: "POST", body: JSON.stringify(g || {}) }); return r.json().catch(() => ({ ok: false, mesaj: "Pelin cevap vermedi" })); }
   return fotoKaydetVenom(env, g || {}, Math.floor(Date.now() / 1000));
@@ -1139,6 +1169,7 @@ export class PelinDO {
       if (yol === "/guncelleme") await guncelleme(await istek.json(), env);
       else if (yol === "/cron") await pelinCron(env, Math.floor(Date.now() / 1000));
       else if (yol === "/venom/foto") return Response.json(await fotoKaydetVenom(env, await istek.json(), Math.floor(Date.now() / 1000)));
+      else if (yol === "/venom/rapor") return Response.json(await pelinRapor(env, await istek.json(), Math.floor(Date.now() / 1000))); // 9 Kasım
     } catch (e) {
       await this.env.KAYIT.put("pelin:hata", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), yol, hata: String(e && e.message).slice(0, 400) }), { expirationTtl: 7 * 86400 });
     }
@@ -2317,6 +2348,8 @@ async function uretimAdimi(env, is, simdi) {
     const s = await bekle(); if (!s) return;
     if (s.hata) {
       is.hamHata = String(s.hata).slice(0, 400);
+      // 9 Kasım (Patron): "Pelin videoyu kendiliğinden yeniden üretmesin" — zaman aşımında para iade edilmez; yeniden gönderilmez, Patron karar verir
+      if (/3 saatte bitmedi/.test(s.hata)) { is.durum = "uyari"; is.sorunlar = ["video 3 saatte bitmedi — kendiliğinden yeniden üretilmedi (ücret iade edilmemiş olabilir); karar sizde"]; return; }
       const aracSimdi = is.arac || aracSec(secim);
       if (ARACLAR[aracSimdi] && ARACLAR[aracSimdi].hf && !/nsfw/i.test(s.hata) && hfYedegeGec(is, aracSimdi, falHataTr(s.hata), simdi)) return;
       if (/^veo/.test(aracSimdi) && !is.aracYedek) { // Veo bu istemi işleyemedi → aynı kareyle Kling 4.0 (deneme sayılmaz)
