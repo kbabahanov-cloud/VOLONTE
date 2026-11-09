@@ -850,7 +850,7 @@ export function takipZamani(rec) {
 // Tek çağrıda: kayıt + açıklar + takip dizini + haftalık özet (Cloudflare istek sınırı).
 async function siparisYaz(env, rec) {
   if (rec._defter !== rec.durum && !rec.deneme) { rec._defter = rec.durum; await defterIs(env, "sami", `fabrika siparişi ${rec.kod}: ${{ bekliyor: "fabrikaya gitti, cevap bekleniyor", gelecek: "gelecek", repete: "repete olacak", geldi: "geldi", bitti: "fabrika bitti dedi", kapandi: "kapandı" }[rec.durum] || rec.durum}`, { kod: rec.kod }); }
-  const ozet = { kod: rec.kod, beden: rec.beden || null, renkler: rec.renkler, grup: rec.grup, tur: rec.tur, durum: rec.durum, gonderim: rec.gonderim, cevaplayan: rec.cevaplayan || null, hazirGun: rec.hazirGun || null, geldi: rec.geldiZaman || null };
+  const ozet = { kod: rec.kod, beden: rec.beden || null, renkler: rec.renkler, grup: rec.grup, tur: rec.tur, durum: rec.durum, gonderim: rec.gonderim, cevaplayan: rec.cevaplayan || null, cevapZaman: rec.cevapZaman || null, hazirGun: rec.hazirGun || null, geldi: rec.geldiZaman || null };
   await stokIste(env, "/fs-yaz", { rec, kapali: ["geldi", "kapandi"].includes(rec.durum), takip: takipZamani(rec), hafta: rec.deneme ? null : pazartesi(rec.gonderim), ozet });
 }
 async function siparisAc(env, { kod, beden = null, renkler, liste, deneme, fotoKod, tur = "eksik", grup = "fabrika", sorumlu: listeSorumlusu = null }, simdi) {
@@ -956,6 +956,23 @@ export async function ekibeFabrikaBildir(env, recler, tg, simdi) {
   const l = (await env.KAYIT.get("fabrika:ekibe", "json").catch(() => null)) || [];
   await env.KAYIT.put("fabrika:ekibe", JSON.stringify([...l.filter((x) => simdi - x.zaman < 14 * 86400), ...recler.map((r) => ({ id: r.id, kod: r.kod, gonderim: r.gonderim, zaman: simdi }))].slice(-100)), { expirationTtl: 15 * 86400 });
   for (const rec of recler) { rec.log.push("🏭 Merdan ve Hemra'ya bildirildi (fabrika 2 iş günü cevap vermedi)"); await siparisYaz(env, rec); }
+}
+// 9 Kasım (Patron): iş defteri 1 Kasım'dan doldurulur — fabrikaya giden siparişler + kim ne cevap verdi (defter açılmadan önceki)
+export async function fabrikaDefterDoldur(env, simdi) {
+  const ilk = Math.floor(Date.parse("2026-11-01T00:00:00+03:00") / 1000);
+  const mevcut = await stokIste(env, "/isd-oku", { basla: ilk, bitis: simdi }).catch(() => []);
+  const t0 = Math.min(simdi, ...(Array.isArray(mevcut) ? mevcut : []).filter((r) => r.sonuc !== "geçmiş kayıt").map((r) => Number(r.zaman)));
+  const kayit = [];
+  for (const h of ["2026-10-26", "2026-11-02", "2026-11-09"]) {
+    for (const id of Object.keys(await ayarOku(env, `fs:hafta:${h}`, {}))) {
+      const rec = await siparisOku(env, id);
+      if (!rec || rec.deneme || rec.gonderim < ilk || rec.gonderim >= t0) continue;
+      kayit.push({ zaman: rec.gonderim, bot: "sami", tur: "is", kod: rec.kod, ozet: `fabrika siparişi ${rec.kod}: fabrikaya gitti`, sonuc: "geçmiş kayıt" });
+      if (rec.cevaplayan && (rec.cevapZaman || rec.gonderim) < t0) kayit.push({ zaman: rec.cevapZaman || rec.gonderim + 60, bot: "sami", tur: "karar", kime: rec.cevaplayanId || null, kod: rec.kod, ozet: `${rec.kod}: ${{ gelecek: "Gelecek", repete: "Repete olacak", bitti: "Bitti, gelmeyecek", geldi: "Geldi", kapandi: "Kapandı" }[rec.durum] || rec.durum}${rec.hazirGun ? ` (${String(rec.hazirGun).slice(8, 10)}.${String(rec.hazirGun).slice(5, 7)} hazır)` : ""}`, sonuc: "geçmiş kayıt" });
+    }
+  }
+  for (let i = 0; i < kayit.length; i += 40) await stokIste(env, "/isd-yaz", { kayitlar: kayit.slice(i, i + 40) }).catch(() => null);
+  return kayit.length;
 }
 // [📞 Aradım, şu cevap geldi] → yazdığı cevap siparişe not olarak düşer
 export async function aramaNotuMesaji(env, m, tg) {
@@ -1200,6 +1217,7 @@ export async function siparisTakip(env, simdi, tg) {
     await ayarYaz(env, "fs:takipGoc", 1);
   }
   const takip = await ayarOku(env, "fs:takip", {});
+  if (!(await ayarOku(env, "fs:defterDoldur", null))) { await ayarYaz(env, "fs:defterDoldur", 1); await fabrikaDefterDoldur(env, simdi).catch(() => null); }
   if (!(await ayarOku(env, "fs:merdivenGoc", null))) { // 9 Kasım: bir kez — açık siparişler yeni merdivene (takip zamanları yeniden)
     for (const id of (await ayarOku(env, "fs:acik", [])).slice(0, 120)) { const r = await siparisOku(env, id); if (r) await siparisYaz(env, r); }
     await ayarYaz(env, "fs:merdivenGoc", 1);

@@ -1,5 +1,6 @@
 // VENOM = MÜDÜR (9 Kasım, Patron): "Kemal bugün ne yaptı?", "herkes bugün ne yaptı?" → İŞ DEFTERİNDEN kesin cevap.
 // Kayıtta yoksa "bilmiyorum" (uydurma yok). Deneme/test kayıtları sayılmaz. Dil: kısa, insan dili, teknik terim ve tablo yok.
+import { donemBul } from "./venom-rapor.js";
 export const BOTLAR = ["kemal", "selin", "pelin", "nora", "sami"];
 const BOT_AD = { kemal: "Kemal", selin: "Selin", pelin: "Pelin", nora: "Nora", sami: "Sami" };
 const kimlikler = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -124,8 +125,8 @@ export function herkesCevabi(env, satirlar, canlilar, { gun = "bugün" } = {}) {
 // "Kemal bugün ne yaptı?" / "herkes ne yaptı" / "Selin dün ne yaptı" → { botlar, gun }
 export function botSorusu(metin) {
   const t = String(metin || "").toLocaleLowerCase("tr");
-  if (!/ne\s*yapt|neler\s*yapt|ne\s*yapıyor|ne\s*durumda|rapor\s*ver|ne\s*iş\s*yapt|neler\s*oldu/.test(t)) return null;
-  const gun = /\bdün\b/.test(t) ? "dün" : "bugün";
+  if (!/ne\s*yapt|neler\s*yapt|ne\s*yapıyor|ne\s*durumda|rapor\s*ver|ne\s*iş\s*yapt|neler\s*oldu|harca|bakiye|bekleyen|yarım\s*kal|senaryo/.test(t)) return null;
+  const gun = donemBul(t); // 9 Kasım: bugün / dün / bu hafta / geçen hafta / bu ay
   if (/herkes|botlar|hepsi|tüm\s*bot|bütün\s*bot|ekip/.test(t)) return { botlar: BOTLAR, gun, herkes: true };
   const b = BOTLAR.filter((x) => new RegExp(`(^|[^a-zçğıöşü])${x}`).test(t));
   return b.length ? { botlar: b, gun, herkes: false } : null;

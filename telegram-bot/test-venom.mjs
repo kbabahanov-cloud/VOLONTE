@@ -954,14 +954,14 @@ test("9 Kasım İŞ DEFTERİ: bot kartı/kararı deftere yazılır; 'Kemal bugü
   try {
     await yazi(o, PATRON, "Kemal bugün ne yaptı?");
     const c = patronaGiden(o).at(-1).govde.text;
-    assert.match(c, /^Kemal bugün:/);
+    assert.match(c, /^Kemal — bugün:\nİş defteri:/);
     assert.match(c, /3 kart \(Hemra 2, Merdan 1\), 2 tanesi cevaplandı/); // aynı düğmeli kart iki kişiye: ilk basan ikisini de kapatır
     assert.match(c, /kanala paylaşıldı: 3539/);
     assert.match(c, /Hemra'da 1 kart bekliyor: 3510/);
     assert.ok(!/9999/.test(c)); // deneme sayılmaz
     assert.equal(o.claude.length, 0); // ücretsiz
     await yazi(o, PATRON, "Nora bugün ne yaptı?");
-    assert.match(patronaGiden(o).at(-1).govde.text, /Nora: bugün için kayıt yok — bilmiyorum\./);
+    assert.match(patronaGiden(o).at(-1).govde.text, /Nora — bugün:\nSenaryolar:|Nora bugün: hiçbir kaynakta kayıt yok — bilmiyorum\. Baktığım kaynaklar: iş defteri, Nora senaryoları\./);
     await yazi(o, PATRON, "herkes bugün ne yaptı?");
     const h = patronaGiden(o).at(-1).govde.text.split("\n");
     assert.equal(h[0], "Bugün herkes:");
@@ -1228,4 +1228,30 @@ test("kim, neye, ne cevap verdi: düğme yazısı + kod deftere; kişi cevabı (
   assert.match(await v.kisiCevabiMetni(o.env, "Fuat bugün ne cevap verdi?", Math.floor(Date.now() / 1000)), /Fuat bugün:\n• Aldığı kartlar \(1\): 3628\n• Cevapladıkları \(0\): yok\n• Cevapsız \(0\): yok/); // Sinem cevapladı → Fuat'ın kopyası da kapandı
   assert.equal(await v.kisiCevabiMetni(o.env, "Kemal bugün ne yaptı?", Math.floor(Date.now() / 1000)), null); // bot sorusu ayrı
   assert.equal(V.kartListe(["3189", "3189", "3000"]), "3189 (2 kart), 3000");
+});
+
+test("tam cevap: dönem (bu hafta) + bütün kaynaklar; Pelin harcama/bekleyen/bakiye; Nora senaryo; hiçbir kaynak yoksa baktıklarını söyler", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const R = await import("./venom-rapor.js");
+  const s = ist(11, 18); // çarşamba 11 Kasım
+  assert.deepEqual(R.donemAraligi(s, "bu hafta"), [ist(9, 0), s]);
+  assert.deepEqual(R.donemAraligi(s, "bu ay"), [Date.UTC(2026, 10, 1, -3) / 1000, s]);
+  assert.equal(R.donemBul("Pelin bu hafta ne yaptı?"), "bu hafta");
+  o.depo.set("kodlar", JSON.stringify({ 3627: [{ ids: [1], tarih: ist(10, 11), album: "a" }], 3539: [{ ids: [2], tarih: ist(2, 11) }] }));
+  const k = await v.botRaporuMetni(o.env, "kemal", "bu hafta", s);
+  assert.match(k, /^Kemal — bu hafta:\nKanal:\n• 1 paylaşım: 3627/);
+  assert.match(k, /\(Kaynaklar: iş defteri, kanal kaydı\)/);
+  o.env.PELIN_W = { rapor: async () => ({ isler: [{ kod: "3627", renk: "beyaz", durum: "teslim edildi", maliyet: 1.2, zaman: ist(10, 12) }], harcama: { toplam: 34.79, fal: 20, hf: 10, openai: 3, claude: 1.79 }, bekleyen: ["3629 ön fotoğraf onayı bekliyor"], bakiye: { hf: 12.5, falNot: "sorgulanamıyor (fal bakiye vermiyor)" }, nora: { bekleyen: ["3627 senaryo"], yazilan: [] } }) };
+  const soru = "Pelin bu hafta ne yaptı? Hangi modeller, ne harcadı, bekleyen ya da yarım kalan iş var mı? Higgsfield ve fal bakiyesi ne kadar? Nora'nın bekleyen senaryosu var mı?";
+  await yazi(o, PATRON, soru);
+  const c = patronaGiden(o).at(-1).govde.text;
+  assert.match(c, /Pelin — bu hafta:\nÜretim:\n• 1 iş: 3627\n• 3627 beyaz: teslim edildi · 1,20 \$ \(10\.11\)/);
+  assert.match(c, /Harcama:\n• bu ay 34,79 \$ \(fal 20,00 \$ · Higgsfield 10,00 \$ · OpenAI 3,00 \$ · Claude 1,79 \$\)/);
+  assert.match(c, /Bekleyen \/ yarım:\n• 3629 ön fotoğraf onayı bekliyor/);
+  assert.match(c, /Bakiye:\n• Higgsfield: 12,50 \$\n• fal: sorgulanamıyor/);
+  assert.match(c, /Nora — bu hafta:\nSenaryolar:\n• bekleyen 1: 3627 senaryo/);
+  assert.equal(o.claude.length, 0); // ücretsiz, şablona sıkışmadan
+  delete o.env.PELIN_W;
+  assert.match(await v.botRaporuMetni(o.env, "nora", "bu hafta", s), /^Nora bu hafta: hiçbir kaynakta kayıt yok — bilmiyorum\. Baktığım kaynaklar: iş defteri, Nora senaryoları\./);
 });
