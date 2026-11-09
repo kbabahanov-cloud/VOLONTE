@@ -1492,7 +1492,8 @@ export async function kanalVideo(env, t, aralik = null) {
 // fiyat YOK. Önizleme Murat'a ve Hemra'ya: ✅ Paylaş / ✏️ Düzelt / ❌ Geç. Onaylanan sıraya girer (08–20, 50–60 dk arayla,
 // günde en fazla 10; akşam onaylananlar ertesi güne kalır, stoğu biterse paylaşılmaz). Eski paylaşımlara dokunulmaz.
 
-const onizleyenler = (env) => [...new Set([muratId(env), hemraId(env)])];
+// 9 Kasım (Patron): günlük "Paylaş / Düzelt / Geç" kartları da SADECE Merdan ve Hemra'ya (önceden Murat + Hemra'ydı)
+const onizleyenler = (env) => yeniModelAlicilar(env);
 const GEC_GUN = 7; // "❌ Geç" denen model bu kadar gün sonra yeniden önerilir
 const HAZIRLIK_PARTI = 3; // bir çalışmada yapay zekâyla hazırlanan model yazısı
 
@@ -1887,10 +1888,41 @@ export async function akisDenemesi(env, simdi = Math.floor(Date.now() / 1000)) {
   return { ok: k.ok || tekrar, bilgi: `akış denemesi: ${u.kod} kartı hazırlandı, ${k.ok || tekrar ? "kontrol tamam" : k.satir} (gönderilmedi)`, sorun: k.ok || tekrar ? null : `akış denemesi ${u.kod}: ${k.sorunlar.join("; ")}` };
 }
 // 6 Kasım (Patron): Venom kontrolü durdurduysa Patron'a kısa sebep (tek kapı açıkken Venom'dan gelir)
+// 9 Kasım (Patron): düzeltemediğim (marka belirsiz, fotoğraf yok…) Hemra'ya ve Merdan'a gider; Patron'a sadece akşam sayısı.
+// "Bugün zaten paylaşıldı" bir iş değildir: kimseye mesaj yok, sadece kayıt.
 async function kontrolBildir(env, kod, kontrol, simdi) {
   await engelKaydet(env, "kemal", kod, kontrol.sorunlar, simdi);
-  const patron = String(env.MURAT_ID || "").split(",")[0].trim();
-  if (patron) await telegram(env, "sendMessage", { chat_id: patron, text: `🛑 Venom kontrolü — ${kod} kanala GİTMEDİ:\n• ${kontrol.sorunlar.join("\n• ")}` }).catch(() => null);
+  const is = kontrol.sorunlar.filter((x) => !/zaten paylaşıldı/.test(x));
+  if (!is.length) return;
+  for (const kisi of yeniModelAlicilar(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: `🛑 Venom kontrolü — ${kod} kanala GİTMEDİ (kendim düzeltemedim):\n• ${is.join("\n• ")}\nDüzeltip Kemal'e "${kod} paylaş" yazabilirsiniz.` }).catch(() => null);
+}
+// 9 Kasım (Patron: "Venom hatayı kendisi düzeltsin"): açıklamadaki başka renk kelimesi çıkarılır, eksik EN/FR siteden tamamlanır,
+// yapay zekâ kolajı/infografik albümden çıkarılır → kontrol bir kez daha. Düzeltilenler KV "venom:kontrol:duzeltme" (akşam sayısı).
+const KOLAJ_AD = /kolaj|collage|infografik|infographic|^detay\s*\d+$/i;
+export async function kendiDuzelt(env, paket, kontrol, { renk = null, simdi = Math.floor(Date.now() / 1000) } = {}) {
+  if (!kontrol || kontrol.ok) return { paket, kontrol, notlar: [] };
+  let p = { ...paket };
+  const notlar = [], var_ = (re) => kontrol.sorunlar.some((x) => re.test(x));
+  if (var_(/EN\/FR açıklama eksik/)) {
+    const u = (await siteUrunleriAl(env).catch(() => [])).find((x) => String(x.kod) === String(p.kod));
+    const ilk = (t) => { const x = String(t || "").split(/(?<=[.!?])\s+/)[0].trim(); return x.length > 160 ? `${x.slice(0, 157).replace(/\s+\S*$/, "")}…` : x; };
+    const en = p.en || (u && u.aciklama && ilk(u.aciklama.en)) || "", fr = p.fr || (u && u.aciklama && ilk(u.aciklama.fr)) || "";
+    if (en !== p.en || fr !== p.fr) { p = { ...p, en, fr }; notlar.push("eksik EN/FR siteden tamamlandı"); }
+  }
+  if (var_(/başka renk geçiyor/) || (notlar.length && (p.renkler || []).length)) {
+    const en = baskaRenkSil(p.en, p.renkler, "en"), fr = baskaRenkSil(p.fr, p.renkler, "fr");
+    if (en !== p.en || fr !== p.fr) { p = { ...p, en, fr }; notlar.push("açıklamadaki başka renk kelimesi çıkarıldı"); }
+  }
+  if (var_(/kolaj/)) {
+    const adlar = p.adlar || [];
+    const medya = (p.medya || []).filter((m) => !KOLAJ_AD.test(String(m.media || "")) && !KOLAJ_AD.test(String(m.ad || "")));
+    if (medya.length !== (p.medya || []).length || adlar.some((a) => KOLAJ_AD.test(a))) { p = { ...p, medya, adlar: adlar.filter((a) => !KOLAJ_AD.test(a)) }; notlar.push("yapay zekâ kolajı albümden çıkarıldı"); }
+  }
+  if (!notlar.length) return { paket, kontrol, notlar };
+  const k2 = await kanalKontrol(env, p, { renk, simdi });
+  const l = (await env.KAYIT.get("venom:kontrol:duzeltme", "json").catch(() => null)) || [];
+  await env.KAYIT.put("venom:kontrol:duzeltme", JSON.stringify([...l, { zaman: simdi, kod: String(p.kod), notlar, ok: k2.ok }].slice(-60)), { expirationTtl: 7 * 86400 }).catch(() => null);
+  return { paket: p, kontrol: { ...k2, satir: k2.ok ? `✅ Venom kontrolü tamam (kendim düzelttim: ${notlar.join("; ")})` : k2.satir }, notlar };
 }
 // Sıradaki yeni düzen paylaşımı: stok hâlâ varsa kanala gönderir; tarih Sami'nin deposuna (tablo) yazılır.
 // sayma: günlük 10 paylaşım sayacına dahil mi (repete paylaşımı dahil değil); stokKontrol: repete'de Vegawin gecikebilir → kapalı.
@@ -1905,7 +1937,10 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ — yanlışsa yayına çıkmaz. Patron (ya da onaylayan) ⚠️'li kartı gördüyse o sorunlar geçer; yeni çıkan sorun durdurur.
-  const kontrol = await kanalKontrol(env, paket, { renk, simdi });
+  const ilkKontrol = await kanalKontrol(env, paket, { renk, simdi });
+  const d = await kendiDuzelt(env, paket, ilkKontrol, { renk, simdi }); // 9 Kasım: düzeltilebileni kendisi düzeltir
+  paket = d.paket;
+  const kontrol = d.kontrol;
   const yeniSorun = kontrol.sorunlar.filter((x) => !(onayliSorunlar || []).some((y) => y.split(":")[0] === x.split(":")[0] || (/zaten paylaşıldı/.test(x) && /zaten paylaşıldı/.test(y))));
   if (yeniSorun.length) { await kontrolBildir(env, paket.kod, { ...kontrol, sorunlar: yeniSorun }, simdi); return { ok: false, hata: `Venom kontrolü: ${yeniSorun.join("; ")}`, kontrol: true }; }
   if (env.STOK && stokKontrol) {
@@ -1959,7 +1994,7 @@ export function repeteAyikla(metin) {
 }
 
 const repeteKlavye = (id) => ({ inline_keyboard: [[{ text: "✅ Onayla", callback_data: `rp1:${id}` }, { text: "✏️ Düzelt", callback_data: `rpd:${id}` }, { text: "❌ İptal", callback_data: `rpx:${id}` }]] });
-const repeteAlicilar = (env, kim) => [...new Set([hemraId(env), String(kim)])];
+const repeteAlicilar = (env, kim) => (kimlikler(env.MURAT_ID).includes(String(kim)) ? yeniModelAlicilar(env) : [...new Set([hemraId(env), String(kim)])]);
 // 6 Kasım (Patron): Selin'in siteye eklediği modellerin "kanalda paylaşayım mı?" kartı SADECE Merdan ve Hemra'ya
 const yeniModelAlicilar = (env) => { const patronlar = kimlikler(env.MURAT_ID); return [...new Set([...kimlikler(env.ALLOWED_IDS).filter((x) => !patronlar.includes(x)), hemraId(env)].filter(Boolean))]; };
 const yeniKlavye4 = (id) => ({ inline_keyboard: [[{ text: "✅ Onayla", callback_data: `rp1:${id}` }, { text: "✏️ Düzelt", callback_data: `rpd:${id}` }], [{ text: "⏭️ Geç", callback_data: `rpx:${id}` }, { text: "⏳ Beklesin", callback_data: `rpb:${id}` }]] });
@@ -2126,7 +2161,9 @@ export async function yeniModelIsleri(env, simdi) {
     }
     const st = env.STOK ? (await stokIste(env, "/toplu", { kodlar: [String(r.kod)] }).catch(() => ({})))[String(r.kod)] : null;
     const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-    const kontrol = await kanalKontrol(env, paket, { simdi }).catch(() => null);
+    const d0 = await kendiDuzelt(env, paket, await kanalKontrol(env, paket, { simdi }).catch(() => null), { simdi }).catch(() => ({ paket, kontrol: null }));
+    paket = d0.paket;
+    const kontrol = d0.kontrol;
     const rec = { id, tur: "yeni", kod: String(r.kod), paket, kim: r.kim || "Selin", alicilar: yeniModelAlicilar(env), kaynak: "site", durum: null, zaman: simdi, kontrolSatir: kontrol ? kontrol.satir : null, kontrolSorunlar: kontrol ? kontrol.sorunlar : [], bekleme: r.bekleme || 0,
       stokUyari: !st ? "Vegawin'de bu modelin stok kaydı henüz görünmüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : !(st.toplam > 0) ? "Vegawin'de stok henüz 0 görünüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : null };
     await repeteOnizlemeGonder(env, rec);
@@ -2156,7 +2193,7 @@ export async function pelinKanalAdimi(env, simdi) {
   }
 }
 
-const pelinMedya = (x) => [...(x.video ? [{ type: "video", media: x.video }] : []), ...[x.foto, ...((x.set || []).map((y) => y.url))].filter(Boolean).slice(0, x.video ? 9 : 10).map((m) => ({ type: "photo", media: m }))];
+const pelinMedya = (x) => [...(x.video ? [{ type: "video", media: x.video }] : []), ...[x.foto, ...((x.set || []).filter((y) => !KOLAJ_AD.test(String(y.ad || ""))).map((y) => y.url))].filter(Boolean).slice(0, x.video ? 9 : 10).map((m) => ({ type: "photo", media: m }))];
 async function yayinOnayKarti(env, x, u, simdi) {
   const patron = String(env.MURAT_ID || "").split(",")[0].trim();
   if (!x.marka) x.marka = (await markaKesin(env, String(x.kod)).catch(() => ({}))).marka || null; // 6 Kasım: "?" bırakma
@@ -2171,7 +2208,9 @@ async function yayinOnayKarti(env, x, u, simdi) {
     await env.KAYIT.delete(k);
   }
   const marka = x.marka === "BLACKROSE" ? "BLACK ROSE" : x.marka || "marka belirsiz (Sami'de kayıt yok)";
-  const kontrol = await kanalKontrol(env, { ...paket, adlar: (x.set || []).map((y) => y.ad) }, { renk: x.renk || null, simdi }); // 6 Kasım: kartın en üstünde
+  const dk = await kendiDuzelt(env, paket, await kanalKontrol(env, { ...paket, adlar: (x.set || []).map((y) => y.ad) }, { renk: x.renk || null, simdi }), { renk: x.renk || null, simdi }); // 9 Kasım: önce kendim düzeltirim
+  Object.assign(paket, { en: dk.paket.en, fr: dk.paket.fr });
+  const kontrol = dk.kontrol; // 6 Kasım: kartın en üstünde
   // 4 Kasım (Patron önerisi 10): TÜM PAKET TEK ALBÜMDE (video + foto seti + askı ön/arka + detay kolajları), kanal yazısı albümün
   // yazısı olarak — kanala aynen böyle gider; altında TEK onay kartı
   const medya = pelinMedya(x);

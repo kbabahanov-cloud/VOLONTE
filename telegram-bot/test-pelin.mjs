@@ -299,7 +299,7 @@ test("tek seferlik yüz kaydı: iki seri yüzü fotoğraflarıyla tek mesaj + or
   assert.equal(s.yuzler.buyuk.fileId, "YUZ1");
   assert.deepEqual(s.ortamlar.map((x) => [x.ad, x.rol]), [["Retro Neon", "kampanya"], ["Siyah Altın Lüks", "katalog"], ["Live Your Life Şehir", "video"]]);
   assert.ok(!o.depo.has("venom:pelinYuzKaydi") && !o.depo.has(`pelin:sohbet:${MURAT}`));
-  const mesaj = o.g.filter((x) => x.metod === "sendMessage");
+  const mesaj = o.g.filter((x) => x.metod === "sendMessage" && !/HAFTALIK PELİN RAPORU/.test(x.govde.text)); // pazartesi haftalık rapor da çıkabilir (gerçek tarih)
   assert.equal(mesaj.length, 1); // fotoğraflar + TEK mesaj
   assert.match(mesaj[0].govde.text, /Küçük seri \(38-44\): 2 numaralı siyahi kız[\s\S]*Büyük seri \(44-50\): 3 numaralı dolgun kız[\s\S]*14:33[\s\S]*Siyah Altın Lüks → katalog fotoğrafları[\s\S]*Live Your Life Şehir → videolar[\s\S]*Retro Neon → sadece kampanya videoları[\s\S]*ten rengini biraz koyulaştır[\s\S]*0,15 \$/);
   assert.equal(o.falIstek.length, 0); // onaysız harcama yok

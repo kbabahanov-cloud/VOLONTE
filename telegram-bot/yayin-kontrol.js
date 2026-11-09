@@ -76,7 +76,8 @@ export async function kanalKontrol(env, p, { renk = null, simdi = Math.floor(Dat
     const baska = ["black", "white", "burgundy", "red", "navy", "blue", "green", "beige", "pink", "purple", "grey", "brown"].filter((c) => new RegExp(`\\b${c}\\b`, "i").test(String(p.en || "")) && !yaziRenk.some((r) => r.split(/\s+/).includes(c)));
     if (yaziRenk.length && baska.length) sorunlar.push(`açıklamada başka renk geçiyor (${baska.join(", ")})`);
     if (FIYAT.test(`${p.en || ""} ${p.fr || ""}`)) sorunlar.push("yazıda FİYAT var");
-    if ((p.adlar || []).some((a) => /kolaj|collage/i.test(String(a))) || (p.medya || []).some((m) => /kolaj|collage/i.test(String(m.media || "")))) sorunlar.push("yapay zekâ kolajı var (kanala konmaz)");
+    // 9 Kasım: Pelin'in yazılı detay sayfası ("detay 1/2", ör. "ELEGANT TWO-PIECE SET") da yapay zekâ kolajıdır
+    if ((p.adlar || []).some((a) => /kolaj|collage|infografik|infographic|^detay\s*\d+$/i.test(String(a))) || (p.medya || []).some((m) => /kolaj|collage|infografik/i.test(String(m.media || "")))) sorunlar.push("yapay zekâ kolajı var (kanala konmaz)");
     if (!(p.medya || []).length) sorunlar.push("medya yok");
   }
   // aynı gün tekrar: aynı renk (renk bilinmiyorsa aynı model) son 24 saatte paylaşıldıysa

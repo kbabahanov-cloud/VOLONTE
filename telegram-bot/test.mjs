@@ -1454,7 +1454,7 @@ async function yeniOrtam() {
 const kontrolDugme = (g, kisi, kod, on) => cagrilar(g, "sendMessage").filter((m) => String(m.govde.chat_id) === kisi && (m.govde.reply_markup || {}).inline_keyboard)
   .flatMap((m) => m.govde.reply_markup.inline_keyboard.flat()).find((d) => d.callback_data && d.callback_data.startsWith(on) && d.callback_data.endsWith(":" + kod)).callback_data;
 
-test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modeller; önizleme Murat'a ve Hemra'ya yeni düzende, fiyatsız", async () => {
+test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modeller; önizleme Merdan ve Hemra yeni düzende, fiyatsız", async () => {
   const o = await yeniOrtam();
   await rotasyon(o.env, ist(7, 55));
   assert.equal(o.depo.get("tur"), undefined);
@@ -1464,14 +1464,14 @@ test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modelle
   assert.equal(tur.durum, "toplaniyor"); // 2 model tek çalışmada hazırlandı ve gönderildi
   assert.equal(o.claude.length, 2);
   assert.ok(o.claude[0].messages[0].content.some((c) => c.type === "image" && c.source.url === "https://www.wearvolonte.com/galeri/3403/1.jpg"));
-  for (const kisi of ["111", "333"]) assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => String(m.govde.chat_id) === kisi).length, 2);
-  const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "111" && m.govde.media[0].caption.includes("3403"));
+  for (const kisi of ["222", "333"]) assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => String(m.govde.chat_id) === kisi).length, 2);
+  const album = cagrilar(o.gonderilen, "sendMediaGroup").find((m) => m.govde.chat_id === "222" && m.govde.media[0].caption.includes("3403"));
   assert.equal(album.govde.media[0].caption, "✅ AVAILABLE / DISPONIBLE\n<b>✅ CODE: 3403</b>\n🎨 Colors / Couleurs: black-gold floral\n📏 Size: 38-\u200B40-\u200B42-\u200B44\n📦 Series: 4 pcs / Série : 4 pièces\n🇬🇧 Model 3403 line.\n🇫🇷 Ligne 3403.\nVOLONTE – Premium Women's Fashion");
   assert.equal(album.govde.media[0].parse_mode, "HTML");
   assert.ok(!/\$|Wholesale|price|prix|fiyat/i.test(JSON.stringify(o.gonderilen))); // fiyat hiçbir yerde
-  const not = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "111" && /👆/.test(m.govde.text));
+  const not = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "222" && /👆/.test(m.govde.text));
   assert.equal(not.govde.reply_markup.inline_keyboard.flat()[0].url, "https://wa.me/905362390091");
-  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "111" && /^⬆️ 3520/.test(m.govde.text));
+  const kontrol = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "222" && /^⬆️ 3520/.test(m.govde.text));
   assert.match(kontrol.govde.text, /Renkler: ⚠️ Emin değilim \(champagne\)/);
   assert.match(kontrol.govde.text, /1 video var/);
   assert.equal(o.depo.get("yazi:3403") != null, true); // yazı bir kez hazırlanır
@@ -1480,8 +1480,8 @@ test("yeni tur: 08:00'de stokta + sitede + 14 gündür paylaşılmamış modelle
 test("✅ Paylaş sıraya alır, renk emin değilse önce ✏️ Düzelt; düzeltme yeni önizleme getirir; sıra kanala yeni düzende gider, tarih tabloya", async () => {
   const o = await yeniOrtam();
   await rotasyon(o.env, ist(8, 0));
-  const p3403 = kontrolDugme(o.gonderilen, "111", "3403", "y1");
-  const p3520 = kontrolDugme(o.gonderilen, "111", "3520", "y1");
+  const p3403 = kontrolDugme(o.gonderilen, "222", "3403", "y1");
+  const p3520 = kontrolDugme(o.gonderilen, "222", "3520", "y1");
   o.gonderilen.length = 0;
   await bas(o.env, 333, p3520);
   assert.match(cagrilar(o.gonderilen, "answerCallbackQuery")[0].govde.text, /Önce renkleri yazın/);
@@ -1494,7 +1494,7 @@ test("✅ Paylaş sıraya alır, renk emin değilse önce ✏️ Düzelt; düzel
   assert.match(yeni[0].govde.media[0].caption, /🎨 Colors \/ Couleurs: champagne, black\n📏 Size: 44-\u200B46-\u200B48-\u200B50\n📦 Series: 4 pcs \/ Série : 4 pièces\n🧵 Fabric \/ Tissu: satin/);
   assert.ok(cagrilar(o.gonderilen, "editMessageText").some((m) => /Hemra düzeltti/.test(m.govde.text)));
   // Düzeltmeden sonra paylaş
-  const yeniDugme = kontrolDugme(o.gonderilen, "111", "3520", "y1");
+  const yeniDugme = kontrolDugme(o.gonderilen, "222", "3520", "y1");
   await bas(o.env, 111, yeniDugme);
   await bas(o.env, 111, p3403);
   assert.ok(o.depo.get("kuyruk:3520") && o.depo.get("kuyruk:3403"));
@@ -1519,9 +1519,9 @@ test("❌ Geç 7 gün; stoğu biten model sıradan paylaşılmaz; eski düzen s�
   o.depo.set("kuyruk:4444", JSON.stringify({ kod: "4444", ids: [1], kim: "x", zaman: 1, tur: 1 }));
   await rotasyon(o.env, ist(8, 0));
   assert.equal(o.depo.get("kuyruk:4444"), undefined);
-  await bas(o.env, 111, kontrolDugme(o.gonderilen, "111", "3520", "yg"));
+  await bas(o.env, 111, kontrolDugme(o.gonderilen, "222", "3520", "yg"));
   assert.ok(JSON.parse(o.depo.get("atlananlar"))["3520"] > ist(8) + 6 * GUN);
-  await bas(o.env, 111, kontrolDugme(o.gonderilen, "111", "3403", "y1"));
+  await bas(o.env, 111, kontrolDugme(o.gonderilen, "222", "3403", "y1"));
   await kopru(o.env, [{ kod: "3403", adet: 0, fiyat: 44 }]);
   o.gonderilen.length = 0;
   await rotasyon(o.env, ist(8, 5));
@@ -1536,7 +1536,7 @@ test("deneme turu (gruplar) akşam da gider; A/B biçim karşılaştırması ve 
   const tur = JSON.parse(o.depo.get("tur"));
   assert.deepEqual(tur.gruplar.map((g) => g.kodlar), [["3403"], ["3520"]]); // 3999 stoksuz; 3411 hariç; 3403 (a)'da
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => m.govde.text === "(b) eski"));
-  assert.ok(cagrilar(o.gonderilen, "sendPhoto").some((m) => m.govde.chat_id === "111" && m.govde.reply_markup.inline_keyboard[0][0].url)); // A: tek + düğme
+  assert.ok(cagrilar(o.gonderilen, "sendPhoto").some((m) => m.govde.chat_id === "222" && m.govde.reply_markup.inline_keyboard[0][0].url)); // A: tek + düğme
   await bas(o.env, 333, "yb:tek");
   assert.equal(o.depo.get("bicim"), "tek");
 });
@@ -2031,7 +2031,8 @@ test("VENOM KONTROLÜ (6 Kasım): aynı model aynı gün ikinci kez kanala GİTM
   assert.equal(r2.ok, false);
   assert.match(r2.hata, /Venom kontrolü: bugün .* zaten paylaşıldı/);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
-  assert.ok(o.gonderilen.some((g) => g.url.endsWith("/sendMessage") && /🛑 Venom kontrolü — 3300 kanala GİTMEDİ/.test(JSON.stringify(g.govde))));
+  // 9 Kasım: "bugün zaten paylaşıldı" bir iş değil → kimseye mesaj yok (Patron'a akşam sayısı), sadece kayıt
+  assert.ok(!o.gonderilen.some((g) => g.url.endsWith("/sendMessage") && /🛑 Venom kontrolü/.test(JSON.stringify(g.govde))));
   assert.match(o.depo.get("venom:kontrol:engel"), /3300/);
   // Black Rose: model kartı BLACKROSE → kopya yok; site yoksa durur
   o.depo.set("pelinboy:3100", JSON.stringify({ marka: "BLACKROSE" }));
@@ -2107,4 +2108,25 @@ test("6 Kasım: 907 = VOLONTE — VOLONTE Vegawin'indeki '907 B 20' kartı Black
   assert.equal(await br("3900"), 24);
   const l = await (await o.env.STOK.get().fetch("https://stok/br-stoklar", { method: "POST", body: "{}" })).json();
   assert.ok(!Object.values(l).flat().some((x) => x[0] === "907"));
+});
+
+test("9 Kasım: Venom kendi düzeltir — açıklamadaki başka renk (3557 'black') çıkar, eksik EN/FR siteden, kolaj albümden; düzeltemediği Merdan+Hemra'ya", async () => {
+  const { kendiDuzelt } = await import("./worker.js");
+  const { kanalKontrol } = await import("./yayin-kontrol.js");
+  const o = await yeniOrtam();
+  Object.assign(o.env, { MURAT_ID: "111", ALLOWED_IDS: "111,222", FABRIKA_SORUMLU: "333" });
+  const p = { kod: "3403", marka: "VOLONTE", renkler: ["orange"], bedenler: "38-40", en: "Orange jacquard skirt with black trim.", fr: "Jupe jacquard orange à bordure noire.", medya: [{ type: "photo", media: "https://x/1.jpg" }], adlar: ["ön", "detay 1"] };
+  const k = await kanalKontrol(o.env, p, { simdi: ist(10) });
+  assert.ok(k.sorunlar.some((x) => /başka renk geçiyor \(black\)/.test(x)) && k.sorunlar.some((x) => /kolaj/.test(x)));
+  const d = await kendiDuzelt(o.env, p, k, { simdi: ist(10) });
+  assert.equal(d.kontrol.ok, true, d.kontrol.satir);
+  assert.ok(!/black/i.test(d.paket.en) && !/noire/i.test(d.paket.fr));
+  assert.deepEqual(d.paket.adlar, ["ön"]);
+  assert.match(d.kontrol.satir, /kendim düzelttim/);
+  assert.match(o.depo.get("venom:kontrol:duzeltme"), /3403/);
+  // EN/FR eksik → siteden (3520'nin sitede aciklama.en var, fr yok → fr düzeltilemez → hâlâ sorun)
+  const p2 = { ...p, kod: "3520", renkler: [], en: "", fr: "", adlar: ["ön"] };
+  const d2 = await kendiDuzelt(o.env, p2, await kanalKontrol(o.env, p2, { simdi: ist(10) }), { simdi: ist(10) });
+  assert.equal(d2.paket.en, "y");
+  assert.equal(d2.kontrol.ok, false);
 });

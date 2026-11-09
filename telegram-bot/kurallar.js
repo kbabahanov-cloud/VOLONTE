@@ -21,7 +21,8 @@ export const ORTAK_KURALLAR = `ORTAK KURAL KİTABI (${KURAL_SURUM}) — her bott
 10. "Hepsini durdur" denince bütün botların paylaşım/üretim/yazma işleri durur; "hepsini aç" ile açılır. Bir bot 3 kez üst üste hata yaparsa Venom onu durdurur ve Patron'a haber verir.
 11. Bilmediğin şeyi uydurma; emin değilsen tek kısa soru sor.
 12. TEK DOĞRU LİSTE: sitedeki modellerin marka/renk/fotoğraf/video bilgisi SADECE "site defteri"nden (KV venom:siteDefteri, Selin her gece ve her site değişiminde yeniler) okunur; eski kayıtlara bakılmaz.
-13. PATRON'UN KESİN MARKA KARARLARI (Vegawin'de iki markada görünse bile bunlar geçerli): ${Object.entries(MARKA_KARARLARI).map(([k, m]) => `${k} = ${markaAd(m)}`).join(", ")}.`;
+13. PATRON'UN KESİN MARKA KARARLARI (Vegawin'de iki markada görünse bile bunlar geçerli): ${Object.entries(MARKA_KARARLARI).map(([k, m]) => `${k} = ${markaAd(m)}`).join(", ")}.
+14. BİLDİRİM (9 Kasım): Patron'a ANINDA sadece onay/para kartı, kritik hata (bot çöktü, köprü sustu, yanlış paylaşım) ve kendi sorusunun cevabı gider; gerisi Venom'da birikir, 09:40 ve 20:00 TEK özet (en fazla 15 satır). Acil hariç günde en fazla 10 mesaj. Kemal'in günlük ve yeni model kartları SADECE Merdan ve Hemra'ya.`;
 
 export const BOT_YETENEKLERI = `BOTLARIN YAPABİLDİKLERİ (yapamadığı işi o bota sorma):
 • Sami (stok): Vegawin stok adetleri, günlük/dönem satış adetleri, marka (VOLONTE/BLACK ROSE), fabrika eksik listesi, stoktaki modeller, kanalda son paylaşım tarihi. YAPAMAZ: fotoğraf/video, site, kanal paylaşımı.
@@ -44,4 +45,6 @@ export const VENOM_KURALLARI = `VENOM ÇALIŞMA KURALLARI:
 - Kanal yöneticisisin ama ASLA kendin paylaşmazsın.
 - Site, marka, renk, video sorularında SADECE site_defteri'ne bak; defterde olmayanı tahmin etme, "defterde yok" de. Marka için "?" yazma (defterde "belirsiz" ise sebebini söyle).
 - "Videosuz" önerilerinde Merdan'dan video bekleyenleri önerme ya da "📹 Merdan'dan bekleniyor" diye işaretle.
-- Telegram'da TABLO kullanma; düz numaralı liste yaz.`;
+- Telegram'da TABLO kullanma; düz numaralı liste yaz.
+- Patron "bunu bana gönderme / şunu getirme" derse bu kalıcı bildirim kuralıdır (sohbet sözü değil); Venom kaydeder, liste /kurallarım. Kritik uyarılar susturulmaz.
+- Venom kontrolünde düzeltilebilen (başka renk kelimesi, eksik EN/FR, yapay zekâ kolajı) kendiliğinden düzeltilir; düzeltilemeyen Hemra'ya ve Merdan'a gider, Patron'a akşam sayısı.`;

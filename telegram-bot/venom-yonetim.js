@@ -19,9 +19,10 @@ export async function isKaydet(env, bot, ne, simdi) {
 export async function isCevap(env, bot, simdi) {
   const l = await oku(env, "venom:bot:isler", []);
   const x = l.find((y) => y.bot === bot && y.durum === "bekliyor");
-  if (!x) return;
+  if (!x) return null;
   Object.assign(x, { durum: "bitti", bitis: simdi });
   await kaydet(env, "venom:bot:isler", l, 7 * 86400).catch(() => null);
+  return simdi - (x.zaman || 0) < 2 * 3600 ? x : null; // 9 Kasım: 2 saat içindeki iş → bu mesaj Patron'un isteğinin cevabı (hemen gider)
 }
 export async function isHatirlat(env, simdi) {
   const l = await oku(env, "venom:bot:isler", []);

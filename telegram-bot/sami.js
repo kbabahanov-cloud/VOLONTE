@@ -14,6 +14,7 @@
 // Ayarlar: BOT_TOKEN, WEBHOOK_SECRET (secret) · ALLOWED_IDS, EKIP_IDS, SELF_URL, GITHUB_REPO (düz metin) ·
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
+import { acikSessizlik } from "./magaza-saat.js";
 import { durdurulduMu } from "./durdurma.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj } from "./tek-kapi.js";
 import { kodBul } from "./ortak.js";
@@ -212,9 +213,10 @@ export function samiRaporu({ simdi, ozet, olaylar, paylasimlar, tum, site, kodla
     satir.push(`Köprü ${k.magaza}: son değişiklik ${tarihYaz(k.degisim || k.son)} · ${k.adet} model`);
     if (k.kalp) {
       const sonTemas = Math.max(k.son || 0, k.kalp || 0);
-      const durdu = simdi - sonTemas > 16 * 3600; // gece 19:00 → sabah 09:00 arası boşluk normal
-      satir.push(`Köprü son çalışma: ${tarihYaz(sonTemas)} ${durdu ? "⚠️ 16 saattir sinyal yok (mağaza bilgisayarı kapalı olabilir)" : "✅"}`);
-      if (durdu) sorunlar.push(`Köprü ${k.magaza} 16 saattir sinyal göndermedi`);
+      // 9 Kasım (Patron): sadece hafta içi 09–20 sayılır; hafta sonu ve gece boşluğu normal (pazartesi bilgisayar açılınca başlar)
+      const sessiz = acikSessizlik(sonTemas, simdi), durdu = sessiz > 3600;
+      satir.push(`Köprü son çalışma: ${tarihYaz(sonTemas)} ${durdu ? `⚠️ ${sessiz >= 11 * 3600 ? "önceki iş günü hiç sinyal yok" : `mağaza açıkken ${Math.round(sessiz / 3600)} saattir sinyal yok`} (mağaza bilgisayarı kapalı olabilir)` : "✅"}`);
+      if (durdu) sorunlar.push(`Köprü ${k.magaza}: ${sessiz >= 11 * 3600 ? "önceki iş günü hiç sinyal yok" : `mağaza açıkken ${Math.round(sessiz / 3600)} saattir sinyal yok`}`);
     } else satir.push("Köprü son çalışma: yeni köprü kurulunca görünecek (eski köprü sadece değişiklik olunca veri gönderir)");
   }
   if (!ozet.kopruler.length) satir.push("⚠️ Köprüden hiç veri gelmedi.");

@@ -110,7 +110,9 @@ test("Fuat'a mesaj: tam metin kart [Onayla/Düzelt/İptal] → Emin misiniz → 
   // Venom: sonuç Patron'a
   o.g.length = 0;
   await venomCron(o.env, ist(3, 12, 10));
-  assert.ok(patronaGiden(o).some((x) => /^✅ Mesaj Fuat'a gitti/.test(x.govde.text)));
+  // 9 Kasım (postane): "gitti" bilgisi Patron'a anında GİTMEZ, Venom'da birikir (akşam özetinde sayı)
+  assert.ok(!patronaGiden(o).some((x) => /Mesaj Fuat'a gitti/.test(x.govde.text)));
+  assert.ok(JSON.parse(o.depo.get("venom:posta:2026-11-03")).some((x) => /^✅ Mesaj Fuat'a gitti/.test(x.ozet)));
   const ars = await (await o.env.STOK.get().fetch("https://stok/arsiv-liste", { method: "POST", body: "{}" })).json();
   assert.ok(ars.some((x) => x.tur === "venom-mesaj") && ars.some((x) => x.tur === "venom-gitti"));
 });
@@ -226,7 +228,9 @@ test("zamanlama: 09:40 toplu rapor ve 20:00 günün özeti Patron'a birer kez; p
   const o = ortam();
   await venomCron(o.env, ist(3, 9, 41)); // salı
   await venomCron(o.env, ist(3, 9, 46));
-  assert.equal(patronaGiden(o).filter((x) => /toplu rapor/.test(x.govde.text)).length, 1);
+  const sabah = patronaGiden(o).filter((x) => /Günaydın Patron/.test(x.govde.text));
+  assert.equal(sabah.length, 1);
+  assert.ok(sabah[0].govde.text.split("\n").length <= 15); // 9 Kasım: tek mesaj, en fazla 15 satır
   await venomCron(o.env, ist(3, 20, 1));
   await venomCron(o.env, ist(3, 20, 6));
   const aksam = patronaGiden(o).filter((x) => /Günün özeti/.test(x.govde.text));
@@ -350,9 +354,10 @@ test("VENOM 5 Kasım: hafıza (kurallar + Patron kararları) sistemde; fotoğraf
   o.depo.set("pelin:hata", JSON.stringify({ zaman: ist(5, 12, 12), yol: "x", hata: "fal hatası" }));
   await venomCron(o.env, ist(5, 12, 15));
   await venomCron(o.env, ist(5, 12, 20));
-  const h = patronaGiden(o).filter((x) => /Botlarda hata/.test(x.govde.text));
-  assert.equal(h.length, 1);
-  assert.match(h[0].govde.text, /Pelin: fal hatası/);
+  // 9 Kasım (postane): tek tek bot hatası Patron'a anında gitmez (kritik değil) → bir kez birikir
+  assert.equal(patronaGiden(o).filter((x) => /hata/i.test(x.govde.text)).length, 0);
+  const bir = JSON.parse(o.depo.get("venom:posta:2026-11-05")).filter((x) => /Pelin: fal hatası/.test(x.ozet));
+  assert.equal(bir.length, 1);
 });
 
 test("TEK KAPI (5 Kasım): bot Patron'un kişisel hesabına yazamaz → Venom'a aktarılır (başlık + küçük resim + tam yazı + düğmeler); Venom'da basılan düğme bota 'Patron bastı' olarak döner; Merdan'a giden aynen gider", async () => {
@@ -375,6 +380,8 @@ test("TEK KAPI (5 Kasım): bot Patron'un kişisel hesabına yazamaz → Venom'a 
   assert.equal(d[1].url, "https://www.wearvolonte.com");
   // albüm: URL'ler aynen, yazı albümde
   await kapi.venomaAktar(botEnv, "pelin", "sendMediaGroup", { chat_id: PATRON, media: [{ type: "video", media: "https://x/v.mp4", caption: "✅ CODE: 3627" }, { type: "photo", media: "https://x/f.jpg" }] });
+  assert.ok(!o.g.some((x) => x.metod === "sendMediaGroup")); // 9 Kasım: düğmesiz albüm bekler (kartıyla birlikte gider)
+  await kapi.venomaAktar(botEnv, "pelin", "sendMessage", { chat_id: PATRON, text: "🎬 3627 onay", reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: "po:1" }]] } });
   const alb = o.g.filter((x) => x.metod === "sendMediaGroup").at(-1);
   assert.deepEqual(alb.govde.media.map((m) => m.media), ["https://x/v.mp4", "https://x/f.jpg"]);
   assert.match(alb.govde.media[0].caption, /🤖 Pelin\n✅ CODE: 3627/);
@@ -736,4 +743,99 @@ test("6 Kasım: gizli mesaj — Patron'a iletilemez mesaj, anahtar hemen silinir
   await venomCron(o.env, t + 3605);
   assert.ok(o.g.some((x) => x.metod === "deleteMessage"));
   assert.deepEqual(JSON.parse(o.depo.get("venom:silinecekMesaj")), []);
+});
+
+test("9 Kasım POSTANE: bilgi birikir, kart ve kritik anında; düzenleme (✏️) kart sayılmaz; 10 tavanı → fazla kartlar saatlik TEK mesaj", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const { postaKarar, kategori, kritikMi } = await import("./venom-posta.js");
+  assert.equal(kategori("✅ 3627 kanala gönderildi"), "paylaşıldı");
+  assert.equal(kategori("🛑 Venom kontrolü — 3557 kanala GİTMEDİ"), "durduruldu");
+  assert.equal(kategori("⚠️ 3557 paylaşılamadı: yetki yok"), "paylaşılamadı");
+  assert.ok(kritikMi("🔴 Köprü VOLONTE sustu: mağaza açık ama 1 saatten uzun sinyal yok"));
+  assert.equal((await postaKarar(o.env, { kaynak: "kemal", metin: "✅ 3627 paylaşıldı (Hemra onayladı)" }, ist(9, 10))).karar, "biriktir");
+  // bilgi → Patron'a GİTMEZ, birikir
+  await v.aktarilanGonder(o.env, { bot: "kemal", metod: "sendMessage", metin: "✅ 3627 paylaşıldı (Hemra onayladı)", medya: [] });
+  await v.aktarilanGonder(o.env, { bot: "kemal", metod: "editMessageText", metin: "✏️ ✅ 3557 Hemra onayladı", butonlar: [[{ text: "x", callback_data: "y1:1:3557" }]], medya: [] });
+  assert.equal(patronaGiden(o).length, 0);
+  const gun = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+  assert.equal(JSON.parse(o.depo.get(`venom:posta:${gun}`)).length, 2);
+  // kart → anında (10'a kadar)
+  for (let i = 0; i < 12; i++) await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: `📝 ${3000 + i} taslak onayı`, butonlar: [[{ text: "✅ Onayla", callback_data: `so:${3000 + i}` }]], medya: [] });
+  assert.equal(patronaGiden(o).length, 10);
+  assert.equal(JSON.parse(o.depo.get("venom:posta:kartSira")).length, 2);
+  // kritik → tavan dolu olsa da anında
+  await v.aktarilanGonder(o.env, { bot: "sami", metod: "sendMessage", metin: "🔴 Köprü VOLONTE sustu", medya: [] });
+  assert.equal(patronaGiden(o).length, 11);
+  // saat başı: kalan 2 kart TEK mesajda, numaralı düğmelerle
+  const simdi = Math.floor(Date.now() / 1000), saatBasi = simdi - (simdi % 3600) + 60;
+  await venomCron(o.env, saatBasi);
+  const bir = patronaGiden(o).filter((x) => /Birleştirilmiş onaylar \(2\)/.test(x.govde.text));
+  if (((saatBasi + 3 * 3600) % 86400) / 3600 >= 8 && ((saatBasi + 3 * 3600) % 86400) / 3600 < 22) {
+    assert.equal(bir.length, 1);
+    assert.match(bir[0].govde.reply_markup.inline_keyboard[0][0].text, /^1· ✅ Onayla/);
+  }
+});
+
+test("9 Kasım: 'bunu bana gönderme' kalıcı kural olur (son mesajın botu + türü); /kurallarım listeler, ❌ ile kaldırılır; kritik susturulmaz", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const { kuralCoz } = await import("./venom-posta.js");
+  assert.deepEqual(kuralCoz("Kemal'in paylaşıldı mesajlarını bana gönderme"), { bot: "kemal", kategori: null, kelimeler: ["paylaşıldı"], ornek: null });
+  assert.equal(kuralCoz("Fuat'a mesaj gönder"), null);
+  // Patron'a bir kart gitti (Selin), Patron "bunu bana gönderme" dedi
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3001 taslak onayı", butonlar: [[{ text: "✅", callback_data: "so:3001" }]], medya: [] });
+  o.g.length = 0;
+  await yazi(o, PATRON, "bunu bana gönderme");
+  assert.match(patronaGiden(o)[0].govde.text, /📝 Kalıcı kural kaydedildi: Selin · "rapor" mesajları|📝 Kalıcı kural kaydedildi: Selin/);
+  assert.equal(o.claude.length, 0); // sohbete (Claude'a) gitmedi
+  const kurallar = JSON.parse(o.depo.get("venom:bildirimKurallari"));
+  assert.equal(kurallar[0].bot, "selin");
+  assert.deepEqual(kurallar[0].kelimeler, ["taslak", "onayı"]); // örnek mesaja bağlı (bütün Selin mesajları değil)
+  // aynı türden Selin mesajı artık anında gelmez
+  o.g.length = 0;
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3002 taslak onayı", butonlar: [[{ text: "✅", callback_data: "so:3002" }]], medya: [] });
+  assert.equal(patronaGiden(o).length, 0);
+  // kritik yine gelir
+  await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "🔴 Köprü sustu (Selin iletti)", medya: [] });
+  assert.equal(patronaGiden(o).length, 1);
+  // /kurallarım → liste + kaldır düğmesi
+  o.g.length = 0;
+  await yazi(o, PATRON, "/kurallarım");
+  const liste = patronaGiden(o)[0];
+  assert.match(liste.govde.text, /Sabit \(sizin 9 Kasım kararınız\)[\s\S]*Sizin kalıcı kurallarınız:\n1\. Selin/);
+  await bas(o, liste.govde.reply_markup.inline_keyboard[0][0].callback_data);
+  assert.deepEqual(JSON.parse(o.depo.get("venom:bildirimKurallari")), []);
+});
+
+test("9 Kasım MAĞAZA SAATLERİ: hafta sonu köprü izlenmez; pazartesi sabah cuma akşamı sinyali normal; hafta içi açıkken 1 saat → uyarı", async () => {
+  const { kopruSustu, acikSessizlik, magazaAcik } = await import("./magaza-saat.js");
+  const t = (gun, hh, mm = 0) => Date.UTC(2026, 10, gun, hh - 3, mm) / 1000; // Kasım 2026 (6 cuma, 7 cmt, 8 pazar, 9 pzt)
+  const cumaAksam = t(6, 19, 30);
+  assert.equal(magazaAcik(t(7, 12)), false); // cumartesi
+  assert.equal(kopruSustu(cumaAksam, t(7, 12)), false);
+  assert.equal(kopruSustu(cumaAksam, t(8, 15)), false); // pazar
+  assert.equal(kopruSustu(cumaAksam, t(9, 9, 30)), false); // pazartesi 09:30: bilgisayar açılıyor
+  assert.equal(kopruSustu(cumaAksam, t(9, 10, 5)), true); // pazartesi 10:05: açılıştan beri 1 saati geçti
+  assert.equal(kopruSustu(t(9, 10, 30), t(9, 11)), false);
+  assert.equal(kopruSustu(t(9, 10, 0), t(9, 11, 5)), true);
+  assert.equal(acikSessizlik(cumaAksam, t(9, 9, 30)), 30 * 60);
+  // salı sabahı: pazartesi bütün gün sinyal yoksa (köprü ölü) 09:05'te de uyarır
+  assert.equal(kopruSustu(cumaAksam, t(10, 9, 5)), true);
+});
+
+test("9 Kasım: sabah 09:40 TEK özet ≤15 satır, sorunlar en üstte, biriken bilgi sayısı; /detay ayrıntıyı verir", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  o.depo.set("venom:posta:2026-11-03", JSON.stringify([{ zaman: ist(3, 2), kaynak: "kemal", kategori: "paylaşıldı", ozet: "✅ 3627 paylaşıldı" }, { zaman: ist(3, 3), kaynak: "kemal", kategori: "paylaşılamadı", ozet: "🛑 3557 kanala gitmedi" }]));
+  o.depo.set("selin:hata", JSON.stringify({ zaman: ist(3, 8), hata: "GitHub 502" }));
+  const m = await v.sabahOzeti(o.env, ist(3, 9, 40));
+  const s = m.split("\n");
+  assert.ok(s.length <= 15, m);
+  assert.match(s[0], /^☀️ Günaydın Patron/);
+  assert.match(m, /📨 Venom'da biriken 2 bilgi: 1 paylaşıldı · 1 paylaşılamadı/);
+  assert.match(s.at(-1), /Ayrıntı: \/detay/);
+  o.g.length = 0;
+  await yazi(o, PATRON, "/detay");
+  assert.match(patronaGiden(o)[0].govde.text, /Biriken bilgiler:[\s\S]*3557 kanala gitmedi/);
 });

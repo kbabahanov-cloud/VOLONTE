@@ -241,8 +241,8 @@ test("köprü raporu: son değişiklik ve son çalışma ayrı; eski köprüde (
   await o.yaz("VOLONTE", [], ist(18, 55, -1)); // yeni köprü: boş gönderim (çalışıyorum)
   r = await rapor(ist(9, 5));
   assert.match(r.metin, /son değişiklik 2[56]\.10 10:00[\s\S]*Köprü son çalışma: .*18:55 ✅/);
-  r = await rapor(ist(18, 0)); // 23 saat sinyal yok
-  assert.match(r.metin, /16 saattir sinyal yok/);
+  r = await rapor(ist(18, 0)); // 23 saat sinyal yok (bugün açılıştan beri 9 saat)
+  assert.match(r.metin, /mağaza açıkken 9 saattir sinyal yok/);
   assert.equal(r.sorunlar.length, 1);
 });
 
@@ -510,13 +510,13 @@ test("fabrika denemesi: 🧪 her mesajda, Murat başlatır; kanal paylaşımı v
   // Kemal: önizleme → onay → kanalda PAYLAŞILMAZ → Murat'a özet
   o.g.length = 0;
   await fabrikaIsleri({ ...o.env, BOT_TOKEN: "k" }, Math.floor(Date.now() / 1000));
-  const onizleme = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "111");
+  const onizleme = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "222");
   assert.match(onizleme.govde.text, /^🧪 DENEME[\s\S]*Repete geldi – 9999[\s\S]*kanalda paylaşılmaz/);
   const { default: kemal } = await import("./worker.js");
   assert.ok(kemal);
   o.g.length = 0;
   const w = await import("./worker.js");
-  await w.guncellemeIsle({ callback_query: { id: "c", from: { id: 111, first_name: "Murat" }, data: onizleme.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 111 }, message_id: 3 } } }, { ...o.env, BOT_TOKEN: "k", ALLOWED_IDS: "111,222" });
+  await w.guncellemeIsle({ callback_query: { id: "c", from: { id: 222, first_name: "Merdan" }, data: onizleme.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 222 }, message_id: 3 } } }, { ...o.env, BOT_TOKEN: "k", ALLOWED_IDS: "111,222" });
   assert.equal(cagri(o.g, "copyMessages").length, 0); // kanalda paylaşım yok
   const ozet = cagri(o.g, "sendMessage").find((x) => /Fabrika denemesi bitti/.test(x.govde.text));
   assert.ok(ozet);
