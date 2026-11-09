@@ -377,6 +377,33 @@ export class StokDeposu {
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
 
+  // 9 Kasım (Patron): REPETE RAPORU verisi tek çağrıda — mağaza başına stok ve satış (ASLA toplanmaz), açık fabrika siparişleri,
+  // repete kararları, sitede bakılma (Sami günlük yazar). Fiyat/maliyet yok.
+  repeteVeri({ bas14, bas7, bitis, basKarar = null }) {
+    const satis = (bas) => this.hepsi("SELECT magaza, kod, SUM(adet) AS a FROM satis WHERE gun >= ? AND gun <= ? GROUP BY magaza, kod", bas, bitis);
+    const fs = [];
+    for (const id of JSON.parse(this.ayarOku("fs:acik") || "[]").slice(-80)) {
+      const r = this.ayarOku(`fs:${id}`); if (!r) continue;
+      const x = JSON.parse(r);
+      if (!x.deneme) fs.push({ id: x.id, kod: x.kod, durum: x.durum, gonderim: x.gonderim, hazirGun: x.hazirGun || null, cevaplayan: x.cevaplayan || null, renkler: x.renkler || [], grup: x.grup || null });
+    }
+    return {
+      urun: this.hepsi("SELECT magaza, kod, adet FROM urun"),
+      s14: satis(bas14), s7: satis(bas7), sKarar: basKarar ? satis(basKarar) : [],
+      ilkGun: (this.tek("SELECT MIN(gun) AS g FROM satis") || {}).g || null,
+      fs,
+      kararlar: JSON.parse(this.ayarOku("repete:kararlar") || "[]"),
+      bakis: JSON.parse(this.ayarOku("site:modelBakis") || "null"),
+      gizli: this.hepsi("SELECT kod, durum FROM karar"),
+    };
+  }
+  repeteKarar(k) {
+    const l = JSON.parse(this.ayarOku("repete:kararlar") || "[]");
+    l.push(k);
+    this.ayarYaz("repete:kararlar", JSON.stringify(l.slice(-400)));
+    return { ok: true };
+  }
+
   // 6 Kasım (Patron, sadece rapor): iki mağazanın Vegawin'inde de satırı olan kodlar — kart bilgisi + mağaza başına satış özeti
   ikiMagaza() {
     const kodlar = this.hepsi("SELECT kod FROM urun GROUP BY kod HAVING COUNT(DISTINCT magaza) > 1 ORDER BY kod").map((r) => r.kod);
@@ -462,6 +489,8 @@ export class StokDO {
     if (yol === "/sorgu-bekleyen") return cevap(d.sorguBekleyen(g.murat, g.sure));
     if (yol === "/sorgu-liste") return cevap(d.sorguListe(g.basla, g.bitis));
     if (yol === "/iki-magaza") return cevap(d.ikiMagaza());
+    if (yol === "/repete-veri") return cevap(d.repeteVeri(g));
+    if (yol === "/repete-karar") return cevap(d.repeteKarar(g));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
     return new Response("?", { status: 404 });

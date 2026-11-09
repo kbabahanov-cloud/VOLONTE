@@ -996,6 +996,15 @@ export async function venomCron(env, simdi) {
   try { const t = await oku(env, "venom:kemalPaylasElle", null); if (t) { await env.KAYIT.delete("venom:kemalPaylasElle"); const ok = await kemaleVer(env, { kod: t.kod, renk: t.renk || null, beden: t.beden || null }, t.liste || [], simdi); await yaz(env, ok ? `🧭 ${t.kod} ${t.renk || ""} → Kemal'e yeni SON YAYIN kartı hazırlatılıyor (alt yazı ${renkDilleri(t.renk || "") ? renkDilleri(t.renk).en : "model kartı"}${t.beden ? `, ${BEDEN_AD[t.beden]}` : ""}, ${(t.liste || []).length} dosya). Kart Venom kontrolüyle buraya gelecek.` : `❌ ${t.kod}: Kemal'e iş gönderilemedi.`); } } catch (e) { await hataYaz(env, "paylasElle", e); }
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await bildir(env, `🤖 Selin\n${[].concat(rs).join("\n")}`, { simdi, kaynak: "selin", tur: "bilgi" }); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
+  // 9 Kasım: repete raporunda Patron "🔁 Repete al / 🔔 Fuat'a hatırlat" bastı → Fuat'a gidecek taslak onay kartı (adet/renk ✏️ Düzelt ile)
+  try {
+    const rt = await oku(env, "venom:repeteTaslak", null);
+    if (rt && rt.length) {
+      await env.KAYIT.delete("venom:repeteTaslak");
+      env.__sohbette = true; // Patron'un kendi isteği: kart hemen gelir
+      try { for (const t of rt.slice(0, 5)) await aracCalistir(env, "mesaj_taslagi", { kime: "fuat", metin: t.metin }, simdi); } finally { env.__sohbette = false; }
+    }
+  } catch (e) { await hataYaz(env, "repeteTaslak", e); }
   try { await hataBildir(env, simdi); } catch (e) { await hataYaz(env, "hataBildir", e); }
   // Tek seferlik (Claude Code): KV "venom:patronaYaz" = metin → Patron'a Venom'dan (ör. kural kitabı özeti)
   // 6 Kasım (gizlilik): KV "venom:gizliMesaj" = { metin, sure } → Patron'a özel mesaj (iletilemez/kopyalanamaz), sure saniye sonra SİLİNİR.

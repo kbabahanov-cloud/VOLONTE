@@ -96,7 +96,8 @@ export default {
     const mutabakat = (e, t) => mutabakatAdimi(e, t, tg);
     const venomGiden = (e, t) => venomGidenAdimi(e, t, tg); // Venom'un onaylanan dış mesajları (3 Kasım)
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const siteBakis = (e, t) => siteBakisYaz(e, t); // 9 Kasım: repete raporu için model başına sitede bakılma (günde bir)
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -108,6 +109,19 @@ export default {
     }
   },
 };
+
+// 9 Kasım (Patron, repete raporu): son 14 günde sitede model sayfasına bakılma sayısı → Sami'nin deposu "site:modelBakis" (günde bir).
+// Site sayımı gizlilik dostudur (IP/çerez yok); burada sadece model kodu → sayı.
+export async function siteBakisYaz(env, simdi) {
+  if (!env.SITE_IC || !env.STOK) return;
+  const gun = gunAnahtari(simdi);
+  const eski = (await stokIste(env, "/ayar-oku", { k: "site:modelBakis" }).catch(() => ({}))).v;
+  if (eski && JSON.parse(eski).gun === gun) return;
+  const l = await env.SITE_IC.ozet(gunAnahtari(simdi - 14 * 86400), gun).catch(() => null);
+  if (!Array.isArray(l)) return;
+  const modeller = Object.fromEntries(l.filter((x) => x.tur === "model").map((x) => [String(x.anahtar), Number(x.n) || 0]));
+  await stokIste(env, "/ayar-yaz", { k: "site:modelBakis", v: JSON.stringify({ gun, gunSayisi: 14, modeller }) });
+}
 
 async function webhookKur(env) {
   if (!env.SELF_URL) return;

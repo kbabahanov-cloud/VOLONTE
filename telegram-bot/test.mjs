@@ -2153,3 +2153,53 @@ test("9 Kasım YAYIN KAPISI: gece (23:00) onaylanan paylaşım kanala gitmez, ku
   assert.equal((await yayinKapisi(o.env, ist(21, 0))).acik, false);
   assert.equal((await yayinKapisi(o.env, ist(8, 59))).acik, false);
 });
+
+test("9 Kasım REPETE RAPORU: hızlı satan/bitmek üzere, bitti ama hızlıydı, fabrikadan gelecek (cevapsız 🔴 + hatırlat), yavaş+stok çok; iki marka toplanmaz; düğmeler", async () => {
+  const { repeteHesapla, repeteMetni, siparisTaslagi } = await import("./repete-rapor.js");
+  const simdi = Date.UTC(2026, 10, 9, 8, 0) / 1000; // 9 Kasım 11:00 İstanbul (pazartesi)
+  const veri = {
+    ilkGun: "2026-10-27",
+    urun: [{ magaza: "BLACKROSE", kod: "3627", adet: 4 }, { magaza: "VOLONTE", kod: "3627", adet: 50 }, { magaza: "VOLONTE", kod: "3500", adet: 0 }, { magaza: "VOLONTE", kod: "3100", adet: 40 }, { magaza: "VOLONTE", kod: "3377", adet: 2 }],
+    s14: [{ magaza: "BLACKROSE", kod: "3627", a: 20 }, { magaza: "VOLONTE", kod: "3627", a: 1 }, { magaza: "VOLONTE", kod: "3500", a: 9 }, { magaza: "VOLONTE", kod: "3100", a: 0 }, { magaza: "VOLONTE", kod: "3377", a: 1 }],
+    s7: [{ magaza: "BLACKROSE", kod: "3627", a: 12 }, { magaza: "VOLONTE", kod: "3500", a: 4 }],
+    fs: [{ id: "a", kod: "3377", durum: "bekliyor", gonderim: simdi - 3 * 86400, renkler: [{ renk: "siyah", adet: 10 }] }, { id: "b", kod: "3201", durum: "gelecek", gonderim: simdi - 86400, hazirGun: "2026-11-12", cevaplayan: "Nuri" }],
+    kararlar: [], bakis: { modeller: { 3627: 45 } }, gizli: [],
+  };
+  const h = repeteHesapla(veri, { markalar: { 3627: "BLACKROSE" }, tepki: { 3627: 12 }, simdi, siteKodlar: new Set(["3627", "3500", "3100", "3377"]) });
+  assert.deepEqual(h.hizli.map((x) => [x.kod, x.stok, x.s14]), [["3627", 4, 20]]); // BLACK ROSE mağazası (VOLONTE'nin 50'si EKLENMEZ)
+  assert.ok(h.hizli[0].bitisGun < 3 && h.acil.length === 1);
+  assert.deepEqual(h.bitti.map((x) => x.kod), ["3500"]);
+  assert.deepEqual(h.gelecek.map((x) => [x.kod, x.cevapsiz]), [["3377", true], ["3201", false]]);
+  assert.deepEqual(h.yavas.map((x) => x.kod), ["3100"]);
+  const r = repeteMetni(h, { simdi });
+  assert.match(r.metin, /🔥 HIZLI SATAN[\s\S]*1\. 3627 · BLACK ROSE\n   7g 12 · 14g 20 · stok 4 · ~3 günde biter[\s\S]*sitede 45 bakış · kanalda 12 tepki/);
+  assert.match(r.metin, /📦 BİTTİ AMA HIZLI SATIYORDU[\s\S]*2\. 3500 · VOLONTE/);
+  assert.match(r.metin, /🚚 FABRİKADAN GELECEK[\s\S]*3377 — .*🔴 cevap yok[\s\S]*3201 — .*12\.11 hazır \(Nuri\)/);
+  assert.match(r.metin, /🐢 YAVAŞ SATAN, STOKTA ÇOK — bunlara repete alma, kampanya düşün:\n3100 \(stok 40, 14g 0\)/);
+  assert.match(r.metin, /Defne kurulunca/);
+  assert.ok(!/\$|fiyat/i.test(r.metin));
+  assert.deepEqual(r.klavye[0].map((b) => b.callback_data), ["rr:r:3627", "rr:b:3627", "rr:x:3627"]);
+  assert.ok(r.klavye.some((row) => row[0].callback_data === "rr:h:3377"));
+  assert.match(siparisTaslagi({ kod: "3377", s14: 9, fabrika: veri.fs[0] }), /3377 modelinden repete rica ediyoruz: siyah 10\. Toplam yaklaşık 10 adet/);
+  // karar verilen (bekle) 7 gün sorulmaz
+  const h2 = repeteHesapla({ ...veri, kararlar: [{ kod: "3500", karar: "b", zaman: simdi - 86400 }] }, { markalar: { 3627: "BLACKROSE" }, simdi });
+  assert.equal(h2.bitti.length, 0);
+  assert.equal(h2.bekleyen, 1);
+});
+
+test("9 Kasım REPETE: Patron 'Repete al' basar → karar kaydı + Fuat taslağı Venom'a; 'Bekle' kayıt; Sami'nin deposu repete verisini mağaza mağaza verir", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  Object.assign(o.env, { MURAT_ID: "111" });
+  await kopru(o.env, [{ kod: "3627", adet: 4 }]);
+  o.depo.set("kemal:repeteSon", JSON.stringify({ zaman: 1, modeller: [{ kod: "3627", marka: "VOLONTE", s14: 20, stok: 4, fabrika: null }], gelecek: [] }));
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 111, first_name: "Patron" }, data: "rr:r:3627", message: { chat: { id: 111 }, message_id: 5 } } }, o.env);
+  const t = JSON.parse(o.depo.get("venom:repeteTaslak"));
+  assert.match(t[0].metin, /3627 modelinden repete rica ediyoruz/);
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 222, first_name: "Merdan" }, data: "rr:b:3627", message: { chat: { id: 222 }, message_id: 5 } } }, o.env);
+  assert.match(cagrilar(o.gonderilen, "answerCallbackQuery").at(-1).govde.text, /Patron'da/);
+  const { stokIste } = await import("./stokbot.js");
+  const v = await stokIste(o.env, "/repete-veri", { bas14: "2026-10-01", bas7: "2026-10-20", bitis: "2026-12-31" });
+  assert.deepEqual(v.kararlar.map((k) => [k.kod, k.karar]), [["3627", "r"]]);
+  assert.ok(v.urun.some((r) => r.kod === "3627" && r.magaza === "VOLONTE" && r.adet === 4));
+});

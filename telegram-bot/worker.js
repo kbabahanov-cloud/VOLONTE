@@ -42,6 +42,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir, ayniModelMi } from "./tanima.js";
 import { markaBas } from "./marka.js";
+import { repeteHesapla, repeteMetni, siparisTaslagi, hatirlatmaTaslagi } from "./repete-rapor.js";
+import { haftaIci, magazaAcik } from "./magaza-saat.js";
 import { musteriIsle, dilSec } from "./musteri.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } from "./ortak.js";
 
@@ -616,6 +618,7 @@ async function dugmeIsle(cq, env) {
   if (/^(r0|r1|r7|r30|rx|hx|hv):/.test(veri)) return cevapla("Bu eski liste artık kullanılmıyor; yeni tur mesajlarını kullanın.");
   if (veri.startsWith("kq:")) return kuyrukIptal(cq, env);
   if (veri.startsWith("kr:")) return repetePaylasKarari(cq, env);
+  if (veri.startsWith("rr:")) return repeteRaporDugmesi(cq, env); // 9 Kasım: repete raporu (Patron)
   if (veri.startsWith("sz:")) return stokKarari(cq, env);
   if (/^(ay|an):/.test(veri)) return altyaziKarar(cq, env);
   if (veri === "mk:acik" || veri === "mk:kapali") {
@@ -1452,6 +1455,105 @@ function sabahBaslangici(t, yarin) {
   const gunBasi = yerel - (yerel % 86400) + (yarin ? 86400 : 0);
   return gunBasi + YAYIN_BAS * 3600 - SAAT_FARKI;
 }
+// ---------- 9 Kasım (Patron): REPETE RAPORU — pazartesi/çarşamba/cuma 11:00, TEK rapor (fotoğraflı albüm + düğmeli liste) ----------
+const gunA = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
+async function repeteVerisi(env, simdi) {
+  const veri = await stokIste(env, "/repete-veri", { bas14: gunA(simdi - 13 * 86400), bas7: gunA(simdi - 6 * 86400), bitis: gunA(simdi), basKarar: gunA(simdi - 40 * 86400) });
+  const magaza = {};
+  for (const r of veri.urun || []) (magaza[r.kod] = magaza[r.kod] || new Set()).add(r.magaza);
+  const markalar = {};
+  for (const [kod, m] of Object.entries(magaza)) { const k = await markaKarari(env, kod).catch(() => null); if (k) markalar[kod] = k; else if (m.size === 1) markalar[kod] = [...m][0]; }
+  const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+  const ids = {}, hepsi = [];
+  for (const [kod, l] of Object.entries(kodlar)) { const x = (l || []).filter((g) => simdi - g.tarih < 14 * 86400).flatMap((g) => g.ids || []); if (x.length) { ids[kod] = x; hepsi.push(...x); } }
+  const t = hepsi.length ? await tepkileriOku(env, hepsi.slice(0, 1500)).catch(() => ({})) : {};
+  const tepki = Object.fromEntries(Object.entries(ids).map(([kod, l]) => [kod, l.reduce((a, id) => a + (Number(t[id]) || 0), 0)]));
+  const site = await siteUrunleriAl(env).catch(() => []);
+  const defne = await env.KAYIT.get("defne:istenenYok", "json").catch(() => null); // Defne kurulunca: { kod: istenme sayısı }
+  return { h: repeteHesapla(veri, { markalar, tepki, simdi, defne, siteKodlar: new Set(site.filter((u) => !u.gizli).map((u) => String(u.kod))) }), site, defne };
+}
+// Sitedeki ön fotoğrafa "MARKA · kod" basılır (Kemal'in marka etiketi; ücretsiz Cloudflare Images)
+async function markaliOnFoto(env, site, x) {
+  const u = site.find((y) => String(y.kod) === String(x.kod));
+  const ilk = u && siteMedyasi(u).find((m) => m.type === "photo");
+  if (!ilk) return null;
+  const r = await fetch(ilk.media).catch(() => null);
+  if (!r || !r.ok) return null;
+  const bayt = new Uint8Array(await r.arrayBuffer());
+  return env.IMAGES ? markaBas(env, bayt, 1080, x.kod, x.marka === "BLACKROSE" ? "BLACKROSE" : "VOLONTE").catch(() => bayt) : bayt;
+}
+async function fotoAlbumu(env, hedef, site, modeller) {
+  const form = new FormData(), medya = [];
+  for (const [i, x] of modeller.slice(0, 10).entries()) {
+    const f = await markaliOnFoto(env, site, x).catch(() => null);
+    if (!f) continue;
+    form.append(`p${i}`, new Blob([f], { type: "image/jpeg" }), `p${i}.jpg`);
+    medya.push({ type: "photo", media: `attach://p${i}`, caption: `${i + 1} · ${x.kod}` });
+  }
+  if (!medya.length) return null;
+  form.append("chat_id", String(hedef));
+  if (medya.length === 1) { form.append("photo", form.get("p0") || form.get(medya[0].media.slice(9))); form.append("caption", medya[0].caption); return telegramForm(env, "sendPhoto", form); }
+  form.append("media", JSON.stringify(medya));
+  return telegramForm(env, "sendMediaGroup", form);
+}
+export async function repeteRaporuGonder(env, simdi) {
+  const hedef = muratId(env);
+  const { h, site, defne } = await repeteVerisi(env, simdi);
+  const r = repeteMetni(h, { simdi, defneVar: Boolean(defne) });
+  await env.KAYIT.put("kemal:repeteSon", JSON.stringify({ zaman: simdi, modeller: r.modeller.map((x) => ({ kod: x.kod, marka: x.marka, s14: x.s14, stok: x.stok, fabrika: x.fabrika })), gelecek: h.gelecek }), { expirationTtl: 14 * 86400 });
+  await fotoAlbumu(env, hedef, site, r.modeller).catch(() => null);
+  await telegram(env, "sendMessage", { chat_id: hedef, text: r.metin, disable_web_page_preview: true, ...(r.klavye.length ? { reply_markup: { inline_keyboard: r.klavye } } : {}) });
+  return { modeller: r.modeller.length, acil: h.acil.length };
+}
+// Hızlı satan model 3 günden az stoğa düşerse raporu beklemeden TEK acil kart (fotoğraflı), 3 günde bir
+async function repeteAcilKontrol(env, simdi) {
+  const { h, site } = await repeteVerisi(env, simdi);
+  for (const x of h.acil.slice(0, 2)) {
+    const k = `kemal:repeteAcil:${x.kod}`;
+    if (await env.KAYIT.get(k)) continue;
+    await env.KAYIT.put(k, "1", { expirationTtl: 3 * 86400 });
+    const metin = `⚡ ACİL REPETE — ${x.kod} ${x.marka === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE"}: ~${Math.max(1, Math.round(x.bitisGun))} günde biter (stok ${x.stok}, 14g ${x.s14}, 7g ${x.s7}).\n${x.fabrika ? `Fabrika: ${x.fabrika.durum}${x.fabrika.hazirGun ? `, ${x.fabrika.hazirGun} hazır` : ""}` : "Fabrikada açık sipariş yok."}`;
+    const kl = { inline_keyboard: [[{ text: "🔁 Repete al", callback_data: `rr:r:${x.kod}` }, { text: "⏳ Bekle", callback_data: `rr:b:${x.kod}` }, { text: "❌ Alma", callback_data: `rr:x:${x.kod}` }]] };
+    const foto = await markaliOnFoto(env, site, x).catch(() => null);
+    const son = JSON.parse((await env.KAYIT.get("kemal:repeteSon")) || "{\"modeller\":[]}");
+    await env.KAYIT.put("kemal:repeteSon", JSON.stringify({ ...son, modeller: [...son.modeller.filter((y) => y.kod !== x.kod), { kod: x.kod, marka: x.marka, s14: x.s14, stok: x.stok, fabrika: x.fabrika }] }), { expirationTtl: 14 * 86400 });
+    if (foto) { const f = new FormData(); f.append("chat_id", String(muratId(env))); f.append("photo", new Blob([foto], { type: "image/jpeg" }), "acil.jpg"); f.append("caption", metin.slice(0, 1000)); f.append("reply_markup", JSON.stringify(kl)); await telegramForm(env, "sendPhoto", f); }
+    else await telegram(env, "sendMessage", { chat_id: muratId(env), text: metin, reply_markup: kl });
+  }
+}
+export async function repeteIsleri(env, simdi) {
+  if (!env.STOK) return;
+  if (await env.KAYIT.get("venom:repeteDeneme")) { // tek seferlik (Claude Code): rapor hesaplanır, GÖNDERİLMEZ → KV venom:repeteDenemeSonuc
+    await env.KAYIT.delete("venom:repeteDeneme");
+    const { h, defne } = await repeteVerisi(env, simdi);
+    const r = repeteMetni(h, { simdi, defneVar: Boolean(defne) });
+    await env.KAYIT.put("venom:repeteDenemeSonuc", JSON.stringify({ zaman: simdi, metin: r.metin, dugme: r.klavye.length, acil: h.acil.map((x) => x.kod) }), { expirationTtl: 86400 });
+  }
+  if (!haftaIci(simdi)) return;
+  const gun = new Date((simdi + SAAT_FARKI) * 1000).getUTCDay(), s = saat(simdi);
+  if ([1, 3, 5].includes(gun) && s >= 11 && s < 12 && !(await env.KAYIT.get(`kemal:repeteRapor:${gunA(simdi)}`))) {
+    await env.KAYIT.put(`kemal:repeteRapor:${gunA(simdi)}`, "1", { expirationTtl: 3 * 86400 });
+    return repeteRaporuGonder(env, simdi);
+  }
+  if (magazaAcik(simdi) && new Date(simdi * 1000).getUTCMinutes() < 5 && s >= 10) return repeteAcilKontrol(env, simdi);
+}
+// Düğmeler: r = repete al (Fuat'a sipariş taslağı Patron onayına), b = bekle (7 gün), x = alma (30 gün), h = Fuat'a hatırlat
+async function repeteRaporDugmesi(cq, env) {
+  const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!kimlikler(env.MURAT_ID).includes(String(cq.from.id))) return cevapla("Repete kararı Patron'da.");
+  const [, islem, kod] = String(cq.data).split(":");
+  const simdi = Math.floor(Date.now() / 1000);
+  const son = JSON.parse((await env.KAYIT.get("kemal:repeteSon")) || "{}");
+  const x = (son.modeller || []).find((y) => y.kod === kod) || { kod, s14: 0, fabrika: ((son.gelecek || []).find((y) => y.kod === kod)) || null };
+  if (islem !== "h") await stokIste(env, "/repete-karar", { kod, karar: islem, zaman: simdi, kim: kisiAdi(cq.from), stok: x.stok ?? null, satis14: x.s14 ?? null });
+  if (islem === "r" || islem === "h") {
+    const l = (await env.KAYIT.get("venom:repeteTaslak", "json")) || [];
+    await env.KAYIT.put("venom:repeteTaslak", JSON.stringify([...l, { kod, metin: islem === "r" ? siparisTaslagi(x) : hatirlatmaTaslagi(x.fabrika || { kod, gonderim: simdi }), zaman: simdi }]));
+    return cevapla(islem === "r" ? "Fuat'a sipariş taslağı onayınıza geliyor" : "Fuat'a hatırlatma taslağı onayınıza geliyor");
+  }
+  return cevapla(islem === "b" ? `${kod}: bekle — 7 gün sormam` : `${kod}: alma — 30 gün sormam`);
+}
+
 // 9 Kasım: YAYIN KAPISI — şu an kanala paylaşılabilir mi? (09–21 arası, son paylaşımdan ≥ 60 dk, sıradaki zamanı gelmiş)
 export async function yayinKapisi(env, simdi) {
   if (env.YAYIN_KAPISI === "0") return { acik: true, sonraki: simdi }; // sadece testler (gerçek saatten bağımsız)
@@ -2832,6 +2934,7 @@ export class KatalogDO {
       if (env.BOT_TOKEN) {
         try { await sabahIsleri(env, simdi); } catch (e) { await this.env.KAYIT.put("kemal:raporHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
         try { await fabrikaIsleri(env, simdi); } catch (e) { await this.env.KAYIT.put("kemal:fabrikaHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); }
+        try { await repeteIsleri(env, simdi); } catch (e) { await this.env.KAYIT.put("kemal:repeteHata", JSON.stringify({ zaman: simdi, hata: String(e && e.message).slice(0, 300) }), { expirationTtl: 7 * 86400 }); } // 9 Kasım
         await rotasyon(env, simdi);
       }
     } else if (yol === "/kemal/adim") {

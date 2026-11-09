@@ -839,3 +839,15 @@ test("9 Kasım: sabah 09:40 TEK özet ≤15 satır, sorunlar en üstte, biriken 
   await yazi(o, PATRON, "/detay");
   assert.match(patronaGiden(o)[0].govde.text, /Biriken bilgiler:[\s\S]*3557 kanala gitmedi/);
 });
+
+test("9 Kasım REPETE: Kemal'den gelen 'Repete al' taslağı Patron'a HEMEN onay kartı (Fuat'a gidecek, ✏️ Düzelt ile adet/renk); onaysız Fuat'a gitmez", async () => {
+  const o = ortam();
+  o.depo.set("venom:repeteTaslak", JSON.stringify([{ kod: "3627", metin: "Fuat Bey merhaba, 3627 modelinden repete rica ediyoruz: siyah 10. Toplam yaklaşık 10 adet. Ne zaman hazır olur?", zaman: 1 }]));
+  await venomCron(o.env, ist(9, 11, 2));
+  const k = patronaGiden(o).find((x) => /Fuat'a gidecek mesaj/.test(x.govde.text));
+  assert.ok(k, "kart geldi");
+  assert.match(k.govde.text, /3627 modelinden repete/);
+  assert.deepEqual(k.govde.reply_markup.inline_keyboard[0].map((b) => b.text), ["✅ Onayla", "✏️ Düzelt", "❌ İptal"]);
+  assert.ok(!o.depo.has("venom:repeteTaslak"));
+  assert.equal(o.samiG.filter((x) => String(x.govde.chat_id) === FUAT).length, 0);
+});
