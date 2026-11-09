@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3539",
+  "baslik": "Chiffon Cape Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A sleeveless, straight-cut maxi dress layered with a flowing sheer chiffon cape in deep green. The inner dress carries a soft swirling floral print with a buttoned front, while the cape ties at the neck and falls in fluid drapes over the arms and back. Elegant for daytime events, celebrations and refined everyday wear. Made in Istanbul with careful craftsmanship.",
+   "fr": "Une robe longue sans manches à coupe droite, associée à une cape fluide en mousseline transparente vert profond. La robe intérieure présente un imprimé floral aux volutes douces et un devant boutonné, tandis que la cape se noue à l'encolure et retombe en drapés légers sur les bras et le dos. Idéale pour les événements de journée, les cérémonies et une élégance quotidienne. Fabriquée à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um vestido longo sem mangas, de corte reto, acompanhado de uma capa fluida em chiffon transparente verde profundo. O vestido interior tem um estampado floral com ondas suaves e frente abotoada, enquanto a capa se amarra ao pescoço e cai em drapeados leves sobre os braços e as costas. Elegante para eventos de dia, celebrações e o dia a dia com requinte. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3539/1.jpg",
+   "galeri/3539/2.jpg",
+   "galeri/3539/3.jpg",
+   "galeri/3539/4.jpg"
+  ],
+  "videolar": [
+   "selin/3539/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-09"
+ },
+ {
   "kod": "3110",
   "baslik": "Satin Wrap Midi Dress",
   "kategori": "dresses",
