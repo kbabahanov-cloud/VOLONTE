@@ -2229,3 +2229,83 @@ test("9 Kasım model kartı fotoğrafı: site yoksa kanal; kanaldaki SOLD OUT g�
   try { r = await venomModelFoto(o.env, "3629"); } finally { globalThis.fetch = asil; }
   assert.equal(r.ok, false);
 });
+
+// ---------- 9 Kasım (Patron): günlük hedef 10 onaylı paylaşım ----------
+import { tamamlamaIhtiyaci, topluKart, turTamamla } from "./worker.js";
+test("10 onay hedefi: geç kadar ek öneri, onay+bekleyen ≤ 10; 10 onayda dur; son geçten 10 dk sonra (ya da bekleyen kalmayınca)", () => {
+  const s = ist(10);
+  const og = (n, karar) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`${karar || "b"}${i}`, { karar, paket: {} }]));
+  // bugün: 3 onay, 6 geç, 1 bekleyen → 6 yeni (son geç 11 dk önce)
+  const tur = { onaylar: ["y10", "y11", "y12"], ogeler: { ...og(3, "y1"), ...og(6, "yg"), ...og(1, null) }, sonGec: s - 11 * 60 };
+  assert.deepEqual(tamamlamaIhtiyaci(tur, s), { onay: 3, bekleyen: 1, eksik: 6, hazir: true });
+  assert.equal(tamamlamaIhtiyaci({ ...tur, sonGec: s - 5 * 60 }, s).hazir, false); // birkaç geç tek kartta toplansın
+  assert.equal(tamamlamaIhtiyaci({ ...tur, ogeler: { ...og(3, "y1"), ...og(7, "yg") }, sonGec: s - 60 }, s).hazir, true); // bekleyen yok → hemen
+  assert.equal(tamamlamaIhtiyaci({ onaylar: Array(10).fill("x"), ogeler: { ...og(10, "y1"), ...og(5, "yg") }, sonGec: s - 3600 }, s).hazir, false); // 10 onay → yeni öneri yok
+  assert.equal(tamamlamaIhtiyaci({ onaylar: [], ogeler: og(10, null), sonGec: s - 3600 }, s).eksik, 0);
+});
+
+test("geç → toplu ek öneri kartı (tek albüm + tek kart, numaralı düğmeler); karar kartı günceller; 15:00'ten sonra ek öneri yok", async () => {
+  const o = await yeniOrtam();
+  await rotasyon(o.env, ist(8, 0));
+  const tur0 = JSON.parse(o.depo.get("tur"));
+  assert.deepEqual(Object.keys(tur0.ogeler).sort(), ["3403", "3520"]);
+  // sonradan stoğa/siteye giren 3 model (3602 kanalda hiç paylaşılmadı)
+  const ek = ["3600", "3601", "3602"].map((kod) => ({ kod, baslik: `Model ${kod}`, bedenler: "38-40-42-44", fotolar: [`galeri/${kod}/1.jpg`, `galeri/${kod}/2.jpg`], videolar: [], fiyat: 1, gizli: false }));
+  SITE_TEST.push(...ek);
+  try {
+    const kodlar = JSON.parse(o.depo.get("kodlar"));
+    kodlar["3600"] = [{ ids: [730], tarih: ist(9) - 40 * GUN }];
+    kodlar["3601"] = [{ ids: [740], tarih: ist(9) - 20 * GUN }];
+    o.depo.set("kodlar", JSON.stringify(kodlar));
+    await kopru(o.env, [{ kod: "3403", adet: 40, fiyat: 44 }, { kod: "3520", adet: 40, fiyat: 52 }, { kod: "3411", adet: 40, fiyat: 55 }, { kod: "3999", adet: 0, fiyat: 1 }, ...ek.map((u) => ({ kod: u.kod, adet: 20, fiyat: 1 }))]);
+    const gec = kontrolDugme(o.gonderilen, "222", "3403", "yg");
+    const gercek = Date.now;
+    Date.now = () => ist(9) * 1000;
+    try { await bas(o.env, 222, gec); } finally { Date.now = gercek; }
+    assert.ok(JSON.parse(o.depo.get("atlananlar"))["3403"] >= ist(9) + 7 * GUN);
+    o.gonderilen.length = 0;
+    assert.equal(await turTamamla(o.env, ist(9, 5)), false); // 3520 hâlâ bekliyor, son geçten 5 dk
+    assert.equal(cagrilar(o.gonderilen, "sendMessage").length, 0);
+    assert.equal(await turTamamla(o.env, ist(9, 11)), true);
+    const tur = JSON.parse(o.depo.get("tur"));
+    assert.deepEqual(tur.dalgalar[0].kodlar, ["3602", "3600", "3601"]); // hiç paylaşılmayan önce, sonra en eski
+    for (const kisi of ["222", "333"]) {
+      const al = cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => String(m.govde.chat_id) === kisi);
+      assert.equal(al.length, 1); // TEK albüm
+      assert.deepEqual(al[0].govde.media.map((m) => m.caption), ["1 · 3602", "2 · 3600", "3 · 3601"]);
+    }
+    const kart = cagrilar(o.gonderilen, "sendMessage").find((m) => m.govde.chat_id === "222");
+    assert.match(kart.govde.text, /ek öneri \(3 model\)/);
+    assert.match(kart.govde.text, /2\. 3600 · Model 3600 — renk black-gold floral ✅ · son paylaşım .* \(40 gün önce\)/);
+    assert.match(kart.govde.text, /1\. 3602 .* kanalda hiç paylaşılmadı/);
+    assert.equal(kart.govde.reply_markup.inline_keyboard.length, 3);
+    assert.equal(cagrilar(o.gonderilen, "sendMessage").length, 2); // kişi başı tek kart
+    // toplu karttan onay ve geç
+    const dugme = (on, kod) => kart.govde.reply_markup.inline_keyboard.flat().find((d) => d.callback_data === `${on}:${tur.no}:${kod}`).callback_data;
+    o.gonderilen.length = 0;
+    Date.now = () => ist(9, 20) * 1000;
+    try { await bas(o.env, 333, dugme("y1", "3600")); await bas(o.env, 333, dugme("yg", "3601")); } finally { Date.now = gercek; }
+    assert.ok(o.depo.get("kuyruk:3600"));
+    assert.ok(JSON.parse(o.depo.get("atlananlar"))["3601"] > ist(9) + 6 * GUN);
+    const son = cagrilar(o.gonderilen, "editMessageText").filter((m) => m.govde.chat_id === "222").at(-1);
+    assert.match(son.govde.text, /3600 .*✅ Murat onayladı/);
+    assert.match(son.govde.text, /3601 .*❌ Murat: geç/);
+    assert.equal(son.govde.reply_markup.inline_keyboard.length, 1); // sadece 3602 kaldı
+    // 15:00'ten sonra yeni ek öneri yok (geç olsa da)
+    o.gonderilen.length = 0;
+    assert.equal(await turTamamla(o.env, ist(15, 5)), false);
+    assert.equal(o.gonderilen.length, 0);
+  } finally { SITE_TEST.splice(SITE_TEST.length - ek.length, ek.length); }
+});
+
+test("toplu kart metni: renk emin değilse ✏️ uyarısı, karar verilen satırın düğmesi kalkar", () => {
+  const s = ist(10);
+  const tur = { no: 4, onaylar: ["1"], dalgalar: [{ no: 1, kodlar: ["1", "2"] }], ogeler: {
+    1: { karar: "y1", kim: "Hemra", paket: { renkler: ["black"], renkEmin: true, tgSon: s - 20 * GUN } },
+    2: { karar: null, paket: { renkler: ["champagne"], renkEmin: false, tgSon: null } } } };
+  const k = topluKart(tur, 1, s);
+  assert.match(k.text, /Bugün 1\/10 onay/);
+  assert.match(k.text, /1\. 1 — renk black ✅ · son paylaşım .* \(20 gün önce\) — ✅ Hemra onayladı/);
+  assert.match(k.text, /2\. 2 — renk ⚠️ emin değilim \(champagne\) → ✏️ · kanalda hiç paylaşılmadı/);
+  assert.deepEqual(k.reply_markup.inline_keyboard.map((r) => r[0].callback_data), ["y1:4:2"]);
+});

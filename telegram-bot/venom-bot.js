@@ -28,7 +28,7 @@ import { kopruSustu, haftaIci } from "./magaza-saat.js";
 import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri } from "./venom-model.js";
 import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
-import { botSorusu, botCevabi, herkesCevabi, canliSatirlar, takilanlar, BOTLAR as DEFTER_BOTLAR, kisiAdi as defterKisi } from "./venom-defter.js";
+import { botSorusu, botCevabi, herkesCevabi, canliSatirlar, takilanlar, hedefSatiri, BOTLAR as DEFTER_BOTLAR, kisiAdi as defterKisi } from "./venom-defter.js";
 import { defterYaz } from "./is-defteri.js";
 import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
 export { KISILER };
@@ -1150,7 +1150,9 @@ export async function aksamOzeti(env, simdi) {
   const kontrol = engel.length || duz.length ? [`🛡 Venom kontrolü: ${duz.length} gönderiyi kendim düzelttim · ${engel.length} gönderi durdu (düzeltemediklerim Hemra/Merdan'a gitti)`] : [];
   const botRap = satirlar(((await oku(env, `venom:botRapor:${gunAnahtari(simdi)}:aksam`, null)) || {}).metin).slice(1).map((x) => `📒 ${x}`);
   const cuma = new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() === 5 ? [await saglikSatiri(env, simdi).catch(() => null)].filter(Boolean) : [];
+  const hedef = hedefSatiri(await botaSor(env, "kemal", "ozet").catch(() => null), gunAnahtari(simdi)); // 9 Kasım: günlük 10 onay hedefi
   const metin = ozetKisalt(satir[0] || `🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, [
+    { satirlar: [hedef].filter(Boolean), enFazla: 1 },
     { satirlar: cuma, enFazla: 1 },
     { satirlar: [birikimSatiri(bir)].filter(Boolean), enFazla: 1 },
     { satirlar: kontrol, enFazla: 1 },

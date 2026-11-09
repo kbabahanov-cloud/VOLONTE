@@ -36,10 +36,17 @@ export function botOzeti(env, bot, satirlar, canli = null) {
   s.push(hata.length ? `${hata.length} hata: ${String(hata.at(-1).ozet || "").slice(0, 80)}` : "hata yok");
   return s;
 }
+// 9 Kasım (Patron): akşam özetinde tek satır — "Bugün X onay / 10, Y geç, Z paylaşıldı." (k: Kemal canlı özeti)
+export function hedefSatiri(k, bugun) {
+  if (!k) return null;
+  const t = k.tur && k.tur.gun === bugun ? k.tur : null;
+  const z = Math.max(Number(k.bugunKanal) || 0, Number(k.bugunPaylasim) || 0);
+  return `📣 Bugün ${t ? t.onay ?? (t.kararlar || {})["paylaş"] ?? 0 : 0} onay / ${(t && t.hedef) || 10}, ${t ? t.gec ?? (t.kararlar || {})["geç"] ?? 0 : 0} geç, ${z} paylaşıldı.`;
+}
 // Canlı özetten kısa satırlar (bot hemen cevap verir)
 export function canliSatirlar(bot, c) {
   if (!c) return [];
-  if (bot === "kemal" && c.tur) return [`bugünün turu: ${c.tur.soruldu} model soruldu, ${c.tur.cevaplandi} cevap${Object.keys(c.tur.kararlar || {}).length ? ` (${Object.entries(c.tur.kararlar).map(([k, n]) => `${n} ${k}`).join(", ")})` : ""}`, ...(c.kuyruk && c.kuyruk.length ? [`kuyrukta ${c.kuyruk.length}: ${kodListe(c.kuyruk)}`] : []), `bugün kanala ${c.bugunPaylasim || 0} paylaşım`];
+  if (bot === "kemal" && c.tur) return [`bugünün turu: ${c.tur.soruldu} model soruldu, ${c.tur.cevaplandi} cevap${Object.keys(c.tur.kararlar || {}).length ? ` (${Object.entries(c.tur.kararlar).map(([k, n]) => `${n} ${k}`).join(", ")})` : ""}${c.tur.hedef ? ` · hedef ${c.tur.onay || 0}/${c.tur.hedef} onay${c.tur.ek ? `, ${c.tur.ek} ek öneri` : ""}` : ""}`, ...(c.kuyruk && c.kuyruk.length ? [`kuyrukta ${c.kuyruk.length}: ${kodListe(c.kuyruk)}`] : []), `bugün kanala ${c.bugunPaylasim || 0} paylaşım`];
   if (bot === "selin") return [`bugün ${c.bugunIstenen || 0} model için fotoğraf istendi`, ...(c.onayda && c.onayda.length ? [`onay bekleyen taslak: ${kodListe(c.onayda)}`] : []), ...(c.takilan && c.takilan.length ? [`gönderilemeyen ${c.takilan.length}: ${c.takilan.slice(0, 5).map((t) => `${t.kod} (${t.sebep})`).join("; ")}${c.takilan.length > 5 ? " …" : ""}`] : [])];
   if ((bot === "pelin" || bot === "nora") && c.isler) {
     const isler = c.isler.filter((x) => bot === "pelin" || /senaryo/.test(x.durum || ""));

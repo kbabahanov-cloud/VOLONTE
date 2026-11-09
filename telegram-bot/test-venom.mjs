@@ -984,3 +984,12 @@ test("9 Kasım: 3 saattir bekleyen kart → Hemra'ya BİR kez hatırlatma (Sami 
   const m = await (await import("./venom-bot.js")).aksamOzeti(o.env, ist(13, 20, 1));
   assert.match(m, /🩺 Bu hafta: \d+ hatayı kendim düzelttim · \d+ mesaj size kurala uymadan geldi · /);
 });
+
+// 9 Kasım (Patron): akşam özetinde günlük 10 onay hedefi satırı
+test("akşam özeti: 'Bugün X onay / 10, Y geç, Z paylaşıldı.' tek satır (Kemal canlı özetinden)", async () => {
+  const { hedefSatiri } = await import("./venom-defter.js");
+  const k = { tur: { gun: "2026-11-09", onay: 7, gec: 9, hedef: 10, kararlar: { paylaş: 7, geç: 9 } }, bugunPaylasim: 5, bugunKanal: 6 };
+  assert.equal(hedefSatiri(k, "2026-11-09"), "📣 Bugün 7 onay / 10, 9 geç, 6 paylaşıldı.");
+  assert.equal(hedefSatiri({ ...k, tur: { ...k.tur, gun: "2026-11-08" } }, "2026-11-09"), "📣 Bugün 0 onay / 10, 0 geç, 6 paylaşıldı.");
+  assert.equal(hedefSatiri(null, "2026-11-09"), null);
+});
