@@ -2072,3 +2072,46 @@ test("10 Kasım: kişi deneme listeleri (Aziz VOLONTE + Merdan Black Rose) 'Emin
   assert.match(h[0].govde.text, /^🧪 DENEME[\s\S]*VOLONTE LİSTESİ \(1 model\):[\s\S]*3394[\s\S]*BLACK ROSE LİSTESİ \(1 model\):[\s\S]*3459/);
   assert.ok(!o.g.some((x) => String(x.govde.chat_id) === "555")); // fabrikaya hiçbir şey
 });
+
+test("TAM ZİNCİR DENEMESİ (tek seferlik): Aziz + Merdan → Hemra (ayrı başlıklar) → SADECE Sinem (Fuat/Nuri yok) → Sinem 'Bitti' → Fuat'a gitmez → Hemra karar kartı → Venom kuyruğu (🧪); gerçek kayda/bitenlere/kanıta yazılmaz", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const { gunAnahtari } = await import("./worker.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }, { id: 556, ad: "Sinem" }, { id: 557, ad: "Fuat" }]));
+  const g = gunAnahtari(Math.floor(Date.now() / 1000));
+  const yaz = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${k}`, v: JSON.stringify(v) }) });
+  const oku = async (k) => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `fabrika:${k}` }) })).json()).v || "null");
+  const liste = (mag, kime, kod, mesaj) => ({ asama: "eminMi", zaman: 1, gun: g, magaza: mag, sorumlu: kime, deneme: true, zincir: true, modeller: [{ kod, satilan: 1, kalan: 3 }], secim: { [kod]: { beden: "b", gruplar: { b: [{ renk: "pudra", adet: 8 }] } } }, mesajlar: { [kod]: [mesaj, "foto", "x"] } });
+  await yaz(`${g}-DK`, liste("VOLONTE", "444", "3394", 71));
+  await yaz(`${g}-BR-DK`, liste("BLACKROSE", "222", "3459", 72));
+  const bas = (id, data, ad = "X") => g2({ callback_query: { id: "c", from: { id, first_name: ad }, data, message: { chat: { id }, message_id: 9 } } }, o.env);
+  await bas(444, `fe:E:${g}-DK:-`);
+  await bas(222, `fe:E:${g}-BR-DK:-`);
+  const hl = o.g.find((x) => String(x.govde.chat_id) === "333" && /Gidecek liste/.test(x.govde.text || ""));
+  assert.match(hl.govde.text, /VOLONTE LİSTESİ[\s\S]*BLACK ROSE LİSTESİ[\s\S]*SADECE Sinem'e gider; Fuat ve Nuri'ye GİTMEZ/);
+  const onay = hl.govde.reply_markup.inline_keyboard[0][0].callback_data;
+  o.g.length = 0;
+  await bas(333, onay, "Hemra");
+  const kime = new Set(o.g.filter((x) => x.govde && x.govde.chat_id != null).map((x) => String(x.govde.chat_id)));
+  assert.ok(kime.has("556"), "Sinem'e gitmedi");
+  assert.ok(!kime.has("555") && !kime.has("557"), "Fuat/Nuri'ye gitti: " + [...kime].join(","));
+  const sinem = o.g.filter((x) => String(x.govde.chat_id) === "556").map((x) => x.govde.text || x.govde.caption || "");
+  assert.ok(sinem.some((t) => /🧪 DENEME[\s\S]*VOLONTE LİSTESİ – BAŞLANGIÇ/.test(t)) && sinem.some((t) => /BLACK ROSE LİSTESİ – BAŞLANGIÇ/.test(t)), sinem.join("\n---\n"));
+  assert.ok(sinem.some((t) => /SONU/.test(t)));
+  const kart = o.g.find((x) => String(x.govde.chat_id) === "556" && x.govde.reply_markup && /3459/.test(x.govde.caption || x.govde.text || ""));
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Gelecek", "🔁 Repete olacak", "❌ Bitti, gelmeyecek", "⚠️ Az kaldı", "⚠️ Fotoğraf yanlış model"]);
+  const bitti = kart.govde.reply_markup.inline_keyboard.flat().find((d) => /Bitti/.test(d.text)).callback_data;
+  o.g.length = 0;
+  await bas(556, bitti, "Sinem");
+  assert.ok(!o.g.some((x) => String(x.govde.chat_id) === "557"), "Fuat'a onay kartı gitti");
+  const hk = o.g.find((x) => String(x.govde.chat_id) === "333" && /fabrikada bitti/.test(x.govde.caption || x.govde.text || ""));
+  assert.ok(hk && /🧪 DENEME/.test(hk.govde.caption || hk.govde.text));
+  const rep = hk.govde.reply_markup.inline_keyboard.flat().find((d) => /Repete/.test(d.text)).callback_data;
+  await bas(333, rep, "Hemra");
+  const q = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "bittiOneri" }) })).json();
+  assert.deepEqual(q.map((x) => [x.kod, x.deneme, x.zincir]), [["3459", true, true]]); // Venom'dan Patron'a (🧪)
+  assert.equal(await oku("bitenler"), null); // gerçek "bitti" kaydı yok
+  const ark = await (await o.env.STOK.get().fetch("https://stok/arsiv-kod", { method: "POST", body: JSON.stringify({ kod: "3459" }) }).catch(() => null))?.json?.().catch(() => []);
+  assert.ok(!JSON.stringify(ark || []).includes("fabrika-kanit"));
+});

@@ -1563,7 +1563,7 @@ export function bittiKartMetni(x) {
 }
 async function bittiOneriAdimi(env, simdi) {
   for (const x of await kuyruguAl(env, "bittiOneri")) {
-    if (x.deneme) { await kaydet(env, `venom:bittiDeneme:${x.sip}`, x, 3 * 86400); continue; } // 10 Kasım kural 5: DENEME Patron'a karar olarak GİTMEZ
+    if (x.deneme && !x.zincir) { await kaydet(env, `venom:bittiDeneme:${x.sip}`, x, 3 * 86400); continue; } // zincir denemesi (Patron istedi): 🧪 işaretli kart gelir // 10 Kasım kural 5: DENEME Patron'a karar olarak GİTMEZ
     await kaydet(env, `venom:bittiKart:${x.sip}`, x, 30 * 86400);
     const metin = bittiKartMetni(x);
     const kl = { inline_keyboard: x.oneri === "sor" ? [[{ text: "🔁 Repete", callback_data: `vbo:r:${x.sip}` }, { text: "🗑 Sil", callback_data: `vbo:s:${x.sip}` }], [{ text: "⏳ Bekle", callback_data: `vbo:w:${x.sip}` }]]
