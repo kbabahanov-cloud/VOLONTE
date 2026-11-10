@@ -1,5 +1,31 @@
 [
  {
+  "kod": "3412",
+  "baslik": "Pleated Ric-Rac Maxi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A long-sleeved maxi dress with a fitted bodice and a finely pleated skirt that falls to an asymmetric handkerchief hem. Contrast ric-rac trim runs along the placket, cuffs and hem, framed by a piped stand collar and a matching belt with a covered round buckle. Polished for office days, ceremonies and church. Made in Istanbul with careful workmanship.",
+   "fr": "Robe longue à manches longues, buste ajusté et jupe finement plissée terminée par un ourlet asymétrique en pointes. Un galon zigzag contrasté souligne le plastron, les poignets et l'ourlet, avec un col montant passepoilé et une ceinture assortie à boucle ronde recouverte. Idéale pour le bureau, les cérémonies ou l'église. Fabriquée à Istanbul avec soin.",
+   "pt": "Vestido longo de mangas compridas, corpete ajustado e saia finamente plissada com barra assimétrica em pontas. Uma fita ondulada em contraste destaca a frente, os punhos e a barra, com gola alta debruada e cinto a condizer com fivela redonda forrada. Elegante para o escritório, cerimónias e a igreja. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44-46-48-50",
+  "fotolar": [
+   "galeri/3412/1.jpg",
+   "galeri/3412/2.jpg",
+   "galeri/3412/3.jpg",
+   "galeri/3412/4.jpg",
+   "galeri/3412/5.jpg",
+   "galeri/3412/6.jpg",
+   "galeri/3412/7.jpg"
+  ],
+  "videolar": [
+   "selin/3412/0",
+   "selin/3412/1"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-10"
+ },
+ {
   "kod": "3501",
   "baslik": "Ombre Cape Trouser Set",
   "kategori": "sets",
