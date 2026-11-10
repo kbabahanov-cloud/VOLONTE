@@ -1192,15 +1192,17 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
         if (d.zincir) rec.zincir = true;
         if (!d.deneme && (d.acil || []).includes(kod)) { // 10 Kasım: fabrikaya ⚡ ACİL (stok bilgisi gitmez); eski açık istek kapanır (aynı model iki kez istenmez)
           rec.acil = true;
+          if ((d.yerineKodlar || []).includes(kod)) rec.yerine = true; // aynı modelin önceki satırı eski isteğin yerine geçtiyse bu satır da
           const eskiler = (await stokIste(env, "/fs-ozet", {}).catch(() => [])).filter((y) => String(y.kod) === kod && !y.deneme && y.id !== rec.id && (y.grup || "fabrika") === (rec.grup || "fabrika") && ["bekliyor", "gelecek", "repete", "sureSoruluyor"].includes(y.durum));
           for (const y of eskiler) {
             const er = await siparisOku(env, y.id);
-            if (!er) continue;
+            if (!er || er.liste === anahtar || (er.gonderim || 0) >= (d.onayZaman || simdi)) continue; // 10 Kasım HATA DÜZELTMESİ: aynı listenin satırları (ör. 3419 Küçük + Büyük) birbirini kapatmaz
             Object.assign(er, { durum: "kapandi", iptal: { neden: "⚡ ACİL istek yerine geçti", zaman: simdi } });
             er.log.push("↪️ Yerine ⚡ ACİL istek geldi");
             await mesajlariGuncelle(env, er, "↪️ Bu istek yerine ⚡ ACİL istek geldi (aşağıda). Bu kartı cevaplamayın.", tg).catch(() => null);
             await siparisYaz(env, er);
             rec.yerine = true;
+            d.yerineKodlar = [...new Set([...(d.yerineKodlar || []), kod])];
           }
         }
         const r = await fabrikayaGonder(env, rec, tg, site);
@@ -1232,7 +1234,13 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
         if (b && !b.deneme && b.asama === "gonderildi" && !(b.gonderilecek || []).length) ekle(b);
       }
       await ayarYaz(env, gk, giden);
-      const metin = `Bugünkü eksik listesi fabrikaya gitti: VOLONTE ${(giden.VOLONTE || []).length} model, Black Rose ${(giden.BLACKROSE || []).length} model.`;
+      const bekleyen = [];
+      for (const k of (await ayarOku(env, `fabrika:birlesik:${gunAnahtari(simdi)}`, [])) || []) { // kısmen giden (5 kart sınırı) listeler de söylenir
+        if (k === anahtar) continue;
+        const b = await ayarOku(env, `fabrika:${k}`, null);
+        if (b && !b.deneme && b.asama === "gonderildi" && (b.gonderilecek || []).length) for (const mg of ["VOLONTE", "BLACKROSE"]) { const n = new Set((b.liste || []).filter((x) => (x.magaza || MAGAZA) === mg).map((x) => x.kod)).size; if (n) bekleyen.push(`${mg === "BLACKROSE" ? "Black Rose" : "VOLONTE"} ${n} modellik liste kısmen gitti (${(b.gonderilecek || []).length} satır fabrikanın cevabını bekliyor)`); }
+      }
+      const metin = `Bugünkü eksik listesi fabrikaya gitti: VOLONTE ${(giden.VOLONTE || []).length} model, Black Rose ${(giden.BLACKROSE || []).length} model.${bekleyen.length ? ` Ayrıca: ${bekleyen.join("; ")}.` : ""}`;
       await stokIste(env, "/kuyruk-ekle", { ad: "fabrikaGitti", kayit: { id: `fg-${anahtar}-${simdi}`, metin, zaman: simdi } }).catch(() => null);
     }
     if (d && d.liste && d.liste.length) {

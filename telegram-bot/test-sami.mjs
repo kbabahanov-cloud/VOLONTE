@@ -2341,7 +2341,11 @@ test("ACİL EK LİSTE (10 Kasım akşam): bugünkü liste gitmişken ⚡ acil mo
   const sinem = o.g.filter((x) => String(x.govde.chat_id) === "556").map((x) => x.govde.caption || x.govde.text || "");
   assert.ok(sinem.some((t) => /⚡ ACİL — bugünkü isteğin YERİNE bu geçerli[\s\S]*3477/.test(t)), sinem.join("\n---\n"));
   assert.ok(!sinem.some((t) => /stok|~2 gün/.test(t))); // fabrikaya stok bilgisi gitmez
-  assert.ok(o.g.some((x) => /Bu istek yerine ⚡ ACİL istek geldi/.test(x.govde.caption || x.govde.text || ""))); // eski kart kapandı
+  const kapanan = o.g.filter((x) => /Bu istek yerine ⚡ ACİL istek geldi/.test(x.govde.caption || x.govde.text || ""));
+  assert.equal(kapanan.length, 1); // SADECE eski kart kapandı (10 Kasım hatası: aynı listenin Küçük satırı da kapanıyordu)
+  assert.ok(!/küçük|Küçük \(38-44\) · beyaz 10/.test(kapanan[0].govde.caption || kapanan[0].govde.text || "") || /beyaz 4/.test(kapanan[0].govde.caption || ""));
+  const yeniKartlar = sinem.filter((t) => /⚡ ACİL — bugünkü isteğin YERİNE bu geçerli[\s\S]*3477/.test(t));
+  assert.equal(yeniKartlar.length, 2); // iki beden satırı da fabrikada açık
   const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
   assert.match(fg.at(-1).metin, /^Bugünkü eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 0 model\.$/);
   assert.ok(ekAd);
