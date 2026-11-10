@@ -29,7 +29,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 
 ## D. Marka ve deneme
 17. **Marka ayrımı:** VOLONTE → Aziz, BLACK ROSE → Merdan. İki marka asla karışmaz, toplanmaz, karşılaştırılmaz; marka tahmin edilmez. Kemal'in öneri kartı Merdan'a sadece Black Rose.
-18. **Deneme ayrı:** 🧪 DENEME asla gerçek akışa, deftere, kanıt defterine, fabrikaya, Hemra'nın gerçek işine ya da Patron'a karar olarak gitmez.
+18. **Deneme ayrı:** 🧪 DENEME asla gerçek akışa, deftere, kanıt defterine, fabrikaya, Hemra'ya ya da Patron'a karar olarak gitmez (Patron bir deneme zincirini açıkça isterse 🧪 işaretiyle gider, fabrikaya yine gitmez).
 
 ## E. Kart
 19. **Kart = tek mesaj:** resim + yazı + düğmeler. Satırda en fazla 2 düğme; yazılar kesilmez.
