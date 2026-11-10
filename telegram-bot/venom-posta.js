@@ -179,12 +179,12 @@ export function birikimSatiri(l) {
 }
 const SORUNLU = /❌|⚠️|🔴|🛑|sorun|hata|gitmedi|yapılamadı|gelmedi/i;
 // bolumler: [{ satirlar: [...], enFazla }] öncelik sırasıyla. Sorunlu satırlar (❌ ⚠️) en üste; toplam OZET_SATIR'ı geçmez.
-export function ozetKisalt(baslik, bolumler, sonNot = "Ayrıntı: /detay") {
+export function ozetKisalt(baslik, bolumler, sonNot = "Ayrıntı: /detay", sinir = OZET_SATIR) {
   const temiz = (s) => String(s || "").replace(/^\s*[•-]\s*/, "• ").trim();
   const tum = bolumler.map((b) => ({ ...b, satirlar: (b.satirlar || []).map(temiz).filter((s) => s && !/^[─-]{3,}$/.test(s)) }));
   const sorunlu = [...new Set(tum.flatMap((b) => b.satirlar.filter((s) => SORUNLU.test(s))))].slice(0, 5);
   const out = [baslik, ...sorunlu];
-  const kalan = OZET_SATIR - 1 - (sonNot ? 1 : 0);
+  const kalan = sinir - 1 - (sonNot ? 1 : 0);
   for (const b of tum) {
     let n = 0;
     for (const s of b.satirlar) {
@@ -195,5 +195,5 @@ export function ozetKisalt(baslik, bolumler, sonNot = "Ayrıntı: /detay") {
     }
   }
   if (sonNot) out.push(sonNot);
-  return out.slice(0, OZET_SATIR).join("\n");
+  return out.slice(0, sinir).join("\n");
 }

@@ -112,7 +112,7 @@ test("Fuat'a mesaj: tam metin kart [Onayla/Düzelt/İptal] → Emin misiniz → 
   await venomCron(o.env, ist(3, 12, 10));
   // 9 Kasım (postane): "gitti" bilgisi Patron'a anında GİTMEZ, Venom'da birikir (akşam özetinde sayı)
   assert.ok(!patronaGiden(o).some((x) => /Mesaj Fuat'a gitti/.test(x.govde.text)));
-  assert.ok(JSON.parse(o.depo.get("venom:posta:2026-11-03")).some((x) => /^✅ Mesaj Fuat'a gitti/.test(x.ozet)));
+  assert.ok(!(JSON.parse(o.depo.get("venom:posta:2026-11-03") || "[]")).some((x) => /Mesaj Fuat'a gitti/.test(x.ozet))); // 10 Kasım: "Mesaj X'e gitti" özete de girmez (arşivde var)
   const ars = await (await o.env.STOK.get().fetch("https://stok/arsiv-liste", { method: "POST", body: "{}" })).json();
   assert.ok(ars.some((x) => x.tur === "venom-mesaj") && ars.some((x) => x.tur === "venom-gitti"));
 });
@@ -1333,4 +1333,37 @@ test("/rol Janet fiyat: Sami listelerinde rol değişir (fabrikadan çıkar, sad
   await yazi(o, PATRON, "/rol Fuat fabrika");
   assert.match(patronaGiden(o).at(-1).govde.text, /Fuat → fabrika/);
   assert.match(await v.rolDegistir(o.env, "Yok", "fiyat", 100), /listelerinde yok/);
+});
+
+test("para: günlük sayaç (bot başına) + model sayımı; Kemal 2 $ tavanında durur, deneme bot bütçesine yazılmaz; Venom %80 ve 3 kat alarmı; özet bugünü doğru yazar", async () => {
+  const o = ortam();
+  const H = await import("./harcama.js");
+  const v = await import("./venom-bot.js");
+  const e = { ...o.env, BOT_ADI: "kemal" };
+  const t = Math.floor(Date.UTC(2026, 10, 10, 9) / 1000);
+  await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t); // 0,40 + 0,40 = 0,80 $
+  assert.equal(await H.gunlukHarcanan(e, "kemal", t), 0.8);
+  const d = JSON.parse(o.depo.get("harcama-detay:kemal:2026-11-10"));
+  assert.deepEqual(d["claude-opus-5-5"], { n: 1, usd: 0.8 });
+  o.depo.set("harcama:denemeBitis", String(t + 3600));
+  await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t + 60);
+  assert.equal(await H.gunlukHarcanan(e, "kemal", t), 0.8); // deneme ayrı
+  o.depo.delete("harcama:denemeBitis");
+  await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t + 120);
+  assert.equal(await H.sinirAsildiMi(e, t + 130), false); // 1,60 $
+  // Venom %80 uyarısı (para izni)
+  o.depo.set("venom:paraGun:2026-11-09", JSON.stringify({ kemal: 0.3, selin: 0.2, pelin: 0, sami: 0, venom: 0.1 }));
+  o.depo.set("venom:paraGun:2026-11-08", JSON.stringify({ kemal: 0.3, selin: 0.2, pelin: 0, sami: 0, venom: 0.1 }));
+  o.depo.set("venom:paraGun:2026-11-07", JSON.stringify({ kemal: 0.4, selin: 0.2, pelin: 0, sami: 0, venom: 0.1 }));
+  await v.paraAlarmi(o.env, t + 200);
+  const m = patronaGiden(o).map((x) => x.govde.text);
+  assert.ok(m.some((x) => /Kemal bugün 1,60 \$ harcadı \(günlük tavan 2 \$, %80\)/.test(x)));
+  assert.ok(m.some((x) => /Kemal bugün olağanın 3 katından fazla harcadı: 1,60 \$/.test(x)));
+  await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t + 300);
+  assert.equal(await H.sinirAsildiMi(e, t + 310), true); // 2,40 $ → yapay zekâ durur
+  await v.paraAlarmi(o.env, t + 400);
+  assert.ok(patronaGiden(o).some((x) => /Kemal bugünkü yapay zekâ tavanına ulaştı: 2,40 \$/.test(x.govde.text)));
+  const n = patronaGiden(o).length;
+  await v.paraAlarmi(o.env, t + 500);
+  assert.equal(patronaGiden(o).length, n); // günde bir kez
 });

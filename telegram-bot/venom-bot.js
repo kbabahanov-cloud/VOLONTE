@@ -1276,7 +1276,7 @@ export async function venomCron(env, simdi) {
   const aktif = Number(await env.KAYIT.get("venom:bot:aktif").catch(() => 0)) || 0;
   if (simdi - aktif > 1200) await env.KAYIT.put("venom:bot:aktif", String(simdi), { expirationTtl: 1800 }).catch(() => null);
   // Diğer botların sonuçları → "✅ yapıldı"
-  for (const s of await kuyruguAl(env, "sonuc")) { await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
+  for (const s of await kuyruguAl(env, "sonuc")) { if (s.ok && /^(Mesaj|Hatırlatma) .* gitti \(Sami\)\.?$/.test(String(s.aciklama || ""))) continue; /* 10 Kasım: "Mesaj X'e gitti" özete girmez */ await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }
   // 9 Kasım (sert müdür): görevler (Hemra + Merdan), çözüm kuyruğu, bota verilen emirlerin kontrolü
   try { await gorevAdimi(env, simdi, mudurAraclari(env, simdi)); } catch (e) { await hataYaz(env, "gorev", e); }
@@ -1295,6 +1295,8 @@ export async function venomCron(env, simdi) {
   try { const t = await oku(env, "venom:kemalPaylasElle", null); if (t) { await env.KAYIT.delete("venom:kemalPaylasElle"); const ok = await kemaleVer(env, { kod: t.kod, renk: t.renk || null, beden: t.beden || null }, t.liste || [], simdi); await yaz({ ...env, __izin: "cevap" }, ok ? `🧭 ${t.kod} ${t.renk || ""} → Kemal'e yeni SON YAYIN kartı hazırlatılıyor (alt yazı ${renkDilleri(t.renk || "") ? renkDilleri(t.renk).en : "model kartı"}${t.beden ? `, ${BEDEN_AD[t.beden]}` : ""}, ${(t.liste || []).length} dosya). Kart Venom kontrolüyle buraya gelecek.` : `❌ ${t.kod}: Kemal'e iş gönderilemedi.`); } } catch (e) { await hataYaz(env, "paylasElle", e); }
   try { const rs = await oku(env, "venom:siteRenkSonuc", null); if (rs) { await env.KAYIT.delete("venom:siteRenkSonuc"); await bildir(env, `🤖 Selin\n${[].concat(rs).join("\n")}`, { simdi, kaynak: "selin", tur: "bilgi" }); } } catch (e) { await hataYaz(env, "siteRenk", e); }
   try { await onayAktar(env, simdi); } catch (e) { await hataYaz(env, "onayAktar", e); }
+  // 10 Kasım (Patron): PARA ALARMI — Kemal/Selin günlük 2 $ tavanı (%80 uyarı), her bot için olağanın 3 katı → anında uyarı
+  if (new Date(simdi * 1000).getUTCMinutes() < 5 || saat(simdi) < 0.2) { try { await paraAlarmi(env, simdi); } catch (e) { await hataYaz(env, "paraAlarmi", e); } }
   // 9 Kasım (Patron): Higgsfield / fal bakiyesi 5 $ altına inince ÖNCEDEN uyar (günde bir; üretim yarıda kalmasın)
   if (saat(simdi) >= 9 && saat(simdi) < 21 && new Date(simdi * 1000).getUTCMinutes() < 5) { try { await bakiyeUyarisi(env, simdi); } catch (e) { await hataYaz(env, "bakiye", e); } }
   // Bir kez (Claude Code): KV "venom:kisiMesajlari" = "<ad>" → bugün o kişiye giden her şey (zaman, bot, tür, özet) → "venom:kisiMesajlariSonuc"
@@ -1449,7 +1451,7 @@ export async function aksamOzeti(env, simdi) {
     { satirlar: kontrol, enFazla: 1 },
     { satirlar: botRap, enFazla: 5 },
     { satirlar: satir.slice(1).filter((x) => !/^• 🛑/.test(x)), enFazla: 10 },
-  ]);
+  ], "Ayrıntı: /detay", 10); // 10 Kasım (Patron): akşam özeti en fazla 10 satır
   await ozetKaydet(env, "aksam", [gunluk, ozetDetay(bir)], simdi);
   return metin;
 }
@@ -1599,6 +1601,34 @@ export async function botRaporuMetni(env, bot, donem, simdi, { parca = null, sat
     }
   }
   return raporMetni(bot, donem, bolum, bakilan);
+}
+// 10 Kasım (Patron): bot başına günlük harcama (Kemal, Selin: harcama-gun; Pelin: pelin-gun; Sami beyni ve Venom: ay toplamı − gün başı)
+export async function gunlukHarcamalar(env, simdi) {
+  const gun = gunAnahtari(simdi), ay9 = gun.slice(0, 7);
+  const n = async (k) => Number((await env.KAYIT.get(k).catch(() => 0)) || 0);
+  const samiAy = env.STOK ? Number(JSON.parse((await stokIste(env, "/ayar-oku", { k: `beyin:harcama:${ay9}` }).catch(() => ({}))).v || "0")) : 0;
+  const venomAy = await venomHarcanan(env, simdi);
+  let baz = await oku(env, `venom:paraBaz:${gun}`, null);
+  if (!baz || baz.ay !== ay9) { baz = { ay: ay9, sami: gun.endsWith("-01") ? 0 : samiAy, venom: gun.endsWith("-01") ? 0 : venomAy }; await kaydet(env, `venom:paraBaz:${gun}`, baz, 3 * 86400); }
+  return { kemal: (await n(`harcama-gun:kemal:${gun}`)) / 1e6, selin: (await n(`harcama-gun:selin:${gun}`)) / 1e6, pelin: await n(`pelin-gun:${gun}`), sami: Math.max(0, samiAy - baz.sami), venom: Math.max(0, venomAy - baz.venom) };
+}
+export async function paraAlarmi(env, simdi) {
+  const gun = gunAnahtari(simdi);
+  const h = await gunlukHarcamalar(env, simdi);
+  await kaydet(env, `venom:paraGun:${gun}`, h, 10 * 86400);
+  const ad = { kemal: "Kemal", selin: "Selin", pelin: "Pelin", sami: "Sami", venom: "Venom" };
+  const usd2 = (x) => `${x.toFixed(2).replace(".", ",")} $`;
+  for (const bot of ["kemal", "selin"]) {
+    if (h[bot] >= 2 && (await ilkKezBugun(env, `paraTavan:${bot}:${gun}`))) await bildir(env, `⛔ ${ad[bot]} bugünkü yapay zekâ tavanına ulaştı: ${usd2(h[bot])} / 2,00 $. Yapay zekâ işleri yarına kadar durdu (komutlar çalışıyor).`, { simdi, tur: "kart", izin: "para" });
+    else if (h[bot] >= 1.6 && h[bot] < 2 && (await ilkKezBugun(env, `para80:${bot}:${gun}`))) await bildir(env, `⚠️ ${ad[bot]} bugün ${usd2(h[bot])} harcadı (günlük tavan 2 $, %80). Tavanda yapay zekâ işi durur.`, { simdi, tur: "kart", izin: "para" });
+  }
+  for (const bot of Object.keys(h)) {
+    const gecmis = [];
+    for (let i = 1; i <= 7; i++) { const g = await oku(env, `venom:paraGun:${gunAnahtari(simdi - i * 86400)}`, null); if (g && g[bot] != null) gecmis.push(Number(g[bot])); }
+    const ort = gecmis.length ? gecmis.reduce((a, b) => a + b, 0) / gecmis.length : null;
+    if (ort != null && gecmis.length >= 3 && h[bot] >= 0.5 && h[bot] > 3 * ort && (await ilkKezBugun(env, `para3x:${bot}:${gun}`))) await bildir(env, `⚠️ ${ad[bot]} bugün olağanın 3 katından fazla harcadı: ${usd2(h[bot])} (son ${gecmis.length} gün ortalaması ${usd2(ort)}).`, { simdi, tur: "kart", izin: "para" });
+  }
+  return h;
 }
 export const BAKIYE_ESIK = 5;
 async function bakiyeUyarisi(env, simdi) {

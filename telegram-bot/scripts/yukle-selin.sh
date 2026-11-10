@@ -28,7 +28,7 @@ cat > "$META" <<JSON
              {"type":"images","name":"IMAGES"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-selin.volonte.workers.dev"},
-             {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},
+             {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},{"type":"plain_text","name":"BOT_ADI","text":"selin"},
              {"type":"plain_text","name":"GITHUB_REPO","text":"kbabahanov-cloud/VOLONTE"},
              {"type":"plain_text","name":"SITE_URL","text":"https://www.wearvolonte.com"}$GIZLI]}
 JSON

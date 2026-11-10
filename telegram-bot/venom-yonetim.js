@@ -112,7 +112,10 @@ export async function paraOzeti(env, simdi, venomAyUsd) {
   const ksAy = Number((await env.KAYIT.get(`harcama:${ay}`).catch(() => 0)) || 0) / 1e6;
   const dun = await oku(env, `venom:paraAnlik:${gunA(simdi - 86400)}`, null);
   const ayBasi = gun.endsWith("-01") || !dun || dun.ay !== ay;
-  const venomBugun = ayBasi ? venomAyUsd : Math.max(0, venomAyUsd - dun.venom), ksBugun = ayBasi ? ksAy : Math.max(0, ksAy - dun.ks);
+  // 10 Kasım (Patron): dünkü kayıt yoksa ay toplamı "bugün" sanılıyordu (9 Kasım 12,96 $ = 1–9 Kasım toplamı). Artık günlük sayaç
+  const pg = await oku(env, `venom:paraGun:${gun}`, null);
+  const ksGun = (Number((await env.KAYIT.get(`harcama-gun:kemal:${gun}`).catch(() => 0)) || 0) + Number((await env.KAYIT.get(`harcama-gun:selin:${gun}`).catch(() => 0)) || 0)) / 1e6;
+  const venomBugun = pg && pg.venom != null ? pg.venom : ayBasi ? venomAyUsd : !dun ? 0 : Math.max(0, venomAyUsd - dun.venom), ksBugun = ksGun;
   await kaydet(env, `venom:paraAnlik:${gun}`, { ay, venom: venomAyUsd, ks: ksAy }, 3 * 86400).catch(() => null);
   const f = (x) => `${x.toFixed(2).replace(".", ",")} $`;
   return `💵 Bugün: Pelin (fal/Higgsfield) ${f(pelin)} · Venom (Claude/OpenAI) ${f(venomBugun)} · Kemal+Selin yapay zekâ ${f(ksBugun)} · Cloudflare ${f(5 / 30)} (5 $/ay sabit) = ${f(pelin + venomBugun + ksBugun + 5 / 30)}`;

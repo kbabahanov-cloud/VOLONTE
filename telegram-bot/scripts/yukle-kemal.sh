@@ -30,7 +30,7 @@ cat > "$META" <<JSON
              {"type":"service","name":"VENOM","service":"volonte-venom","entrypoint":"VenomKapi"},
              $KIMLIK,
              {"type":"plain_text","name":"SELF_URL","text":"https://volonte-asistan.volonte.workers.dev"},
-             {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},
+             {"type":"plain_text","name":"ANTHROPIC_MODEL","text":"claude-opus-5-5"},{"type":"plain_text","name":"BOT_ADI","text":"kemal"},
              {"type":"plain_text","name":"MUSTERI_MODEL","text":"claude-sonnet-5-5"}]}
 JSON
 for bekle in 0 4 8 16; do
