@@ -57,6 +57,7 @@ import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce } from "./yayin-kontrol.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
+import { magazaStogu, STOK_KURALI } from "./sil.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
 import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRapor, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
@@ -1244,6 +1245,8 @@ export function modelMesajlari(kod, kodlar, kodsuz) {
 // silinir. Kopyaların yeri KV "silinen:<kod>" → "/geri <kod>" ile kanala geri konur. Görsel eşleşmede emin olunmayan paylaşım
 // SİLİNMEZ, Patron'a ayrıca bildirilir. ek.patron: sonuç sadece Patron'a tek mesaj; ek.site: Selin'in site sonucu.
 export async function hicGelmeyecek(env, kod, kim, simdi, ek = {}) {
+  const stok = await magazaStogu(env, kod); // 10 Kasım KESİN KURAL: mağaza stoğu bitmeden kanaldan kaldırılmaz
+  if (stok) { await telegram(env, "sendMessage", { chat_id: String(env.MURAT_ID || "").split(",")[0].trim(), text: STOK_KURALI(kod, stok) }).catch(() => null); return { engel: stok }; }
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
   const arsiv = (await env.KAYIT.get("hicgelmeyecek", "json")) || {};

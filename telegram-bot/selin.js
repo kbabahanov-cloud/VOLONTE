@@ -18,6 +18,7 @@ import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMes
 import { kartTekrarAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
+import { magazaStogu, STOK_KURALI } from "./sil.js";
 import { siteKontrol, engelKaydet, markaKesin } from "./yayin-kontrol.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
@@ -2025,6 +2026,8 @@ export async function siteSilAdimi(env, simdi) {
     await env.KAYIT.put("venom:siteSil", "[]");
     for (const x of l) {
       let site;
+      const stok = await magazaStogu(env, x.kod); // 10 Kasım KESİN KURAL: mağazada stok varken siteden/kanaldan kaldırılmaz
+      if (stok) { await yazKV(env, "venom:silEngelSonuc", { kod: String(x.kod), kim: x.kim, zaman: simdi, adet: stok, metin: STOK_KURALI(x.kod, stok) }, 3 * 86400); continue; }
       try { site = (await sitedenKaldir(env, String(x.kod), x.kim, simdi)) ? "kaldirildi" : "yoktu"; } catch (e) { site = `hata: ${String(e && e.message).slice(0, 150)}`; }
       if (x.kanal === false) continue;
       await kemaleDevret(env, "venom:kanalSil", { kod: String(x.kod), kim: x.kim, zaman: x.zaman || simdi, site });

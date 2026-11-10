@@ -4,7 +4,7 @@
 
 import { stokKodu, BEKLESIN_STOK_GUN } from "./stok.js";
 import { modelSecenekleri } from "./ortak.js";
-import { patronMu, silKuyrugu } from "./sil.js";
+import { patronMu, silKuyrugu, STOK_KURALI } from "./sil.js";
 
 const SAAT_FARKI = 3 * 3600;
 const kimlikler = (yazi) => String(yazi || "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -74,8 +74,10 @@ export async function stokKarari(cq, env, tg) {
   if (!r.ok) return cevapla(r.kim ? `${r.kim} zaten karar verdi.` : "Bu soru artık geçerli değil.");
   // 2 Kasım (Patron, tek onay): Patron "Sil" derse model siteden (Selin) ve VOLONTE kanalından (Kemal) de kaldırılır.
   const tamSil = r.durum === "gizli" && patronMu(env, cq.from.id);
-  if (tamSil) await silKuyrugu(env, kod, kim, Math.floor(Date.now() / 1000));
+  const engel = tamSil ? (await silKuyrugu(env, kod, kim, Math.floor(Date.now() / 1000))) : null;
+  if (engel && engel.engel) await tg(env, "sendMessage", { chat_id: cq.from.id, text: STOK_KURALI(kod, engel.engel) });
   const ek = r.durum === "repete" ? `🔁 ${kim}: repete olacak — gizli bekliyor, stok gelince geri döner.`
+    : engel && engel.engel ? STOK_KURALI(kod, engel.engel)
     : tamSil ? `🗑 ${kim}: sil — önce siteden (Selin), hemen ardından VOLONTE kanalındaki bütün paylaşımlar (Kemal) kaldırılıyor; bitince Patron'a haber gelir. Yanlışsa: /geri ${kod}`
     : r.durum === "gizli" ? `🗑 ${kim}: sil — Telegram turlarından kaldırıldı (siteden/kanaldan kaldırma Patron'un "Sil"iyle olur).`
     : `⏳ ${kim}: beklesin — ${BEKLESIN_STOK_GUN} gün sonra tekrar sorulacak.`;

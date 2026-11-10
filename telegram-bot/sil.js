@@ -10,5 +10,30 @@ async function kuyruk(env, anahtar, kayit) {
   await env.KAYIT.put(anahtar, JSON.stringify(l.slice(-50)));
   return true;
 }
-export const silKuyrugu = (env, kod, kim, simdi) => kuyruk(env, "venom:siteSil", { kod: String(kod), kim, zaman: simdi, kanal: true });
+// 10 Kasım (Patron, KESİN KURAL — kural kitabının en üstü): mağaza stoğu (Vegawin, iki mağaza ayrı ayrı sayılır) bitmeden model
+// siteden ve Telegram'dan ASLA kaldırılmaz. Fabrikada bitmesi kaldırma sebebi değildir. Bütün silme yolları buradan geçer.
+// Dönüş: mağaza mağaza kalan adet (VOLONTE ve BLACK ROSE AYRI yazılır, toplanmaz). yazi boşsa stok yok → silinebilir.
+export async function magazaStoklari(env, kod) {
+  const bos = { var: false, yazi: "", magazalar: {} };
+  if (!env || !env.STOK) return bos;
+  try {
+    const r = await env.STOK.get(env.STOK.idFromName("stok"), { locationHint: "enam" }).fetch("https://stok/bilgi", { method: "POST", body: JSON.stringify({ kod: String(kod) }) });
+    const m = {};
+    for (const x of ((await r.json()) || {}).satirlar || []) m[x.magaza] = (m[x.magaza] || 0) + (Number(x.adet) || 0);
+    const dolu = Object.entries(m).filter(([, n]) => n > 0);
+    return { var: dolu.length > 0, magazalar: m, yazi: dolu.map(([g, n]) => `${g === "BLACKROSE" ? "BLACK ROSE" : g} ${n} adet`).join(" · ") };
+  } catch { return bos; }
+}
+export const magazaStogu = async (env, kod) => { const s = await magazaStoklari(env, kod); return s.var ? s.yazi : 0; };
+export const STOK_KURALI = (kod, yazi) => `⛔ ${kod} mağazada stokta (${yazi}) — mağaza stoğu bitmeden model siteden ve Telegram'dan kaldırılmaz (kural kitabı, en üst kural). Stok bitince yeniden sorulur.`;
+// Stok varsa kuyruğa girmez: { engel: adet } döner (çağıran kişiye STOK_KURALI yazar)
+export async function silKuyrugu(env, kod, kim, simdi) {
+  const adet = await magazaStogu(env, kod);
+  if (adet) {
+    const l = (await env.KAYIT.get("venom:silEngel", "json").catch(() => null)) || [];
+    await env.KAYIT.put("venom:silEngel", JSON.stringify([...l, { kod: String(kod), kim, zaman: simdi, adet }].slice(-100))).catch(() => null);
+    return { engel: adet };
+  }
+  return kuyruk(env, "venom:siteSil", { kod: String(kod), kim, zaman: simdi, kanal: true });
+}
 export const geriKuyrugu = (env, kod, kim, simdi) => kuyruk(env, "venom:siteGeri", { kod: String(kod), kim, zaman: simdi });

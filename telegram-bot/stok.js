@@ -340,6 +340,9 @@ export class StokDeposu {
     return { ok: true };
   }
 
+  // 10 Kasım (KESİN KURAL): stok varken kaldırılan model geri — "Sil" gizlemesi kalkar (Telegram turları / site hazırlığı yeniden görür)
+  goster(kod) { this.sql.exec("DELETE FROM karar WHERE kod = ? AND durum = 'gizli'", stokKodu(kod)); return { ok: true }; }
+
   // Telegram son paylaşım: { kod: unix } — sadece daha yeni tarih yazılır.
   tgYaz(kayitlar) {
     for (const [ham, t] of Object.entries(kayitlar || {}).slice(0, 3000)) {
@@ -378,6 +381,20 @@ export class StokDeposu {
     }
     return { ok: true };
   }
+
+  // 10 Kasım (Sinem / fabrika zinciri): açık siparişler tek çağrıda (her biri ayrı istek olmasın — Cloudflare istek sınırı)
+  fsAcikler() { return JSON.parse(this.ayarOku("fs:acik") || "[]").map((id) => { try { return JSON.parse(this.ayarOku(`fs:${id}`) || "null"); } catch { return null; } }).filter(Boolean); }
+  // Kodun en son açık siparişi (deneme hariç; chat verilirse o kişiye gitmiş olan)
+  fsKod({ kod, chat = null, deneme = false }) {
+    const l = this.fsAcikler().filter((r) => String(r.kod) === String(kod) && Boolean(r.deneme) === Boolean(deneme) && (!chat || (r.mesajlar || []).some((m) => String(m[0]) === String(chat))));
+    return l.sort((a, b) => (b.gonderim || 0) - (a.gonderim || 0))[0] || null;
+  }
+  // Kişiye giden, cevap bekleyen açık siparişler (toplu cevap "hepsi 5 gün")
+  fsKisi({ chat, durum = "bekliyor" }) { return this.fsAcikler().filter((r) => r.durum === durum && (r.mesajlar || []).some((m) => String(m[0]) === String(chat))).map((r) => r.id).slice(0, 60); }
+  // Sinem'e günlük özet: açık siparişlerin kısa hali (fiyat/stok yok)
+  fsOzet() { return this.fsAcikler().map((r) => ({ id: r.id, kod: r.kod, magaza: r.magaza || null, grup: r.grup || "fabrika", durum: r.durum, gonderim: r.gonderim, hazirGun: r.hazirGun || null, teslimSure: r.teslimSure || null, deneme: Boolean(r.deneme), chats: [...new Set((r.mesajlar || []).map((m) => String(m[0])))] })); }
+  // 10 Kasım KANIT DEFTERİ: bir kodun fabrika kayıtları (mühürlü arşivden; silinemez)
+  arsivKod(tur, mt) { return this.hepsi("SELECT sira, zaman, icerik FROM arsiv WHERE tur = ? AND mt = ? ORDER BY sira LIMIT 300", String(tur), String(mt)); }
 
   ayarOku(k) { return (this.tek("SELECT v FROM ayar WHERE k = ?", k) || {}).v ?? null; }
   ayarYaz(k, v) { this.sql.exec("INSERT INTO ayar (k, v) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", k, String(v)); }
@@ -500,6 +517,7 @@ export class StokDO {
     if (yol === "/paylasimlar") return cevap(d.paylasimlar(g.basla, g.bitis));
     if (yol === "/tum") return cevap(d.tum());
     if (yol === "/gizle") return cevap(d.gizle(g.kod, g.kim, g.simdi));
+    if (yol === "/goster") return cevap(d.goster(g.kod));
     if (yol === "/satis-yaz") return cevap(d.satisYaz(g.magaza, g.gun, g.kalemler || []));
     if (yol === "/satislar") return cevap(d.satislar(g.gun, g.magaza || null));
     if (yol === "/tedarikci") return cevap(Object.fromEntries((g.kodlar || []).slice(0, 200).map((k) => [k, d.tedarikci(k)])));
@@ -508,6 +526,10 @@ export class StokDO {
     if (yol === "/satis-donem") return cevap(d.satisDonem(g.basla, g.bitis));
     if (yol === "/geldiler") return cevap(d.geldiler(g.basla || 0));
     if (yol === "/fs-yaz") return cevap(d.fsYaz(g));
+    if (yol === "/fs-kod") return cevap(d.fsKod(g));
+    if (yol === "/fs-kisi") return cevap(d.fsKisi(g));
+    if (yol === "/fs-ozet") return cevap(d.fsOzet());
+    if (yol === "/arsiv-kod") return cevap(d.arsivKod(g.tur, g.mt));
     if (yol === "/arsiv-ekle") return cevap(d.arsivEkle(g.tur, g.mt, g.icerik, g.zaman));
     if (yol === "/arsiv-liste") return cevap(d.arsivListe(g.basla, g.enFazla));
     if (yol === "/arsiv-dogrula") return cevap(d.arsivDogrula());

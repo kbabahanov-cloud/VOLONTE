@@ -1367,3 +1367,27 @@ test("para: günlük sayaç (bot başına) + model sayımı; Kemal 2 $ tavanınd
   await v.paraAlarmi(o.env, t + 500);
   assert.equal(patronaGiden(o).length, n); // günde bir kez
 });
+
+// 10 Kasım (Patron): fabrika zinciri — Hemra önerisi → Patron kartı → karar Sami'ye; "3394 fabrika kaydı"; cuma hata sayacı
+import { bittiKartMetni, kartHataMetni } from "./venom-bot.js";
+test("Venom fabrika zinciri: Patron kartı (izinli), karar Sami'ye; 'fabrika kaydı' kanıt defterinden; cuma kart hata satırı", async () => {
+  const o = ortam();
+  const oneri = { id: "x1", sip: "3100-abc", kod: "3100", magaza: "VOLONTE", oneri: "repete", hemra: "Hemra", tur: "bitti", fabrika: { kim: "Sinem", zaman: 1793000000, ne: "bitti" }, fuat: { kim: "Fuat", zaman: 1793002000 }, stok: "VOLONTE 12 adet", deneme: true, foto: null };
+  assert.match(bittiKartMetni(oneri), /^🧪 DENEME[\s\S]*🏭 Fabrikada bitti — 🟦 VOLONTE · 3100\nFabrika: Sinem "bitti" dedi \(\d+ \S+ \d\d:\d\d\)\nFuat onayladı[\s\S]*Mağaza stoğu: VOLONTE 12 adet\nHemra önerisi: 🔁 Repete[\s\S]*Onaylıyor musun\?$/);
+  await kuyrugaEkle(o.env, "bittiOneri", oneri);
+  await venomCron(o.env, Math.floor(Date.now() / 1000));
+  const kart = o.g.find((x) => /Hemra önerisi/.test(x.govde.text || x.govde.caption || ""));
+  assert.ok(kart, "Patron kartı gitmedi (izin kapısı)");
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Onayla", "🔁 Repete", "🗑 Sil", "⏳ Bekle"]);
+  await guncelleme({ update_id: uid++, callback_query: { id: "c", from: { id: PATRON }, data: kart.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: PATRON }, message_id: 5 } } }, o.env);
+  const karar = await kuyruguAl(o.env, "bittiKarar");
+  assert.deepEqual(karar.map((x) => [x.sip, x.karar]), [["3100-abc", "repete"]]);
+  // fabrika kaydı
+  await o.env.STOK.get().fetch("https://stok/arsiv-ekle", { method: "POST", body: JSON.stringify({ tur: "fabrika-kanit", mt: "3394", icerik: { kod: "3394", kim: "Sinem", ne: "Bitti, gelmeyecek", metin: "3394 bitti" }, zaman: 1793000000 }) });
+  await o.env.STOK.get().fetch("https://stok/arsiv-ekle", { method: "POST", body: JSON.stringify({ tur: "fabrika-kanit", mt: "3394", icerik: { kod: "3394", kim: "Fuat", ne: "Onayladı: bitti" }, zaman: 1793002700 }) });
+  o.g.length = 0;
+  await yazi(o, PATRON, "3394 fabrika kaydı");
+  assert.match(o.g.at(-1).govde.text, /^📒 3394 fabrika kaydı \(silinemez defter\):\n26 Ekim 10:33 Sinem: Bitti, gelmeyecek — "3394 bitti"\n26 Ekim 11:18 Fuat: Onayladı: bitti$/);
+  assert.equal(o.claude.length, 0); // ücretsiz (Claude'a gitmez)
+  assert.equal(kartHataMetni([{ tur: "eksik kartı" }, { tur: "eksik kartı" }, { tur: "fabrika kartı (fotoğraf yanlış)" }], [{ tur: "fabrika kartı" }]), "🧮 Bu hafta kartlar: ⚠️ bot hatası 3 · ↩️ geri al 1 · en çok: eksik kartı (2).");
+});

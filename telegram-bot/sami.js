@@ -37,7 +37,7 @@ import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
-import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi } from "./fabrika.js";
+import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -98,6 +98,7 @@ export default {
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
     const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
     const siparis = (e, t) => siparisTakip(e, t, tg);
+    const zincir = (e, t) => fabrikaZincirAdimi(e, t, tg); // 10 Kasım: Patron kararı, toplu cevap, Sinem 18:00 özeti, bir kerelik işler
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
     const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); await cariDokumu(e, tg); };
@@ -106,7 +107,7 @@ export default {
     const venomGiden = (e, t) => venomGidenAdimi(e, t, tg); // Venom'un onaylanan dış mesajları (3 Kasım)
     const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
     const siteBakis = (e, t) => siteBakisYaz(e, t); // 9 Kasım: repete raporu için model başına sitede bakılma (günde bir)
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -161,6 +162,7 @@ export async function guncelleme(u, env) {
     if (cq.data === GUNCEL) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "⏩ Güncel kart aşağıda" });
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
+    if (/^f[oh]:/.test(String(cq.data || ""))) return zincirDugmesi(env, cq, tg, simdiD); // 10 Kasım: Fuat onayı / Hemra önerisi
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
     if (String(cq.data || "").startsWith("oz:")) return isOzetiDugmesi(env, cq, tg, simdiD); // Fuat'a iş özeti (sadece Patron)
     if (String(cq.data || "").startsWith("ad:")) return adetDugmesi(env, cq, tg, simdiD); // Fuat'a adet listesi (sadece Patron)
@@ -183,9 +185,12 @@ export async function guncelleme(u, env) {
   if (!izinli(m.from.id, env)) {
     if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması
     if (await stokSorguMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat/Nuri: Black Rose stok sorgusu (Hemra onaylı)
+    if (await fabrikaSesMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // 10 Kasım: Sinem sesli mesaj ("3394 bitti")
+    if (await fabrikaYaziMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // 10 Kasım: "3394 bitti / az kaldı / 5 gün", "hepsi 5 gün", ✏️ tarih
     return yabanciMesaji(env, m, tg); // fabrika kişisi ya da /start → Murat'a sorulur
   }
   if (await aramaNotuMesaji(env, m, tg)) return; // 9 Kasım: "📞 Aradım, şu cevap geldi"
+  if (await fabrikaYaziMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // 10 Kasım: 📦 gelen adet (Aziz/Merdan), ✏️ tarih
   if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000))) return; // Hemra'nın eksik listesi
   if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return; // "3394 repete geldi …"
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();
