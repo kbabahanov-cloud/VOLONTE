@@ -1207,7 +1207,7 @@ test("onay merdiveni (10 Kasım ACİL): birden çok bekleyen kart → kısa baş
   const ktg = async (e, m, g) => { kg.push({ m, g }); return { ok: true, result: { message_id: 900 } }; };
   assert.equal(await kartTekrarAdimi(o.env, "selin", ktg, ist(10, 12, 5)), 2);
   assert.equal(kg.filter((x) => x.m === "sendMediaGroup").length, 0); // albüm yok (düğme mesajı düşünce yarım kalıyordu)
-  assert.match(kg[0].g.text, /^🔁 Hatırlatma — 2 kart cevabınızı bekliyor/);
+  assert.match(kg[0].g.text, /^🔁 Hatırlatma — toplam 2 kart cevabınızı bekliyor/);
   const kartlar = kg.filter((x) => x.m === "sendPhoto");
   assert.deepEqual(kartlar.map((x) => [x.g.photo, x.g.caption.split("\n")[1], x.g.reply_markup.inline_keyboard.flat().map((d) => d.callback_data)]), [["https://x/3493.jpg", "📝 3493 taslak", ["so:3493", "sx:3493"]], ["https://x/3529.jpg", "📝 3529 taslak", ["so:3529"]]]);
   assert.equal(kg.filter((x) => x.m === "editMessageReplyMarkup").length, 2);

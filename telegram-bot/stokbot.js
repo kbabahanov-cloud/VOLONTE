@@ -24,9 +24,9 @@ export async function stokIste(env, yol, govde = {}) {
 }
 
 const STOK_SORU_PARTI = 6; // bir çalışmada en fazla soru (istek sınırı)
+// 10 Kasım (Patron): Merdan ve Aziz'e "Sil" düğmesi ASLA gitmez — silme kararı sadece Patron'un (Venom'a "3512 sil")
 const stokKlavye = (kod) => ({ inline_keyboard: [[
   { text: "🔁 Repete olacak", callback_data: `sz:r:${kod}` },
-  { text: "🗑 Sil", callback_data: `sz:s:${kod}` },
   { text: "⏳ Beklesin", callback_data: `sz:b:${kod}` },
 ]] });
 
@@ -41,7 +41,7 @@ export async function stokSorulariGonder(env, simdi, tg) {
       `📦 ${s.kod}${s.ad ? ` — ${s.ad}` : ""}`,
       `Vegawin: stok bitti (adet ${s.adet}). Ne yapalım?`,
       "🔁 Repete olacak → gizli bekler, stok gelince kendiliğinden geri döner",
-      "🗑 Sil → siteden ve Telegram turlarından kaldırılır (kanal paylaşımlarına ve Vegawin'e dokunulmaz)",
+      "Silme kararı sadece Patron'un (Venom'a yazar).",
       `⏳ Beklesin → ${BEKLESIN_STOK_GUN} gün sonra hâlâ stok yoksa tekrar sorarım`,
     ].join("\n");
     const sec = kanal && modelSecenekleri(s.kod, kodlar, {})[0];
@@ -70,6 +70,7 @@ export async function stokKarari(cq, env, tg) {
   const [, islem, kod] = String(cq.data).split(":");
   const kim = kisiAdi(cq.from);
   if (!env.STOK) return cevapla("Stok köprüsü bağlı değil.");
+  if (islem === "s" && !patronMu(env, cq.from.id)) return cevapla("Silme kararı sadece Patron'un."); // 10 Kasım (eski kartlar)
   const r = await stokIste(env, "/karar", { kod, islem, kim, simdi: Math.floor(Date.now() / 1000) });
   if (!r.ok) return cevapla(r.kim ? `${r.kim} zaten karar verdi.` : "Bu soru artık geçerli değil.");
   // 2 Kasım (Patron, tek onay): Patron "Sil" derse model siteden (Selin) ve VOLONTE kanalından (Kemal) de kaldırılır.

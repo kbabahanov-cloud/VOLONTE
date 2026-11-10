@@ -15,9 +15,26 @@ export function duzKlavye(rm) {
   }
   return { ...rm, inline_keyboard: satirlar };
 }
+// 10 Kasım (Patron): satır başına en fazla 2 düğme (yazılar telefonda kesilmesin)
+export function ikiliSatir(rm) {
+  if (!rm || !Array.isArray(rm.inline_keyboard) || !rm.inline_keyboard.some((s) => (s || []).length > 2)) return rm;
+  const satirlar = [];
+  for (const s of rm.inline_keyboard) for (let i = 0; i < (s || []).length; i += 2) satirlar.push(s.slice(i, i + 2));
+  return { ...rm, inline_keyboard: satirlar };
+}
+// Deneme kartının KANITI: Telegram'ın döndürdüğü mesaj (resim var mı, yazı, düğmeler) → "<bot>:kanit"
+async function kanitKaydet(env, bot, metod, g, r) {
+  const m = r && r.result && !Array.isArray(r.result) ? r.result : null;
+  if (!m || typeof m !== "object") return;
+  const yazi = String(m.caption || m.text || "");
+  if (!/🧪 DENEME/.test(yazi)) return;
+  const l = (await env.KAYIT.get(`${bot}:kanit`, "json").catch(() => null)) || [];
+  await env.KAYIT.put(`${bot}:kanit`, JSON.stringify([...l, { zaman: Math.floor(Date.now() / 1000), metod, chat: String(g.chat_id), mesaj: m.message_id, resim: Boolean(m.photo && m.photo.length), video: Boolean(m.video), yazi: yazi.slice(0, 600), dugmeler: ((m.reply_markup && m.reply_markup.inline_keyboard) || []).map((s) => s.map((b) => b.text)) }].slice(-60)), { expirationTtl: 7 * 86400 }).catch(() => null);
+}
 export async function guvenliGonder(env, bot, cagir, metod, govde) {
   if (!govde || typeof govde !== "object") return cagir(metod, govde);
   let g = govde;
+  if (g.reply_markup && g.reply_markup.inline_keyboard) g = { ...g, reply_markup: ikiliSatir(g.reply_markup) };
   if (typeof g.caption === "string" && g.caption.length > 1024) g = { ...g, caption: kisalt(g.caption, 1024) };
   if (typeof g.text === "string" && g.text.length > 4096) g = { ...g, text: kisalt(g.text, 4096) };
   let r = await cagir(metod, g);
@@ -34,5 +51,6 @@ export async function guvenliGonder(env, bot, cagir, metod, govde) {
       await env.KAYIT.put(`${bot}:tgHatalar`, JSON.stringify([...l, { zaman: Math.floor(Date.now() / 1000), metod, chat: g.chat_id != null ? String(g.chat_id) : null, hata: String(r.description || h).slice(0, 200), ozet: String(g.caption || g.text || "").split("\n")[0].slice(0, 80), dugme: Boolean(g.reply_markup) }].slice(-150)), { expirationTtl: 14 * 86400 }).catch(() => null);
     }
   }
+  if (r && r.ok && g.reply_markup) await kanitKaydet(env, bot, metod, g, r);
   return r;
 }
