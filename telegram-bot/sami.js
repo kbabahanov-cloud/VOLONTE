@@ -55,7 +55,24 @@ async function tg(env, metod, govde) {
   if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "sami", metod, govde, r); return r; }
   const r = await tgGercek(env, metod, govde);
   await defterTg(env, "sami", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
+  await gercekKanit(env, metod, govde, r);
   return r;
+}
+// 10 Kasım (kanıtsız tamam yok): GERÇEK eksik listesi zincirinde telefona giden mesajın Telegram'ın döndürdüğü hali → StokDO "kanit:gercek:<gün>"
+// (deneme 🧪 ayrı: sami:kanit). Sadece kart / liste / teyit mesajları.
+async function gercekKanit(env, metod, govde, r) {
+  try {
+    if (!r || !r.ok || !govde || typeof govde !== "object" || govde instanceof FormData || !/^(send|edit|copy)/.test(metod)) return;
+    const m = r.result && typeof r.result === "object" ? r.result : null;
+    const yazi = String((m && (m.caption || m.text)) || govde.caption || govde.text || "");
+    if (!yazi || /🧪 DENEME/.test(yazi)) return;
+    if (!(govde.reply_markup || /LİSTESİ|Gidecek liste|Göndereyim mi|Şunu anladım|fabrikaya gönderildi|Kaydedildi|kaydedildi|Hemra onayladı|Onaylandı/.test(yazi))) return;
+    const k = `kanit:gercek:${gunAnahtari(Math.floor(Date.now() / 1000))}`;
+    const l = JSON.parse((await stokIste(env, "/ayar-oku", { k })).v || "[]");
+    const dg = (rm) => ((rm && rm.inline_keyboard) || []).map((s) => s.map((b) => b.text));
+    l.push({ zaman: Math.floor(Date.now() / 1000), metod, chat: String(govde.chat_id), mesaj: (m && m.message_id) || govde.message_id || null, resim: Boolean(m && (m.photo || m.video)) || /copy|Photo/.test(metod), yazi: yazi.slice(0, 700), dugmeler: dg(m && m.reply_markup) .length ? dg(m.reply_markup) : dg(govde.reply_markup) });
+    await stokIste(env, "/ayar-yaz", { k, v: JSON.stringify(l.slice(-400)) });
+  } catch { /* kanıt yazılamazsa iş durmaz */ }
 }
 async function tgGercek(env, metod, govde) {
   // 10 Kasım (ACİL): her gönderim doğrulanır, sınır aşımı kısaltılır, hata bir kez düzeltilip denenir, olmazsa "sami:tgHatalar"

@@ -1355,6 +1355,11 @@ export async function venomCron(env, simdi) {
   // Kemal toplu raporu grup yerine Venom'a bırakır. 6 Kasım: 20 dakikada bir yazılır (önceden her 5 dk: günde 288 KV yazması)
   const aktif = Number(await env.KAYIT.get("venom:bot:aktif").catch(() => 0)) || 0;
   if (simdi - aktif > 1200) await env.KAYIT.put("venom:bot:aktif", String(simdi), { expirationTtl: 1800 }).catch(() => null);
+  // 10 Kasım (Patron): eksik listesi fabrikaya ulaşınca TEK satır ("Bugünkü eksik listesi fabrikaya gitti: VOLONTE X model, Black Rose Y model.")
+  for (const f of await kuyruguAl(env, "fabrikaGitti")) {
+    const r = await yaz({ ...env, __izin: "cevap" }, f.metin, { posta: { kaynak: "sami", tur: "cevap", izin: "cevap" } }).catch(() => null);
+    await kaydet(env, "venom:fabrikaGittiKanit", { zaman: simdi, metin: f.metin, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null }, 7 * 86400).catch(() => null);
+  }
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) { if (s.ok && /^(Mesaj|Hatırlatma) .* gitti \(Sami\)\.?$/.test(String(s.aciklama || ""))) continue; /* 10 Kasım: "Mesaj X'e gitti" özete girmez */ await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }

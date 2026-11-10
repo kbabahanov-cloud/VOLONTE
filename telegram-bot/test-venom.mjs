@@ -1449,3 +1449,14 @@ test("TAM ZİNCİR DENEMESİ son halka: Patron'un açıkça istediği zincir den
     assert.match(bittiKartMetni(x), /^🧪 DENEME/);
   } finally { globalThis.fetch = onceki; }
 });
+
+test("eksik listesi fabrikaya ulaşınca Patron'a Venom'dan TEK satır (kuyruk 'fabrikaGitti'); Telegram'ın döndürdüğü hali kanıt", async () => {
+  const o = ortam();
+  await kuyrugaEkle(o.env, "fabrikaGitti", { id: "fg1", metin: "Bugünkü eksik listesi fabrikaya gitti: VOLONTE 11 model, Black Rose 9 model." });
+  await venomCron(o.env, Math.floor(Date.now() / 1000));
+  const giden = o.g.filter((x) => /Bugünkü eksik listesi fabrikaya gitti/.test(x.govde.text || ""));
+  assert.equal(giden.length, 1);
+  assert.equal(giden[0].govde.text, "Bugünkü eksik listesi fabrikaya gitti: VOLONTE 11 model, Black Rose 9 model.");
+  assert.equal(String(giden[0].govde.chat_id), String(PATRON));
+  assert.equal(JSON.parse(o.depo.get("venom:fabrikaGittiKanit")).ok, true);
+});

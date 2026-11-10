@@ -1,0 +1,1675 @@
+[
+ {
+  "metin": "3394 pudra büyük 12, pudra küçük 4",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3459 12 pudra büyük",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3459",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3186 kırmızı 6 büyük, kırmızı 2 küçük",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3186",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "kırmızı",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3186",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "kırmızı",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3183 küçük: siyah 10, bej 6\n3201 büyük: bordo 5",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     },
+     {
+      "renk": "bej",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3201",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bordo",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3520 büyük açık mavi 12 koyu yeşil 4",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3520",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "açık mavi",
+      "adet": 12
+     },
+     {
+      "renk": "koyu yeşil",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3254 - KÜÇÜK - SİYAH 8 - BEJ 4",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3254",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 8
+     },
+     {
+      "renk": "bej",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3297 büyük siyah 10 adet bej 6 adet küçük siyah 5 adet",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3297",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     },
+     {
+      "renk": "bej",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3297",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3412\nBüyük\nHaki 6\nEkru 6\nKüçük\nHaki 3",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3412",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "haki",
+      "adet": 6
+     },
+     {
+      "renk": "ekru",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3412",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "haki",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3611 kucuk acik gri 7 koyu yesil 3, buyuk acik gri 5",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3611",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "açık gri",
+      "adet": 7
+     },
+     {
+      "renk": "koyu yeşil",
+      "adet": 3
+     }
+    ]
+   },
+   {
+    "kod": "3611",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "açık gri",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3708 siyahtan 10 bejden 6 hepsi büyük",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3708",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     },
+     {
+      "renk": "bej",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3215'ten büyük pudra 12 tane lazım",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3215",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "Büyük vizon 8 küçük vizon 4, 3388 için",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3388",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "vizon",
+      "adet": 8
+     }
+    ]
+   },
+   {
+    "kod": "3388",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "vizon",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3540 büyük ve küçük lila 6'şar",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3540",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "lila",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3540",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "lila",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3194 küçük siyah10 bej5",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3194",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     },
+     {
+      "renk": "bej",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3302 siyah 10 tane, bej 6 tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3302",
+    "beden": null,
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     },
+     {
+      "renk": "bej",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3183 küçük siyah 6\n3459 büyük pudra 8 siyah 4\n3459 küçük pudra 3",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3459",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 8
+     },
+     {
+      "renk": "siyah",
+      "adet": 4
+     }
+    ]
+   },
+   {
+    "kod": "3459",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "22014 büyük: 10 siyah, 6 beyaz",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "22014",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     },
+     {
+      "renk": "beyaz",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3472'den 8 tane büyük somon",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3472",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "somon",
+      "adet": 8
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3266 bejden büyük 7 küçük 3",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3266",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bej",
+      "adet": 7
+     }
+    ]
+   },
+   {
+    "kod": "3266",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "bej",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3394 buyuk kucuk pudra 12",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3459 pudra 8 büyük siyah 6",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3190 küçük siyah bej 10",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3577 büyük siyah 10-12",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3645 küçük 8 büyük 4",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3519 büyük haki 6, küçükten de koy",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "bicim"
+ },
+ {
+  "metin": "3530.. buyk bordo8, kck bordo3!!",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3530",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bordo",
+      "adet": 8
+     }
+    ]
+   },
+   {
+    "kod": "3530",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "bordo",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3297den buyuk haki 5 tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3297",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "haki",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3611 byk gul kurusu 6adt",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3611",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "gül kurusu",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3520 byuk lacivert 4",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3520",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "lacivert",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3394 byk pdura 12 kck pudra 4",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3186 KUCUK SIYAH 6 BEJ 2 ADET",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3186",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 6
+     },
+     {
+      "renk": "bej",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "Slm 3412 byk ekru 5",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3412",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "ekru",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3459 byk pudra 8 degil 6 aded",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3459",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3605 vizon buyuk 4 kucuk 2",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3605",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "vizon",
+      "adet": 4
+     }
+    ]
+   },
+   {
+    "kod": "3605",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "vizon",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3147 kck byk mint 6sar",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3147",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "mint",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3147",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "mint",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3078 buyuk kirmizi 4 yesil 2",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3078",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "kırmızı",
+      "adet": 4
+     },
+     {
+      "renk": "yeşil",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3254 kck siyah5 bej3 ekru2 byk siyah4",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3254",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 5
+     },
+     {
+      "renk": "bej",
+      "adet": 3
+     },
+     {
+      "renk": "ekru",
+      "adet": 2
+     }
+    ]
+   },
+   {
+    "kod": "3254",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3240 kck siyah 6\n3186byk bej3",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3240",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3186",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bej",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3290 3 fume 2 siyah",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3290",
+    "beden": null,
+    "renkler": [
+     {
+      "renk": "füme",
+      "adet": 3
+     },
+     {
+      "renk": "siyah",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3333 tas b/k 6/2",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3333",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "taş",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3333",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "taş",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3254 ikiside siyah12",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3188 byk siyah 2seri",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3365 gecen seferki gibi",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3209 da aynisi",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3415 kck 6ad",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3618 kck bej 5 ekru",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3394 ve 3459 byk pudra 8",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3183 kck siyah 4 yada 5",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3622 byk siyah bej 6",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "3394 pudra 12/4",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "hizli"
+ },
+ {
+  "metin": "abi 3459 büyükten pudra 8 tane lazım bir de küçükten pudra 3 tane olsun",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3459",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 8
+     }
+    ]
+   },
+   {
+    "kod": "3459",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 büyükten pudra on iki tane küçükten de pudradan dört tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3183 küçükten siyah x12, bej x6 bolsun",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 12
+     },
+     {
+      "renk": "bej",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "33 94 büyük pudra 12 adet",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3186 küçükten bej ile vizondan beşer tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3186",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "bej",
+      "adet": 5
+     },
+     {
+      "renk": "vizon",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3520 ekru küçük büyük 6'şar tane olsun",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3520",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "ekru",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3520",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "ekru",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 büyükten pudra 10 tane yok pardon 12 tane olsun",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3311 büyük haki iki tane bir de siyah bir tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3311",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "haki",
+      "adet": 2
+     },
+     {
+      "renk": "siyah",
+      "adet": 1
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3459 için pudradan 8 tane lazım abi",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3459",
+    "beden": null,
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 8
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3183 küçük'ten siyah 5 tane bir de 3186 büyük'ten bej 2 tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 5
+     }
+    ]
+   },
+   {
+    "kod": "3186",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bej",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 pudradan büyük 8 küçük 4 tane toplam 12",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 8
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "Merhaba. 3520 büyük beden vizon 3 tane. Teşekkürler.",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3520",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "vizon",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "7001 büyüğünden 6 tane siyah bejden de 4 tane",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "7001",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 6
+     },
+     {
+      "renk": "bej",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3183 küçükten bej 5 tane lazım siyah lazım değil",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "bej",
+      "adet": 5
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 pudra 12 tane yarısı büyük yarısı küçük",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 pudradan büyük küçük 12 tane olsun abi",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3459 büyükten pudra 2 seri yazalım",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3183 geçen sefer ne istediysek aynısı olsun abi",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3311 büyük 6 tane yaz",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3459 büyük pudra depoda var mı abi?",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3254 küçükten siyah on iki bej",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "7014 büyükten siyah 10 15 tane bir şey",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3520 büyükten her renkten ikişer tane",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 büyük pudra 12 mi yazayım 10 mu?",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3186 bej büyükten 4 tane küçükten de",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "konusma"
+ },
+ {
+  "metin": "3394 uly gara 10 sany kiçi gara 6 sany bolsun",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 10
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 uly razmer gyzyl 4 sany, gara 2 sany",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "kırmızı",
+      "adet": 4
+     },
+     {
+      "renk": "siyah",
+      "adet": 2
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 улы ак 8 саны, кичи ак 4 саны",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "beyaz",
+      "adet": 8
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "beyaz",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3459 gara 6 ak 3",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3459",
+    "beden": null,
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 6
+     },
+     {
+      "renk": "beyaz",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 большой размер пудра 12 штук, маленький пудра 4 шт",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 маленький: черный - 5 шт, беж - 3 шт",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 5
+     },
+     {
+      "renk": "bej",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3459 bolshoy cherniy 7 sht, malenkiy cherniy 3 sht",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3459",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 7
+     }
+    ]
+   },
+   {
+    "kod": "3459",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 3
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 ikisi hem pudra 12 sany",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 uly we kiçi pudra her birinden 6 sany",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 6
+     }
+    ]
+   },
+   {
+    "kod": "3394",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 большой и маленький бордо по 8 шт",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bordo",
+      "adet": 8
+     }
+    ]
+   },
+   {
+    "kod": "3183",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "bordo",
+      "adet": 8
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 3459 uly pudra 12",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 uly pudra 12 sany, 3459 kiçi gara 4 sany",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3394",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "pudra",
+      "adet": 12
+     }
+    ]
+   },
+   {
+    "kod": "3459",
+    "beden": "k",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 4
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 44 beden gara 5 sany",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 44-50 beden bordo 6 adet",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "bordo",
+      "adet": 6
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 uly gara 500 sany",
+  "beklenen_tur": "liste",
+  "gruplar": [
+   {
+    "kod": "3183",
+    "beden": "b",
+    "renkler": [
+     {
+      "renk": "siyah",
+      "adet": 500
+     }
+    ]
+   }
+  ],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 маленький черный 0 шт",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3459 kici gara 3 seri bolsun",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3459 uly pudra aynısı bolsun",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 uly pudra 12 sany, kiçi geçen gezekki yaly",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 большой пудра надо",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3459 kiçi 5 sany",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183 uly gara 6 sany, ak hem gerek",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3394 pudra 12 kiçi 4 sany",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3459 12 pudra 4",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ },
+ {
+  "metin": "3183",
+  "beklenen_tur": "belirsiz",
+  "gruplar": [],
+  "bakis": "karisik"
+ }
+]
