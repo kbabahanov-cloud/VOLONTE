@@ -23,7 +23,7 @@ export function ikiliSatir(rm) {
   return { ...rm, inline_keyboard: satirlar };
 }
 // Deneme kartının KANITI: Telegram'ın döndürdüğü mesaj (resim var mı, yazı, düğmeler) → "<bot>:kanit"
-async function kanitKaydet(env, bot, metod, g, r) {
+export async function kanitKaydet(env, bot, metod, g, r) {
   const m = r && r.result && !Array.isArray(r.result) ? r.result : null;
   if (!m || typeof m !== "object") return;
   const yazi = String(m.caption || m.text || "");

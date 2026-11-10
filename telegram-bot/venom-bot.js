@@ -10,6 +10,7 @@
 //    Fuat/Nuri'ye giden metin güvenlik süzgecinden geçer.
 // Ayarlar: BOT_TOKEN, ANTHROPIC_API_KEY, OPENAI_API_KEY (ses), WEBHOOK_SECRET (secret); KAYIT (KV), STOK (StokDO, volonte-asistan),
 // SELIN_DEPO; MURAT_ID, FUAT_ID, NURI_ID, BR_SORUMLU (Merdan), HEMRA_ID, FABRIKA_SORUMLU (venom:kimlikler); SELF_URL.
+import { kanitKaydet } from "./tg-guvenli.js";
 import { claudeIstemci, claudeVar, claudeTur, openaiFetch, openaiVar } from "./ai-istemci.js";
 import { stokIste } from "./stokbot.js";
 import { bakiyeOku, mutabakatIcerigi, arsiv, fuatSuzgec, tarihSaat } from "./mutabakat.js";
@@ -77,7 +78,10 @@ export async function tg(env, metod, govde) {
     govde = temiz;
   }
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde) });
-  return r.json().catch(() => ({ ok: false }));
+  const j = await r.json().catch(() => ({ ok: false }));
+  // 10 Kasım (kanıtsız tamam yok): 🧪 DENEME kartı Patron'a gidince Telegram'ın döndürdüğü hali "venom:kanit"e (zincir testi son halkası)
+  if (j && j.ok && govde && typeof govde === "object" && !(govde instanceof FormData) && govde.reply_markup) await kanitKaydet(env, "venom", metod, govde, j).catch(() => null);
+  return j;
 }
 // 9 Kasım: Patron'a giden her mesaj kayıtlı (sayım + "bunu bana gönderme" için). ek.posta = { tur, kaynak } (varsayılan: cevap)
 const TUR_IZIN = { cevap: "cevap", kritik: "kritik", ozet: "rapor", rapor: "rapor" };

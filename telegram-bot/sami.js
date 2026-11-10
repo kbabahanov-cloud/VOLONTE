@@ -27,7 +27,7 @@ import { indirimliMi } from "./stok.js";
 import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster, kisiAdi } from "./stokbot.js";
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
-import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
+import { beyinCevapla, beyinDenemesi, yaziYorumla } from "./sami-beyin.js";
 import { kagitAcik } from "./gorev-kagidi.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu, brSayKomutu } from "./stoksorgu.js";
 import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi, adetKomutu, adetDugmesi, nuriStokKomutu } from "./mutabakat.js";
@@ -39,7 +39,7 @@ import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
-import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi } from "./fabrika.js";
+import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi, teyitDugmesi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
 const GUNCELLEMELER = ["message", "callback_query", "my_chat_member", "channel_post"];
@@ -170,6 +170,7 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (/^f[oh]:/.test(String(cq.data || ""))) return zincirDugmesi(env, cq, tg, simdiD); // 10 Kasım: Fuat onayı / Hemra önerisi
+    if (String(cq.data || "").startsWith("ft:")) return teyitDugmesi(env, cq, tg); // 10 Kasım: "Şunu anladım … Doğru mu?" (yazan kişi; içeride kontrol)
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
     if (String(cq.data || "").startsWith("oz:")) return isOzetiDugmesi(env, cq, tg, simdiD); // Fuat'a iş özeti (sadece Patron)
     if (String(cq.data || "").startsWith("ad:")) return adetDugmesi(env, cq, tg, simdiD); // Fuat'a adet listesi (sadece Patron)
@@ -199,7 +200,7 @@ export async function guncelleme(u, env) {
   }
   if (await aramaNotuMesaji(env, m, tg)) return; // 9 Kasım: "📞 Aradım, şu cevap geldi"
   if (await fabrikaYaziMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // 10 Kasım: 📦 gelen adet (Aziz/Merdan), ✏️ tarih
-  if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000))) return; // Hemra'nın eksik listesi
+  if (await fabrikaCevabi(env, m, tg, Math.floor(Date.now() / 1000), { yorumla: yaziYorumla })) return; // Hemra'nın eksik listesi; Aziz/Merdan kendi kartı (teyitli)
   if (await repeteMetni(env, m, tg, Math.floor(Date.now() / 1000))) return; // "3394 repete geldi …"
   const komut = (m.text || "").trim().split(/[\s@]/)[0].toLowerCase();
   if (komut === "/stok") return stokGoster(m, env, tg);

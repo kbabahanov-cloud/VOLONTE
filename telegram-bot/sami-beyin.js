@@ -18,6 +18,9 @@ export const BEYIN_MODEL = "claude-haiku-5-5";
 export const AYLIK_SINIR_USD = 10;
 export const UYARI_ORANI = 0.8;
 const FIYAT = { giris: 0.1, cikis: 0.5, okuma: 0.01 }; // $ / milyon token (100K altı istem)
+// 10 Kasım (Patron): kalıba uymayan eksik yazısını OPUS anlar (Sami'nin beyin modeli Patron izni olmadan değiştirilmez)
+export const YORUM_MODEL = "claude-opus-5-5";
+const MODEL_FIYAT = { "claude-opus-5-5": { giris: 4, cikis: 20, okuma: 0.2 }, "claude-sonnet-5-5": { giris: 2, cikis: 10, okuma: 0.2 }, "claude-haiku-5-5": FIYAT };
 const GUNLUK_MESAJ = 300;
 const GECMIS = 8;
 const EN_FAZLA_TUR = 4;
@@ -29,8 +32,9 @@ const ayarOku = async (env, k, bos) => { const v = (await stokIste(env, "/ayar-o
 const ayarYaz = (env, k, v) => stokIste(env, "/ayar-yaz", { k, v: JSON.stringify(v) });
 
 export const buAyHarcanan = async (env, simdi) => Number(await ayarOku(env, `beyin:harcama:${ay(simdi)}`, 0));
-async function harcamaEkle(env, u, simdi, tg) {
-  const usd = ((u.input_tokens || 0) * FIYAT.giris + (u.cache_creation_input_tokens || 0) * FIYAT.giris * 1.25 + (u.cache_read_input_tokens || 0) * FIYAT.okuma + (u.output_tokens || 0) * FIYAT.cikis) / 1e6;
+async function harcamaEkle(env, u, simdi, tg, model = null) {
+  const F = MODEL_FIYAT[model || env.SAMI_MODEL || BEYIN_MODEL] || FIYAT;
+  const usd = ((u.input_tokens || 0) * F.giris + (u.cache_creation_input_tokens || 0) * F.giris * 1.25 + (u.cache_read_input_tokens || 0) * F.okuma + (u.output_tokens || 0) * F.cikis) / 1e6;
   const once = await buAyHarcanan(env, simdi);
   const yeni = Math.round((once + usd) * 1e6) / 1e6;
   await ayarYaz(env, `beyin:harcama:${ay(simdi)}`, yeni);
@@ -106,7 +110,8 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     return l.length ? { kod: girdi.kod, siparisler: l } : { kod: girdi.kod, sonuc: "son 3 haftada sipariş yok" };
   }
   if (ad === "eksik_listesine_isle") {
-    if (!(muratMi(env, kim) || String(kim) === sorumlu(env))) return { hata: "Eksik listesine sadece Hemra ve Murat işleyebilir." };
+    // 10 Kasım (Patron): Aziz/Merdan kendi kontrol kartına doğrudan yazar (beyne düşmez); burada sadece yol gösterilir
+    if (!(muratMi(env, kim) || String(kim) === sorumlu(env))) return { hata: "Kontrol kartınızdaki model için kodu, bedeni, rengi ve adedi doğrudan yazın (örnek: 3394 büyük pudra 12, küçük pudra 4); Sami teyit sorar. Kartınızda olmayan bir modeli istemek için Hemra'ya yazın." };
     return listeyeIsle(env, tg, simdi, girdi.kararlar, girdi.hepsini_onceki_gibi);
   }
   return { hata: "bilinmeyen araç" };
@@ -173,4 +178,38 @@ export async function beyinDenemesi(env, simdi, tg) {
   }
   await env.KAYIT.put("sami:beyinDenemeSonuc", JSON.stringify({ zaman: simdi, sonuc }), { expirationTtl: 7 * 86400 });
   await tg(env, "sendMessage", { chat_id: murat(env), text: `🧪 Sami'nin beyni deneme (Haiku):\n\n${sonuc.map((x) => `❓ ${x.soru}\n💬 ${x.cevap}`).join("\n\n")}`.slice(0, 4000) });
+}
+
+// ---------- 10 Kasım (Patron): KALIBA UYMAYAN EKSİK YAZISI — OPUS ANLAR ----------
+// Sadece Aziz/Merdan'ın KENDİ açık kontrol kartındaki modeller için. Sonuç her zaman kişiye teyit sorulur ("Şunu anladım … Doğru mu?").
+// Dönüş: { tur: "liste", gruplar: [{ kod, beden: "k"|"b"|null, renkler: [{ renk, adet }] }] } | { tur: "soru" } | { tur: "anlasilmadi" } | null
+const YORUM_ARACI = {
+  name: "eksik_yazisi",
+  description: "Mağaza çalışanının eksik listesi kontrol kartına yazdığı mesajın yapılandırılmış hali.",
+  strict: true,
+  input_schema: {
+    type: "object", additionalProperties: false, required: ["tur", "gruplar"],
+    properties: {
+      tur: { type: "string", enum: ["liste", "soru", "anlasilmadi"], description: "liste: model için beden/renk/adet yazmış; soru: bilgi soruyor; anlasilmadi: emin değilsin" },
+      gruplar: { type: "array", items: { type: "object", additionalProperties: false, required: ["kod", "beden", "renkler"], properties: {
+        kod: { type: "string" }, beden: { type: ["string", "null"], enum: ["k", "b", null], description: "k = Küçük (38-44), b = Büyük (44-50), null = yazılmamış" },
+        renkler: { type: "array", items: { type: "object", additionalProperties: false, required: ["renk", "adet"], properties: { renk: { type: "string" }, adet: { type: "integer" } } } } } } },
+    },
+  },
+};
+export async function yaziYorumla(env, metin, kartlar, simdi, tg) {
+  if (!env.ANTHROPIC_API_KEY) return null;
+  if ((await buAyHarcanan(env, simdi)) >= AYLIK_SINIR_USD) return null;
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 30_000 });
+  const sistem = `Bir kadın giyim toptancısında mağaza çalışanı, fabrikaya istenecek eksik listesindeki kendi kontrol kartına Telegram'dan yazıyor. Mesajı yapılandır.
+Kartlarındaki modeller (kod, marka, kartta seçilen beden: k=Küçük 38-44, b=Büyük 44-50, i=ikisi de, null=seçilmedi): ${JSON.stringify(kartlar)}.
+Kurallar: Sadece bu kodları kullan. Beden yazılmadıysa beden=null. Renk adlarını yalın ve Türkçe küçük harfle yaz (siyahtan → siyah). Adet tam sayı. Türkçe harfsiz yazımı (buyuk, kucuk), kısaltmaları (b/k, byk/kck), bitişik yazımı (4adet), kelime sırasını serbest kabul et. Türkmence/Rusça kelimeleri de anla (uly = büyük, kiçi = küçük; большой = büyük, маленький = küçük). Bir şey soruyorsa tur=soru. Emin değilsen TAHMİN ETME: tur=anlasilmadi.`;
+  const r = await client.messages.create({ model: YORUM_MODEL, max_tokens: 600, system: sistem, tools: [YORUM_ARACI], tool_choice: { type: "tool", name: "eksik_yazisi" }, messages: [{ role: "user", content: String(metin).slice(0, 600) }] });
+  await harcamaEkle(env, r.usage || {}, simdi, tg, YORUM_MODEL);
+  const a = (r.content || []).find((b) => b.type === "tool_use");
+  if (!a || !a.input) return null;
+  const izinli = new Set(kartlar.map((k) => String(k.kod)));
+  const gruplar = (a.input.gruplar || []).filter((g) => izinli.has(String(g.kod))).map((g) => ({ kod: String(g.kod), beden: g.beden === "k" || g.beden === "b" ? g.beden : null, renkler: (g.renkler || []).filter((x) => x && x.renk && Number.isInteger(x.adet) && x.adet > 0 && x.adet < 1000).map((x) => ({ renk: String(x.renk).toLocaleLowerCase("tr").trim(), adet: x.adet })) }));
+  if (a.input.tur === "liste" && gruplar.length !== (a.input.gruplar || []).length) return { tur: "anlasilmadi" }; // karta ait olmayan kod → tahmin yok
+  return { tur: a.input.tur, gruplar };
 }

@@ -1425,3 +1425,27 @@ test("Venom kanal: 'sil' niyeti (kod / link / yanıt); bot yapamadıysa Patron'a
   await yazi(o, PATRON, "3512 sil");
   assert.equal(o.g.filter((x) => String(x.govde.chat_id) === String(PATRON)).at(-1).govde.text, "Silindi: 3512 (t.me/Volonteroseoffical/15001 +1 mesaj, 10.11 14:35)");
 });
+
+test("TAM ZİNCİR DENEMESİ son halka: Patron'un açıkça istediği zincir denemesi (zincir: true) 🧪 işaretli karar kartı olarak Patron'a gider; Telegram'ın döndürdüğü hali venom:kanit'e; düz deneme yine gitmez", async () => {
+  const { bittiKartMetni } = await import("./venom-bot.js");
+  const o = ortam();
+  const onceki = globalThis.fetch;
+  globalThis.fetch = async (url, istek = {}) => { // Telegram yazıyı/düğmeleri aynen geri döndürsün (kanıt)
+    const r = await onceki(url, istek);
+    if (!String(url).includes("api.telegram.org")) return r;
+    const j = await r.json(); const g = istek.body ? JSON.parse(istek.body) : {};
+    return Response.json({ ...j, result: { ...(j.result || {}), ...(g.caption ? { caption: g.caption, photo: [{ file_id: "p" }] } : {}), ...(g.text ? { text: g.text } : {}), ...(g.reply_markup ? { reply_markup: g.reply_markup } : {}) } });
+  };
+  try {
+    const x = { id: "z1", sip: "D3459-z", kod: "3459", magaza: "BLACKROSE", oneri: "repete", hemra: "Hemra", tur: "bitti", fabrika: { kim: "Sinem", zaman: 1793000000, ne: "bitti" }, fuat: { kim: "deneme: Fuat'a gitmedi", zaman: 1793000000, kendisi: true }, stok: "deneme", deneme: true, zincir: true, foto: null };
+    await kuyrugaEkle(o.env, "bittiOneri", { ...x, id: "z0", sip: "D1-duz", zincir: false });
+    await kuyrugaEkle(o.env, "bittiOneri", x);
+    await venomCron(o.env, Math.floor(Date.now() / 1000));
+    const kartlar = o.g.filter((y) => /Hemra önerisi/.test(y.govde.text || y.govde.caption || ""));
+    assert.equal(kartlar.length, 1); // sadece zincir denemesi
+    assert.match(kartlar[0].govde.text || kartlar[0].govde.caption, /^🧪 DENEME[\s\S]*3459/);
+    const kanit = JSON.parse(o.depo.get("venom:kanit") || "[]");
+    assert.ok(kanit.some((k) => /^🧪 DENEME/.test(k.yazi) && /3459/.test(k.yazi) && k.dugmeler.flat().includes("🔁 Repete")), JSON.stringify(kanit));
+    assert.match(bittiKartMetni(x), /^🧪 DENEME/);
+  } finally { globalThis.fetch = onceki; }
+});

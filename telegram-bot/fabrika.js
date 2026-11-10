@@ -321,7 +321,7 @@ async function secimUygula(env, tg, anahtar, d, kararlar, kaynak, metin = "") {
     const m = d.mesajlar && d.mesajlar[kod];
     if (m) {
       const [mesaj, tur, yazi] = m;
-      const yazili = kaynak === "metin" && secimTamam(secimNorm(s)) ? `✅ ${[].concat(liste).map((k) => `${kod} ${k.beden === "k" ? "küçük" : k.beden === "b" ? "büyük" : ""} ${(k.renkler || []).map((x) => `${x.renk} ${x.adet}`).join(" ")}`.replace(/\s+/g, " ").trim()).join(", ")} – kaydedildi` : null;
+      const yazili = kaynak === "metin" && secimTamam(secimNorm(s)) ? `✅ ${kod} ${[].concat(liste).map((k) => `${k.beden === "k" ? "küçük" : k.beden === "b" ? "büyük" : ""} ${(k.renkler || []).map((x) => `${x.renk} ${x.adet}`).join(", ")}`.replace(/\s+/g, " ").trim()).join(", ")} – kaydedildi` : null;
       await tg(env, tur === "foto" ? "editMessageCaption" : "editMessageText", { chat_id: kimeOf(env, d), message_id: mesaj, [tur === "foto" ? "caption" : "text"]: `${yazi}\n\n${yazili || secimYazi(s)}`, reply_markup: modelKlavye(anahtar, kod, Boolean(sonIstek[kod]), s.beden || null, secimTamam(secimNorm(s))) });
     }
   }
@@ -783,26 +783,42 @@ export async function listeyeIsle(env, tg, simdi, kararlar, hepsiOnceki = false)
 }
 
 // Hemra'nın yazısı (liste bekleniyorsa). true dönerse mesaj işlendi.
-export async function fabrikaCevabi(env, m, tg, simdi) {
+export async function fabrikaCevabi(env, m, tg, simdi, { yorumla = null } = {}) {
   const cfg = MAGAZALAR.find((c) => c.kime(env) === String(m.from.id));
   if (!cfg) return false;
   const metin = String(m.text || "").trim();
-  if (!/^\d{4,6}\b/.test(metin)) return false;
-  // 10 Kasım (Patron ACİL): Aziz/Merdan KENDİ kontrol kartındaki modele yazıyla renk/adet girer ("3459 büyük pudra 8").
-  // Yetki sadece kendisine gelen açık kontrol kartları için (bugün + son 2 gün; ana liste, ekler ve 🧪 deneme listesi).
-  const kendi = duzListeMi(metin) ? await kendiKartlari(env, simdi, cfg, String(m.from.id)) : [];
-  const cozulen = kendi.length ? listeCozBeden(metin) : [];
-  if (cozulen.length && cozulen.every((x) => kendi.some((k) => (k.d.mesajlar || {})[x.kod]))) {
-    for (const k of kendi) {
-      const kararlar = {};
-      for (const x of cozulen) if ((k.d.mesajlar || {})[x.kod] && !kendi.some((z) => z !== k && (z.d.mesajlar || {})[x.kod] && z.d.zaman > k.d.zaman)) (kararlar[x.kod] = kararlar[x.kod] || []).push(x.renkler.length ? { beden: x.beden, renkler: x.renkler } : { beden: x.beden });
-      if (Object.keys(kararlar).length) { k.d.yazan = m.from.first_name || cfg.ad; k.d.secim = k.d.secim || {}; await secimUygula(env, tg, k.anahtar, k.d, kararlar, "metin", metin); }
+  if (!/^\d{4,6}(?!\d)/.test(metin)) return false;
+  // 10 Kasım (Patron): Aziz/Merdan KENDİ açık kontrol kartındaki modele yazıyla renk/adet girer. Önce kalıp çözücü (serbest sıra,
+  // Türkçe harfsiz, "adet"li/adetsiz, bitişik, iki beden, çok renk); kalıba uymazsa Opus anlar; HER ZAMAN teyit sorulur.
+  // Kendi kartındaki model için "sadece Hemra ya da Murat girebilir" ASLA gitmez (beyne düşmez).
+  if (String(m.from.id) !== sorumlu(env)) {
+    const kisi = String(m.from.id);
+    const kendi = await kendiKartlari(env, simdi, cfg, kisi);
+    const kartKod = new Set(kendi.flatMap((k) => Object.keys(k.d.mesajlar || {})));
+    const yazilan = [...new Set(metin.match(/(?<!\d)\d{4,6}(?!\d)/g) || [])];
+    const kalip = serbestCoz(metin);
+    if (!yazilan.some((k) => kartKod.has(k))) {
+      if (kalip || listeCozBeden(metin).length) { await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${yazilan.join(", ")}: size gelen açık kontrol kartında yok. Başka model istemek için Hemra'ya yazın.` }); return true; }
+      return false; // soru vb. → beyin
     }
-    return true;
-  }
-  if (cozulen.length) {
-    const yok = cozulen.filter((x) => !kendi.some((k) => (k.d.mesajlar || {})[x.kod])).map((x) => x.kod);
-    await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${yok.join(", ")}: size gelen açık kontrol kartında yok. Başka model istemek için Hemra'ya yazın.` });
+    const sonKart = (kod) => kendi.filter((k) => (k.d.mesajlar || {})[kod]).sort((x, y) => (y.d.zaman || 0) - (x.d.zaman || 0))[0];
+    let gr = kalip && kalip.every((g) => kartKod.has(g.kod)) ? kalip : null;
+    let kaynak = "kalip";
+    if (!gr && yorumla) {
+      const kartlar = [...kartKod].map((kod) => { const k = sonKart(kod); const sc = secimNorm(k.d.secim && k.d.secim[kod]); return { kod, marka: k.d.magaza || MAGAZA, secilenBeden: sc && sc.beden ? sc.beden : null }; });
+      const y = await yorumla(env, metin, kartlar, simdi, tg).catch(() => null);
+      if (y && y.tur === "soru") return false; // stok sorusu vb. → beyin (eksik kaydı değil)
+      if (y && y.tur === "liste" && y.gruplar && y.gruplar.length && y.gruplar.every((g) => kartKod.has(g.kod) && (g.renkler || []).length)) { gr = y.gruplar; kaynak = "opus"; }
+    }
+    const ORNEK = `Örnek: ${[...kartKod][0] || "3394"} büyük pudra 12, küçük pudra 4`;
+    if (!gr) { await tg(env, "sendMessage", { chat_id: m.chat.id, text: `Tam anlayamadım. Kod, beden, renk ve adet yazın.\n${ORNEK}` }); return true; }
+    for (const g of gr) if (!g.beden) { const k = sonKart(g.kod); const sc = secimNorm(k.d.secim && k.d.secim[g.kod]); if (sc && (sc.beden === "k" || sc.beden === "b")) g.beden = sc.beden; }
+    const bedensiz = [...new Set(gr.filter((g) => !g.beden).map((g) => g.kod))];
+    if (bedensiz.length) { await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${bedensiz.join(", ")}: hangi beden? Küçük mü, büyük mü?\n${ORNEK}` }); return true; }
+    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10);
+    const ozet = anladimYazisi(gr);
+    await ayarYaz(env, `fabrika:teyit:${id}`, { kisi, zaman: simdi, metin: metin.slice(0, 300), kaynak, gr, anahtar: Object.fromEntries([...new Set(gr.map((g) => g.kod))].map((kod) => [kod, sonKart(kod).anahtar])) });
+    await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${kendi.some((k) => k.d.deneme) ? DENEME : ""}Şunu anladım: ${ozet}. Doğru mu?`, reply_markup: { inline_keyboard: [[{ text: "✅ Evet", callback_data: `ft:e:${id}` }, { text: "✏️ Düzelt", callback_data: `ft:d:${id}` }]] } });
     return true;
   }
   // "3254 siyahtan 5", "bu sefer isteme", "önceki gibi" gibi serbest yazı beyne gider (Sami'nin beyni varsa).
@@ -2401,3 +2417,89 @@ export async function fabrikaDenemesi(env, m, tg, simdi) {
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: `🧪 Deneme başladı: Hemra'ya onay kartı gitti. Bütün adımlar "🧪 DENEME" ile işaretli; kanalda paylaşım ve silme yapılmaz. Bitince size özet gelecek.` });
 }
 export const _test = { siparisAc, hemraKarti, siparisYaz }; // testler için
+
+// ---------- 10 Kasım (Patron): SERBEST YAZIM ÇÖZÜCÜ (yapay zekâ yok) ----------
+// Kelime sırası serbest (pudra büyük / büyük pudra), Türkçe harfsiz (buyuk, kucuk), "adet" yazılsın/yazılmasın, bitişik (4adet, 12ad),
+// iki beden tek mesajda, birden fazla renk (siyah 10 bej 6). Anlaşılmazsa null (eksik/fazla parça varsa tahmin edilmez).
+const BEDEN_SOZ = {
+  k: ["küçük", "kucuk", "kücük", "kuçuk", "kucük", "küçuk", "kçk", "kck", "kuc", "küç", "k", "s", "kiçi", "kici", "kiçiler"],
+  b: ["büyük", "buyuk", "büyuk", "buyük", "büyk", "buyk", "byk", "b", "l", "uly", "ulы"],
+};
+const BEDEN_EK = /^(küçü[kğ]|kucu[kg]|kücü[kğ]|büyü[kğ]|buyu[kg]|büyu[kg]|buyü[kğ])(ten|tan|den|dan|te|ta|de|da|e|a|ler|lar|leri|ları|ü|u|ünden|unden|lerden|lardan)?$/;
+const BOS_SOZ = new Set(["adet", "ad", "adt", "adet.", "tane", "tn", "pcs", "pc", "ve", "de", "da", "ile", "için", "icin", "lazım", "lazim", "gerek", "iste", "istiyorum", "isteyelim", "olsun", "x", "abi", "abla", "renk", "renkten", "beden", "bedenden", "bedeni", "beden:", "model", "kod", "kodu", "bolsun", "gerekli"]);
+const BELIRSIZ = /^(ikisi|ikiside|ikiside|ikisinden|ikisine|her|herikisi|seri|seriden|aynı|aynısı|aynisi|ayni|önceki|onceki|gibi|geçen|gecen|yarım|yarim|isteme|istemeyelim|yok|iptal|değil|degil|yerine|kadar|fazla|eksik|az|çok|cok|mi|mı|mu|mü|kaç|kac|ne|nedir)$/;
+export function serbestCoz(metin) {
+  const t = String(metin || "").toLocaleLowerCase("tr").replace(/[’'`´]/g, "").replace(/[.,;:/\\+\-–—()!?=*&]+/g, " ").replace(/\n/g, " ")
+    .replace(/(\d)([a-zçğıöşü])/g, "$1 $2").replace(/([a-zçğıöşü])(\d)/g, "$1 $2");
+  const kel = t.split(/\s+/).filter(Boolean);
+  const ekAt = (w) => (w.length > 5 ? w.replace(/(ndan|nden|dan|den|tan|ten)$/, "") : w); // siyahtan → siyah, pudradan → pudra, bejden → bej
+  const bedenOf = (w) => { if (BEDEN_SOZ.k.includes(w)) return "k"; if (BEDEN_SOZ.b.includes(w)) return "b"; const m = w.match(BEDEN_EK); return m ? (/^k/.test(m[1]) ? "k" : "b") : null; };
+  const sonuc = [];
+  let kod = null, beden = null, renk = [], adet = null, bedensiz = [], bedenBos = false;
+  const cift = () => { if (renk.length && adet != null) { const p = { kod, beden, renk: renk.join(" "), adet }; sonuc.push(p); if (!beden) bedensiz.push(p); renk = []; adet = null; bedenBos = false; } };
+  for (const w0 of kel) {
+    if (/^\d{4,6}$/.test(w0)) { if (renk.length || adet != null || bedenBos) return null; kod = w0; beden = null; bedensiz = []; continue; }
+    if (!kod) return null;
+    if (BELIRSIZ.test(w0)) return null; // "ikisi de 12", "3 seri", "aynısı", "isteme" → tahmin yok (Opus / soru)
+    const bd = bedenOf(w0);
+    if (bd) {
+      if (renk.length || adet != null) { if (beden && beden !== bd) return null; beden = bd; continue; } // "pudra büyük 12"
+      if (bedensiz.length && !bedenBos) { for (const p of bedensiz) p.beden = bd; bedensiz = []; continue; } // "pudra 12 büyük"
+      if (bedenBos) return null; // "büyük küçük pudra 12" belirsiz
+      beden = bd; bedenBos = true; continue;
+    }
+    if (/^\d{1,3}$/.test(w0)) { if (adet != null) return null; adet = Number(w0); if (adet <= 0) return null; cift(); continue; }
+    if (BOS_SOZ.has(w0)) continue;
+    const w = ekAt(w0);
+    if (BOS_SOZ.has(w)) continue;
+    if (!/^[a-zçğıöşü]+$/.test(w)) return null; // Rusça vb. → Opus
+    if (renk.length >= 3) return null;
+    renk.push(w);
+    if (adet != null) cift(); // "10 siyah"
+  }
+  if (renk.length || adet != null || bedenBos || !sonuc.length) return null; // yarım kalan parça → tahmin yok
+  const gr = [];
+  for (const p of sonuc) {
+    let g = gr.find((x) => x.kod === p.kod && x.beden === p.beden);
+    if (!g) gr.push((g = { kod: p.kod, beden: p.beden, renkler: [] }));
+    const r = g.renkler.find((x) => x.renk === p.renk);
+    if (r) r.adet += p.adet; else g.renkler.push({ renk: p.renk, adet: p.adet });
+  }
+  return gr;
+}
+export const anladimYazisi = (gr) => [...new Set(gr.map((g) => g.kod))].map((kod) => `${kod} ${gr.filter((g) => g.kod === kod).map((g) => `${g.beden === "k" ? "Küçük " : g.beden === "b" ? "Büyük " : ""}${g.renkler.map((r) => `${r.renk} ${r.adet}`).join(", ")}`).join(", ")}`).join("; ");
+
+// ft:e:<id> (✅ Evet) · ft:d:<id> (✏️ Düzelt) — "Şunu anladım … Doğru mu?" teyidi (sadece yazan kişi basar)
+export async function teyitDugmesi(env, cq, tg) {
+  const cevapla = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  const [, islem, id] = String(cq.data || "").split(":");
+  const t = await ayarOku(env, `fabrika:teyit:${id}`, null);
+  const benim = cq.message ? { chat_id: cq.message.chat.id, message_id: cq.message.message_id } : null;
+  if (!t || t.bitti) return cevapla("Bu teyit artık geçerli değil.");
+  if (String(cq.from.id) !== String(t.kisi)) return cevapla("Bu teyit size ait değil.");
+  t.bitti = islem === "e" ? "evet" : "duzelt";
+  await ayarYaz(env, `fabrika:teyit:${id}`, t);
+  const ozet = anladimYazisi(t.gr);
+  if (islem !== "e") {
+    await cevapla("Yeniden yazın");
+    const kod = t.gr[0] ? t.gr[0].kod : "3394";
+    return benim && tg(env, "editMessageText", { ...benim, text: `✏️ Kaydedilmedi. Yeniden yazın.\nÖrnek: ${kod} büyük pudra 12, küçük pudra 4` });
+  }
+  const simdi = Math.floor(Date.now() / 1000);
+  const kayit = [], olmadi = [];
+  for (const anahtar of [...new Set(Object.values(t.anahtar))]) {
+    const d = await ayarOku(env, `fabrika:${anahtar}`, null);
+    const kodlar = Object.keys(t.anahtar).filter((k) => t.anahtar[k] === anahtar);
+    if (!d || !["soruldu", "duzelt", "eminMi"].includes(d.asama) || String(kimeOf(env, d)) !== String(t.kisi)) { olmadi.push(...kodlar); continue; }
+    const kararlar = {};
+    for (const g of t.gr) if (kodlar.includes(g.kod) && (d.mesajlar || {})[g.kod]) (kararlar[g.kod] = kararlar[g.kod] || []).push({ beden: g.beden, renkler: g.renkler });
+    if (!Object.keys(kararlar).length) { olmadi.push(...kodlar); continue; }
+    if (d.asama === "eminMi") d.asama = "soruldu"; // değişiklik: "Emin misin?" yeniden sorulur
+    d.yazan = cq.from.first_name || "";
+    d.secim = d.secim || {};
+    await secimUygula(env, tg, anahtar, d, kararlar, "metin", t.metin);
+    kayit.push(...Object.keys(kararlar));
+  }
+  await cevapla(kayit.length ? "Kaydedildi" : "Kaydedilemedi");
+  return benim && tg(env, "editMessageText", { ...benim, text: kayit.length ? `✅ Kaydedildi: ${ozet}${olmadi.length ? `\n⚠️ ${olmadi.join(", ")}: kart artık açık değil, kaydedilmedi.` : ""}` : `⚠️ Kaydedilemedi: kart artık açık değil (${olmadi.join(", ")}). Hemra'ya yazın.` });
+}

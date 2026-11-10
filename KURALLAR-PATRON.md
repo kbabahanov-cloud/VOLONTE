@@ -9,6 +9,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 1. **Kanıtsız tamam yok.** "Tamam" demeden önce kişinin telefonuna giden mesaj Telegram'dan geri okunur ve raporda aynen gösterilir (resim/yazı/düğmeler). Kanıt yoksa "doğrulanmadı".
 2. **Zincir testi.** Her değişiklikten sonra: kart → cevap → bir sonraki kişi → son durak (Hemra / Patron / fabrika). Her halkada telefona giden mesaj geri okunur. Bir halka eksikse "tamam" denmez.
 3. **Gerileme kontrolü.** Her değişiklikten sonra bütün testler; bozulan varsa raporun EN BAŞINA.
+33. **Test sadece kolay örnekle yapılmaz;** elemanların gerçek yazım şekilleriyle yapılır (Türkçe harfsiz, sıra serbest, bitişik, kısaltma, iki beden, çok renk, Türkmence/Rusça karışık, belirsiz/tuzak yazılar).
 4. **"X basmadı" denmeden önce** kartın X'e gerçekten gittiği doğrulanır.
 5. **Bot yapamazsa** "yapamadı, sebebi şu" der; "verdim / hallettim" diye yalan rapor yok.
 6. **Rapor kısa, insan dili;** Telegram'da tablo yok. Önce bozuk kalanlar, sonra tamamlananlar.
@@ -35,7 +36,9 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 19. **Kart = tek mesaj:** resim + yazı + düğmeler. Satırda en fazla 2 düğme; yazılar kesilmez.
 20. **Bir kişiye aynı anda en fazla 5 kart;** cevap verdikçe yenisi gelir.
 21. **Eski kart yenisiyle değiştirilir;** geçersiz kart kapatılır.
-22. **Aziz/Merdan kendi kontrol kartına yazıyla renk/adet girebilir** (sadece kendilerine gelen kart); kart "✅ … – kaydedildi" diye kapanır, Geri al kalır. Beden talimatı tek mesaj.
+22. **Aziz/Merdan kendi kontrol kartına yazıyla renk/adet girebilir** (sadece kendilerine gelen kart); kart "✅ … – kaydedildi" diye kapanır, Geri al kalır. Beden talimatı tek mesaj. Kendi kartındaki model için "sadece Hemra ya da Murat girebilir" mesajı ASLA gitmez.
+34. **Anlaşılan yazı her zaman teyit edilir:** "Şunu anladım: … Doğru mu?" [✅ Evet] [✏️ Düzelt]. Anlaşılmazsa örnekle yeniden sorulur; tahmin yok.
+35. **Sami'nin beyin modeli Patron izni olmadan değiştirilmez.** Patron kararı (10 Kasım): kalıba uymayan yazıyı Opus anlar. (Not: Sami'nin genel sohbet beyni 29 Ekim'den beri Haiku; Opus'a geçiş Patron'un onayını bekliyor.)
 
 ## F. Stok, silme, kanal, site
 23. **Silme kararı sadece Patron'un.** "Sil" düğmesi Patron dışında kimseye gitmez.
