@@ -48,6 +48,23 @@ const METIN = {
     yok: "Não encontrei este modelo na nossa coleção. Nossa equipe vai verificar e responder.",
   },
 };
+// 10 Kasım (Patron): müşteriye yapay zekâ cevabı KAPALI. Her mesaj Hemra'ya iletilir (cevabı yanıtla → müşteriye gider);
+// müşteriye günde bir kez kısa hazır cevap. Yapay zekâ ve harcama yok. (Müşteri işi ileride Defne'nin.)
+export async function musteriBasit(msg, env, y, simdi) {
+  const kisi = msg.from, sohbet = msg.chat.id;
+  const t = METIN[dilSec(kisi)];
+  const yaz = (text) => y.gonder("sendMessage", { chat_id: sohbet, text, disable_web_page_preview: true });
+  const metin = msg.text || msg.caption || "";
+  if (/^\/start\b/.test(metin)) return yaz(`${t.merhaba} https://t.me/Volonteroseoffical`);
+  const gun = new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  const say = `mbasit:${kisi.id}:${gun}`;
+  const n = Number((await env.KAYIT.get(say)) || 0);
+  await env.KAYIT.put(say, String(n + 1), { expirationTtl: 2 * 86400 });
+  const foto = medyaDosyasi(msg, 800);
+  if (n < 30) await y.ekibeIlet(msg, "Müşteri mesajı — cevabınızı bu mesajı YANITLAYARAK yazın", null, foto || msg.video || msg.document ? msg.message_id : null);
+  if (n === 0) return yaz(foto ? t.foto : t.yogun);
+  return null;
+}
 export const dilSec = (from) => {
   const d = String((from && from.language_code) || "en").slice(0, 2);
   return METIN[d] ? d : "en";

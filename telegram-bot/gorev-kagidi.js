@@ -19,6 +19,7 @@ export const KAPALI = {
     repeteRaporu: "Pzt/Çar/Cum repete raporu Patron'a (Sami/Venom'un işi)",
     repeteAcil: "saatlik acil repete kartı Patron'a (Sami/Venom'un işi)",
     turEksikleri: "sonradan gelene eski tur kartları",
+    musteriYZ: "müşteriye yapay zekâ cevabı (Patron 10 Kasım: KAPALI; mesajlar Hemra'ya)",
   },
 };
 

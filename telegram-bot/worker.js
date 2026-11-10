@@ -45,7 +45,7 @@ import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir
 import { markaBas } from "./marka.js";
 import { repeteHesapla, repeteMetni, siparisTaslagi, hatirlatmaTaslagi } from "./repete-rapor.js";
 import { haftaIci, magazaAcik } from "./magaza-saat.js";
-import { musteriIsle, dilSec } from "./musteri.js";
+import { musteriIsle, musteriBasit, dilSec } from "./musteri.js";
 import { kagitAcik } from "./gorev-kagidi.js";
 import { guvenliGonder } from "./tg-guvenli.js";
 import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } from "./ortak.js";
@@ -473,6 +473,14 @@ async function mesajIsle(msg, env) {
     const rp = repeteYetkili(env, kimden.id) && repeteAyikla(msg.text);
     if (rp) return repeteIstegi(msg, env, rp);
   }
+  // Hemra (ekip) Kemal'in ilettiği müşteri mesajını yanıtlarsa: müşteriye iletilir (10 Kasım)
+  if (ekipMi(kimden.id, env) && msg.reply_to_message) {
+    const musteri = await env.KAYIT.get(`iletim:${msg.chat.id}:${msg.reply_to_message.message_id}`);
+    if (musteri) {
+      const r = await telegram(env, "copyMessage", { chat_id: Number(musteri), from_chat_id: msg.chat.id, message_id: msg.message_id });
+      return telegram(env, "sendMessage", { chat_id: msg.chat.id, text: r.ok ? "✅ Müşteriye iletildi (Kemal'in ağzından)." : `⚠️ İletilemedi: ${r.description}`, reply_to_message_id: msg.message_id });
+    }
+  }
   if (ekipMi(kimden.id, env)) return ekipMesaji(msg, env);
   if (!izinliMi(kimden.id, env)) {
     await env.KAYIT.put(
@@ -480,6 +488,8 @@ async function mesajIsle(msg, env) {
       JSON.stringify({ ad: [kimden.first_name, kimden.last_name].filter(Boolean).join(" "), kullanici: kimden.username || null, zaman: msg.date, metin: (msg.text || "").slice(0, 50) }),
       { expirationTtl: 7 * 24 * 60 * 60 }
     );
+    // 10 Kasım (Patron): müşteriye yapay zekâ cevabı KAPALI — mesaj Hemra'ya iletilir, müşteriye kısa hazır cevap
+    if (!(await kagitAcik(env, "kemal", "musteriYZ"))) return musteriBasit(msg, env, musteriYardimcilari(env), Math.floor(Date.now() / 1000));
     // Müşteri modu: ayrı dosya, yönetici işlerine erişimi yok (musteri.js).
     return musteriIsle(msg, env, musteriYardimcilari(env), Math.floor(Date.now() / 1000));
   }
@@ -2579,7 +2589,7 @@ async function repeteOnizlemeGonder(env, rec) {
 }
 const repeteKontrol = (rec, simdi) => [
   rec.kontrolSatir || null, // 6 Kasım: Venom kontrolü en üstte
-  rec.tur === "yeni" ? `🆕 YENİ MODEL — ${rec.kod} (siteye ekleyen: ${rec.kim})` : `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
+  rec.yenirenk ? `🎨 YENİ RENK — ${rec.kod} · ${rec.yenirenk} (Kemal sitede fark etti; kanalda bu renk hiç paylaşılmadı)` : rec.tur === "yeni" ? `🆕 YENİ MODEL — ${rec.kod} (siteye ekleyen: ${rec.kim})` : `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
   `Medya: ${rec.kaynak === "site" ? "siteden" : "kanaldaki son paylaşımdan (eski yazı kullanılmadı)"}`,
   `Renkler: ${rec.paket.renkEmin && rec.paket.renkler.length ? rec.paket.renkler.join(", ") : "yazılmadı → satır yok (✏️ Düzelt ile ekleyebilirsiniz)"}`,
   rec.stokUyari ? `⚠️ ${rec.stokUyari}` : null,
@@ -2715,7 +2725,7 @@ export async function yeniModelIsleri(env, simdi) {
     const u = site.find((x) => String(x.kod) === String(r.kod) && !x.gizli);
     if (!u) { if ((r.deneme || 0) < 12) tekrar[r.kod] = (r.deneme || 0) + 1; continue; }
     let paket;
-    try { paket = { ...(await paketHazirla(env, u, await durumBaglami(env, [String(r.kod)], simdi), simdi, { durum: "yeni" })), kaynak: "site" }; } catch (e) {
+    try { paket = { ...(await paketHazirla(env, u, await durumBaglami(env, [String(r.kod)], simdi), simdi, r.yenirenk ? { durum: "yenirenk", renk: r.yenirenk } : { durum: "yeni" })), kaynak: "site" }; } catch (e) {
       // Geçici hata (indirme/zaman aşımı/yoğunluk): sessizce sonraki turlarda tekrar (en fazla 3 tur); olmazsa Patron'a kısa Türkçe
       await env.KAYIT.put("kemal:sonHata", JSON.stringify({ zaman: simdi, kod: r.kod, hata: String(e && e.message).slice(0, 500) }), { expirationTtl: 7 * 86400 });
       if (gecici(e) && (r.hataTur || 0) < 3) { hataTekrar[r.kod] = (r.hataTur || 0) + 1; continue; }
@@ -2727,7 +2737,7 @@ export async function yeniModelIsleri(env, simdi) {
     const d0 = await kendiDuzelt(env, paket, await kanalKontrol(env, paket, { simdi }).catch(() => null), { simdi }).catch(() => ({ paket, kontrol: null }));
     paket = d0.paket;
     const kontrol = d0.kontrol;
-    const rec = { id, tur: "yeni", kod: String(r.kod), paket, kim: r.kim || "Selin", alicilar: yeniModelAlicilar(env), kaynak: "site", durum: null, zaman: simdi, kontrolSatir: kontrol ? kontrol.satir : null, kontrolSorunlar: kontrol ? kontrol.sorunlar : [], bekleme: r.bekleme || 0,
+    const rec = { id, tur: "yeni", yenirenk: r.yenirenk || null, kod: String(r.kod), paket, kim: r.kim || "Selin", alicilar: yeniModelAlicilar(env), kaynak: "site", durum: null, zaman: simdi, kontrolSatir: kontrol ? kontrol.satir : null, kontrolSorunlar: kontrol ? kontrol.sorunlar : [], bekleme: r.bekleme || 0,
       stokUyari: !st ? "Vegawin'de bu modelin stok kaydı henüz görünmüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : !(st.toplam > 0) ? "Vegawin'de stok henüz 0 görünüyor (giriş yapılmamış olabilir) — paylaşım engellenmez, karar sizin" : null };
     await repeteOnizlemeGonder(env, rec);
     await env.KAYIT.put(`rpt:${id}`, JSON.stringify(rec), { expirationTtl: 3 * 86400 });
@@ -2940,6 +2950,113 @@ async function yayinOnayDugmesi(cq, env) {
   return null;
 }
 
+// ---------- 10 Kasım (Patron): STOK BİTİNCE SOLD OUT ----------
+// SADECE Vegawin MAĞAZA stoğu 0 olunca (fabrikada bitmesi sebep değil). Olay bazlı: stoğu daha önce >0 görülen model 0'a düşünce,
+// en az 1 saat arayla İKİ kontrolde de 0 ise. Köprü verisi 3 saatten eskiyse hiçbir şey yapılmaz. Kanal mesajı SİLİNMEZ: kanaldaki
+// son 3 paylaşımın yazısı "❌ SOLD OUT / ÉPUISÉ" ile başlar (resim ve düğmeler kalır). Saatte en fazla 3 model; 09–21.
+export const SOLDOUT_SATIR = "❌ SOLD OUT / ÉPUISÉ";
+export async function soldOutAdimi(env, simdi, { zorla = false } = {}) {
+  if (!env.STOK) return null;
+  const s = saat(simdi);
+  if (!zorla && (s < 9 || s >= 21)) return null;
+  const son = Number((await env.KAYIT.get("kemal:soldoutSon")) || 0);
+  if (!zorla && simdi - son < 3600) return null;
+  await env.KAYIT.put("kemal:soldoutSon", String(simdi), { expirationTtl: 3 * 86400 });
+  const oz = await stokIste(env, "/ozet", {}).catch(() => null);
+  const kopruler = (oz && oz.kopruler) || [];
+  if (!kopruler.length || kopruler.some((k) => simdi - Number(k.son || 0) > 3 * 3600)) return { atlandi: "köprü verisi taze değil" };
+  const kodlar = Object.keys((await env.KAYIT.get("kodlar", "json")) || {}).filter((k) => !indirimliMi(k));
+  const stok = {};
+  for (let i = 0; i < kodlar.length; i += 500) Object.assign(stok, await stokIste(env, "/toplu", { kodlar: kodlar.slice(i, i + 500) }).catch(() => ({})));
+  const gorulen = (await env.KAYIT.get("kemal:stokGorulen", "json").catch(() => null));
+  const bekleyen = (await env.KAYIT.get("kemal:soldoutBekleyen", "json").catch(() => null)) || {};
+  const yapilan = (await env.KAYIT.get("kemal:soldout", "json").catch(() => null)) || {};
+  const yeniGorulen = { ...(gorulen || {}) };
+  const adaylar = [];
+  for (const kod of kodlar) {
+    const x = stok[kod];
+    if (!x) continue; // Vegawin'de kaydı yok → dokunma
+    if (x.toplam > 0) { yeniGorulen[kod] = 1; delete bekleyen[kod]; if (yapilan[kod]) delete yapilan[kod]; continue; } // stok döndü: yeniden bitince yine SOLD OUT
+    if (!gorulen || !gorulen[kod] || yapilan[kod]) continue; // ilk çalışma / stoğu hiç görülmemiş / zaten yapıldı
+    if (!bekleyen[kod]) { bekleyen[kod] = simdi; continue; } // ilk kez 0: bir saat sonra yeniden bakılır
+    if (simdi - bekleyen[kod] >= 3300) adaylar.push(kod);
+  }
+  const sonuc = { zaman: simdi, yapilan: [], ilk: !gorulen };
+  for (const kod of adaylar.slice(0, 3)) {
+    const r = await soldOutYaz(env, kod);
+    yapilan[kod] = simdi; delete bekleyen[kod]; delete yeniGorulen[kod];
+    sonuc.yapilan.push({ kod, ...r });
+    if (r.duzenlenen) for (const kisi of [hemraId(env)].filter(Boolean)) await telegram(env, "sendMessage", { chat_id: kisi, text: `❌ ${kod} mağazada bitti (Vegawin stok 0) → kanalda ${r.duzenlenen} paylaşımın yazısı "SOLD OUT" yapıldı. Mesajlar silinmedi.`, disable_web_page_preview: true });
+  }
+  await env.KAYIT.put("kemal:stokGorulen", JSON.stringify(yeniGorulen));
+  await env.KAYIT.put("kemal:soldoutBekleyen", JSON.stringify(bekleyen), { expirationTtl: 7 * 86400 });
+  await env.KAYIT.put("kemal:soldout", JSON.stringify(yapilan));
+  if (sonuc.yapilan.length) { const l = (await env.KAYIT.get("kemal:soldoutKayit", "json").catch(() => null)) || []; await env.KAYIT.put("kemal:soldoutKayit", JSON.stringify([...l, ...sonuc.yapilan.map((y) => ({ ...y, zaman: simdi }))].slice(-200)), { expirationTtl: 60 * 86400 }); }
+  return sonuc;
+}
+// Yazıyı başa SOLD OUT satırı koyarak düzenler (eski durum satırı çıkar, kalın/bağlantı biçimleri korunur, düğmeler korunur)
+export function soldOutYazisi(yazi, ents = []) {
+  const t = String(yazi || "");
+  if (t.startsWith(SOLDOUT_SATIR)) return null;
+  const ilk = t.split("\n")[0];
+  const durumMu = /AVAILABLE|DISPONIBLE|BACK IN STOCK|DE RETOUR|NEW COLOR|NOUVEAU|BEST SELLER|LAST SERIES|DERNI/i.test(ilk) && ilk.length < 60;
+  const kes = durumMu ? Math.min(t.length, ilk.length + 1) : 0;
+  const on = `${SOLDOUT_SATIR}\n`;
+  const kayma = on.length - kes;
+  const entities = [{ type: "bold", offset: 0, length: SOLDOUT_SATIR.length }, ...(ents || []).filter((e) => e.offset >= kes).map((e) => ({ ...e, offset: e.offset + kayma }))];
+  return { caption: (on + t.slice(kes)).slice(0, 1024), caption_entities: entities.filter((e) => e.offset + e.length <= 1024) };
+}
+async function soldOutYaz(env, kod) {
+  const kanal = await env.KAYIT.get("kanal", "json");
+  const arsiv = await env.KAYIT.get("arsiv", "json");
+  const paylasimlar = (((await env.KAYIT.get("kodlar", "json")) || {})[kod] || []).slice().sort((a, b) => (b.tarih || 0) - (a.tarih || 0)).slice(0, 3);
+  if (!kanal || !arsiv || !paylasimlar.length) return { duzenlenen: 0, hata: "kanal/arşiv/paylaşım yok" };
+  let duzenlenen = 0; const hatalar = [];
+  for (const p of paylasimlar) {
+    for (const id of (p.ids || []).slice(0, 10)) {
+      const f = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: id, disable_notification: true }).catch(() => null);
+      if (!f || !f.ok) continue;
+      const m = f.result;
+      await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: m.message_id }).catch(() => null);
+      if (!m.caption || !(m.photo || m.video)) continue; // yazılı medya (albümün başı)
+      const y = soldOutYazisi(m.caption, m.caption_entities);
+      if (!y) break;
+      const g = await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: id, ...y, ...(m.reply_markup ? { reply_markup: m.reply_markup } : {}) });
+      if (g && g.ok) duzenlenen++; else hatalar.push(`${id}: ${(g && g.description) || "?"}`);
+      break;
+    }
+  }
+  return { duzenlenen, hata: hatalar.length ? hatalar.join("; ").slice(0, 300) : null };
+}
+
+// ---------- 10 Kasım (Patron): YENİ RENK — Kemal kendisi fark eder ----------
+// Site defterinde (venom:siteDefteri) bir modele daha önce görülmemiş renk eklenince ve kanalda bu renk hiç paylaşılmadıysa
+// "🎨 NEW COLOR / NOUVELLE COULEUR" öneri kartı (Merdan/Hemra onayıyla paylaşılır). İlk çalışmada sadece mevcut renkler kaydedilir.
+export async function yeniRenkAdimi(env, simdi) {
+  const d = await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null);
+  if (!d || !d.modeller) return null;
+  const imza = String(d.zaman || d.guncel || Object.keys(d.modeller).length);
+  const gorulen = await env.KAYIT.get("kemal:siteRenkGorulen", "json").catch(() => null);
+  if (gorulen && gorulen.__imza === imza) return null; // defter değişmedi
+  const kanalda = Object.keys((await env.KAYIT.get("kodlar", "json")) || {});
+  const kanalRenk = (await env.KAYIT.get("kemal:kanalRenkleri", "json").catch(() => null)) || {};
+  const yeni = { __imza: imza };
+  const bulunan = [];
+  for (const [kod, m] of Object.entries(d.modeller)) {
+    const renkler = ((m && m.renkler) || []).map((r) => renkIngilizce(r) || String(r).toLowerCase().trim()).filter(Boolean);
+    yeni[kod] = [...new Set(renkler)];
+    if (!gorulen || !gorulen[kod] || !kanalda.includes(String(kod)) || indirimliMi(kod)) continue; // ilk çalışma / yeni model (Selin bildirir) / kanalda hiç yok
+    for (const r of yeni[kod]) if (!gorulen[kod].includes(r) && !(kanalRenk[kod] || []).includes(r)) bulunan.push({ kod: String(kod), renk: r });
+  }
+  if (bulunan.length) {
+    const sira = (await env.KAYIT.get("venom:yeniModel", "json")) || [];
+    for (const b of bulunan.slice(0, 5)) if (!sira.some((x) => String(x.kod) === b.kod)) sira.push({ kod: b.kod, kim: "Kemal (yeni renk)", yenirenk: b.renk, zaman: simdi });
+    await env.KAYIT.put("venom:yeniModel", JSON.stringify(sira));
+  }
+  await env.KAYIT.put("kemal:siteRenkGorulen", JSON.stringify(yeni));
+  return { bulunan, ilk: !gorulen };
+}
+
 // 10 Kasım GÖREV KÂĞIDI kanıtı: KV "kemal:kagitDeneme" = { merdan?: kod, hemra?: kod } → Merdan'a (Black Rose) ve Hemra'ya (VOLONTE)
 // TEK 🧪 DENEME öneri kartı. Gerçek akışa, kanala, deftere gitmez; düğmeler "kd:" (hiçbir şey yapmaz). Yapay zekâ yok (hazır yazı).
 export async function kagitDenemeAdimi(env, simdi) {
@@ -2976,6 +3093,8 @@ export async function kagitDenemeAdimi(env, simdi) {
 }
 
 export async function fabrikaIsleri(env, simdi) {
+  try { await soldOutAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:soldoutHata", JSON.stringify({ zaman: simdi, hata: kisaHata(e) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
+  try { await yeniRenkAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:yeniRenkHata", JSON.stringify({ zaman: simdi, hata: kisaHata(e) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
   try { await kagitDenemeAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:kagitDenemeSonuc", JSON.stringify({ zaman: simdi, hata: kisaHata(e) }), { expirationTtl: 86400 }).catch(() => null); }
   try { await kanalDuzeltAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:sonHata", JSON.stringify({ zaman: simdi, hata: `kanalDuzelt: ${String(e && e.message).slice(0, 300)}` }), { expirationTtl: 7 * 86400 }).catch(() => null); } // 10 Kasım
   if (env.STOK) { try { await venomYayinKararlari(env); await patronPaylasimAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:pelinTeslimHata", JSON.stringify({ zaman: simdi, hata: `patron/venom: ${String(e && e.message).slice(0, 300)}` }), { expirationTtl: 7 * 86400 }); } }
@@ -3802,7 +3921,7 @@ function musteriYardimcilari(env) {
         msg.text ? `Son mesajı: "${String(msg.text).slice(0, 500)}"` : null,
         "↩️ Bu mesajı yanıtlayın, yazdığınızı Kemal müşteriye iletir.",
       ].filter(Boolean).join("\n");
-      for (const kisi of onizleyenler(env)) { // 10 Kasım görev kâğıdı: Kemal Patron'a yazmaz
+      for (const kisi of [hemraId(env)].filter(Boolean)) { // 10 Kasım (Patron): müşteri mesajları SADECE Hemra'ya (ileride Defne)
         const r = await telegram(env, "sendMessage", { chat_id: kisi, text: metin, disable_web_page_preview: true });
         if (r.ok) await env.KAYIT.put(`iletim:${kisi}:${r.result.message_id}`, String(msg.chat.id), { expirationTtl: 7 * 86400 });
         if (fotoMesaj) {
