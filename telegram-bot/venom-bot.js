@@ -1549,7 +1549,7 @@ async function kartHataSatiri(env, simdi) {
   return kartHataMetni(son(await oku(env, "sami:botHatalari", [])), son(await oku(env, "sami:geriAllar", [])));
 }
 // 10 Kasım (Patron): Sami'den "bittiOneri" → Patron'a onay kartı (fotoğraf + kod + Hemra'nın görüşü)
-const ONERI_AD = { repete: "🔁 Repete", sil: "🗑 Sil", bekle: "⏳ Stok bitene kadar bekle" };
+const ONERI_AD = { repete: "🔁 Repete", sil: "🗑 Sil", bekle: "⏳ Stok bitene kadar bekle", sor: "❓ Hemra karar sizde dedi" };
 export function bittiKartMetni(x) {
   return [
     `${x.deneme ? "🧪 DENEME – üretim yapmayın\n" : ""}🏭 ${x.tur === "az" ? "Fabrikada bitmek üzere" : x.tur === "stokBitti" ? "Mağaza stoğu bitti" : "Fabrikada bitti"} — ${MAGAZA_BASLIK[x.magaza] || "mağaza yazılmamış"} · ${x.kod}`,
@@ -1563,9 +1563,11 @@ export function bittiKartMetni(x) {
 }
 async function bittiOneriAdimi(env, simdi) {
   for (const x of await kuyruguAl(env, "bittiOneri")) {
+    if (x.deneme) { await kaydet(env, `venom:bittiDeneme:${x.sip}`, x, 3 * 86400); continue; } // 10 Kasım kural 5: DENEME Patron'a karar olarak GİTMEZ
     await kaydet(env, `venom:bittiKart:${x.sip}`, x, 30 * 86400);
     const metin = bittiKartMetni(x);
-    const kl = { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `vbo:o:${x.sip}` }, { text: "🔁 Repete", callback_data: `vbo:r:${x.sip}` }], [{ text: "🗑 Sil", callback_data: `vbo:s:${x.sip}` }, { text: "⏳ Bekle", callback_data: `vbo:w:${x.sip}` }]] };
+    const kl = { inline_keyboard: x.oneri === "sor" ? [[{ text: "🔁 Repete", callback_data: `vbo:r:${x.sip}` }, { text: "🗑 Sil", callback_data: `vbo:s:${x.sip}` }], [{ text: "⏳ Bekle", callback_data: `vbo:w:${x.sip}` }]]
+      : [[{ text: "✅ Onayla", callback_data: `vbo:o:${x.sip}` }, { text: "🔁 Repete", callback_data: `vbo:r:${x.sip}` }], [{ text: "🗑 Sil", callback_data: `vbo:s:${x.sip}` }, { text: "⏳ Bekle", callback_data: `vbo:w:${x.sip}` }]] };
     const r = x.foto ? await tg(env, "sendPhoto", { chat_id: patron(env), photo: x.foto, caption: metin.slice(0, 1024), reply_markup: kl, izin: "onay" }) : null;
     if (r && r.ok) await gonderildiKaydet(env, { kaynak: "sami", tur: "kart", metin, id: r.result && r.result.message_id, izin: "onay" }, simdi).catch(() => null);
     else await yaz(env, metin, { reply_markup: kl, posta: { izin: "onay", tur: "kart", kaynak: "sami" } });

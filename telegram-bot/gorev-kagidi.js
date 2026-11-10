@@ -21,6 +21,20 @@ export const KAPALI = {
     turEksikleri: "sonradan gelene eski tur kartları",
     musteriYZ: "müşteriye yapay zekâ cevabı (Patron 10 Kasım: KAPALI; mesajlar Hemra'ya)",
   },
+  sami: {
+    kisiKontrol: "/start kontrol hatırlatması",
+    kartIlet: "kartı başka kişiye iletme",
+    kartTamamla: "yarım kartları yeniden gönderme",
+    kartTekrar: "cevapsız kartları yeniden gönderme (hatırlatma)",
+    stokSorulari: "stok 0'a düşünce Sil/Repete/Beklesin sorusu (Bitti zinciri yeterli)",
+    grupRaporu: "sabah raporunu gruba gönderme (Venom'a not bırakma açık)",
+    siteHaftalik: "pazartesi site özeti Patron'a",
+    paylasimTakip: "pazartesi eski paylaşım listesi Patron'a + Hemra'ya fotoğrafı olmayanlar",
+    mutabakat: "mutabakat / ödeme / borç takibi mesajları ve hatırlatmaları",
+    fabrikaHatirlatma: "fabrika hatırlatmaları (24 saat cevapsız, teslim günü soruları, repete hazır mı, Vegawin girişi, haftalık özet)",
+    sinemOzeti: "Sinem'e 18:00 günlük özet",
+    stokSorgu: "Fuat/Nuri /stok sorgusu (fabrikaya stok gitmez)",
+  },
 };
 
 export async function kagitAcik(env, bot, is) {

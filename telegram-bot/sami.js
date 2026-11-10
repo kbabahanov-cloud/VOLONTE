@@ -28,6 +28,7 @@ import { kisiler, tarihYaz, stokIste, stokSorulariGonder, stokKarari, stokGoster
 import { grubaGonder, grupUyeligi, raporuBirak, birikimSuzgeci, birikimAdimi, patronDenemesi } from "./venom.js";
 import { hizmetHesabi, tabloKimligi, sayfaHazirla, sayfayaYaz } from "./google.js";
 import { beyinCevapla, beyinDenemesi } from "./sami-beyin.js";
+import { kagitAcik } from "./gorev-kagidi.js";
 import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, stokYetkiDugmesi, sorgularKomutu, brSayKomutu } from "./stoksorgu.js";
 import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi, adetKomutu, adetDugmesi, nuriStokKomutu } from "./mutabakat.js";
 import { borcLimitKomutu } from "./cari-takip.js";
@@ -94,10 +95,10 @@ export default {
     const simdi = Math.floor(Date.now() / 1000);
     if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
-    try { await kisiKontrolAdimi(env, "sami", tg); } catch { /* 9 Kasım: kişi /start kontrolü */ }
-    if (env.BOT_TOKEN) try { await kartIletAdimi(env, "sami", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
-    if (env.BOT_TOKEN) try { await kartTamamlaAdimi(env, "sami", tg, simdi); } catch { /* 10 Kasım: yarım giden kartları tamamla (bir kerelik) */ }
-    if (env.BOT_TOKEN) try { await kartTekrarAdimi(env, "sami", tg, simdi); } catch { /* 9 Kasım: onay merdiveni (görev kartları dahil) */ }
+    try { if (await kagitAcik(env, "sami", "kisiKontrol")) await kisiKontrolAdimi(env, "sami", tg); } catch { /* 9 Kasım: kişi /start kontrolü */ }
+    if (env.BOT_TOKEN) try { if (await kagitAcik(env, "sami", "kartIlet")) await kartIletAdimi(env, "sami", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
+    if (env.BOT_TOKEN) try { if (await kagitAcik(env, "sami", "kartTamamla")) await kartTamamlaAdimi(env, "sami", tg, simdi); } catch { /* 10 Kasım: yarım giden kartları tamamla (bir kerelik) */ }
+    if (env.BOT_TOKEN) try { if (await kagitAcik(env, "sami", "kartTekrar")) await kartTekrarAdimi(env, "sami", tg, simdi); } catch { /* 9 Kasım: onay merdiveni (görev kartları dahil) */ }
     if (await durdurulduMu(env, "sami")) return; // 6 Kasım: durduruldu → zamanlı işler (mesaj/yazma) bekler
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
@@ -105,12 +106,12 @@ export default {
     const siparis = (e, t) => siparisTakip(e, t, tg);
     const zincir = (e, t) => fabrikaZincirAdimi(e, t, tg); // 10 Kasım: Patron kararı, toplu cevap, Sinem 18:00 özeti, bir kerelik işler
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
-    const stokSorgu = (e, t) => stokSorguTakip(e, t, tg);
+    const stokSorgu = async (e, t) => { if (await kagitAcik(e, "sami", "stokSorgu")) await stokSorguTakip(e, t, tg); };
     const dokum = async (e) => { await gunDokumu(e); await raporTekrar(e, tg); await cariDokumu(e, tg); };
-    const paylasilmamis = (e, t) => paylasimTakip(e, t, tg);
-    const mutabakat = (e, t) => mutabakatAdimi(e, t, tg);
+    const paylasilmamis = async (e, t) => { if (await kagitAcik(e, "sami", "paylasimTakip")) await paylasimTakip(e, t, tg); };
+    const mutabakat = async (e, t) => { if (await kagitAcik(e, "sami", "mutabakat")) await mutabakatAdimi(e, t, tg); };
     const venomGiden = (e, t) => venomGidenAdimi(e, t, tg); // Venom'un onaylanan dış mesajları (3 Kasım)
-    const siteOzet = async (e, t) => { await siteDenemesi(e); await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
+    const siteOzet = async (e, t) => { await siteDenemesi(e); if (await kagitAcik(e, "sami", "siteHaftalik")) await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
     const siteBakis = (e, t) => siteBakisYaz(e, t); // 9 Kasım: repete raporu için model başına sitede bakılma (günde bir)
     const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
@@ -153,6 +154,7 @@ async function webhookKur(env) {
 }
 
 async function sorular(env, simdi) {
+  if (!(await kagitAcik(env, "sami", "stokSorulari"))) return; // 10 Kasım görev kâğıdı
   const s = saat(simdi);
   if (s < 8 || s >= 21) return; // gece soru yok
   await stokSorulariGonder(env, simdi, tg);
@@ -189,6 +191,7 @@ export async function guncelleme(u, env) {
   if (await gorevAciklamaMesaji(env, m, tg)) return; // 9 Kasım: Venom görevi — ✏️ açıklama
   if (!izinli(m.from.id, env)) {
     if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması
+    if (/^\/stok(@\w+)?\b/i.test(String(m.text || "").trim()) && !(await kagitAcik(env, "sami", "stokSorgu")) && (await fabrikaKisisiMi(env, m.from.id))) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Stok bilgisi fabrikaya verilmiyor." }); // 10 Kasım görev kâğıdı
     if (await stokSorguMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat/Nuri: Black Rose stok sorgusu (Hemra onaylı)
     if (await fabrikaSesMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // 10 Kasım: Sinem sesli mesaj ("3394 bitti")
     if (await fabrikaYaziMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // 10 Kasım: "3394 bitti / az kaldı / 5 gün", "hepsi 5 gün", ✏️ tarih
@@ -347,7 +350,7 @@ async function sabahRaporu(env, simdi) {
   await env.KAYIT.put(`venom:samiMetin:${gun}`, rapor.metin, { expirationTtl: 7 * 86400 }); // tam metin (kontrol için)
   if (elle) return;
   await raporuBirak(env, "sami", simdi, rapor);
-  if (env.BOT_TOKEN) await grubaGonder(env, "sami", rapor.metin, tg);
+  if (env.BOT_TOKEN && (await kagitAcik(env, "sami", "grupRaporu"))) await grubaGonder(env, "sami", rapor.metin, tg);
 }
 
 // ---------- Google Sheets (kullanıcı kararı, 28 Ekim) ----------

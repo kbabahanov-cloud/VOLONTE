@@ -488,13 +488,13 @@ test("fabrika siparişi: model başına mesaj (kanal fotoğrafı + ⚠️ düğm
   await bas(555, `fc:b:${id2}`);
   const karar = o.g.filter((x) => /Bu mal fabrikada bitti \(Nuri\)\. Mağazada son: yok \(0\)\. Ne yapalım\?/.test(x.govde.caption || x.govde.text || ""));
   assert.deepEqual(karar.map((x) => x.govde.chat_id), ["333"]); // 10 Kasım: Hemra'ya (Patron'a değil)
-  assert.deepEqual(karar[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🔁 Repete öner", "🗑 Sil öner", "⏳ Stok bitene kadar bekle"]);
+  assert.deepEqual(karar[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["🔁 Repete öner", "❓ Patron karar versin", "⏳ Stok bitene kadar bekle"]); // 10 Kasım kural 7: Sil düğmesi Hemra'ya gitmez
   assert.ok(JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "fabrika:bitenler" }) })).json()).v)["3100"]); // bir daha sorulmaz
-  // 10 Kasım: Hemra "🗑 Sil öner" → Venom'dan Patron'a kart → Patron "Sil" → Sami uygular (mağaza stoğu yok)
+  // 10 Kasım: Hemra "❓ Patron karar versin" → Venom'dan Patron'a kart → Patron "Sil" → Sami uygular (mağaza stoğu yok)
   o.g.length = 0;
-  await bas(333, `fh:s:${id2}`, 5);
+  await bas(333, `fh:q:${id2}`, 5);
   const oneri = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "bittiOneri" }) })).json();
-  assert.deepEqual(oneri.map((x) => [x.kod, x.oneri, x.magaza, x.stok, x.hemra]), [["3100", "sil", "VOLONTE", "yok", "Hemra"]]);
+  assert.deepEqual(oneri.map((x) => [x.kod, x.oneri, x.magaza, x.stok, x.hemra]), [["3100", "sor", "VOLONTE", "yok", "Hemra"]]);
   assert.ok(!o.depo.has("venom:siteSil")); // Hemra'nın önerisiyle silinmez — Patron onayı gerekir
   await o.env.STOK.get().fetch("https://stok/kuyruk-ekle", { method: "POST", body: JSON.stringify({ ad: "bittiKarar", kayit: { id: "k1", sip: id2, karar: "sil" } }) });
   await f.bittiKararAdimi(o.env, Math.floor(Date.now() / 1000), tg6);
@@ -1978,4 +1978,37 @@ test("10 Kasım bütün hatalar: Merdan'a sadece Black Rose; cevaptan sonra sade
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 444, first_name: "Aziz" }, data: "fe:x:2026-10-29:3401", message: { chat: { id: 444 }, message_id: 901 } } }, o.env);
   assert.equal(o.g.filter((x) => x.govde.reply_markup && String(x.govde.chat_id) === "444" && /3406 ·/.test(x.govde.caption || x.govde.text || "")).length, 1); // cevap verince sıradaki
+});
+
+// 10 Kasım GÖREV KÂĞIDI (Sami)
+test("görev kâğıdı Sami: DENEME karar kartı Patron'a gitmez; Hemra kartında Sil yok; KAGIT=1 iken fabrikaya /stok kapalı, hatırlatmalar ve Sinem özeti kapalı", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", KAGIT: "1" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Fuat" }, { id: 556, ad: "Sinem" }]));
+  const tg = async (_e, metod, govde) => { o.g.push({ url: `/${metod}`, govde }); return { ok: true, result: { message_id: 900 + o.g.length } }; };
+  const simdi = Math.floor(Date.now() / 1000);
+  const rec = await f._test.siparisAc(o.env, { kod: "3459", renkler: [{ renk: "siyah", adet: 1 }], liste: "DK", deneme: true, fotoKod: "3459", grup: "fabrika", magaza: "BLACKROSE" }, simdi);
+  Object.assign(rec, { durum: "bitti", cevaplayan: "Sinem (deneme)", cevapZaman: simdi });
+  o.g.length = 0;
+  await f._test.hemraKarti(o.env, tg, rec, "bitti", "Sinem (deneme)", simdi);
+  await f._test.siparisYaz(o.env, rec);
+  const kart = o.g.find((x) => /fabrikada bitti/.test(x.govde.caption || x.govde.text || ""));
+  assert.equal(String(kart.govde.chat_id), "333");
+  const dugmeler = kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text);
+  assert.ok(!dugmeler.some((t) => /Sil/.test(t)), dugmeler.join(","));
+  const q = kart.govde.reply_markup.inline_keyboard.flat().find((d) => /Repete/.test(d.text)).callback_data;
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra", last_name: "Hemra" }, data: q, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
+  const kuyruk = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "bittiOneri" }) })).json();
+  assert.equal(kuyruk.length, 0); // Venom'a / Patron'a gitmedi
+  assert.ok(o.g.some((x) => /DENEME olduğu için Patron'a GİTMEDİ/.test(x.govde.caption || x.govde.text || "")));
+  assert.ok(!o.g.some((x) => /Hemra Hemra/.test(x.govde.caption || x.govde.text || ""))); // ad bir kez
+  // fabrikaya stok yok
+  o.g.length = 0;
+  await g2({ message: { chat: { id: 555, type: "private" }, from: { id: 555, first_name: "Fuat" }, text: "/stok 3459" } }, o.env);
+  assert.match(o.g.map((x) => x.govde.text || "").join("\n"), /Stok bilgisi fabrikaya verilmiyor/);
+  const { kagitAcik } = await import("./gorev-kagidi.js");
+  for (const is of ["fabrikaHatirlatma", "sinemOzeti", "kartTekrar", "mutabakat", "stokSorulari"]) assert.equal(await kagitAcik(o.env, "sami", is), false, is);
 });

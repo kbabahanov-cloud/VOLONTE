@@ -1385,8 +1385,11 @@ test("Venom fabrika zinciri: Patron kartı (izinli), karar Sami'ye; 'fabrika kay
   const o = ortam();
   const oneri = { id: "x1", sip: "3100-abc", kod: "3100", magaza: "VOLONTE", oneri: "repete", hemra: "Hemra", tur: "bitti", fabrika: { kim: "Sinem", zaman: 1793000000, ne: "bitti" }, fuat: { kim: "Fuat", zaman: 1793002000 }, stok: "VOLONTE 12 adet", deneme: true, foto: null };
   assert.match(bittiKartMetni(oneri), /^🧪 DENEME[\s\S]*🏭 Fabrikada bitti — 🟦 VOLONTE · 3100\nFabrika: Sinem "bitti" dedi \(\d+ \S+ \d\d:\d\d\)\nFuat onayladı[\s\S]*Mağaza stoğu: VOLONTE 12 adet\nHemra önerisi: 🔁 Repete[\s\S]*Onaylıyor musun\?$/);
-  await kuyrugaEkle(o.env, "bittiOneri", oneri);
+  await kuyrugaEkle(o.env, "bittiOneri", oneri); // 10 Kasım kural 5: DENEME Patron'a karar olarak GİTMEZ
   await venomCron(o.env, Math.floor(Date.now() / 1000));
+  assert.ok(!o.g.some((x) => /Hemra önerisi/.test(x.govde.text || x.govde.caption || "")), "deneme Patron'a gitti");
+  await kuyrugaEkle(o.env, "bittiOneri", { ...oneri, id: "x2", deneme: false });
+  await venomCron(o.env, Math.floor(Date.now() / 1000) + 300);
   const kart = o.g.find((x) => /Hemra önerisi/.test(x.govde.text || x.govde.caption || ""));
   assert.ok(kart, "Patron kartı gitmedi (izin kapısı)");
   assert.deepEqual(kart.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Onayla", "🔁 Repete", "🗑 Sil", "⏳ Bekle"]);
