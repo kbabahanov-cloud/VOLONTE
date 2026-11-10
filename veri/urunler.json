@@ -325,7 +325,7 @@
   "videolar": [
    "selin/3512/0"
   ],
-  "gizli": true,
+  "gizli": false,
   "eklenme": "2026-11-06"
  },
  {
@@ -3997,7 +3997,7 @@
   "videolar": [
    "selin/3629/0"
   ],
-  "gizli": true,
+  "gizli": false,
   "eklenme": "2026-10-31"
  }
 ]
