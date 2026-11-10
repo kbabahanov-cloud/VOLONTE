@@ -2049,3 +2049,26 @@ test("ACİL 10 Kasım: Aziz/Merdan KENDİ kontrol kartına yazıyla renk/adet gi
   assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /3394: size gelen açık kontrol kartında yok/);
   assert.equal(cagri(o.g, "editMessageCaption").length, 0);
 });
+
+test("10 Kasım: kişi deneme listeleri (Aziz VOLONTE + Merdan Black Rose) 'Eminim, gönder' → ikisi bitince HEMEN Hemra'ya tek liste, mağaza başlıklarıyla; fabrikaya gitmez", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const { gunAnahtari } = await import("./worker.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Sinem" }]));
+  const g = gunAnahtari(Math.floor(Date.now() / 1000));
+  const yaz = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${k}`, v: JSON.stringify(v) }) });
+  await yaz("denemeAkis", { gun: "2026-11-01", keys: ["2026-11-01-D1"] }); // eski deneme akışı karışmaz
+  const liste = (mag, kime, kod, mesaj) => ({ asama: "eminMi", zaman: 1, gun: g, magaza: mag, sorumlu: kime, deneme: true, modeller: [{ kod, satilan: 1, kalan: 3 }], secim: { [kod]: { beden: "b", gruplar: { b: [{ renk: "pudra", adet: 8 }] } } }, mesajlar: { [kod]: [mesaj, "foto", "x"] } });
+  await yaz(`${g}-DK`, liste("VOLONTE", "444", "3394", 71));
+  await yaz(`${g}-BR-DK`, liste("BLACKROSE", "222", "3459", 72));
+  const bas = (id, data) => g2({ callback_query: { id: "c", from: { id, first_name: "X" }, data, message: { chat: { id }, message_id: 9 } } }, o.env);
+  o.g.length = 0;
+  await bas(444, `fe:E:${g}-DK:-`);
+  assert.ok(!o.g.some((x) => String(x.govde.chat_id) === "333" && /Gidecek liste/.test(x.govde.text || ""))); // Merdan henüz bitirmedi
+  await bas(222, `fe:E:${g}-BR-DK:-`);
+  const h = o.g.filter((x) => String(x.govde.chat_id) === "333" && /Gidecek liste/.test(x.govde.text || ""));
+  assert.equal(h.length, 1);
+  assert.match(h[0].govde.text, /^🧪 DENEME[\s\S]*VOLONTE LİSTESİ \(1 model\):[\s\S]*3394[\s\S]*BLACK ROSE LİSTESİ \(1 model\):[\s\S]*3459/);
+  assert.ok(!o.g.some((x) => String(x.govde.chat_id) === "555")); // fabrikaya hiçbir şey
+});

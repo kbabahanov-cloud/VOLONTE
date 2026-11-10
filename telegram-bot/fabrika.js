@@ -411,7 +411,9 @@ async function kartGonder(env, tg, anahtar, d, { emin = false } = {}) {
     await ayarYaz(env, `fabrika:${anahtar}`, d);
     await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: `${d.deneme ? DENEME : ""}✅ Kontrol bitti, teşekkürler. Liste Hemra'nın onayına gidiyor.` });
     const gun = d.gun || anahtar.slice(0, 10);
-    const keys = d.deneme ? ((await ayarOku(env, "fabrika:denemeAkis", null)) || {}).keys || [anahtar] : await gunAnahtarlari(env, gun);
+    // 10 Kasım: kişi denemesi (…-DK) kendi iki listesiyle birleşir (VOLONTE + Black Rose); eski deneme akışı kendi anahtarlarıyla
+    const da = d.deneme ? (await ayarOku(env, "fabrika:denemeAkis", null)) || {} : null;
+    const keys = !d.deneme ? await gunAnahtarlari(env, gun) : /-DK$/.test(anahtar) ? [`${gun}-DK`, `${gun}-BR-DK`] : (da.keys && da.keys.includes(anahtar) ? da.keys : [anahtar]);
     return birlesikOnay(env, tg, gun, d.kontrolZaman, keys, { deneme: Boolean(d.deneme) });
   }
   const gun = d.gun || anahtar.slice(0, 10);
@@ -2193,6 +2195,9 @@ async function tekIslem(env, simdi, tg) {
         sonuc.l.push({ kod, ok: Boolean(r && r.ok) });
       }
     }
+  } else if (is.tur === "birlesikDeneme") { // 10 Kasım: kontrolü biten kişi deneme listeleri Hemra'ya (fabrikaya GİTMEZ)
+    const g = is.gun || gunAnahtari(simdi);
+    sonuc.anahtar = await birlesikOnay(env, tg, g, simdi, [`${g}-DK`, `${g}-BR-DK`], { deneme: true });
   } else if (is.tur === "kararGeriAl") { // 10 Kasım (Patron): kaynağı kanıtlanamayan Patron kararı geri alınır, karar Patron'a yeniden sorulur
     sonuc.l = [];
     for (const id of (is.ids || []).slice(0, 10)) {
