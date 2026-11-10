@@ -15,7 +15,9 @@ const stokSor = async (env, yol, govde) => {
   const r = await env.STOK.get(env.STOK.idFromName("stok")).fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(govde) });
   return r.json();
 };
-export const FIYAT = /(\$\s?\d|\d+(?:[.,]\d+)?\s?(?:\$|usd|eur|€|tl|₺)(?![a-z])|\bprice\b|\bprix\b|fiyat)/i;
+// 10 Kasım (Patron): rakamsız alan ("PRICE. $") fiyat SAYILMAZ — ama ESKİ TARZ yazıdır, düzeltilir (ESKI_YAZI)
+export const FIYAT = /(\$\s?\d|\d+(?:[.,]\d+)?\s?(?:\$|usd|eur|€|tl|₺)(?![a-z])|\b(?:price|prix|fiyat)\b\s*[:.\-–]?\s*\$?\s*\d)/i;
+export const ESKI_YAZI = /\bPRICE\b|\bPRIX\b|\bFİYAT\b|\bFIYAT\b|\$|\bTEL\b|\bTELEFON\b|whats\s*app|\+\s?90\s?\d|\b0\s?5\d\d[\s.]?\d{3}/i;
 const TR_EN = { siyah: "black", beyaz: "white", bordo: "burgundy", "kırmızı": "red", lacivert: "navy", mavi: "blue", "yeşil": "green", bej: "beige", krem: "cream", ekru: "ecru", pembe: "pink", pudra: "powder pink", mor: "purple", lila: "lilac", gri: "grey", antrasit: "anthracite", kahverengi: "brown", kahve: "brown", vizon: "mink", taba: "tan", haki: "khaki", "zümrüt": "emerald", mint: "mint", "fuşya": "fuchsia", "sarı": "yellow", hardal: "mustard", turuncu: "orange", somon: "salmon", mercan: "coral", "altın": "gold", "gümüş": "silver", petrol: "teal" };
 // "koyu bordo" → "dark burgundy"; bilinmiyorsa null
 export function renkIngilizce(tr) {

@@ -59,7 +59,7 @@ const html = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
 // Alt yazı (Telegram HTML). Renk emin değilse (onaylanmamışsa) renk satırı konmaz; kumaş bilinmiyorsa satır yok.
 export function altYazi(p) {
   const seri = seriBilgisi(p.bedenler);
-  const satirlar = [DURUMLAR[p.durum] || DURUMLAR.hazir, `<b>✅ CODE: ${html(p.kod)}</b>`];
+  const satirlar = [DURUMLAR[p.durum] || DURUMLAR.hazir, ...(p.kodsuz ? [] : [`<b>✅ CODE: ${html(p.kod)}</b>`])]; // 10 Kasım: kodsuz eski paylaşımda kod satırı yok
   if (p.renkler && p.renkler.length && p.renkEmin) satirlar.push(`🎨 Colors / Couleurs: ${html(p.renkler.join(", "))}`);
   if (seri) satirlar.push(`📏 Size: ${linksiz(seri.beden)}`, `📦 Series: ${seri.adet} pcs / Série : ${seri.adet} pièces`);
   if (p.kumas) satirlar.push(`🧵 Fabric / Tissu: ${html(p.kumas)}`);

@@ -792,8 +792,13 @@ test("9 Kasım: 'bunu bana gönderme' kalıcı kural olur (son mesajın botu + t
   assert.equal(kuralCoz("Fuat'a mesaj gönder"), null);
   // Patron'a bir kart gitti (Selin), Patron "bunu bana gönderme" dedi
   await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 3001 taslak silme onayı", butonlar: [[{ text: "✅", callback_data: "so:3001" }]], medya: [] });
-  o.g.length = 0;
-  await yazi(o, PATRON, "bunu bana gönderme");
+  // 10 Kasım: yanıt vermeden söylenen "bana getirme" kural OLMAZ
+  await yazi(o, PATRON, "Hayır bana onaya getirme sadece düzelt paylaşımını yap");
+  assert.ok(!o.depo.get("venom:bildirimKurallari") || JSON.parse(o.depo.get("venom:bildirimKurallari")).length === 0);
+  // kart mesajına YANIT + açıkça "bunu bana gönderme" → kalıcı kural
+  const kartId = JSON.parse(o.depo.get("venom:posta:gonderilen")).find((x) => /3001 taslak/.test(x.ozet || x.metin || "")).id;
+  o.g.length = 0; o.claude.length = 0;
+  await guncelleme({ update_id: uid++, message: { message_id: 2, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, text: "bunu bana gönderme", reply_to_message: { message_id: kartId, text: "📝 3001 taslak silme onayı" } } }, o.env);
   assert.match(patronaGiden(o)[0].govde.text, /📝 Kalıcı kural kaydedildi: Selin · "rapor" mesajları|📝 Kalıcı kural kaydedildi: Selin/);
   assert.equal(o.claude.length, 0); // sohbete (Claude'a) gitmedi
   const kurallar = JSON.parse(o.depo.get("venom:bildirimKurallari"));
@@ -1183,7 +1188,8 @@ test("bota emir: 10 dk sonra iş defterinden kontrol; iz yoksa bir kez tekrar, o
   assert.match(gl[0].metin, /^Selin'de 2 modelin fotoğrafı yok \(3047, 3050\)\. Bugün 18:00'e kadar çekilebilenleri gönderin, kalanların sebebini düğmeden seçin\.$/);
   assert.deepEqual(gl[2].kalemler.map((k) => k.kod), ["907", "3396", "3582", "3618"]);
   assert.equal(gl[2].kalip, "video");
-  assert.equal(patronaGiden(o).length, 0); // Patron'a hiçbir şey gitmedi
+  // 10 Kasım: bot yapamadıysa Patron'a AÇIKÇA "yapamadı" (biriktirilmez); başka hiçbir şey gitmedi
+  assert.ok(patronaGiden(o).length && patronaGiden(o).every((m) => /yapamadı/.test(m.govde.text)));
 });
 
 test("onay merdiveni: aynı kişide birden çok bekleyen kart → TEK mesajda toplu (albüm + numaralı düğmeler)", async () => {
@@ -1390,4 +1396,24 @@ test("Venom fabrika zinciri: Patron kartı (izinli), karar Sami'ye; 'fabrika kay
   assert.match(o.g.at(-1).govde.text, /^📒 3394 fabrika kaydı \(silinemez defter\):\n26 Ekim 10:33 Sinem: Bitti, gelmeyecek — "3394 bitti"\n26 Ekim 11:18 Fuat: Onayladı: bitti$/);
   assert.equal(o.claude.length, 0); // ücretsiz (Claude'a gitmez)
   assert.equal(kartHataMetni([{ tur: "eksik kartı" }, { tur: "eksik kartı" }, { tur: "fabrika kartı (fotoğraf yanlış)" }], [{ tur: "fabrika kartı" }]), "🧮 Bu hafta kartlar: ⚠️ bot hatası 3 · ↩️ geri al 1 · en çok: eksik kartı (2).");
+});
+
+// 10 Kasım (Patron): Venom bot yapamadıysa "yapamadı, sebebi şu" der; "sil" anında
+import { kanalSilNiyeti } from "./venom-bot.js";
+test("Venom kanal: 'sil' niyeti (kod / link / yanıt); bot yapamadıysa Patron'a açıkça", async () => {
+  assert.deepEqual(kanalSilNiyeti("3512 sil"), { kodlar: ["3512"], ids: [] });
+  assert.deepEqual(kanalSilNiyeti("bugünkü 3512 ve 3629 paylaşımlarını sil"), { kodlar: ["3512", "3629"], ids: [] });
+  assert.deepEqual(kanalSilNiyeti("bu paylaşımı sil", "✅ 3512 paylaşıldı https://t.me/Volonteroseoffical/15000"), { kodlar: [], ids: [15000] });
+  assert.equal(kanalSilNiyeti("3512'yi siteden sil"), null); // model kaldırma ayrı (onay kartı + stok kuralı)
+  assert.equal(kanalSilNiyeti("hatırlatıcıyı sil"), null);
+  const o = ortam();
+  o.env.KEMAL_W = { mesaj: async () => { const { aktarilanGonder } = await import("./venom-bot.js"); await aktarilanGonder(o.env, { bot: "kemal", metod: "sendMessage", metin: "Bunu yapamıyorum: eski paylaşımın yazısını değiştirme yetkim yok.", medya: [] }); return true; }, paylasimSil: async (g) => ({ ok: true, kod: g.kod, silinen: [15001, 15002], ozet: `${g.kod} (t.me/Volonteroseoffical/15001 +1 mesaj, 10.11 14:35)` }) };
+  o.cevaplar.push({ arac: "bota_yaz", girdi: { bot: "kemal", metin: "3512 yazısını düzelt" } }, { text: "Kemal yapamadı Patron." });
+  await yazi(o, PATRON, "3512 yazısını Kemal düzeltsin");
+  const tum = o.g.filter((x) => String(x.govde.chat_id) === String(PATRON)).map((x) => x.govde.text || "");
+  assert.ok(tum.some((t) => /^⚠️ Kemal yapamadı\. Sebebi: Bunu yapamıyorum/.test(t)), JSON.stringify(tum));
+  assert.match(JSON.stringify(o.claude.at(-1).messages.at(-1)), /KEMAL YAPAMADI/);
+  o.g.length = 0;
+  await yazi(o, PATRON, "3512 sil");
+  assert.equal(o.g.filter((x) => String(x.govde.chat_id) === String(PATRON)).at(-1).govde.text, "Silindi: 3512 (t.me/Volonteroseoffical/15001 +1 mesaj, 10.11 14:35)");
 });

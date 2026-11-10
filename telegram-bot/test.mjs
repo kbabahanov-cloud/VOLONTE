@@ -143,6 +143,11 @@ function telegramTaklit(gonderilen, hata) {
     gonderilen.push({ url, govde });
     if (hata && url.endsWith("copyMessages") && govde.chat_id === -100) return new Response(JSON.stringify({ ok: false, description: hata }));
     if (url.endsWith("copyMessages")) return new Response(JSON.stringify({ ok: true, result: govde.message_ids.map((_, i) => ({ message_id: 900 + i })) }));
+    // 10 Kasım: yeniden paylaşım = eski mesajın MEDYASI (arşive iletilip okunur) + Kemal'in yeni yazısı
+    if (url.endsWith("forwardMessage")) return new Response(JSON.stringify({ ok: true, result: { message_id: 1, photo: [{ file_id: `f${govde.message_id}` }], caption: "✅CODE.0000\n✅PRICE. 25$" } }));
+    if (hata && /sendMediaGroup|sendPhoto|sendVideo/.test(url) && String(govde.chat_id) === "-100") return new Response(JSON.stringify({ ok: false, description: hata }));
+    if (url.endsWith("sendMediaGroup")) return new Response(JSON.stringify({ ok: true, result: govde.media.map((_, i) => ({ message_id: 900 + i })) }));
+    if (/sendPhoto|sendVideo|sendMessage/.test(url)) return new Response(JSON.stringify({ ok: true, result: { message_id: 950 } }));
     return new Response(JSON.stringify({ ok: true, result: {} }));
   };
 }
@@ -213,11 +218,16 @@ function rotasyonOrtami() {
     o.gonderilen.push({ url, govde });
     if (url.endsWith("copyMessages")) return new Response(JSON.stringify({ ok: true, result: govde.message_ids.map(() => ({ message_id: sonraki++ })) }));
     if (url.endsWith("copyMessage") || url.endsWith("sendMessage")) return new Response(JSON.stringify({ ok: true, result: { message_id: sonraki++ } }));
+    if (url.endsWith("forwardMessage")) return new Response(JSON.stringify({ ok: true, result: { message_id: sonraki++, photo: [{ file_id: `f${govde.message_id}` }] } }));
+    if (url.endsWith("sendMediaGroup")) return new Response(JSON.stringify({ ok: true, result: govde.media.map(() => ({ message_id: sonraki++ })) }));
+    if (url.endsWith("sendPhoto") || url.endsWith("sendVideo")) return new Response(JSON.stringify({ ok: true, result: { message_id: sonraki++ } }));
     return new Response(JSON.stringify({ ok: true, result: {} }));
   };
   return { ...o, simdi };
 }
 const cagrilar = (g, metod) => g.filter((x) => x.url.endsWith("/" + metod));
+// 10 Kasım: kanala giden paylaşım (eski yazı kopyalanmaz → albüm / tek fotoğraf yeni yazıyla)
+const kanalaGiden = (g) => g.filter((x) => /\/(sendMediaGroup|sendPhoto|sendVideo|copyMessages)$/.test(x.url) && String(x.govde.chat_id) === "-100");
 const bas = (env, kisi, data, mid = 1) => guncellemeIsle({ callback_query: { id: "c", from: { id: kisi, first_name: kisi === 222 ? "Merdan" : "Murat" }, data, message: { chat: { id: kisi }, message_id: mid } } }, env);
 
 test("adaylar: en eski önce, 30 gün–1 yıl arası, kodsuz dahil, atlanan ve sıradaki hariç", () => {
@@ -245,7 +255,7 @@ function turOrtami(n = 14) {
       const govde = JSON.parse(istek.body);
       o.gonderilen.push({ url, govde });
       const kod = String(4000 + Math.floor((govde.message_id - 5000) / 10));
-      return new Response(JSON.stringify({ ok: true, result: { message_id: 1, caption: kod === "4005" ? `✅CODE.${kod}` : `✅CODE.${kod}\n✅SIZE.  38/40/42/44` } }));
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1, photo: [{ file_id: `f${govde.message_id}` }], caption: kod === "4005" ? `✅CODE.${kod}` : `✅CODE.${kod}\n✅SIZE.  38/40/42/44` } }));
     }
     return onceki(url, istek);
   };
@@ -347,9 +357,10 @@ test("beden: paylaşımda alt yazının beden satırı seçilen grupla değişir
   const r = await kanaldaPaylas(o.env, "3100", [300, 301, 302], o.simdi, "b");
   assert.equal(r.ok, true);
   const grup = o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup"));
-  const medya = JSON.parse(grup.govde.media);
-  assert.deepEqual(medya.map((m) => m.media), ["b300", "b301", "vid302"]);
-  assert.equal(medya[0].caption, "CODE.3100\n📏 SIZE: 44-46-48-50");
+  const medya = grup.govde.media;
+  assert.deepEqual(medya.map((m) => m.media), ["b300", "b301", "vid302"]); // medya eski paylaşımdan
+  assert.match(medya[0].caption, /CODE: 3100<\/b>\n📏 Size: 44\W*46\W*48\W*50/); // 10 Kasım: yazı Kemal'in düzeniyle, seçilen beden
+  assert.ok(!/CODE\.3100|SIZE 38\/40/.test(medya[0].caption)); // eski yazı ASLA kopyalanmaz
   assert.equal(o.islenen.length, 0); // marka yok: görsel aracı kullanılmadı
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
@@ -359,12 +370,12 @@ test("videodan kare: sadece videosu olan paylaşımda onaylı kare başa eklenir
   o.depo.set("kare:3300", JSON.stringify({ durum: "onayli", url: "https://raw.githubusercontent.com/x/y/z/kareler/3300/aday-2.jpg", w: 1080, h: 1440 }));
   const r = await kanaldaPaylas(o.env, "3300", [302], o.simdi);
   assert.equal(r.ok, true);
-  const medya = JSON.parse(o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup")).govde.media);
+  const medya = o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup")).govde.media;
   assert.deepEqual(medya.map((m) => [m.type, m.media]), [["photo", "https://raw.githubusercontent.com/x/y/z/kareler/3300/aday-2.jpg"], ["video", "vid302"]]);
   o.depo.set("kare:3300", JSON.stringify({ durum: "onayda" })); // onaylanmamış kare kullanılmaz
   o.gonderilen.length = 0;
   await kanaldaPaylas(o.env, "3300", [302], o.simdi + 2 * 86400); // 6 Kasım: aynı gün tekrar Venom kontrolünde durur
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
+  assert.deepEqual(kanalaGiden(o.gonderilen).map((g) => g.url.split("/").pop()), ["sendVideo"]); // tek video, yeni yazıyla
 });
 
 test("ekip: tur ona da gelir, sonradan eklenene eksikler gönderilir, ilk basan geçerli; ayar, harcama ve yapay zekâ yok", async () => {
@@ -507,15 +518,16 @@ test("günde tek tur: onaylanan hemen sıraya girer, 60–90 dk arayla paylaşı
   o.gonderilen.length = 0;
   const t = ist(10, 5);
   await rotasyon(o.env, t);
-  const ilk = cagrilar(o.gonderilen, "copyMessages");
+  const ilk = kanalaGiden(o.gonderilen);
   assert.equal(ilk.length, 1);
-  assert.deepEqual(ilk[0].govde.message_ids, [5240, 5241]); // ilk onaylanan (4024), albümün tamamı
+  assert.deepEqual(ilk[0].govde.media.map((m) => m.media), ["f5240", "f5241"]); // ilk onaylanan (4024), albümün tamamı (medyası)
+  assert.match(ilk[0].govde.media[0].caption, /CODE: 4024/); // 10 Kasım: yazı Kemal'in düzeniyle (eski yazı kopyalanmaz)
   const ara = Number(o.depo.get("sonraki")) - t;
   assert.ok(ara >= 60 * 60 && ara <= 90 * 60, `aralık ${ara / 60} dk`); // 9 Kasım: 60–90 dk
   assert.equal(turMesajlari(o.gonderilen).length, 0);
   o.gonderilen.length = 0;
   await rotasyon(o.env, t + 45 * 60);
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.equal(kanalaGiden(o.gonderilen).length, 0);
   assert.equal(turMesajlari(o.gonderilen).length, 0); // gün içinde yeni liste gelmez
 });
 
@@ -524,9 +536,9 @@ test("paylaşım penceresi 08:00–20:00", async () => {
   o.depo.set("tur", JSON.stringify({ no: 1, durum: "toplaniyor", basla: o.simdi, onaylar: [], ogeler: {} }));
   o.depo.set("kuyruk:4000", JSON.stringify({ kod: "4000", ids: [5000], kim: "Murat", zaman: 1, tur: 1 }));
   await rotasyon(o.env, ist(7, 55));
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.equal(kanalaGiden(o.gonderilen).length, 0);
   await rotasyon(o.env, ist(19, 50));
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
+  assert.equal(kanalaGiden(o.gonderilen).length, 1);
 });
 
 test("20:00'de gün sonu: paylaşılamayan onaylılar sıradan çıkar, tur kapanır; rapor söyler; ertesi sabah yeni tur", async () => {
@@ -651,34 +663,23 @@ test("içe aktarma: kodsuz dizin son 1 yıl, AVAILABLE AGAIN / DISPONIBLE", asyn
   assert.deepEqual(k["~1"].ids, [1, 2]);
 });
 
-test("botun yeniden paylaşımı: kanala düşen kopya bir kez sayılır, kodsuz kopya yeni kayıt açmaz, Sil kopyaları da siler", async () => {
+test("botun yeniden paylaşımı (10 Kasım): kodsuz eski paylaşım eski yazısıyla KOPYALANMAZ; medya + yeni yazı (kod satırı yok), bir kez sayılır, yeni mesajlar Sil için kaydedilir", async () => {
   const o = rotasyonOrtami();
-  // Telegram kanala kopyalarken kimlik 0 dönebiliyor
-  const eski = globalThis.fetch;
-  globalThis.fetch = async (url, istek) => {
-    if (String(url).endsWith("/copyMessages")) { o.gonderilen.push({ url, govde: JSON.parse(istek.body) }); return new Response(JSON.stringify({ ok: true, result: [{ message_id: 0 }, { message_id: 0 }] })); }
-    return eski(url, istek);
-  };
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
   const t = o.simdi;
   const sonuc = await kanaldaPaylas(o.env, "~200", [200, 201], t);
   assert.equal(sonuc.ok, true);
-  assert.equal(sonuc.link, null); // 0 kimlikle bozuk link verilmez
+  const giden = kanalaGiden(o.gonderilen);
+  assert.equal(giden.length, 1);
+  assert.deepEqual(giden[0].govde.media.map((m) => m.media), ["f200", "f201"]);
+  assert.ok(!/CODE|PRICE/.test(giden[0].govde.media[0].caption)); // kodsuz: kod satırı yok; eski yazı yok
+  assert.match(giden[0].govde.media[0].caption, /Premium Women's Fashion/);
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   assert.equal(JSON.parse(o.depo.get("sonpaylasim"))["~200"], t);
-  assert.equal(o.depo.get(`gun:${gunAnahtari(t)}`), undefined); // henüz kanala düşmedi
-  // kopyalar kanala düşer (DISPONIBLE yazısıyla)
-  await guncellemeIsle({ channel_post: { message_id: 900, date: t + 2, chat: kanal, photo: [{ file_id: "f" }], caption: "AVAILABLE NOW DISPONIBLE", media_group_id: "Z" } }, o.env);
-  await guncellemeIsle({ channel_post: { message_id: 901, date: t + 2, chat: kanal, photo: [{ file_id: "f" }], media_group_id: "Z" } }, o.env);
-  // sonra insanın kendi paylaşımı: normal kayıt
-  await guncellemeIsle({ channel_post: { message_id: 902, date: t + 60, chat: kanal, photo: [{ file_id: "f" }], caption: "DISPONIBLE 38-40" } }, o.env);
-  const kodsuz = JSON.parse(o.depo.get("kodsuz"));
-  assert.deepEqual(kodsuz["~200"].kopyalar, [900, 901]);
-  assert.deepEqual(kodsuz["~200"].ids, [200, 201]); // asıl kayıt yerinde
-  assert.ok(!kodsuz["~900"]);
-  assert.ok(kodsuz["~902"]);
-  assert.equal(o.depo.get(`gun:${gunAnahtari(t)}`), "2"); // kopya albümü 1 + insan 1
   assert.equal(o.depo.get(`sayac:${gunAnahtari(t)}`), "1");
-  assert.deepEqual(modelMesajlari("~200", {}, kodsuz), [200, 201, 900, 901]);
-  // yeniden paylaşılan model 30 gün aday olmaz
+  const kodsuz = JSON.parse(o.depo.get("kodsuz"));
+  assert.deepEqual(kodsuz["~200"].ids, [200, 201]); // asıl kayıt yerinde
+  assert.ok(kodsuz["~200"].kopyalar.length >= 2); // yeni mesajlar: Sil bunları da siler
   assert.ok(!adaylar({}, kodsuz, {}, [], t + 5 * GUN, JSON.parse(o.depo.get("sonpaylasim"))).some((a) => a.kod === "~200"));
 });
 
@@ -1085,6 +1086,11 @@ function markaOrtami() {
       const sonuc = Array.from({ length: sayi }, (_, i) => ({ message_id: 7000 + i }));
       return new Response(JSON.stringify({ ok: true, result: alanlar.media ? sonuc : sonuc[0] }));
     }
+    if (/\/(sendMediaGroup|sendPhoto|sendVideo)$/.test(adres) && istek && typeof istek.body === "string") {
+      const govde = JSON.parse(istek.body);
+      o.gonderilen.push({ url: adres, govde });
+      return new Response(JSON.stringify({ ok: true, result: govde.media ? govde.media.map((_, i) => ({ message_id: 7000 + i })) : { message_id: 7000 } }));
+    }
     if (adres.endsWith("/forwardMessage")) {
       const govde = JSON.parse(istek.body);
       o.gonderilen.push({ url: adres, govde });
@@ -1125,14 +1131,14 @@ test("marka açıkken Kemal'in kanal paylaşımı markalı yüklenir; görsel ar
   const r = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi);
   assert.equal(r.ok, true);
   const grup = o.gonderilen.find((g) => g.url.endsWith("/sendMediaGroup"));
-  assert.equal(grup.govde.chat_id, "-100");
+  assert.equal(String(grup.govde.chat_id), "-100");
   assert.equal(r.link, "https://t.me/Volonteroseoffical/7000");
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
   o.env.IMAGES = { input: () => ({ transform() { return this; }, draw() { return this; }, async output() { throw new Error("9422 limit"); } }) };
   o.gonderilen.length = 0;
   const r2 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 2 * 86400);
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 1);
-  assert.match(r2.markaNotu, /marka basılamadı \(9422 limit\)/);
+  assert.equal(r2.ok, true); // 10 Kasım: yeniden paylaşım her zaman Kemal'in yazısıyla (eski yazı kopyalanmaz)
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
 
 // ---------- Müşteri modu ----------
@@ -1774,9 +1780,14 @@ test("SİL kuralı (Kemal): Selin'den gelen iş → kodlu + fotoğrafla emin eş
   o.gonderilen.length = 0;
   o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Murat", site: "geri kondu" }]));
   await fabrikaIsleri(o.env, o.simdi + 600);
-  const geri = cagrilar(o.gonderilen, "copyMessages");
-  assert.deepEqual(geri[0].govde, { chat_id: -100, from_chat_id: -200, message_ids: kayit.kopya.map((x) => x.arsiv) });
-  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /^↩️ 3100 geri kondu: site geri kondu; kanala 5 mesaj geri kondu \(yeni tarihle\)\./);
+  // 10 Kasım: eski mesajlar OLDUĞU GİBİ kopyalanmaz — arşivdeki medya + Kemal'in yeni yazısıyla tek albüm
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  const geri = kanalaGiden(o.gonderilen);
+  assert.equal(geri.length, 1);
+  assert.equal(geri[0].govde.media.length, 5);
+  assert.match(geri[0].govde.media[0].caption, /CODE: 3100/);
+  assert.ok(!/PRICE/.test(geri[0].govde.media[0].caption));
+  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /^↩️ 3100 geri kondu: site geri kondu; kanala doğru yazıyla tek albüm paylaşıldı/);
   assert.ok(!JSON.parse(o.depo.get("hicgelmeyecek"))["3100"] && !JSON.parse(o.depo.get("hicgelmeyecek"))["~200"]);
 });
 
@@ -1831,7 +1842,7 @@ test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyl
   o.gonderilen.length = 0;
   o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Patron", site: "geri kondu" }]));
   await fabrikaIsleri(o.env, o.simdi + 600);
-  assert.equal(cagrilar(o.gonderilen, "copyMessages")[0].govde.message_ids.length, 3);
+  assert.equal(kanalaGiden(o.gonderilen)[0].govde.media.length, 3); // 10 Kasım: medya + yeni yazı
   assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Kanalda SOLD OUT görselli 1 eski paylaşım duruyor[\s\S]*\/300/);
 });
 
@@ -2034,7 +2045,7 @@ test("VENOM KONTROLÜ (6 Kasım): aynı model aynı gün ikinci kez kanala GİTM
   const r2 = await kanaldaPaylas(o.env, "3300", [302], o.simdi + 3600);
   assert.equal(r2.ok, false);
   assert.match(r2.hata, /Venom kontrolü: bugün .* zaten paylaşıldı/);
-  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
+  assert.equal(kanalaGiden(o.gonderilen).length, 0);
   // 9 Kasım: "bugün zaten paylaşıldı" bir iş değil → kimseye mesaj yok (Patron'a akşam sayısı), sadece kayıt
   assert.ok(!o.gonderilen.some((g) => g.url.endsWith("/sendMessage") && /🛑 Venom kontrolü/.test(JSON.stringify(g.govde))));
   assert.match(o.depo.get("venom:kontrol:engel"), /3300/);
@@ -2042,8 +2053,8 @@ test("VENOM KONTROLÜ (6 Kasım): aynı model aynı gün ikinci kez kanala GİTM
   o.depo.set("pelinboy:3100", JSON.stringify({ marka: "BLACKROSE" }));
   o.gonderilen.length = 0;
   const r3 = await kanaldaPaylas(o.env, "3100", [300, 301], o.simdi + 7200);
-  assert.equal(r3.ok, false);
-  assert.match(r3.hata, /Black Rose modeli eski gönderiden KOPYALANAMAZ/);
+  assert.equal(r3.ok, true); // 10 Kasım: eski gönderi hiç kopyalanmaz → medya alınır, BLACK ROSE imzalı yeni yazı
+  assert.match(kanalaGiden(o.gonderilen)[0].govde.media[0].caption, /BLACK ROSE/);
   assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0);
 });
 
@@ -2350,4 +2361,41 @@ test("dünden kalan onaylılar: ertesi sabah önce onlar; sabah önerisi 21:00'e
   await rotasyon(o.env, ist(8, 0, 2));
   assert.equal(JSON.parse(o.depo.get("tur")).durum, "bitti");
   assert.ok(cagrilar(o.gonderilen, "sendMessage").some((m) => /dünden kalan onaylı paylaşımlar 09:00'dan itibaren ilk sırada/.test(m.govde.text)));
+});
+
+// 10 Kasım (Patron): KANAL DÜZELTME — eski yazı ASLA kopyalanmaz; Patron "sil" → onaysız sil; yazı düzelt
+test("kanal düzeltme: eski yazı tespiti, mesajları paylaşımlara ayırma, Patron sil (onaysız, en son paylaşım), sil + doğru yazıyla tek albüm", async () => {
+  const w = await import("./worker.js");
+  assert.equal(w.eskiYaziMi("✅CODE.3512\n✅PRICE. $\nTEL: +90 532 000 00 00"), true);
+  assert.equal(w.eskiYaziMi("<b>✅ CODE: 3512</b>\nVOLONTE – Premium Women's Fashion"), false);
+  const { FIYAT } = await import("./yayin-kontrol.js");
+  assert.equal(FIYAT.test("PRICE. $"), false); // rakamsız alan fiyat sayılmaz
+  assert.equal(FIYAT.test("PRICE. 25$"), true);
+  const ayir = w.paylasimlaraAyir([
+    { id: 15000, tarih: 100, yazi: "✅CODE.3512 PRICE. $", medya: { type: "video", media: "v0" } },
+    { id: 15001, tarih: 100, yazi: "✅CODE.3512 PRICE. $", medya: { type: "photo", media: "p1" } },
+    { id: 15002, tarih: 100, yazi: "", medya: { type: "photo", media: "p2" } },
+    { id: 15003, tarih: 100, yazi: "", medya: { type: "photo", media: "p3" } },
+    { id: 15010, tarih: 101, yazi: "✅CODE.3629 TEL 0532 111 22 33", medya: { type: "video", media: "v9" } },
+  ]);
+  assert.deepEqual(ayir.map((p) => [p.kod, p.ids, p.eski]), [["3512", [15000], true], ["3512", [15001, 15002, 15003], true], ["3629", [15010], true]]);
+  // Patron "3512 sil": EN SON paylaşım (tarihe göre), onay kartı yok
+  const o = rotasyonOrtami();
+  o.depo.set("kodlar", JSON.stringify({ 3512: [{ ids: [13918, 13919], tarih: o.simdi - 13 * GUN }, { ids: [15001, 15002], tarih: o.simdi - 3600 }] }));
+  const r = await w.paylasimSil(o.env, { kod: "3512" }, o.simdi);
+  assert.deepEqual(cagrilar(o.gonderilen, "deleteMessage").map((x) => x.govde.message_id), [15001, 15002]);
+  assert.match(r.ozet, /^3512 \(t\.me\/Volonteroseoffical\/15001 \+1 mesaj, /);
+  assert.deepEqual(JSON.parse(o.depo.get("kodlar"))["3512"].map((g) => g.ids), [[13918, 13919]]);
+  // Düzelt: aynı medya → sil → Kemal'in yazısıyla TEK ALBÜM (onay kartı yok)
+  o.depo.set("arsiv", JSON.stringify({ id: -555 }));
+  o.depo.set("kodlar", JSON.stringify({ 3512: [{ ids: [15005, 15006], tarih: o.simdi - 1800 }] }));
+  o.gonderilen.length = 0;
+  const d = await w.paylasimDuzelt(o.env, { kod: "3512", ids: [15005, 15006] }, o.simdi);
+  assert.equal(d.ok, true, JSON.stringify(d));
+  assert.deepEqual(cagrilar(o.gonderilen, "deleteMessage").filter((x) => String(x.govde.chat_id) === "-100").map((x) => x.govde.message_id), [15005, 15006]);
+  const albm = kanalaGiden(o.gonderilen);
+  assert.equal(albm.length, 1);
+  assert.deepEqual(albm[0].govde.media.map((m) => m.media), ["f15005", "f15006"]);
+  assert.match(albm[0].govde.media[0].caption, /CODE: 3512/);
+  assert.ok(!cagrilar(o.gonderilen, "sendMessage").some((x) => String(x.govde.chat_id) === "111" && /onay/i.test(x.govde.text || ""))); // Patron'a onay kartı yok
 });

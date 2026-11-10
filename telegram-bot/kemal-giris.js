@@ -2,12 +2,14 @@
 // (Testler worker.js'i doğrudan kullanır; "cloudflare:workers" sadece burada.)
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { botSagligi, sonHata } from "./saglik.js";
-import { venomDugme, venomMesaj, akisDenemesi, venomModelFoto, venomFotoTani, venomOzet } from "./worker.js";
+import { venomDugme, venomMesaj, akisDenemesi, venomModelFoto, venomFotoTani, venomOzet, paylasimSil, paylasimDuzelt } from "./worker.js";
 export * from "./worker.js";
 export { default } from "./worker.js";
 export class VenomKapisi extends WorkerEntrypoint {
   async dugme(data, rid) { return venomDugme(this.env, data, rid); }
   async mesaj(metin) { return venomMesaj(this.env, metin); }
+  async paylasimSil(g) { return paylasimSil(this.env, g || {}); } // 10 Kasım: Patron "sil" → onay kartı YOK
+  async paylasimDuzelt(g) { return paylasimDuzelt(this.env, g || {}); } // 10 Kasım: aynı medya, doğru yazı
   async ozet() { return venomOzet(this.env); } // 9 Kasım: Venom'un canlı sorusu
   async modelFoto(kod) { return venomModelFoto(this.env, kod); } // 9 Kasım: Venom kısa model kartı (markalı ön fotoğraf)
   async fotoTani(b64, ipucu) { return venomFotoTani(this.env, b64, ipucu); } // 9 Kasım: Patron maliyeti onaylayınca

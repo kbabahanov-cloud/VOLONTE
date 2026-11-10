@@ -58,17 +58,23 @@ export async function hataSayilari(env, simdi, sure) {
 }
 
 // ---------- 9) GERİ ALMA: son paylaşım (ya da bir kodun son paylaşımı) → kanaldan + siteden birlikte (tek onay kartıyla) ----------
-export async function geriAlBul(env, kod = null) {
+// 10 Kasım (Patron): geri alma HER ZAMAN hatanın görüldüğü mesaj numaralarına bağlı — mesaj_no verildiyse o paylaşım;
+// yoksa kodun EN SON paylaşımı (tarihe göre; dizinin ilk satırına değil).
+export async function geriAlBul(env, kod = null, mesajNo = null) {
   const kodlar = await oku(env, "kodlar", {});
+  const kanal = await oku(env, "kanal", {});
+  const no = (mesajNo || []).map(Number).filter((x) => x > 0);
   let secilen = null;
   for (const [k, l] of Object.entries(kodlar)) {
-    if (kod && String(k) !== String(kod)) continue;
-    const g = (l || [])[0];
-    if (g && (!secilen || g.tarih > secilen.g.tarih)) secilen = { kod: k, g };
+    if (kod && String(k) !== String(kod) && !no.length) continue;
+    for (const g of l || []) {
+      if (no.length ? g.ids.some((id) => no.includes(id)) : (!secilen || g.tarih > secilen.g.tarih)) { if (no.length) { secilen = { kod: k, g }; break; } secilen = { kod: k, g }; }
+    }
+    if (no.length && secilen) break;
   }
+  if (!secilen && no.length) secilen = { kod: kod || "?", g: { ids: no, tarih: Math.floor(Date.now() / 1000) } }; // dizinde yoksa: verilen numaralar
   if (!secilen) return null;
   const site = await oku(env, `venom:siteSonEkleme:${secilen.kod}`, null);
-  const kanal = await oku(env, "kanal", {});
   return { kod: secilen.kod, ids: secilen.g.ids, tarih: secilen.g.tarih, link: kanal.kullanici ? `t.me/${kanal.kullanici}/${secilen.g.ids[0]}` : null, site: site && site.zaman >= secilen.g.tarih - 6 * 3600 ? site : null };
 }
 
