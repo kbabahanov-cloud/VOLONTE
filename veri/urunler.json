@@ -1,5 +1,26 @@
 [
  {
+  "kod": "3489",
+  "baslik": "Corset Pleated Evening Gown",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length evening gown with a structured corset bodice in textured copper and a fluid pleated skirt in golden satin-finish fabric. A sweetheart neckline, an asymmetric off-shoulder strap and a beaded fringe along the pointed waistline define the look, with ribbon lace-up detailing at the back. Made for galas, weddings and formal celebrations. Produced in Istanbul with careful workmanship.",
+   "fr": "Robe de soirée longue au bustier corseté en tissu cuivré texturé, prolongée par une jupe plissée fluide aux reflets dorés. Le décolleté cœur, la bretelle asymétrique tombant sur l'épaule et la frange perlée qui souligne la taille en pointe font son caractère, complétés par un laçage ruban au dos. Idéale pour les galas, mariages et cérémonies. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Vestido de festa longo com corpete estruturado em tecido acobreado texturizado e saia plissada fluida em tom dourado acetinado. O decote coração, a alça assimétrica caída no ombro e a franja de contas na cintura em ponta marcam o modelo, com amarração em fita nas costas. Pensado para galas, casamentos e cerimónias. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3489/1.jpg",
+   "galeri/3489/2.jpg",
+   "galeri/3489/3.jpg"
+  ],
+  "videolar": [
+   "selin/3489/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-10"
+ },
+ {
   "kod": "988",
   "baslik": "Pleated Sleeve Wrap Suit",
   "kategori": "sets",
