@@ -2412,6 +2412,24 @@ async function tekIslem(env, simdi, tg) {
     sonuc.d = d ? { asama: d.asama, magaza: d.magaza || null, deneme: Boolean(d.deneme), onaylayan: d.onaylayan || null, onayZaman: d.onayZaman || null, gonderilecek: (d.gonderilecek || []).length, giden: d.giden || 0, atlanan: d.atlanan || [], fabrikaBildirildi: d.fabrikaBildirildi || null,
       liste: (d.liste || []).map((x) => ({ kod: x.kod, magaza: x.magaza, beden: x.beden, adet: (x.renkler || []).reduce((t, r) => t + r.adet, 0), renkler: renkYazi(x.renkler || []) })),
       modeller: (d.modeller || []).map((x) => ({ kod: x.kod, gitti: Boolean((d.mesajlar || {})[x.kod]), secim: (d.secim || {})[x.kod] ? (secimTamam(secimNorm(d.secim[x.kod])) ? "tamam" : "yarım") : null })), gonderilmedi: d.gonderilmedi || [], istenmeyen: d.istenmeyen || [] } : null;
+  } else if (is.tur === "listedenCikar") { // {anahtar, kodlar, neden}: modeller listeden çıkar, kartları açıklamayla kapanır (liste boşalırsa kapanır)
+    const d = await ayarOku(env, `fabrika:${is.anahtar}`, null);
+    if (!d) sonuc.hata = "liste yok";
+    else {
+      const cik = (d.modeller || []).map((x) => x.kod).filter((k) => (is.kodlar || []).map(String).includes(k));
+      for (const kod of cik) {
+        const mm = (d.mesajlar || {})[kod];
+        if (mm) await tg(env, mm[1] === "foto" ? "editMessageCaption" : "editMessageText", { chat_id: kimeOf(env, d), message_id: mm[0], [mm[1] === "foto" ? "caption" : "text"]: `${mm[2]}\n\n↪️ ${kod}: ${is.neden || "listeden çıkarıldı"}`, reply_markup: { inline_keyboard: [] } }).catch(() => null);
+        if (d.secim) delete d.secim[kod];
+        if (d.mesajlar) delete d.mesajlar[kod];
+      }
+      d.modeller = (d.modeller || []).filter((x) => !cik.includes(x.kod));
+      d.gonderilmedi = (d.gonderilmedi || []).filter((k) => !cik.includes(k));
+      if (!d.modeller.length) d.asama = "iptal";
+      await ayarYaz(env, `fabrika:${is.anahtar}`, d);
+      sonuc.cikarilan = cik; sonuc.kalan = d.modeller.map((x) => x.kod); sonuc.asama = d.asama;
+      if (cik.length && is.bilgi) await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: is.bilgi });
+    }
   } else if (is.tur === "kanitOku") { // gerçek akış kanıtı (Telegram'ın döndürdüğü mesajlar) — StokDO "kanit:gercek:<gün>"
     sonuc.l = ((await ayarOku(env, `kanit:gercek:${is.gun || gunAnahtari(simdi)}`, [])) || []).filter((x) => !is.basla || x.zaman >= is.basla).slice(-(is.son || 60));
   } else if (is.tur === "listeDurum") { // 10 Kasım: bugünün ve dünün liste durumu (okuma; hiçbir şey göndermez)
