@@ -1922,3 +1922,17 @@ test("fabrika zinciri: Sinem yazıyla (bitti / 5 gün / hepsi), mal geldi + adet
   assert.deepEqual(giden.map((x) => (x.govde.caption || x.govde.text).split("\n").slice(0, 2).join(" | ")), ["🧪 DENEME – üretim yapmayın | 🟦 VOLONTE LİSTESİ – BAŞLANGIÇ (1 model)", "🧪 DENEME – üretim yapmayın | 🟦 VOLONTE", "🧪 DENEME – üretim yapmayın | 🟦 VOLONTE LİSTESİ – BİTTİ (1 model)", "🧪 DENEME – üretim yapmayın | 🌹 BLACK ROSE LİSTESİ – BAŞLANGIÇ (1 model)", "🧪 DENEME – üretim yapmayın | 🌹 BLACK ROSE", "🧪 DENEME – üretim yapmayın | 🌹 BLACK ROSE LİSTESİ – BİTTİ (1 model)"]);
   assert.equal(JSON.parse(o.depo.get("sami:sinemDenemeSonuc")).kartlar.length, 2);
 });
+
+test("10 Kasım ACİL: Telegram gönderimi doğrulanır — uzun yazı kısaltılır, düğme hatasında düzeltilip tekrar, olmazsa hata kaydı", async () => {
+  const { guvenliGonder } = await import("./tg-guvenli.js");
+  const o = ortam();
+  const giden = [];
+  const cagir = async (m, g) => { giden.push(g); if (g.reply_markup && g.reply_markup.inline_keyboard.flat().some((b) => b.style)) return { ok: false, description: "Bad Request: can't parse inline keyboard button: Field \"style\" is invalid" }; return { ok: true, result: { message_id: 1 } }; };
+  const r = await guvenliGonder(o.env, "sami", cagir, "sendPhoto", { chat_id: 222, photo: "p", caption: "x".repeat(1500), reply_markup: { inline_keyboard: [[{ text: "↩️ Geri al", callback_data: "fe:g:a:1", style: "danger" }]] } });
+  assert.equal(r.ok, true);
+  assert.equal(giden[0].caption.length, 1024); // fotoğraf altı sınırı
+  assert.equal(giden[1].reply_markup.inline_keyboard[0][0].style, undefined); // ikinci deneme düz düğme
+  const kotu = async () => ({ ok: false, description: "Forbidden: bot was blocked by the user" });
+  await guvenliGonder(o.env, "sami", kotu, "sendMessage", { chat_id: 222, text: "3517 kart" });
+  assert.deepEqual(JSON.parse(o.depo.get("sami:tgHatalar")).map((x) => [x.metod, x.chat, x.hata]), [["sendMessage", "222", "Forbidden: bot was blocked by the user"]]);
+});

@@ -1192,7 +1192,7 @@ test("bota emir: 10 dk sonra iş defterinden kontrol; iz yoksa bir kez tekrar, o
   assert.ok(patronaGiden(o).length && patronaGiden(o).every((m) => /yapamadı/.test(m.govde.text)));
 });
 
-test("onay merdiveni: aynı kişide birden çok bekleyen kart → TEK mesajda toplu (albüm + numaralı düğmeler)", async () => {
+test("onay merdiveni (10 Kasım ACİL): birden çok bekleyen kart → kısa başlık + HER KART TEK MESAJ (fotoğraf + yazı + düğmeler); düşen kart yazıyla tekrar, olmazsa Venom'a hata", async () => {
   const o = ortam();
   const { defterTg, _defterOnbellekSifirla } = await import("./is-defteri.js");
   const { kartTekrarAdimi } = await import("./kart-tekrar.js");
@@ -1206,13 +1206,18 @@ test("onay merdiveni: aynı kişide birden çok bekleyen kart → TEK mesajda to
   const kg = [];
   const ktg = async (e, m, g) => { kg.push({ m, g }); return { ok: true, result: { message_id: 900 } }; };
   assert.equal(await kartTekrarAdimi(o.env, "selin", ktg, ist(10, 12, 5)), 2);
-  const alb = kg.find((x) => x.m === "sendMediaGroup");
-  assert.deepEqual(alb.g.media.map((m) => [m.media, m.caption]), [["https://x/3493.jpg", "1 · 3493"], ["https://x/3529.jpg", "2 · 3529"]]);
-  const toplu = kg.find((x) => x.m === "sendMessage");
-  assert.match(toplu.g.text, /^🔁 Hatırlatma — 2 kart cevabınızı bekliyor:\n1\. 📝 3493 taslak\n2\. 📝 3529 taslak/);
-  assert.deepEqual(toplu.g.reply_markup.inline_keyboard.flat().map((b) => [b.text, b.callback_data]), [["1· ✅ Onayla, siteye yükle", "so:3493"], ["1· ❌ Ekleme", "sx:3493"], ["2· ✅ Onayla, siteye yükle", "so:3529"]]);
+  assert.equal(kg.filter((x) => x.m === "sendMediaGroup").length, 0); // albüm yok (düğme mesajı düşünce yarım kalıyordu)
+  assert.match(kg[0].g.text, /^🔁 Hatırlatma — 2 kart cevabınızı bekliyor/);
+  const kartlar = kg.filter((x) => x.m === "sendPhoto");
+  assert.deepEqual(kartlar.map((x) => [x.g.photo, x.g.caption.split("\n")[1], x.g.reply_markup.inline_keyboard.flat().map((d) => d.callback_data)]), [["https://x/3493.jpg", "📝 3493 taslak", ["so:3493", "sx:3493"]], ["https://x/3529.jpg", "📝 3529 taslak", ["so:3529"]]]);
   assert.equal(kg.filter((x) => x.m === "editMessageReplyMarkup").length, 2);
-  assert.equal(kg.filter((x) => x.m === "sendMessage").length, 1); // tek mesaj
+  // fotoğraflı kart Telegram'dan dönmezse yazıyla bir kez daha; o da olmazsa Venom'a "Merdan'a kart gitmedi"
+  const { tamKartGonder } = await import("./kart-tekrar.js");
+  const kg2 = [];
+  const kotu = async (e, m, g) => { kg2.push({ m, g }); return { ok: false, description: "Bad Request: wrong file identifier" }; };
+  assert.equal(await tamKartGonder(o.env, kotu, o.env, MERDAN, { kod: "3517" }, { foto: "x", metin: "3517", klavye: [[{ text: "✅", callback_data: "a" }]] }, "", "sami"), false);
+  assert.deepEqual(kg2.map((x) => x.m), ["sendPhoto", "sendMessage"]);
+  assert.match(JSON.parse(o.depo.get("sami:hata")).hata, /^Merdan'a kart gitmedi \(sami · 3517\): Bad Request: wrong file identifier/);
 });
 
 test("kim, neye, ne cevap verdi: düğme yazısı + kod deftere; kişi cevabı (aldığı → cevapladığı → cevapsız); sayı = liste", async () => {

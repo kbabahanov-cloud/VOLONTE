@@ -32,11 +32,12 @@ import { stokSorguMesaji, stokSorguDugmesi, stokSorguTakip, stokYetkiKomutu, sto
 import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi, odemeMesaji, bakiyeKomutu, isOzetiKomutu, isOzetiDugmesi, adetKomutu, adetDugmesi, nuriStokKomutu } from "./mutabakat.js";
 import { borcLimitKomutu } from "./cari-takip.js";
 import { patronMu, geriKuyrugu } from "./sil.js";
+import { guvenliGonder } from "./tg-guvenli.js";
 import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
 import { hemraDugmesi } from "./venom-ekip.js";
-import { kartTekrarAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
+import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -56,10 +57,13 @@ async function tg(env, metod, govde) {
   return r;
 }
 async function tgGercek(env, metod, govde) {
-  const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde),
-  });
-  return r.json();
+  // 10 Kasım (ACİL): her gönderim doğrulanır, sınır aşımı kısaltılır, hata bir kez düzeltilip denenir, olmazsa "sami:tgHatalar"
+  return guvenliGonder(env, "sami", async (m, g) => {
+    const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${m}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(g),
+    });
+    return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }));
+  }, metod, govde);
 }
 
 function gizliEsit(a, b) {
@@ -92,6 +96,7 @@ export default {
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
     try { await kisiKontrolAdimi(env, "sami", tg); } catch { /* 9 Kasım: kişi /start kontrolü */ }
     if (env.BOT_TOKEN) try { await kartIletAdimi(env, "sami", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
+    if (env.BOT_TOKEN) try { await kartTamamlaAdimi(env, "sami", tg, simdi); } catch { /* 10 Kasım: yarım giden kartları tamamla (bir kerelik) */ }
     if (env.BOT_TOKEN) try { await kartTekrarAdimi(env, "sami", tg, simdi); } catch { /* 9 Kasım: onay merdiveni (görev kartları dahil) */ }
     if (await durdurulduMu(env, "sami")) return; // 6 Kasım: durduruldu → zamanlı işler (mesaj/yazma) bekler
     // Bot anahtarı yokken (BotFather adımı bekliyor) Telegram işleri yapılmaz; sabah raporu ve kontroller

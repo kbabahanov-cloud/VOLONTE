@@ -56,7 +56,7 @@ import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce, ESKI_YAZI } from "./yayin-kontrol.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
-import { kartTekrarAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
+import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { magazaStogu, STOK_KURALI } from "./sil.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
 import { karmaDepo, gocBirKez, KEMAL_YEREL } from "./depo.js";
@@ -165,6 +165,7 @@ export default {
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     try { await kisiKontrolAdimi(env, "kemal", telegram); } catch { /* 9 Kasım: kişi /start kontrolü */ }
     try { await kartIletAdimi(env, "kemal", telegram); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
+    try { await kartTamamlaAdimi(env, "kemal", telegram, Math.floor(Date.now() / 1000)); } catch { /* 10 Kasım: yarım kartları tamamla */ }
     try { await kartTekrarAdimi(env, "kemal", telegram, Math.floor(Date.now() / 1000)); } catch (e) { await env.KAYIT.put("kemal:kartTekrarHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); } // 9 Kasım: onay merdiveni
     if (env.KATALOG) {
       const nesne = kemalNesne(env);

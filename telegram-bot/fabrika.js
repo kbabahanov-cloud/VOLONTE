@@ -86,7 +86,8 @@ async function hemraModelGonder(env, tg, kod, site, yazi, kl, kime = null) {
       if (r && r.ok) return { r, tur: "foto", kaynak: "kanal" };
     }
   }
-  const r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}\n📷 fotoğraf yok`, reply_markup: kl });
+  let r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}\n📷 fotoğraf yok`, reply_markup: kl });
+  if (!(r && r.ok)) r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}\n📷 fotoğraf yok`.slice(0, 3500), reply_markup: kl }); // 10 Kasım: bir kez daha
   return { r, tur: "metin", kaynak: null };
 }
 
@@ -570,7 +571,7 @@ async function indirimliOzet(env, gun, simdi, tg) {
 export async function fabrikaAdimi(env, simdi, tg) {
   // Bir kez (Claude Code, Patron isteği): KV "sami:eksikDeneme" = "<gün>" → o günün listeleri yeni akışla DENEME (fabrikaya gitmez)
   const dg = await env.KAYIT.get("sami:eksikDeneme").catch(() => null);
-  if (dg) { await env.KAYIT.delete("sami:eksikDeneme"); let ay9 = { gun: dg }; try { if (dg.startsWith("{")) ay9 = JSON.parse(dg); } catch { /* düz gün */ } const keys = await eksikDenemesi(env, ay9.gun, simdi, tg, { adet: ay9.adet || null, ek: ay9.ek || "-D", kapat: ay9.kapat || [] }); await env.KAYIT.put("sami:eksikDenemeSonuc", JSON.stringify({ zaman: simdi, keys }), { expirationTtl: 3 * 86400 }); return; }
+  if (dg) { await env.KAYIT.delete("sami:eksikDeneme"); let ay9 = { gun: dg }; try { if (dg.startsWith("{")) ay9 = JSON.parse(dg); } catch { /* düz gün */ } const keys = await eksikDenemesi(env, ay9.gun, simdi, tg, { adet: ay9.adet || null, ek: ay9.ek || "-D", kapat: ay9.kapat || [], magaza: ay9.magaza || null, kodlar: ay9.kodlar || null }); await env.KAYIT.put("sami:eksikDenemeSonuc", JSON.stringify({ zaman: simdi, keys }), { expirationTtl: 3 * 86400 }); return; }
   if (await kuyrukAdimi(env, simdi, tg)) return; // önce yarım kalan gönderimler
   if ((await env.KAYIT.get("sami:satisAcik")) !== "1") return; // satış okuması henüz doğrulanmadı
   const gun = gunAnahtari(simdi);
@@ -585,13 +586,15 @@ export async function fabrikaAdimi(env, simdi, tg) {
   if (da && da.keys) await birlesikOnay(env, tg, da.gun, simdi, da.keys, { deneme: true }).catch(() => null);
 }
 // 10 Kasım (Patron): DENEME — verilen günün eksik listeleri yeni akışla Aziz'e (VOLONTE) ve Merdan'a (Black Rose); fabrikaya GİTMEZ
-export async function eksikDenemesi(env, gun, simdi, tg, { adet = null, ek = "-D", kapat = [] } = {}) {
+export async function eksikDenemesi(env, gun, simdi, tg, { adet = null, ek = "-D", kapat = [], magaza = null, kodlar = null } = {}) {
   for (const k of kapat) { const x = await ayarOku(env, `fabrika:${k}`, null); if (x && !["denemeOnay", "iptal"].includes(x.asama)) { x.asama = "iptal"; await ayarYaz(env, `fabrika:${k}`, x); } } // önceki deneme kapanır
   const keys = [];
   for (const cfg of MAGAZALAR) {
+    if (magaza && cfg.magaza !== magaza) continue; // 10 Kasım: tek mağaza denemesi (ör. sadece Merdan'a Black Rose)
     const x = await ayarOku(env, `fabrika:${gun}${cfg.ek}`, null);
     if (!x || !(x.modeller || []).length) continue;
-    const modeller = adet ? x.modeller.slice(0, adet) : x.modeller;
+    const secili = kodlar && kodlar.length ? x.modeller.filter((m) => kodlar.includes(String(m.kod))) : x.modeller;
+    const modeller = adet ? secili.slice(0, adet) : secili;
     const k = `${gun}${cfg.ek}${ek}`;
     await ayarYaz(env, `fabrika:${k}`, { asama: "soruldu", zaman: simdi, gun, magaza: cfg.magaza, sorumlu: cfg.kime(env), modeller, secim: {}, mesajlar: {}, gonderilmedi: modeller.map((m) => m.kod), deneme: true, fabrikayaGitmez: true });
     await tg(env, "sendMessage", { chat_id: cfg.kime(env), text: `${DENEME}🏭 ${gunGoster(gun)} ${cfg.etiket} eksik listesi — KONTROL (${modeller.length} model). Önce beden, sonra: ✅ İste, aynı adet · ✏️ Adeti değiştir · 🚫 İsteme · ⚠️ Bot hatası. Bitince Hemra'nın onayına gider; deneme fabrikaya GİTMEZ.` });

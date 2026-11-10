@@ -15,7 +15,7 @@
 import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
-import { kartTekrarAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
+import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
 import { magazaStogu, STOK_KURALI } from "./sil.js";
@@ -182,6 +182,7 @@ export default {
     try { await patronDenemesi(env, "Selin", tg); } catch { /* */ }
     try { await birikimAdimi(env, "selin", Math.floor(Date.now() / 1000), tg); } catch { /* bir sonraki çalışmada */ }
     try { await kartIletAdimi(env, "selin", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
+    try { await kartTamamlaAdimi(env, "selin", tg, Math.floor(Date.now() / 1000)); } catch { /* 10 Kasım: yarım kartları tamamla */ }
     try { await kartTekrarAdimi(env, "selin", tg, Math.floor(Date.now() / 1000)); } catch { /* 9 Kasım: onay merdiveni; bir sonraki çalışmada */ }
     if (env.SELIN) {
       const nesne = selinNesne(env);

@@ -81,26 +81,60 @@ export async function kartTekrarAdimi(env, bot, tg, simdi, { stokIste = stokIste
     const bilgiler = [];
     for (const r of kartlar.slice(0, 8)) { const b = await kartBilgisi(env, r); if (acik(b.klavye).length) bilgiler.push({ r, b }); }
     if (!bilgiler.length) { await stokIste(env, "/isd-isaretle", { idler: kartlar.map((r) => r.id), alan: "hatirlatildi" }).catch(() => null); continue; }
-    if (bilgiler.length === 1) {
-      const { r, b } = bilgiler[0];
-      const bas = `🔁 Hatırlatma — cevabınızı bekliyor:\n`;
-      if (b.foto) await tg(sessiz, "sendPhoto", { chat_id: chat, photo: b.foto, caption: (bas + b.metin).slice(0, 1024), reply_markup: { inline_keyboard: acik(b.klavye) } });
-      else if (b.eski) await tg(sessiz, "copyMessage", { chat_id: chat, from_chat_id: chat, message_id: r.mesaj, reply_markup: { inline_keyboard: acik(b.klavye) } });
-      else await tg(sessiz, "sendMessage", { chat_id: chat, text: (bas + b.metin).slice(0, 4000), reply_markup: { inline_keyboard: acik(b.klavye) }, disable_web_page_preview: true });
-    } else {
-      const fotolar = bilgiler.map(({ r, b }, i) => (b.foto ? { type: "photo", media: b.foto, caption: `${i + 1} · ${r.kod || ""}`.trim() } : null)).filter(Boolean).slice(0, 10);
-      if (fotolar.length > 1) await tg(sessiz, "sendMediaGroup", { chat_id: chat, media: fotolar });
-      else if (fotolar.length === 1) await tg(sessiz, "sendPhoto", { chat_id: chat, photo: fotolar[0].media, caption: fotolar[0].caption });
-      const satir = [`🔁 Hatırlatma — ${bilgiler.length} kart cevabınızı bekliyor:`, ...bilgiler.map(({ r, b }, i) => `${i + 1}. ${String(b.eski ? r.ozet : b.metin.split("\n").filter(Boolean).slice(0, 2).join(" · ")).slice(0, 160)}`)];
-      const klavye = bilgiler.flatMap(({ b }, i) => acik(b.klavye).map((s) => s.map((x) => ({ ...x, text: `${i + 1}· ${x.text}`.slice(0, 64) })))).slice(0, 90);
-      await tg(sessiz, "sendMessage", { chat_id: chat, text: satir.join("\n").slice(0, 4000), reply_markup: { inline_keyboard: klavye }, disable_web_page_preview: true });
+    // 10 Kasım (Patron, ACİL): her kart TEK mesaj — fotoğraf + altında yazı + düğmeler (albüm + ayrı düğme mesajı YOK: düğme
+    // mesajı düşünce fotoğraf yarım kalıyordu). Gönderim doğrulanır; olmazsa yazıyla yeniden; yine olmazsa Venom'a hata.
+    if (bilgiler.length > 1) await tg(sessiz, "sendMessage", { chat_id: chat, text: `🔁 Hatırlatma — ${bilgiler.length} kart cevabınızı bekliyor (aşağıda, her biri ayrı kart):` });
+    const giden = [];
+    for (const [i, { r, b }] of bilgiler.entries()) {
+      const bas = bilgiler.length > 1 ? `🔁 ${i + 1}/${bilgiler.length} — cevabınızı bekliyor:\n` : `🔁 Hatırlatma — cevabınızı bekliyor:\n`;
+      const ok = await tamKartGonder(env, tg, sessiz, chat, r, b, bas, bot);
+      if (ok) giden.push({ r, b });
     }
     // eski kartlar: üstte "⏩ Güncel kart aşağıda", düğmeleri aynen (basılırsa aynı sonuç)
-    for (const { r, b } of bilgiler) await tg(sessiz, "editMessageReplyMarkup", { chat_id: chat, message_id: r.mesaj, reply_markup: { inline_keyboard: [[{ text: "⏩ Güncel kart aşağıda", callback_data: GUNCEL }], ...acik(b.klavye)] } }).catch(() => null);
-    await stokIste(env, "/isd-isaretle", { idler: kartlar.map((r) => r.id), alan: "hatirlatildi", deger: simdi }).catch(() => null);
-    n += bilgiler.length;
+    for (const { r, b } of giden) await tg(sessiz, "editMessageReplyMarkup", { chat_id: chat, message_id: r.mesaj, reply_markup: { inline_keyboard: [[{ text: "⏩ Güncel kart aşağıda", callback_data: GUNCEL }], ...acik(b.klavye)] } }).catch(() => null);
+    if (giden.length) await stokIste(env, "/isd-isaretle", { idler: giden.map(({ r }) => r.id), alan: "hatirlatildi", deger: simdi }).catch(() => null);
+    const kalan = kartlar.filter((r) => !bilgiler.some((x) => x.r.id === r.id)); // düğmesi kalmamış kartlar: hatırlatma yok
+    if (kalan.length) await stokIste(env, "/isd-isaretle", { idler: kalan.map((r) => r.id), alan: "hatirlatildi", deger: simdi }).catch(() => null);
+    n += giden.length;
   }
   return n;
+}
+const KISI_AD = (env, chat) => ([["BR_SORUMLU", "Merdan"], ["HEMRA_ID", "Hemra"], ["FABRIKA_SORUMLU", "Hemra"], ["AZIZ_ID", "Aziz"]].find(([k]) => kml(env[k]).includes(String(chat))) || [null, "kişi"])[1];
+// Kartın TAMAMI tek mesajda; Telegram "ok" dönmezse yazıyla bir kez daha; yine olmazsa Venom'a "X'e kart gitmedi" (kendi hata kaydı)
+export async function tamKartGonder(env, tg, sessiz, chat, r, b, bas, bot) {
+  const kl = { inline_keyboard: acik(b.klavye) };
+  let s = null;
+  if (b.foto) s = await tg(sessiz, "sendPhoto", { chat_id: chat, photo: b.foto, caption: (bas + b.metin).slice(0, 1024), reply_markup: kl, ...(b.parse_mode ? { parse_mode: b.parse_mode } : {}) });
+  else if (b.video) s = await tg(sessiz, "sendVideo", { chat_id: chat, video: b.video, caption: (bas + b.metin).slice(0, 1024), reply_markup: kl });
+  else if (b.eski && r.mesaj) s = await tg(sessiz, "copyMessage", { chat_id: chat, from_chat_id: chat, message_id: r.mesaj, reply_markup: kl });
+  if (!(s && s.ok)) s = await tg(sessiz, "sendMessage", { chat_id: chat, text: (bas + (b.metin || r.ozet || "")).slice(0, 4000), reply_markup: kl, disable_web_page_preview: true });
+  if (s && s.ok) return true;
+  const hata = `${KISI_AD(env, chat)}'a kart gitmedi (${bot}${r.kod ? ` · ${r.kod}` : ""}): ${String((s && s.description) || "Telegram cevap vermedi").slice(0, 160)}`;
+  await env.KAYIT.put(`${bot}:hata`, JSON.stringify({ zaman: Math.floor(Date.now() / 1000), hata }), { expirationTtl: 7 * 86400 }).catch(() => null);
+  const y = (await env.KAYIT.get("venom:yetenekIstekleri", "json").catch(() => null)) || [];
+  await env.KAYIT.put("venom:yetenekIstekleri", JSON.stringify([...y, { zaman: Math.floor(Date.now() / 1000), istek: `KART GİTMEDİ: ${hata}` }].slice(-100))).catch(() => null);
+  return false;
+}
+// Bir kez (Claude Code, 10 Kasım ACİL): KV "<bot>:kartTamamla" = { kim: "BR_SORUMLU", bas, bit } → o kişinin cevapsız kartlarından
+// toplu hatırlatmada YARIM kalanlar (hatirlatildi bas–bit arası) TEK mesaj tam kart olarak yeniden. Sonuç "<bot>:kartTamamlaSonuc".
+export async function kartTamamlaAdimi(env, bot, tg, simdi, { stokIste = stokIsteOrtak } = {}) {
+  const is = await env.KAYIT.get(`${bot}:kartTamamla`, "json").catch(() => null);
+  if (!is) return 0;
+  await env.KAYIT.delete(`${bot}:kartTamamla`).catch(() => null);
+  const kime = kml(env[is.kim])[0] || String(is.kim || "");
+  const l = await stokIste(env, "/isd-bekleyen", { enEski: simdi - 3 * 86400, bot }).catch(() => []);
+  const hedef = (Array.isArray(l) ? l : []).filter((r) => r.bot === bot && String(r.kime) === kime && r.mesaj && (is.hepsi || (Number(r.hatirlatildi) >= (is.bas || 0) && Number(r.hatirlatildi) <= (is.bit || simdi))));
+  const sessiz = { ...env, __kartTekrar: true };
+  const sonuc = [];
+  if (hedef.length) await tg(sessiz, "sendMessage", { chat_id: kime, text: `📋 ${hedef.length} kart cevabınızı bekliyor — önceki hatırlatma yarım gitmişti, kartlar aşağıda tam haliyle:` });
+  for (const [i, r] of hedef.slice(0, 12).entries()) {
+    const b = await kartBilgisi(env, r);
+    if (!acik(b.klavye).length) { sonuc.push({ kod: r.kod, ozet: String(r.ozet || "").slice(0, 60), sonuc: "düğmesi yok (kapanmış)" }); continue; }
+    const ok = await tamKartGonder(env, tg, sessiz, kime, r, b, `📋 ${i + 1}/${hedef.length}\n`, bot);
+    sonuc.push({ kod: r.kod, ozet: String(r.ozet || "").slice(0, 60), sonuc: ok ? "tam gitti" : "gitmedi" });
+  }
+  await env.KAYIT.put(`${bot}:kartTamamlaSonuc`, JSON.stringify({ zaman: simdi, kime: is.kim, sonuc }), { expirationTtl: 7 * 86400 }).catch(() => null);
+  return sonuc.length;
 }
 // 9 Kasım (ekip düzeni): Hemra'nın seçtiği kişiye kartın KENDİSİ — StokDO kuyruğu "kartIlet:<bot>" ({ chat, mesaj, isdId, hedef, kim })
 export async function kartIletAdimi(env, bot, tg, { stokIste = stokIsteOrtak } = {}) {
@@ -109,9 +143,8 @@ export async function kartIletAdimi(env, bot, tg, { stokIste = stokIsteOrtak } =
     const b = await kartBilgisi(env, { chat: x.chat, mesaj: x.mesaj, cb: x.cb || "", ozet: x.ozet || "" });
     const kl = { inline_keyboard: acik(b.klavye) };
     const bas = `📋 ${x.kim || "Hemra"} sana verdi:\n`;
-    if (b.foto) await tg(env, "sendPhoto", { chat_id: x.hedef, photo: b.foto, caption: (bas + b.metin).slice(0, 1024), reply_markup: kl });
-    else if (b.eski && x.chat && x.mesaj) await tg(env, "copyMessage", { chat_id: x.hedef, from_chat_id: x.chat, message_id: x.mesaj, reply_markup: kl });
-    else await tg(env, "sendMessage", { chat_id: x.hedef, text: (bas + (b.metin || x.ozet || "")).slice(0, 4000), reply_markup: kl, disable_web_page_preview: true });
+    if (b.eski && x.chat && x.mesaj && !b.foto) { const s2 = await tg(env, "copyMessage", { chat_id: x.hedef, from_chat_id: x.chat, message_id: x.mesaj, reply_markup: kl }); if (!(s2 && s2.ok)) await tamKartGonder(env, tg, env, x.hedef, { kod: x.kod || null, ozet: x.ozet || "" }, { ...b, eski: false }, bas, bot); }
+    else await tamKartGonder(env, tg, env, x.hedef, { kod: x.kod || null, ozet: x.ozet || "", mesaj: x.mesaj }, { ...b, eski: false }, bas, bot); // 10 Kasım: doğrulanır
     if (x.isdId) await stokIste(env, "/isd-isaretle", { idler: [x.isdId], alan: "durum", deger: "devredildi" }).catch(() => null);
   }
   return Array.isArray(l) ? l.length : 0;
