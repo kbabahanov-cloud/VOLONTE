@@ -140,6 +140,17 @@ async function merdivenSatirlari(env, simdi) {
     const gy = (t) => { const x = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${x.slice(8, 10)}.${x.slice(5, 7)}`; };
     if (hala.length) satir.push(`🏭 Fabrika cevap vermedi (Merdan ve Hemra'ya bildirildi): ${hala.slice(0, 10).map((e) => `${e.kod} (${gy(e.gonderim)})`).join(", ")}${hala.length > 10 ? " …" : ""}`);
   }
+  // 10 Kasım (Patron): "Eksik listesi: X model, Aziz/Merdan kontrol etti, Hemra onayladı, fabrikaya gitti."
+  if (env.STOK) {
+    const oku9 = async (k) => { const v = (await stokIste(env, "/ayar-oku", { k }).catch(() => ({}))).v; try { return v ? JSON.parse(v) : null; } catch { return null; } };
+    for (const k of ((await oku9(`fabrika:birlesik:${gunAnahtari(simdi)}`)) || []).filter((x) => !/-D-/.test(x))) {
+      const b = await oku9(`fabrika:${k}`);
+      if (!b) continue;
+      const kodlar = new Set((b.liste || []).map((x) => x.kod));
+      const durum = b.asama === "gonderildi" ? `Hemra onayladı (${b.onaylayan || "Hemra"}), fabrikaya gitti` : b.asama === "onayda" ? "Hemra'nın onayında bekliyor" : b.asama;
+      satir.push(`📦 Eksik listesi: ${kodlar.size} model, ${(b.kontrol || []).join(", ").replace(/VOLONTE: |Black Rose: /g, "")}, ${durum}.${(b.kontrolsuz || []).length ? ` Kontrol edilmeyen: ${b.kontrolsuz.length}.` : ""}`);
+    }
+  }
   return satir.filter(Boolean);
 }
 // Bir kez (Claude Code): şu an bekleyen kartlar yeni kurala — eski yazılı hatırlatma sayılmaz (kart bir kez yeniden gider);
