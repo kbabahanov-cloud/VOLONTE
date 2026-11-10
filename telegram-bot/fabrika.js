@@ -262,7 +262,7 @@ const modelKlavye = (anahtar, kod, oncekiVar, beden = null, tamam = false) => (t
   [["k", "Küçük 38-44"], ["b", "Büyük 44-50"]].map(([g, ad]) => ({ text: `${beden === g ? "✓ " : ""}${ad}`, callback_data: `fe:${g}:${anahtar}:${kod}` })),
   [{ text: `${beden === "i" ? "✓ " : ""}İkisi de`, callback_data: `fe:i:${anahtar}:${kod}` }],
   // 10 Kasım (Patron): net yazı, kart kesilmeden okunsun (satır başı 2 düğme)
-  [{ text: "✅ İste, aynı adet", callback_data: `fe:o:${anahtar}:${kod}` }, { text: "✏️ Adeti değiştir", callback_data: `fe:a:${anahtar}:${kod}` }],
+  [{ text: "✅ Aynısı", callback_data: `fe:o:${anahtar}:${kod}` }, { text: "✏️ Adeti değiştir", callback_data: `fe:a:${anahtar}:${kod}` }],
   [{ text: "🚫 İsteme", callback_data: `fe:x:${anahtar}:${kod}` }, { text: "⚠️ Bot hatası", callback_data: `fe:h:${anahtar}:${kod}` }],
 ] });
 
@@ -313,7 +313,7 @@ async function modelParcasi(env, anahtar, tg) {
 
 // Bir modelin kararları (beden, renkler, önceki gibi, isteme). Hepsi tamamlanınca onay kartı. Beden seçilmeden model karta geçmez.
 // kararlar: { kod: [karar, ...] } — karar: { isteme } | { onceki } | { beden?, renkler? }
-async function secimUygula(env, tg, anahtar, d, kararlar, kaynak) {
+async function secimUygula(env, tg, anahtar, d, kararlar, kaynak, metin = "") {
   const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
   for (const [kod, liste] of Object.entries(kararlar)) {
     for (const k of [].concat(liste)) d.secim[kod] = secimIsle(d.secim[kod], k);
@@ -321,7 +321,8 @@ async function secimUygula(env, tg, anahtar, d, kararlar, kaynak) {
     const m = d.mesajlar && d.mesajlar[kod];
     if (m) {
       const [mesaj, tur, yazi] = m;
-      await tg(env, tur === "foto" ? "editMessageCaption" : "editMessageText", { chat_id: kimeOf(env, d), message_id: mesaj, [tur === "foto" ? "caption" : "text"]: `${yazi}\n\n${secimYazi(s)}`, reply_markup: modelKlavye(anahtar, kod, Boolean(sonIstek[kod]), s.beden || null, secimTamam(secimNorm(s))) });
+      const yazili = kaynak === "metin" && secimTamam(secimNorm(s)) ? `✅ ${[].concat(liste).map((k) => `${kod} ${k.beden === "k" ? "küçük" : k.beden === "b" ? "büyük" : ""} ${(k.renkler || []).map((x) => `${x.renk} ${x.adet}`).join(" ")}`.replace(/\s+/g, " ").trim()).join(", ")} – kaydedildi` : null;
+      await tg(env, tur === "foto" ? "editMessageCaption" : "editMessageText", { chat_id: kimeOf(env, d), message_id: mesaj, [tur === "foto" ? "caption" : "text"]: `${yazi}\n\n${yazili || secimYazi(s)}`, reply_markup: modelKlavye(anahtar, kod, Boolean(sonIstek[kod]), s.beden || null, secimTamam(secimNorm(s))) });
     }
   }
   const kalan = d.modeller.filter((x) => !secimTamam(secimNorm(d.secim[x.kod])));
@@ -608,7 +609,7 @@ export async function eksikDenemesi(env, gun, simdi, tg, { adet = null, ek = "-D
     const modeller = adet ? secili.slice(0, adet) : secili;
     const k = `${gun}${cfg.ek}${ek}`;
     await ayarYaz(env, `fabrika:${k}`, { asama: "soruldu", zaman: simdi, gun, magaza: cfg.magaza, sorumlu: cfg.kime(env), modeller, secim: {}, mesajlar: {}, gonderilmedi: modeller.map((m) => m.kod), deneme: true, fabrikayaGitmez: true });
-    await tg(env, "sendMessage", { chat_id: cfg.kime(env), text: `${DENEME}🏭 ${gunGoster(gun)} ${cfg.etiket} eksik listesi — KONTROL (${modeller.length} model). Önce beden, sonra: ✅ İste, aynı adet · ✏️ Adeti değiştir · 🚫 İsteme · ⚠️ Bot hatası. Bitince Hemra'nın onayına gider; deneme fabrikaya GİTMEZ.` });
+    await tg(env, "sendMessage", { chat_id: cfg.kime(env), text: `${DENEME}🏭 ${gunGoster(gun)} ${cfg.etiket} eksik listesi — KONTROL (${modeller.length} model). Önce beden, sonra: ✅ Aynısı · ✏️ Adeti değiştir · 🚫 İsteme · ⚠️ Bot hatası. Bitince Hemra'nın onayına gider; deneme fabrikaya GİTMEZ.` });
     await kuyrukEkle(env, "liste", k);
     keys.push(k);
   }
@@ -703,6 +704,19 @@ export async function eksikKomutu(env, m, tg, simdi) {
 export const duzListeMi = (metin) => !/[a-zçğıöşü](dan|den|tan|ten)\b/i.test(metin) && !/(isteme|önceki|onceki|hepsi|gibi|sefer|değil|degil|yerine|iptal|\byok\b|\bama\b|\bve\b)/i.test(metin);
 
 // ---------- Sami'nin beyni için (sami-beyin.js): sadece okuma + Hemra'nın listesine işleme ----------
+// Kişiye gelmiş AÇIK kontrol kartlı listeler (bugün + 2 gün öncesi; ana + ekler + deneme "-DK")
+async function kendiKartlari(env, simdi, cfg, kisi) {
+  const l = [];
+  for (let i = 0; i < 3; i++) {
+    const gun = gunAnahtari(simdi - i * 86400), ak = `${gun}${cfg.ek}`;
+    const ana = await ayarOku(env, `fabrika:${ak}`, null);
+    for (const k of [...new Set([ak, ...((ana && ana.ekler) || []), `${ak}-DK`])]) {
+      const d = k === ak ? ana : await ayarOku(env, `fabrika:${k}`, null);
+      if (d && ["soruldu", "duzelt", "eminMi"].includes(d.asama) && String(kimeOf(env, d)) === kisi && d.mesajlar && Object.keys(d.mesajlar).length) l.push({ anahtar: k, d });
+    }
+  }
+  return l;
+}
 export async function acikListe(env, simdi, cfg = MAGAZALAR[0]) {
   const gun = gunAnahtari(simdi);
   const ak = `${gun}${cfg.ek}`;
@@ -769,6 +783,23 @@ export async function fabrikaCevabi(env, m, tg, simdi) {
   if (!cfg) return false;
   const metin = String(m.text || "").trim();
   if (!/^\d{4,6}\b/.test(metin)) return false;
+  // 10 Kasım (Patron ACİL): Aziz/Merdan KENDİ kontrol kartındaki modele yazıyla renk/adet girer ("3459 büyük pudra 8").
+  // Yetki sadece kendisine gelen açık kontrol kartları için (bugün + son 2 gün; ana liste, ekler ve 🧪 deneme listesi).
+  const kendi = duzListeMi(metin) ? await kendiKartlari(env, simdi, cfg, String(m.from.id)) : [];
+  const cozulen = kendi.length ? listeCozBeden(metin) : [];
+  if (cozulen.length && cozulen.every((x) => kendi.some((k) => (k.d.mesajlar || {})[x.kod]))) {
+    for (const k of kendi) {
+      const kararlar = {};
+      for (const x of cozulen) if ((k.d.mesajlar || {})[x.kod] && !kendi.some((z) => z !== k && (z.d.mesajlar || {})[x.kod] && z.d.zaman > k.d.zaman)) (kararlar[x.kod] = kararlar[x.kod] || []).push(x.renkler.length ? { beden: x.beden, renkler: x.renkler } : { beden: x.beden });
+      if (Object.keys(kararlar).length) { k.d.yazan = m.from.first_name || cfg.ad; k.d.secim = k.d.secim || {}; await secimUygula(env, tg, k.anahtar, k.d, kararlar, "metin", metin); }
+    }
+    return true;
+  }
+  if (cozulen.length) {
+    const yok = cozulen.filter((x) => !kendi.some((k) => (k.d.mesajlar || {})[x.kod])).map((x) => x.kod);
+    await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${yok.join(", ")}: size gelen açık kontrol kartında yok. Başka model istemek için Hemra'ya yazın.` });
+    return true;
+  }
   // "3254 siyahtan 5", "bu sefer isteme", "önceki gibi" gibi serbest yazı beyne gider (Sami'nin beyni varsa).
   if (env.ANTHROPIC_API_KEY && !duzListeMi(metin)) return false;
   // Cevap kişinin mağazasındaki en son gönderilen açık listeye (ana liste ya da ek) yazılır.
@@ -963,8 +994,13 @@ export async function fabrikaDugmesi(env, cq, tg, simdi) {
     const s = secimNorm(d.secim[kod]);
     const eksik = secimEksigi(s);
     if (["k", "b", "i"].includes(islem) && eksik && d.asama !== "onayda") {
-      const ornek = islem === "i" ? `${kod} küçük siyah 10 bej 6, ${kod} büyük siyah 5` : `${kod} siyah 10 bej 6`;
-      await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: `📏 ${kod}: ${islem === "i" ? "Küçük ve Büyük için ayrı ayrı" : BEDEN[islem] + " için"} renk/adet yazın. Örnek: ${ornek}` });
+      const ornek = islem === "i" ? `${kod} küçük siyah 10 bej 6, ${kod} büyük siyah 5` : `${kod} ${islem === "k" ? "küçük" : "büyük"} siyah 10 bej 6`;
+      const text = `📏 ${kod}: ${islem === "i" ? "Küçük ve Büyük için ayrı ayrı" : BEDEN[islem] + " için"} renk/adet yazın. Örnek: ${ornek}`;
+      d.bedenMesaj = d.bedenMesaj || {};
+      const eski = d.bedenMesaj[kod]; // 10 Kasım (Patron): beden değişince YENİ mesaj değil, aynı mesaj düzenlenir
+      const r = eski ? await tg(env, "editMessageText", { chat_id: kimeOf(env, d), message_id: eski, text }) : null;
+      if (!r || !r.ok) { const y = await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text }); if (y && y.ok) d.bedenMesaj[kod] = y.result.message_id; }
+      await ayarYaz(env, `fabrika:${ek}`, d);
     }
     return;
   }
@@ -1824,7 +1860,7 @@ export async function bittiKararAdimi(env, simdi, tg) {
       else { Object.assign(rec, { karar: "sil", durum: "kapandi" }); await stokIste(env, "/gizle", { kod: rec.kod, kim: "Patron", simdi }); await silKuyrugu(env, rec.kod, "Patron", simdi); await tg(env, "sendMessage", { chat_id: hemra, text: `${bas}: 🗑 Patron "sil" dedi (mağaza stoğu yok). Siteden (Selin) ve kanaldan (Kemal) kaldırılıyor.` }); }
     } else {
       Object.assign(rec, { karar: "stokBitene", stokKontrol: simdi + 86400 });
-      await tg(env, "sendMessage", { chat_id: hemra, text: `${bas}: ⏳ Patron "stok bitene kadar bekle" dedi. Stok bitince yeniden sorulur.` });
+      await tg(env, "sendMessage", { chat_id: hemra, text: `${bas}: ⏳ Patron "stok bitene kadar bekle" dedi${k.dugme ? ` (Venom kartında "${k.dugme}", ${new Date(((k.zaman || simdi) + SAAT_FARKI) * 1000).toISOString().slice(11, 16)})` : ""}. Stok bitince yeniden sorulur.` });
     }
     await siparisYaz(env, rec);
     if (rec.deneme) await denemeKaydi(env, rec.liste, `Patron kararı: ${k.karar}`);
@@ -2157,11 +2193,31 @@ async function tekIslem(env, simdi, tg) {
         sonuc.l.push({ kod, ok: Boolean(r && r.ok) });
       }
     }
+  } else if (is.tur === "kararGeriAl") { // 10 Kasım (Patron): kaynağı kanıtlanamayan Patron kararı geri alınır, karar Patron'a yeniden sorulur
+    sonuc.l = [];
+    for (const id of (is.ids || []).slice(0, 10)) {
+      const rec = await siparisOku(env, id);
+      if (!rec) { sonuc.l.push({ id, ok: false }); continue; }
+      const eski = rec.karar;
+      Object.assign(rec, { karar: null, stokKontrol: null, silOnayli: false });
+      rec.log.push(`↩️ Patron kararı geri alındı (${eski}): kaynağı kanıtlanamadı — Patron'a yeniden soruldu`);
+      await kanitYaz(env, rec, "Sami", `Patron kararı (${eski}) geri alındı: Patron böyle bir karar vermediğini söyledi; karar yeniden Patron'a soruldu`, simdi).catch(() => null);
+      const st = await magazaStoklari(env, rec.kod).catch(() => null);
+      const site = await siteListesi(env).catch(() => []);
+      await stokIste(env, "/kuyruk-ekle", { ad: "bittiOneri", kayit: { id: `${rec.id}:${simdi}`, sip: rec.id, kod: rec.kod, magaza: rec.magaza || null, oneri: (rec.hemraOneri && rec.hemraOneri.oneri) || "sor", not: "Önceki karar geri alındı (kimin bastığı kayıtlı değildi) — lütfen yeniden karar verin", hemra: (rec.hemraOneri && rec.hemraOneri.kim) || "Hemra", tur: rec.hemraTur || "bitti",
+        fabrika: rec.cevaplayan ? { kim: rec.cevaplayan, zaman: rec.cevapZaman || null, ne: "bitti" } : null, fuat: rec.fuatOnay ? { kim: rec.fuatOnay.kim, zaman: rec.fuatOnay.zaman } : null, stok: st && st.yazi ? st.yazi : "yok", deneme: false, foto: sitedenFoto(env, site || [], rec.kod) } });
+      await siparisYaz(env, rec);
+      sonuc.l.push({ id, kod: rec.kod, eski, ok: true });
+    }
+    const kodlar = sonuc.l.filter((x) => x.ok).map((x) => x.kod);
+    if (kodlar.length) await tg(env, "sendMessage", { chat_id: sorumlu(env), text: `↩️ ${kodlar.join(", ")}: "Patron stok bitene kadar bekle dedi" mesajı GERİ ALINDI — Patron böyle bir karar vermedi. Karar Patron'a yeniden soruldu; sonucu size yazacağım.` });
   } else if (is.tur === "kisiDeneme") { // her kişiye TEK 🧪 DENEME kartı (fabrikaya / gerçek akışa gitmez); kanıt "sami:kanit"
     const g = gunAnahtari(simdi);
     const kart = async (cfg, kod) => {
       const k = `${g}${cfg.ek}-DK`;
-      await ayarYaz(env, `fabrika:${k}`, { asama: "soruldu", zaman: simdi, gun: g, magaza: cfg.magaza, sorumlu: cfg.kime(env), modeller: [{ kod, satilan: 1, kalan: null, grup: "fabrika" }], secim: {}, mesajlar: {}, gonderilmedi: [kod], deneme: true, fabrikayaGitmez: true, tekKart: true });
+      const st = await magazaStoklari(env, kod).catch(() => null); // 10 Kasım: deneme de olsa GERÇEK mağaza stoğu
+      const kalan = st && st.magazalar && st.magazalar[cfg.magaza] != null ? st.magazalar[cfg.magaza] : st && st.magazalar ? 0 : null;
+      await ayarYaz(env, `fabrika:${k}`, { asama: "soruldu", zaman: simdi, gun: g, magaza: cfg.magaza, sorumlu: cfg.kime(env), modeller: [{ kod, satilan: 1, kalan, grup: "fabrika" }], secim: {}, mesajlar: {}, gonderilmedi: [kod], deneme: true, fabrikayaGitmez: true, tekKart: true });
       return modelParcasi(env, k, tg);
     };
     const k = (ad) => !is.sadece || is.sadece.includes(ad); // 10 Kasım: istenirse sadece belirli kişilere

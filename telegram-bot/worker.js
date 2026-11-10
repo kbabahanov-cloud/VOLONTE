@@ -2008,13 +2008,13 @@ const yeniKlavye = (no, kod) => ({ inline_keyboard: [
 
 export function kontrolMetni(p, simdi) {
   const renk = !p.renkler.length ? "⚠️ Renkleri bulamadım — ✏️ Düzelt ile yazın (paylaşmadan önce gerekli)"
-    : p.renkEmin ? `${p.renkler.join(", ")} ✅` : `⚠️ Emin değilim (${p.renkler.join(", ")})${p.renkNotu ? ` — ${p.renkNotu}` : ""} → ✏️ Düzelt ile doğru renkleri yazın (paylaşmadan önce gerekli)`;
+    : p.renkEmin ? `${p.renkler.join(", ")} ✅` : `⚠️ Emin değilim (${p.renkler.join(", ")})${p.renkNotu ? ` — ${p.renkNotu}` : ""}. ✏️ Düzelt ile doğru renkleri yazın (paylaşmadan önce gerekli)`;
   return [
     `⬆️ ${p.kod}${p.baslik ? ` · ${p.baslik}` : ""}`,
     `Durum: ${DURUMLAR[p.durum]}`,
     `Renkler: ${renk}`,
     ...(p.renkEmin && p.renkNotu ? [`Not: ${p.renkNotu}`] : []),
-    `Kumaş: ${p.kumas || "bilinmiyor → satır konmadı (biliyorsanız ✏️ Düzelt)"}`,
+    `Kumaş: ${p.kumas || "bilinmiyor, kanal yazısına konmadı (biliyorsanız ✏️ Düzelt)"}`,
     `Telegram'da son paylaşım: ${p.tgSon ? `${tarihUzun(p.tgSon)} (${Math.floor((simdi - p.tgSon) / 86400)} gün önce)` : "hiç"}`,
     ...(p.video ? [`🎞 ${p.video} video var — videoda başka renk varsa ✏️ Düzelt`] : []),
     ...(p.blackRose ? ["⚠️ Black Rose – stok kontrol edilemedi"] : []),
@@ -2591,7 +2591,7 @@ const repeteKontrol = (rec, simdi) => [
   rec.kontrolSatir || null, // 6 Kasım: Venom kontrolü en üstte
   rec.yenirenk ? `🎨 YENİ RENK — ${rec.kod} · ${rec.yenirenk} (Kemal sitede fark etti; kanalda bu renk hiç paylaşılmadı)` : rec.tur === "yeni" ? `🆕 YENİ MODEL — ${rec.kod} (siteye ekleyen: ${rec.kim})` : `🔁 Repete paylaşımı — ${rec.kod} (${rec.kim} bildirdi)`,
   `Medya: ${rec.kaynak === "site" ? "siteden" : "kanaldaki son paylaşımdan (eski yazı kullanılmadı)"}`,
-  `Renkler: ${rec.paket.renkEmin && rec.paket.renkler.length ? rec.paket.renkler.join(", ") : "yazılmadı → satır yok (✏️ Düzelt ile ekleyebilirsiniz)"}`,
+  `Renkler: ${rec.paket.renkEmin && rec.paket.renkler.length ? rec.paket.renkler.join(", ") : "yazılmadı, kanal yazısında renk satırı yok (✏️ Düzelt ile ekleyebilirsiniz)"}`,
   rec.stokUyari ? `⚠️ ${rec.stokUyari}` : null,
   `Telegram'da son paylaşım: ${rec.paket.tgSon ? tarihUzun(rec.paket.tgSon) : "—"}`,
   rec.tur === "yeni" ? "✅ Onayla → hemen kanala · ⏭️ Geç → paylaşılmaz · ⏳ Beklesin → 3 gün sonra yeniden sorulur. Fiyat yazılmaz." : "✅ Onayla → sıra beklemeden hemen kanala (günlük 10'a sayılmaz). Fiyat yazılmaz.",

@@ -1580,8 +1580,11 @@ async function bittiKararDugmesi(env, cq, simdi, cevap) {
   const karar = h === "o" ? x.oneri : { r: "repete", s: "sil", w: "bekle" }[h];
   if (!karar) return cevap("?");
   x.karar = karar;
+  x.kararKim = [cq.from && cq.from.first_name, cq.from && cq.from.last_name].filter(Boolean).join(" ") || "?"; // 10 Kasım: kanıt — kim, ne zaman, hangi düğme
+  x.kararZaman = simdi;
+  x.kararDugme = { o: "✅ Onayla", r: "🔁 Repete", s: "🗑 Sil", w: "⏳ Bekle" }[h] || h;
   await kaydet(env, `venom:bittiKart:${sip}`, x, 30 * 86400);
-  await kuyrugaEkle(env, "bittiKarar", { id: `${sip}:${simdi}`, sip, karar });
+  await kuyrugaEkle(env, "bittiKarar", { id: `${sip}:${simdi}`, sip, karar, kim: x.kararKim, dugme: x.kararDugme, zaman: simdi });
   await cevap(karar === "repete" ? "Repete taslağı hazırlanıyor" : karar === "sil" ? "Sil — stok kuralıyla" : "Bekle");
   const foto = Boolean(cq.message && cq.message.photo);
   const ek = `\n\n✅ Kararınız: ${ONERI_AD[karar]}${karar === "sil" ? " (mağaza stoğu varsa stok bitince kaldırılır)" : karar === "repete" ? (x.deneme ? " (DENEME: taslak hazırlanmadı)" : " — taslak aşağıda, onayınızla Fuat'a gider") : ""}`;
