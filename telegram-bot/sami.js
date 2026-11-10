@@ -130,7 +130,8 @@ export default {
     const venomGiden = (e, t) => venomGidenAdimi(e, t, tg); // Venom'un onaylanan dış mesajları (3 Kasım)
     const siteOzet = async (e, t) => { await siteDenemesi(e); if (await kagitAcik(e, "sami", "siteHaftalik")) await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
     const siteBakis = (e, t) => siteBakisYaz(e, t); // 9 Kasım: repete raporu için model başına sitede bakılma (günde bir)
-    const isler = env.BOT_TOKEN ? { webhookKur, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const satisKontrol = (e, t) => satisSayimKontrol(e, t); // 10 Kasım (Patron): ofis ile Sami'nin satış sayısı her gün karşılaştırılır
+    const isler = env.BOT_TOKEN ? { webhookKur, satisKontrol, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -245,6 +246,35 @@ export async function guncelleme(u, env) {
     "Stok tablosunu (Google Sheets) 5 dakikada bir güncellerim. /tablo — tablo durumu (yönetici).",
     "Bana normal cümleyle de yazabilirsiniz: \"3596'dan kaç tane kaldı?\", \"bugün en çok ne sattı?\", \"Hemra listeyi onayladı mı?\"",
   ].join("\n") });
+}
+
+// 10 Kasım (Patron): OFİS ve SAMİ satış sayısı AYNI kaynaktan (StokDO /satis-sayim). Kalıcı kontrol: ofisin gösterdiği sayı (sayfa açıldıkça
+// KV "ofis:satisGosterilen:<gün>") Sami'nin sayımıyla karşılaştırılır; ofis değeri taze (≤10 dk) iken İKİ ardışık kontrolde fark varsa Venom'a hata.
+export async function satisSayimKontrol(env, simdi) {
+  const g = gunAnahtari(simdi);
+  const ofis = await env.KAYIT.get(`ofis:satisGosterilen:${g}`, "json").catch(() => null);
+  if (!ofis || simdi - (ofis.zaman || 0) > 600) return null;
+  const fark = [];
+  for (const m of ["VOLONTE", "BLACKROSE"]) {
+    if (ofis[m] == null) continue;
+    const x = await stokIste(env, "/satis-sayim", { gun: g, magaza: m }).catch(() => null);
+    if (x && x.toplam !== ofis[m]) fark.push(`${m === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE"}: ofis ${ofis[m]}, Sami ${x.toplam}`);
+  }
+  const k = "satis:kontrolFark";
+  const once = JSON.parse((await stokIste(env, "/ayar-oku", { k })).v || "null");
+  if (!fark.length) { if (once) await stokIste(env, "/ayar-yaz", { k, v: "null" }); return { ok: true }; }
+  const metin = `⚠️ Satış sayısı uyuşmuyor (${g}): ${fark.join(" · ")}`;
+  if (once && once.metin === metin) {
+    if (!once.bildirildi) {
+      const l = (await env.KAYIT.get("venom:yetenekIstekleri", "json").catch(() => null)) || [];
+      await env.KAYIT.put("venom:yetenekIstekleri", JSON.stringify([...l, { zaman: simdi, istek: `${metin}. Ofis ve Sami aynı kaynaktan saymalı (StokDO /satis-sayim); farkın sebebini bul.` }].slice(-100)));
+      await env.KAYIT.put("sami:hata", JSON.stringify({ zaman: simdi, hata: metin }), { expirationTtl: 7 * 86400 });
+      await stokIste(env, "/ayar-yaz", { k, v: JSON.stringify({ ...once, bildirildi: simdi }) });
+    }
+    return { ok: false, metin };
+  }
+  await stokIste(env, "/ayar-yaz", { k, v: JSON.stringify({ metin, zaman: simdi }) }); // ilk görüş: bir sonraki kontrolde de varsa bildirilir
+  return { ok: false, metin, ilk: true };
 }
 
 // "Venom Ekip" grubuna yönetici ekleyince grup kaydedilir (raporlar oraya gider).

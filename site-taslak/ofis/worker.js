@@ -142,9 +142,14 @@ async function durum(env, simdi) {
   ].sort((a, b) => b.zaman - a.zaman).slice(0, 60);
 
   // Satış panosu: iki mağaza AYRI, sadece adet (fiyat/ciro yok). Mağaza adı StokDO kaydından.
-  const satis = { volonte: [], blackrose: [] };
-  for (const m of ["VOLONTE", "BLACKROSE"]) { const l = await stok(env, "/satislar", { gun: bugun, magaza: m }); if (Array.isArray(l)) satis[m === "VOLONTE" ? "volonte" : "blackrose"] = l.map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })).sort((a, b) => b.satilan - a.satilan).slice(0, 8); }
-  if (!satis.volonte.length && !satis.blackrose.length && Array.isArray(satisBugun)) satis.volonte = satisBugun.map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })).slice(0, 8);
+  // 10 Kasım (Patron): satış sayısı Sami ile AYNI kaynaktan ve yöntemle (StokDO /satis-sayim): toplam BÜTÜN modellerden, liste ilk 8 (ekranda 5)
+  const satis = { volonte: [], blackrose: [], toplam: { volonte: null, blackrose: null }, model: { volonte: 0, blackrose: 0 }, indirimli: { volonte: 0, blackrose: 0 } };
+  for (const m of ["VOLONTE", "BLACKROSE"]) {
+    const a = m === "VOLONTE" ? "volonte" : "blackrose";
+    const x = await stok(env, "/satis-sayim", { gun: bugun, magaza: m });
+    if (x && Array.isArray(x.liste)) { satis[a] = x.liste.slice(0, 8); satis.toplam[a] = x.toplam; satis.model[a] = x.model; satis.indirimli[a] = x.indirimliAdet; }
+  }
+  if (satis.toplam.volonte != null || satis.toplam.blackrose != null) await env.KAYIT.put(`ofis:satisGosterilen:${bugun}`, JSON.stringify({ zaman: simdi, VOLONTE: satis.toplam.volonte, BLACKROSE: satis.toplam.blackrose }), { expirationTtl: 3 * 86400 }).catch(() => null);
 
   // Site (Selin ekranı): son eklenen modeller
   let site = { toplam: null, bugun: 0, son: [] };
@@ -174,6 +179,12 @@ async function durum(env, simdi) {
   };
 }
 
+// 10 Kasım (kanıtsız tamam yok): KV "ofis:kanitIste" varsa Patron'un ekranındaki veri bir kez "ofis:durumKanit"a yazılır (ekran kanıtı için)
+async function durumKanit(env, simdi, d) {
+  if (!(await env.KAYIT.get("ofis:kanitIste"))) return;
+  await env.KAYIT.delete("ofis:kanitIste");
+  await env.KAYIT.put("ofis:durumKanit", JSON.stringify({ zaman: simdi, d }), { expirationTtl: 2 * 86400 });
+}
 // Anlık görüntü (en az 5 dakika arayla; sayfa açıkken her /api/durum çağrısında kontrol edilir — hesapta cron hakkı kalmadı,
 // ücretsiz planda 5 cron sınırı): zaman geri sarma için küçük kayıt
 async function anlikGoruntu(env, simdi, d = null) {
@@ -181,7 +192,7 @@ async function anlikGoruntu(env, simdi, d = null) {
   if (simdi - son < 300) return;
   await env.KAYIT.put("ofis:sonAn", String(simdi), { expirationTtl: 86400 });
   d = d || await durum(env, simdi);
-  const kucuk = { zaman: simdi, botlar: Object.fromEntries(Object.entries(d.botlar).map(([k, b]) => [k, { durum: b.durum, balon: b.balon }])), onay: d.onaylar.length, tasima: d.tasima, satis: { volonte: d.panolar.satis.volonte.reduce((t, x) => t + x.satilan, 0), blackrose: d.panolar.satis.blackrose.reduce((t, x) => t + x.satilan, 0) }, harcama: d.panolar.pelin.harcama.toplam };
+  const kucuk = { zaman: simdi, botlar: Object.fromEntries(Object.entries(d.botlar).map(([k, b]) => [k, { durum: b.durum, balon: b.balon }])), onay: d.onaylar.length, tasima: d.tasima, satis: { volonte: d.panolar.satis.toplam ? d.panolar.satis.toplam.volonte : d.panolar.satis.volonte.reduce((t, x) => t + x.satilan, 0), blackrose: d.panolar.satis.toplam ? d.panolar.satis.toplam.blackrose : d.panolar.satis.blackrose.reduce((t, x) => t + x.satilan, 0) }, harcama: d.panolar.pelin.harcama.toplam };
   await env.KAYIT.put(`ofis:an:${simdi}`, JSON.stringify(kucuk), { expirationTtl: 7 * 86400 });
 }
 
@@ -189,7 +200,7 @@ async function anlikGoruntu(env, simdi, d = null) {
 async function gecmis(env, g, simdi) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(g)) return { hata: "gün?" };
   const b = gunBasi(g), s = Math.min(b + 86400, simdi + 60);
-  const [olaylar, paylasimlar, satisV, satisB] = await Promise.all([stok(env, "/olaylar", { basla: b, bitis: s }), stok(env, "/paylasimlar", { basla: b, bitis: s }), stok(env, "/satislar", { gun: g, magaza: "VOLONTE" }), stok(env, "/satislar", { gun: g, magaza: "BLACKROSE" })]);
+  const [olaylar, paylasimlar, satisV, satisB] = await Promise.all([stok(env, "/olaylar", { basla: b, bitis: s }), stok(env, "/paylasimlar", { basla: b, bitis: s }), stok(env, "/satis-sayim", { gun: g, magaza: "VOLONTE" }), stok(env, "/satis-sayim", { gun: g, magaza: "BLACKROSE" })]);
   const anlar = [];
   try { const l = await env.KAYIT.list({ prefix: "ofis:an:", limit: 1000 }); for (const k of l.keys) { const t = Number(k.name.slice(8)); if (t >= b && t < s) { const x = await oku(env, k.name); if (x) anlar.push(x); } } } catch { /* yok */ }
   const liste = [
@@ -198,7 +209,7 @@ async function gecmis(env, g, simdi) {
     ...anlar.map((a) => ({ zaman: a.zaman, kim: "ofis", metin: `anlık görüntü: ${Object.values(a.botlar).filter((x) => x.durum === "yesil").length} çalışıyor, ${a.onay} onay bekliyor`, tur: "an", an: a })),
   ].sort((a, b2) => a.zaman - b2.zaman);
   const raporlar = {}; for (const k of ["kemal", "sami", "selin"]) raporlar[k] = await oku(env, `venom:rapor:${k}:${g}`);
-  return { gun: g, olaylar: liste, satis: { volonte: Array.isArray(satisV) ? satisV.reduce((t, x) => t + x.satilan, 0) : null, blackrose: Array.isArray(satisB) ? satisB.reduce((t, x) => t + x.satilan, 0) : null }, raporlar };
+  return { gun: g, olaylar: liste, satis: { volonte: satisV && satisV.toplam != null ? satisV.toplam : null, blackrose: satisB && satisB.toplam != null ? satisB.toplam : null }, raporlar };
 }
 
 // ---------- SESLİ/YAZILI KONUŞMA (4 Kasım, Patron onaylı) ----------
@@ -256,7 +267,7 @@ export default {
     const g = await girisli(istek, env);
     if (url.pathname === "/" || url.pathname === "/index.html") return new Response(g ? SAYFA : GIRIS.replace("%HATA%", env.OFIS_SIFRE ? "" : '<div class="h">OFIS_SIFRE henüz ayarlı değil.</div>'), { headers: basliklar });
     if (!g) return new Response(JSON.stringify({ hata: "giriş gerekli" }), { status: 401, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
-    if (url.pathname === "/api/durum") { try { const d = await durum(env, simdi); ctx.waitUntil(anlikGoruntu(env, simdi, d).catch(() => {})); return json(d); } catch (e) { return json({ hata: String(e && e.message).slice(0, 200) }); } }
+    if (url.pathname === "/api/durum") { try { const d = await durum(env, simdi); ctx.waitUntil(anlikGoruntu(env, simdi, d).catch(() => {})); ctx.waitUntil(durumKanit(env, simdi, d).catch(() => {})); return json(d); } catch (e) { return json({ hata: String(e && e.message).slice(0, 200) }); } }
     if (url.pathname === "/api/gecmis") { try { return json(await gecmis(env, url.searchParams.get("gun") || gun(simdi - 86400), simdi)); } catch (e) { return json({ hata: String(e && e.message).slice(0, 200) }); } }
     if (url.pathname === "/api/acil") return json({ yapildi: false, not: "Aşama 1: ACİL DURDUR bağlı değil. Botlara dokunulmadı." });
     return new Response("yok", { status: 404 });

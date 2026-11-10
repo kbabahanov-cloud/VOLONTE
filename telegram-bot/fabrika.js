@@ -2430,6 +2430,9 @@ async function tekIslem(env, simdi, tg) {
       sonuc.cikarilan = cik; sonuc.kalan = d.modeller.map((x) => x.kod); sonuc.asama = d.asama;
       if (cik.length && is.bilgi) await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: is.bilgi });
     }
+  } else if (is.tur === "satisSayimOku") { // okuma: ortak satış sayımı (ofis ile aynı) + eski "ilk 8" hesabı (karşılaştırma için)
+    sonuc.m = {};
+    for (const m of ["VOLONTE", "BLACKROSE"]) { const x = await stokIste(env, "/satis-sayim", { gun: is.gun || gunAnahtari(simdi), magaza: m }).catch(() => null); if (x) sonuc.m[m] = { toplam: x.toplam, model: x.model, indirimliAdet: x.indirimliAdet, ilk8: (x.liste || []).slice(0, 8).reduce((t, y) => t + y.satilan, 0) }; }
   } else if (is.tur === "kanitOku") { // gerçek akış kanıtı (Telegram'ın döndürdüğü mesajlar) — StokDO "kanit:gercek:<gün>"
     sonuc.l = ((await ayarOku(env, `kanit:gercek:${is.gun || gunAnahtari(simdi)}`, [])) || []).filter((x) => !is.basla || x.zaman >= is.basla).slice(-(is.son || 60));
   } else if (is.tur === "listeDurum") { // 10 Kasım: bugünün ve dünün liste durumu (okuma; hiçbir şey göndermez)

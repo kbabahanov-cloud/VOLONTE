@@ -432,10 +432,11 @@ function ekranlar(v) {
   (p.selin.site.son || []).slice(0, 3).forEach((x, i) => { const xx = 854 + i * 44; if (x.foto) { const im = el("image", { x: xx, y: 398, width: 38, height: 52, preserveAspectRatio: "xMidYMid slice", href: x.foto }); im.addEventListener("error", () => im.remove()); ss.appendChild(im); } ss.appendChild(el("text", { class: "ekranKucuk", x: xx, y: 462 }, x.kod)); if (x.video) ss.appendChild(el("text", { class: "ekranKucuk", x: xx, y: 473 }, "▶ video")); });
   $("#selinToplam").textContent = p.selin.site.toplam != null ? `Sitede ${p.selin.site.toplam} model · bugün +${p.selin.site.bugun}` : "site okunamadı";
   // Satış panosu (iki mağaza ayrı, adet)
-  for (const [id, liste, x0] of [["#satisV", p.satis.volonte, 64], ["#satisB", p.satis.blackrose, 342]]) {
+  for (const [id, liste, x0, ad] of [["#satisV", p.satis.volonte, 64, "volonte"], ["#satisB", p.satis.blackrose, 342, "blackrose"]]) {
     const g = $(id); g.innerHTML = "";
-    const top = (liste || []).reduce((t, s) => t + s.satilan, 0);
-    g.appendChild(el("text", { class: "ekranYazi", x: x0, y: 624, style: "font-size:16px;fill:#fff" }, `${top} adet`));
+    const tp = p.satis.toplam || {}, md = p.satis.model || {}; // 10 Kasım: toplam BÜTÜN modellerden (ilk 8 değil)
+    const top = tp[ad] != null ? tp[ad] : (liste || []).reduce((t, s) => t + s.satilan, 0);
+    g.appendChild(el("text", { class: "ekranYazi", x: x0, y: 624, style: "font-size:16px;fill:#fff" }, `${top} adet${md[ad] ? ` · ${md[ad]} model` : ""}`));
     (liste || []).slice(0, 5).forEach((s, i) => { const y = 644 + i * 16; g.appendChild(el("text", { class: "ekranYazi", x: x0, y }, `${s.kod}`)); g.appendChild(el("rect", { x: x0 + 48, y: y - 8, width: Math.min(150, s.satilan * 18), height: 9, fill: "#8a6a1e", rx: 1 })); g.appendChild(el("text", { class: "ekranKucuk", x: x0 + 52 + Math.min(150, s.satilan * 18), y }, `${s.satilan}${s.kalan != null ? ` · kalan ${s.kalan}` : ""}`)); });
     if (!(liste || []).length) g.appendChild(el("text", { class: "ekranKucuk", x: x0, y: 650 }, "bugün satış kaydı yok"));
   }
@@ -573,7 +574,8 @@ function toplanti(ac) {
 $("#bToplanti").onclick = () => toplanti(!toplantiModu);
 function gunSonu() {
   if (!veri) return; const p = veri.panolar;
-  const sv = p.satis.volonte.reduce((t, x) => t + x.satilan, 0), sb = p.satis.blackrose.reduce((t, x) => t + x.satilan, 0);
+  const tp = p.satis.toplam || {}; // 10 Kasım: toplam BÜTÜN modellerden (Sami ile aynı sayım)
+  const sv = tp.volonte != null ? tp.volonte : p.satis.volonte.reduce((t, x) => t + x.satilan, 0), sb = tp.blackrose != null ? tp.blackrose : p.satis.blackrose.reduce((t, x) => t + x.satilan, 0);
   const hatalar = Object.values(veri.botlar).filter((b) => b.hata).length;
   modal(`<h2>GÜN SONU</h2><div class="alt">${veri.gun.split("-").reverse().join(".")} · ${veri.saat}</div>
     <div class="sayi"><span>VOLONTE satış (adet)</span><b>${sv}</b></div>

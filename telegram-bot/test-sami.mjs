@@ -2346,3 +2346,27 @@ test("ACİL EK LİSTE (10 Kasım akşam): bugünkü liste gitmişken ⚡ acil mo
   assert.match(fg.at(-1).metin, /^Bugünkü eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 0 model\.$/);
   assert.ok(ekAd);
 });
+
+test("satış sayımı (10 Kasım): ofis ile Sami AYNI yöntem — toplam BÜTÜN modellerden (ilk 8 değil), indirimli ayrı; fark iki kontrolde sürerse Venom'a 'satış sayısı uyuşmuyor'", async () => {
+  const { satisSayimKontrol } = await import("./sami.js");
+  const { gunAnahtari } = await import("./worker.js");
+  const o = ortam();
+  const simdi = Math.floor(Date.now() / 1000), g = gunAnahtari(simdi);
+  // 12 model satılmış (Black Rose bugün 61 adet gibi): ilk 8'in toplamı eksik sayardı
+  const kalemler = [12, 9, 7, 6, 5, 4, 4, 4, 3, 3, 2, 2].map((adet, i) => ({ kod: String(3500 + i), adet }));
+  await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun: g, kalemler: [...kalemler, { kod: "2000", adet: 5 }] }) });
+  const x = await (await o.env.STOK.get().fetch("https://stok/satis-sayim", { method: "POST", body: JSON.stringify({ gun: g, magaza: "BLACKROSE" }) })).json();
+  assert.equal(x.toplam, 61);
+  assert.equal(x.model, 12);
+  assert.equal(x.indirimliAdet, 5); // indirimli mal (2000) ayrı
+  assert.equal(x.liste.slice(0, 8).reduce((t, y) => t + y.satilan, 0), 51); // eski ofis hatası: sadece ilk 8 sayılıyordu
+  // ofis aynı sayıyı gösteriyorsa sessiz; fark iki kontrolde sürerse Venom'a hata
+  o.depo.set(`ofis:satisGosterilen:${g}`, JSON.stringify({ zaman: simdi, BLACKROSE: 61, VOLONTE: 0 }));
+  assert.deepEqual(await satisSayimKontrol(o.env, simdi), { ok: true });
+  o.depo.set(`ofis:satisGosterilen:${g}`, JSON.stringify({ zaman: simdi, BLACKROSE: 45, VOLONTE: 0 }));
+  assert.equal((await satisSayimKontrol(o.env, simdi)).ilk, true);
+  assert.equal(o.depo.get("venom:yetenekIstekleri"), undefined); // ilk görüşte bildirilmez
+  const r = await satisSayimKontrol(o.env, simdi + 300);
+  assert.match(r.metin, /Satış sayısı uyuşmuyor .*BLACK ROSE: ofis 45, Sami 61/);
+  assert.match(JSON.parse(o.depo.get("venom:yetenekIstekleri")).at(-1).istek, /Satış sayısı uyuşmuyor/);
+});
