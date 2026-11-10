@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+> **ZORUNLU:** Her yeni işe başlamadan önce `KURALLAR-PATRON.md` dosyasını oku. Her raporun son satırı: "KURALLAR-PATRON.md okundu, X kural kontrol edildi, ihlal yok / ihlal: …". Patron yeni kalıcı kural verince aynı anda o dosyaya ekle.
+
 Bu dosya, bu projede benimle (kullanıcıyla) nasıl çalışacağını anlatır. Her oturumda bunu dikkate al.
 
 ## GİZLİLİK — önce bunu oku
