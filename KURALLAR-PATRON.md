@@ -57,3 +57,6 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 
 ## I. Pelin
 32. **Pelin sadece Patron açıkça isterse üretir;** kendiliğinden / otomatik yeniden üretim yok. Büyük beden modelde dolgun manken, onaylı yüz. 3 saatte bitmezse Patron'a sorar. Çalışan işi varken Pelin yeniden yüklenmez.
+
+## J. Dosyalar
+36. **KURALLAR-PATRON.md ve VOLONTE-BILGI.md her güncellendiğinde main dalına da AYNI ANDA yazılır** (Claude projesi bu dosyaları main'den okur). Main'de sadece bu dosyalar değişir; kod ve site dosyalarına dokunulmaz.
