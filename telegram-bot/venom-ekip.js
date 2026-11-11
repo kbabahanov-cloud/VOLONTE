@@ -6,6 +6,7 @@
 // - Yedek: Hemra izinliyse ya da o gün hiç cevap vermediyse koordinasyon o gün Merdan'a geçer.
 import { KISILER, kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { mesaiSuresi } from "./kart-tekrar.js";
+import { BILGI_KARTI } from "./tek-defter.js";
 
 const SAAT_FARKI = 3 * 3600;
 const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
@@ -29,6 +30,7 @@ export async function koordinator(env, simdi) {
 }
 // Listeye ekle (aynı iş iki kez eklenmez). x: { tur: "kart"|"cozum"|"gorev", ozet, ref, bot, chat, mesaj, isdId, cid, kod }
 export async function listeyeEkle(env, x, simdi) {
+  if (BILGI_KARTI.test(String(x.ozet || ""))) return null; // 11 Kasım: bilgi satırı (rapor) Hemra'nın kartına girmez
   const l = await oku(env, "venom:hemraListe", []);
   if (l.some((y) => y.ref === x.ref && (y.durum === "bekliyor" || simdi - y.zaman < 3 * 86400))) return null; // 11 Kasım: cevaplanan / dağıtılan soru bir daha sorulmaz
   const kayit = { id: kisaId(), zaman: simdi, durum: "bekliyor", ...x };
@@ -58,7 +60,7 @@ export async function listeyiTemizle(env, simdi, defter) {
     const acik = x.tur === "kart" ? (String(x.ref).startsWith("kart:") ? acikRef.has(x.ref) : acikIsd.has(Number(x.isdId)))
       : x.tur === "cozum" ? cozum.some((c) => c.id === x.cid && c.durum === "listede") && simdi - x.zaman < 3 * 86400
         : simdi - x.zaman < 3 * 86400;
-    if (!acik) { x.durum = "kapandi"; x.kapanis = simdi; n++; }
+    if (!acik || BILGI_KARTI.test(String(x.ozet || ""))) { x.durum = "kapandi"; x.kapanis = simdi; n++; } // rapor = bilgi satırı; Hemra'nın kartına girmez
   }
   // aynı model + aynı iş yazısı iki kez durmaz
   const gorulen = new Set();

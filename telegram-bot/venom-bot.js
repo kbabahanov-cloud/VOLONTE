@@ -2417,7 +2417,7 @@ export async function kisiyeSoyleYap(env, s, simdi) {
 // "Kanalda 3529'un yazısını kontrol et" → Venom kendisi bakar; sorun varsa SORMADAN Kemal'e düzelttirir; tek mesaj
 export function kanalKontrolSorusu(metin) {
   const t = String(metin || "").toLocaleLowerCase("tr");
-  if (!/kanal/.test(t) || !/(kontrol|bak|incele|do[ğg]ru mu)/.test(t)) return null;
+  if (!/kanal/.test(t) || !/(kontrol|(?<![\p{L}])bak(?![ıi]m)|incele|do[ğg]ru mu)/u.test(t) || /(payla[sş]|(?<![\p{L}])sil|kald[ıi]r|geri al)/u.test(t)) return null;
   const kodlar = [...new Set(t.match(/(?<![\d.,:])\d{3,5}(?![\d:])/g) || [])];
   return kodlar.length && kodlar.length <= 5 ? kodlar : null;
 }
@@ -2442,12 +2442,12 @@ export async function kanalKontrolCevabi(env, kodlar, simdi) {
 }
 export function fabrikaSorusu(metin, simdi) {
   const t = String(metin || "").toLocaleLowerCase("tr");
-  if (!/fabrika/.test(t) || !/(gitti|giden|g[öo]nderil|istendi|ne gitti|hangi model)/.test(t) || /\b\d{4,5}\b/.test(t)) return null;
+  if (!/fabrika/.test(t) || !/(gitti|giden|g[öo]nderil|istendi)/.test(t) || !/(model|liste|ne\s+(gitti|g[öo]nderildi|istendi)|neler|ka[çc])/.test(t) || /\b\d{4,5}\b/.test(t)) return null;
   return gunAnahtari(/bug[üu]n/.test(t) && !/d[üu]n/.test(t) ? simdi : simdi - 86400);
 }
 export function repeteSorusu(metin) {
   const t = String(metin || "").toLocaleLowerCase("tr");
-  if (!/repete/.test(t) || !/(durum|ne oldu|nerede|ne zaman|geldi mi|gelecek mi|ne alemde|var m[ıi]|a[çc][ıi]k m[ıi]|\?)/.test(t) || /tekrar a[çc]/.test(t)) return null;
+  if (!/repete/.test(t) || !/(durum|ne oldu|nerede|ne zaman|geldi mi|gelecek mi|ne alemde|ne a[şs]amada|var m[ıi]|a[çc][ıi]k m[ıi]|onayland[ıi] m[ıi])/.test(t) || /tekrar a[çc]/.test(t)) return null;
   const k = t.match(/(?<![\d.,:])\d{3,5}(?![\d:])/g) || [];
   return k.length === 1 ? k[0] : null;
 }
