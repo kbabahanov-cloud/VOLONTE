@@ -1,5 +1,29 @@
 [
  {
+  "kod": "3189",
+  "baslik": "Vest Trouser Set Scarf",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A tailored four-piece set: a sleeveless longline vest with notched lapels, wide-leg trousers, a printed long-sleeve shirt and a matching scarf. The single-button vest has a softly flared hem and a round metal brooch, while the brushstroke print ties shirt and scarf together. Wear it as a set for the office or events, or style the pieces separately. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble tailleur quatre pièces : gilet long sans manches à revers crantés, pantalon large, chemise imprimée à manches longues et foulard assorti. Le gilet à un bouton s'évase légèrement en bas et porte une broche ronde en métal ; l'imprimé coups de pinceau relie chemise et foulard. À porter complet au bureau ou lors d'événements, ou pièce par pièce. Confectionné à Istanbul avec soin.",
+   "pt": "Um conjunto alfaiataria de quatro peças: colete comprido sem mangas com lapelas, calça de perna larga, camisa estampada de manga comprida e lenço a condizer. O colete de um botão tem a bainha ligeiramente evasê e um broche redondo em metal; o estampado de pinceladas une camisa e lenço. Use completo no escritório ou em eventos, ou combine as peças separadamente. Produzido em Istambul com acabamento cuidado."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3189/1.jpg",
+   "galeri/3189/2.jpg",
+   "galeri/3189/3.jpg",
+   "galeri/3189/4.jpg",
+   "galeri/3189/5.jpg",
+   "galeri/3189/6.jpg",
+   "galeri/3189/7.jpg",
+   "galeri/3189/8.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-11"
+ },
+ {
   "kod": "3269",
   "baslik": "Lace Button-Front Maxi Dress",
   "kategori": "evening",
