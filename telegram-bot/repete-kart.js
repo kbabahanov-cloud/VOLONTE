@@ -247,8 +247,8 @@ async function fuataGonder(env, tg, rec, simdi, ne = "Fuat") {
 async function patronKarari(env, tg, k, simdi) {
   if (k.karar === "tekrarAc") { // Patron Venom'a "3419 repete tekrar aç" dedi
     const r = await tekrarAc(env, tg, k.kod, k.kim || "Patron", simdi);
-    if (!r.ok) await kuyruk(env, "rkSonuc", { id: `ta:${k.kod}:${simdi}`, rid: r.rec ? r.rec.id : `ta-${k.kod}`, metin: r.metin }); // olmadıysa Patron'a sebep; olduysa Fuat'ın cevabı tek satır gelir
-    else await kartGonder(env, tg, r.rec, "Hemra", await _rk.koordinatorId(env, simdi), r.metin, null, simdi).then(() => rkYaz(env, r.rec));
+    await kuyruk(env, "rkSonuc", { id: `ta:${k.kod}:${simdi}`, rid: r.rec ? r.rec.id : `ta-${k.kod}`, metin: r.metin }); // Patron'a TEK sonuç: gitti ya da gitmedi (sebebiyle)
+    if (r.ok) await kartGonder(env, tg, r.rec, "Hemra", await _rk.koordinatorId(env, simdi), r.metin, null, simdi).then(() => rkYaz(env, r.rec));
     return;
   }
   const rec = await rkOku(env, k.rid);

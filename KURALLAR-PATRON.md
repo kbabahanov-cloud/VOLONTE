@@ -77,3 +77,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 42. **Kontrol ilkesi:** Venom önce kendisi çözer; Patron'a sadece çözülmüş hali ya da gerçek karar gelir.
 47. **Venom listeleri temiz:** biten ya da 3 günden eski iş listeden kendiliğinden düşer (şüpheliyse Venom önce kanıtla kontrol eder); aynı iş iki kez yazılmaz; satır yarım kesilmez; iç kod adı Patron'a gösterilmez.
 48. **"Bekleyenler"de sadece Patron kararı bekleyen işler olur,** her birinin altında kendi düğmesi; bilgi satırı (ör. "Sitede 165 model") olmaz. Ne olduğu belli olmayan iş tek cümleyle açıklanır.
+
+## L. Deneme (11 Kasım)
+52. **Elemanlara deneme kartı gitmez.** Claude Code zinciri önce kendisi baştan sona çalıştırır: Sami ve Venom'un gerçek kodu, sahte Telegram ile; düğmelere sahte basılır, her adımda giden mesaj okunur (Sinem → Hemra → Patron → Fuat [2 gün sonra dön] → Fuat [Yapamam] → "tekrar aç" → Fuat [4-8 gün] → Patron'a sonuç satırı; dosya telegram-bot/test-zincir.mjs). Uçtan uca hatasız geçmeden Patron'a "hazır" denmez. Sadece hatasız geçerse elemanlarla TEK bir son deneme yapılır (Patron onayıyla).
+53. **Aynı mesaj tekrar gitmez:** aynı kişiye aynı mesaj için ikinci onay kartı açılmaz; onaylanmış mesaj 24 saat içinde ikinci kez gönderilmez. Fabrikaya (Fuat, Nuri) "test" / "deneme" içerikli mesaj "🧪 DENEME" başlığı olmadan asla gitmez.

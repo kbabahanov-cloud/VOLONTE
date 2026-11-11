@@ -1621,7 +1621,7 @@ test("11 Kasım REPETE SON HAL (Venom): Patron 'TEST-002 repete tekrar aç' → 
   await yazi(o, PATRON, "TEST-002 repete tekrar aç");
   assert.equal(o.claude.length, 0);
   assert.deepEqual((await kuyruguAl(o.env, "rkKarar")).map((x) => [x.karar, x.kod, x.kim]), [["tekrarAc", "TEST-002", "Patron"]]);
-  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["Tamam Patron, TEST-002 repete kartını Fuat'a yeniden gönderiyorum."]);
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), []); // ara mesaj yok: sonuç TEK satır olarak Sami'den gelir
   // anahtar kapalı: eski yol (Fuat'a gidecek taslak kartı)
   o.g.length = 0;
   o.env.__sohbette = true;

@@ -356,6 +356,15 @@ export async function aracCalistir(env, ad, g, simdi) {
         return `Repete artık KARTLA isteniyor (Fuat'a düz yazı gitmez). Yapılan: ${bilgi} Patron'a sadece bunu söyle.`;
       }
     }
+    { // 11 Kasım (Patron, ACİL): aynı kişiye aynı mesaj için ikinci kart açılmaz (bekleyen kart ya da 24 saatte gitmiş mesaj)
+      const iz = String(g.metin).replace(/\s+/g, " ").trim().toLocaleLowerCase("tr");
+      for (const x of (await (async () => { try { return (await env.KAYIT.list({ prefix: "venom:bot:is:" })).keys || []; } catch { return []; } })()).slice(0, 80)) {
+        const is = await oku(env, x.name, null);
+        if (!is || is.tur !== "mesaj" || is.kime !== g.kime || String(is.govde || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("tr") !== iz) continue;
+        if (["bekliyor", "emin"].includes(is.durum)) return `AYNI MESAJIN KARTI ZATEN BEKLİYOR (${tarihSaat(is.zaman).slice(11, 16)}). Yeni kart AÇILMADI. Patron'a: "Bu mesajın onay kartı ${tarihSaat(is.zaman).slice(11, 16)}'de geldi; onu onaylayın." de.`;
+        if (is.durum === "yapiliyor" && simdi - (is.onayZaman || is.zaman) < 86400) return `BU MESAJ ${tarihSaat(is.onayZaman || is.zaman).slice(11, 16)}'de ${k.e} ZATEN GİTTİ. Yeni kart AÇILMADI; tekrar gönderilmez. Patron'a aynen bunu söyle.`;
+      }
+    }
     await kartAc(env, { tur: "mesaj", kime: g.kime, govde: g.metin }, `✉️ ${k.e} gidecek mesaj (Sami adına, birebir):\n\n${g.metin}`, simdi);
     return "Onay kartı Patron'a gösterildi; onaylamadan gitmez.";
   }
@@ -1745,6 +1754,7 @@ async function rkKararDugmesi(env, cq, simdi, cevap) {
   x.kararDugme = h === "o" ? "✅ Onaylıyorum" : "❌ Reddediyorum";
   await kaydet(env, `venom:rkKart:${rid}`, x, 14 * 86400);
   await kuyrugaEkle(env, "rkKarar", { id: `${rid}:${simdi}`, rid, karar: x.karar, kim: x.kararKim, dugme: x.kararDugme, zaman: simdi });
+  await botaSor(env, "sami", "repeteAdim"); // 11 Kasım (ACİL): Sami 5 dk beklemez — Fuat'ın kartı HEMEN gider
   await cevap(x.karar === "onay" ? "Fuat'a gidiyor" : "Reddedildi");
   const foto = Boolean(cq.message && cq.message.photo);
   const yeni = `${rkKartMetni(x).replace(" Onaylarsanız Fuat'a gider.", "")}\n\n${x.karar === "onay" ? "✅ Kararınız: Onaylıyorum — Fuat'a gidiyor." : "❌ Kararınız: Reddediyorum — Fuat'a gitmedi."}`;
@@ -2270,7 +2280,7 @@ export async function sabitKomut(env, metin, simdi) {
   const t = String(metin || "").trim().toLocaleLowerCase("tr");
   { // 11 Kasım: "3419 repete tekrar aç" — Fuat "Yapamam" dediği için beklemede olan repete kartı Fuat'a yeniden gider (Sami gönderir)
     const ta = String(metin || "").match(/^\s*(test-\d+|\d{3,6})\s+repete(?:yi|sini)?\s+tekrar\s+a[çc]/i);
-    if (ta) { const kod = ta[1].toLocaleUpperCase("tr"); await kuyrugaEkle(env, "rkKarar", { id: `ta:${kod}:${simdi}`, karar: "tekrarAc", kod, kim: "Patron", zaman: simdi }); return `Tamam Patron, ${kod} repete kartını Fuat'a yeniden gönderiyorum.`; }
+    if (ta) { const kod = ta[1].toLocaleUpperCase("tr"); await kuyrugaEkle(env, "rkKarar", { id: `ta:${kod}:${simdi}`, karar: "tekrarAc", kod, kim: "Patron", zaman: simdi }); await botaSor(env, "sami", "repeteAdim"); await rkAdimi(env, simdi).catch(() => null); return true; } // sonuç (gitti / gitmedi) TEK mesajla Sami'den gelir
   }
   if (t === "📋 bekleyenler") { await bekleyenleriGonder(env, simdi); return true; }
   if (t === "📊 bugün ne oldu") return [await gunOzetiKisa(env, simdi)].join("\n");

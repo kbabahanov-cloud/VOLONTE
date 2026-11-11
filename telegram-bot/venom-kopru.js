@@ -47,7 +47,16 @@ export async function venomGidenAdimi(env, simdi, tg) {
         const yasak = k.dis ? fuatSuzgec(is.metin) : ekipSuzgec(is.metin);
         if (yasak) { await arsiv(env, "venom-engel", is.id, { kime: is.kime, neden: yasak }, simdi); await sonucBildir(env, is.id, false, `${k.e} mesaj GİTMEDİ: gizli bilgi içeriyor (${yasak.join(", ")}).`); continue; }
       }
+      // 11 Kasım (Patron, ACİL): fabrikaya (Fuat / Nuri) "test" / "deneme" içerikli mesaj DENEME başlığı olmadan ASLA gitmez
+      if (k.dis && /\b(test|deneme)\b/i.test(String(is.metin)) && !/^🧪 DENEME/.test(String(is.metin))) is.metin = `🧪 DENEME — Bu bir deneme, üretim yapmayın.\n${is.metin}`;
+      // 11 Kasım (Patron, ACİL): AYNI kişiye AYNI mesaj 24 saat içinde ikinci kez gitmez (kart her seferinde yeni olsa bile)
+      const izK = `giden:son:${is.kime}`, iz = String(is.metin).replace(/\s+/g, " ").trim().toLocaleLowerCase("tr");
+      const gecmis = ((await stokIste(env, "/ayar-oku", { k: izK }).catch(() => ({}))).v || "[]");
+      const l = (() => { try { return JSON.parse(gecmis).filter((x) => simdi - x.zaman < 86400); } catch { return []; } })();
+      const once = !is.klavye && l.find((x) => x.iz === iz);
+      if (once) { await arsiv(env, "venom-engel", is.id, { kime: is.kime, neden: ["aynı mesaj 24 saat içinde gitmişti"] }, simdi); await sonucBildir(env, is.id, false, `${k.e} aynı mesaj ${new Date((once.zaman + 3 * 3600) * 1000).toISOString().slice(11, 16)}'de zaten gitmişti; ikinci kez GÖNDERİLMEDİ.`); continue; }
       const r = await tg(env, "sendMessage", { chat_id: hedef, text: String(is.metin).slice(0, 4000), disable_web_page_preview: true, ...(is.klavye ? { reply_markup: is.klavye } : {}) });
+      if (r && r.ok && !is.klavye) await stokIste(env, "/ayar-yaz", { k: izK, v: JSON.stringify([...l, { zaman: simdi, iz }].slice(-50)) }).catch(() => null);
       if (r && r.ok) await arsiv(env, "venom-gitti", is.id, { kime: is.kime, metin: is.metin, mesaj: r.result.message_id }, simdi);
       if (r && r.ok && is.klavye) await gorevMesajiKaydet(env, is, r, hedef).catch(() => null); // 9 Kasım: görev kartı kopyaları (Hemra + Merdan)
       await sonucBildir(env, is.id, Boolean(r && r.ok), r && r.ok ? `${is.tur === "hatirlatma" ? "Hatırlatma" : "Mesaj"} ${k.e} gitti (Sami).` : `${k.e} gönderilemedi (Sami'ye /start yazmamış olabilir).`);
