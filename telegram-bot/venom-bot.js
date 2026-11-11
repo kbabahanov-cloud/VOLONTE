@@ -1408,6 +1408,8 @@ export async function venomCron(env, simdi) {
     const r = await yaz({ ...env, __izin: "cevap" }, z.metin, { posta: { kaynak: "sami", tur: "cevap", izin: "cevap" } }).catch(() => null);
     await kaydet(env, `venom:zincirKanit:${z.id}`, { zaman: simdi, metin: z.metin, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null }, 3 * 86400).catch(() => null);
   }
+  // 11 Kasım: Claude Code'un bir kerelik işleri — KV "venom:claudeIslem" = [{tur:"testMesaj", metin} | {tur:"kopruOku"}] → "venom:claudeIslemSonuc"
+  try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) { if (s.ok && /^(Mesaj|Hatırlatma) .* gitti \(Sami\)\.?$/.test(String(s.aciklama || ""))) continue; /* 10 Kasım: "Mesaj X'e gitti" özete girmez */ await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }
@@ -1701,7 +1703,7 @@ export async function kopruIzle(env, simdi) {
   if (!env.STOK) return;
   const o = await stokIste(env, "/ozet", {}).catch(() => null);
   const saatNow = ((simdi + SAAT_FARKI) % 86400) / 3600;
-  const ekip = [...new Set(["BR_SORUMLU", "HEMRA_ID"].flatMap((k) => String(env[k] || "").split(",").map((x) => x.trim()).filter(Boolean)))];
+  const kisiler = (m) => [...new Set([m === "BLACKROSE" ? "BR_SORUMLU" : "AZIZ_ID", "HEMRA_ID"].flatMap((k) => String(env[k] || "").split(",").map((x) => x.trim()).filter(Boolean)))]; // VOLONTE → Aziz, BLACK ROSE → Merdan; ikisinde Hemra
   const sustu = [];
   for (const k of (o && o.kopruler) || []) {
     if (!k.kalp) continue; // eski köprü (sadece değişiklikte gönderir) izlenmez
@@ -1719,7 +1721,7 @@ export async function kopruIzle(env, simdi) {
     if (!a) { a = { son, ekip: null, patron: null }; sustu.push(k.magaza); }
     else if (!a.patron && a.ekip && simdi - a.ekip >= 1800) {
       a.patron = simdi;
-      await bildir(env, `🔴 Köprü sustu: ${k.magaza === "BLACKROSE" ? "Black Rose" : "VOLONTE"} mağaza bilgisayarı ${tarihSaat(son).slice(11, 16)}'den beri sinyal vermiyor; Merdan ve Hemra'ya 30 dk önce soruldu, düzelmedi.`, { simdi, kaynak: "venom", tur: "kritik" });
+      await bildir(env, `🔴 Köprü sustu: ${k.magaza === "BLACKROSE" ? "Black Rose" : "VOLONTE"} mağaza bilgisayarı ${tarihSaat(son).slice(11, 16)}'den beri sinyal vermiyor; ${k.magaza === "BLACKROSE" ? "Merdan" : "Aziz"} ve Hemra'ya 30 dk önce soruldu, düzelmedi.`, { simdi, kaynak: "venom", tur: "kritik" });
     }
     await kaydet(env, anahtar, a, 7 * 86400);
   }
@@ -1727,9 +1729,28 @@ export async function kopruIzle(env, simdi) {
     const ad = sustu.map((m) => (m === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE")).join(" ve ");
     const metin = `🔌 ${ad}: Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu? 1 saattir sinyal gelmiyor. Bilgisayarı açıp kontrol edip buraya "tamam" yazın. (Venom)`;
     const r = [];
-    for (const c of ekip) r.push(await tg(env, "sendMessage", { chat_id: c, text: metin }).catch(() => null));
+    for (const c of [...new Set(sustu.flatMap(kisiler))]) r.push(await tg(env, "sendMessage", { chat_id: c, text: metin }).catch(() => null));
     for (const m of sustu) { const a = await oku(env, `venom:kopruAlarm:${m}`, null); await kaydet(env, `venom:kopruAlarm:${m}`, { ...(a || {}), ekip: simdi, ekipKanit: r.map((x) => (x && x.ok ? x.result.message_id : null)) }, 7 * 86400); }
   }
+}
+async function claudeIslemAdimi(env, simdi) {
+  const l = await oku(env, "venom:claudeIslem", null);
+  if (!Array.isArray(l) || !l.length) return;
+  await env.KAYIT.delete("venom:claudeIslem");
+  const sonuc = [];
+  for (const is of l.slice(0, 5)) {
+    if (is.tur === "testMesaj") { // Patron'a test mesajı; Telegram'ın döndürdüğü hali (telefona giden) kayda
+      const r = await tg(env, "sendMessage", { chat_id: patron(env), text: String(is.metin || "").slice(0, 4000), izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
+      sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null, bicim: r && r.result ? r.result.entities || null : null, hata: r && !r.ok ? r.description : null });
+    } else if (is.tur === "kopruOku") {
+      const o = await stokIste(env, "/ozet", {}).catch(() => null);
+      const alarm = {}; for (const m of ["VOLONTE", "BLACKROSE"]) alarm[m] = await oku(env, `venom:kopruAlarm:${m}`, null);
+      const sat = {}; for (const m of ["VOLONTE", "BLACKROSE"]) { const x = await stokIste(env, "/satis-sayim", { gun: gunAnahtari(simdi), magaza: m }).catch(() => null); sat[m] = x ? { toplam: x.toplam, model: x.model } : null; }
+      sonuc.push({ tur: is.tur, zaman: simdi, kopruler: (o && o.kopruler) || null, alarm, satis: sat, sustu: ((o && o.kopruler) || []).map((k) => ({ m: k.magaza, sustu: kopruSustu(Math.max(k.son || 0, k.kalp || 0), simdi) })) });
+    } else if (is.tur === "kopruSifirla") { for (const m of is.magazalar || []) await env.KAYIT.delete(`venom:kopruAlarm:${m}`).catch(() => null); sonuc.push({ tur: is.tur, ok: true }); }
+    else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
+  }
+  await kaydet(env, "venom:claudeIslemSonuc", { zaman: simdi, sonuc }, 3 * 86400);
 }
 // ---------- 6 Kasım: SİTE DEFTERİ (Selin sayar; Venom sadece buna bakar) ----------
 const MARKA_AD = { BLACKROSE: "BLACK ROSE", VOLONTE: "VOLONTE" };

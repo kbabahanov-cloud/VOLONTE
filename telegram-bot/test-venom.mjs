@@ -877,7 +877,7 @@ test("11 Kasım MESAJ DÜZENİ: botun <b> etiketli yazısı temiz gider; 'kontro
   assert.deepEqual(t, ["3557: Black Rose 20, VOLONTE 7 adet."]);
   assert.match(JSON.stringify(o.claude.at(-1).messages), /Patron'a izin sorma/);
   // köprü
-  Object.assign(o.env, { BR_SORUMLU: "222", HEMRA_ID: "333" });
+  Object.assign(o.env, { BR_SORUMLU: "222", HEMRA_ID: "333", AZIZ_ID: "444" });
   const kopru = (son) => { o.stok.depo.sql.exec("INSERT INTO kopru (magaza, son, adet, degisim, kalp) VALUES ('BLACKROSE', ?, 0, ?, ?)", son, son, son); };
   const ozetEski = o.env.STOK;
   const sonSinyal = ist(10, 20, 0); // salı akşamı son sinyal
