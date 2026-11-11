@@ -60,3 +60,11 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 
 ## J. Dosyalar
 36. **KURALLAR-PATRON.md ve VOLONTE-BILGI.md her güncellendiğinde main dalına da AYNI ANDA yazılır** (Claude projesi bu dosyaları main'den okur). Main'de sadece bu dosyalar değişir; kod ve site dosyalarına dokunulmaz.
+
+## K. Venom rapor ve mesaj düzeni (11 Kasım)
+37. **Sabah (09:40) ve akşam (20:00) raporu EN FAZLA 8 satır, sabit sıra, her satır tek kez:** başlık · genel durum ("Her şey çalışıyor" / "N sorun var: …") · Patron kararı bekleyen (sadece para, repete, silme; yoksa satır yok) · satış (VOLONTE X, Black Rose Y) · kanal (X paylaşım) · site (X model, Y eklendi) · fabrika (eksik listesi gitti mi, kaç model) · Venom'un kendi çözdükleri (tek satır). Tekrar, yarım satır, kart sayısı, iç ayrıntı yok; ayrıntı sadece /detay.
+38. **Mesajlarda <b> gibi kod etiketi görünmez;** biçimsiz gönderimde etiketler temizlenir.
+39. **Venom Patron'a "kontrol edeyim mi?", "yazayım mı?" diye sormaz;** kontrol eder, çözer, sonucu tek mesajla bildirir.
+40. **Çelişkili mesaj yasak:** bot "yapamadım" deyip Venom "düzeltildi" diyemez. Venom önce kanıtla doğrular (kanal mesaj numarası, site linki), sonra TEK mesaj: "Tamam, kanıt: …" ya da "Yapılamadı, sebep: …, şu an çözülüyor". Sıraya alınan iş "tamam" sayılmaz.
+41. **Köprü alarmı Patron'a doğrudan gelmez:** Venom önce Merdan ve Hemra'ya yazar ("Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu?"); 30 dakikada düzelmezse Patron'a tek satır. Cumartesi, pazar ve 09:00–10:30 açılışta alarm yok.
+42. **Kontrol ilkesi:** Venom önce kendisi çözer; Patron'a sadece çözülmüş hali ya da gerçek karar gelir.

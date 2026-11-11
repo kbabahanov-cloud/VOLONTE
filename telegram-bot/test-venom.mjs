@@ -32,6 +32,7 @@ function ortam() {
       async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; },
       async put(k, v) { depo.set(k, v); },
       async delete(k) { depo.delete(k); },
+      async list({ prefix = "" } = {}) { return { keys: [...depo.keys()].filter((k) => k.startsWith(prefix)).sort().map((name) => ({ name })) }; },
     },
     STOK: { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) },
   };
@@ -230,12 +231,12 @@ test("zamanlama: 09:40 toplu rapor ve 20:00 günün özeti Patron'a birer kez; p
   await venomCron(o.env, ist(3, 9, 46));
   const sabah = patronaGiden(o).filter((x) => /Günaydın Patron/.test(x.govde.text));
   assert.equal(sabah.length, 1);
-  assert.ok(sabah[0].govde.text.split("\n").length <= 15); // 9 Kasım: tek mesaj, en fazla 15 satır
+  assert.ok(sabah[0].govde.text.split("\n").length <= 8); // 11 Kasım: tek mesaj, en fazla 8 satır
   await venomCron(o.env, ist(3, 20, 1));
   await venomCron(o.env, ist(3, 20, 6));
   const aksam = patronaGiden(o).filter((x) => /Günün özeti/.test(x.govde.text));
   assert.equal(aksam.length, 1);
-  assert.match(aksam[0].govde.text, /Bugün Venom üzerinden iş yapılmadı/);
+  assert.ok(aksam[0].govde.text.split("\n").length <= 8);
   o.g.length = 0;
   await venomCron(o.env, ist(8, 9, 41)); // 8 Kasım pazar
   await venomCron(o.env, ist(8, 20, 1));
@@ -836,20 +837,68 @@ test("9 Kasım MAĞAZA SAATLERİ: hafta sonu köprü izlenmez; pazartesi sabah c
   assert.equal(kopruSustu(cumaAksam, t(10, 9, 5)), true);
 });
 
-test("9 Kasım: sabah 09:40 TEK özet ≤15 satır, sorunlar en üstte, biriken bilgi sayısı; /detay ayrıntıyı verir", async () => {
+test("11 Kasım RAPOR DÜZENİ: sabah 09:40 en fazla 8 satır, sabit sıra (genel · karar · satış · kanal · site · fabrika · Venom); tekrar yok; /detay ayrıntıyı verir", async () => {
   const o = ortam();
   const v = await import("./venom-bot.js");
   o.depo.set("venom:posta:2026-11-03", JSON.stringify([{ zaman: ist(3, 2), kaynak: "kemal", kategori: "paylaşıldı", ozet: "✅ 3627 paylaşıldı" }, { zaman: ist(3, 3), kaynak: "kemal", kategori: "paylaşılamadı", ozet: "🛑 3557 kanala gitmedi" }]));
-  o.depo.set("selin:hata", JSON.stringify({ zaman: ist(3, 8), hata: "GitHub 502" }));
+  o.depo.set("venom:bittiKart:S1", JSON.stringify({ kod: "3490", zaman: ist(3, 8) }));
+  o.depo.set("venom:siteDefteri", JSON.stringify({ zaman: 1, modeller: { 3627: { kod: "3627", eklenme: "2026-11-02" }, 3629: { kod: "3629", eklenme: "2026-10-01" }, 3000: { kod: "3000", gizli: true } } }));
+  o.depo.set("venom:cozdum:2026-11-02", JSON.stringify(["VOLONTE köprüsü (Merdan/Hemra ile)"]));
   const m = await v.sabahOzeti(o.env, ist(3, 9, 40));
   const s = m.split("\n");
-  assert.ok(s.length <= 15, m);
-  assert.match(s[0], /^☀️ Günaydın Patron/);
-  assert.match(m, /📨 Venom'da biriken 2 bilgi: 1 paylaşıldı · 1 paylaşılamadı/);
-  assert.match(s.at(-1), /Ayrıntı: \/detay/);
+  assert.ok(s.length <= 8, m);
+  assert.equal(new Set(s).size, s.length); // her satır tek kez
+  assert.match(s[0], /^☀️ Günaydın Patron — .* \(ayrıntı \/detay\)$/);
+  assert.match(s[1], /^(✅ Her şey çalışıyor|🔴 \d+ sorun var: )/);
+  assert.equal(s[2], "🟡 Kararınız bekleniyor: repete 3490");
+  assert.match(s[3], /^💰 Satış dün: VOLONTE \S+, Black Rose \S+$/);
+  assert.match(s[4], /^📣 Kanal dün: \S+ paylaşım$/);
+  assert.equal(s[5], "🌐 Site: 2 model, dün 1 eklendi");
+  assert.match(s[6], /^🏭 Fabrika: /);
+  assert.equal(s[7], "🛡 Venom kendi çözdü: VOLONTE köprüsü (Merdan/Hemra ile)");
+  assert.ok(!/<\/?b>|📨|kart/.test(m)); // iç ayrıntı / kart sayısı yok
   o.g.length = 0;
   await yazi(o, PATRON, "/detay");
   assert.match(patronaGiden(o)[0].govde.text, /Biriken bilgiler:[\s\S]*3557 kanala gitmedi/);
+});
+
+// 11 Kasım (Patron): <b> gibi etiketler görünmez; izin sorusu yok; köprü önce ekibe
+test("11 Kasım MESAJ DÜZENİ: botun <b> etiketli yazısı temiz gider; 'kontrol edeyim mi?' yerine Venom kendisi bakar; köprü alarmı önce Merdan+Hemra, 30 dk sonra Patron'a tek satır, açılışta/hafta sonu yok", async () => {
+  const v = await import("./venom-bot.js");
+  assert.equal(v.etiketTemizle("Patron, <b>Hiçbir şey silinmedi.</b> • <b>Kaldırmak:</b> **yok**"), "Patron, Hiçbir şey silinmedi. • Kaldırmak: yok");
+  const o = ortam();
+  await v.tg(o.env, "sendMessage", { chat_id: PATRON, text: "<b>Kalın</b> yazı", izin: "cevap" });
+  assert.equal(o.g.at(-1).govde.text, "Kalın yazı");
+  // izin sorusu → bir tur daha (araçla bakar), son mesajda soru yok
+  o.cevaplar.push({ text: "Kontrol edip sana net durumu yazayım mı?" }, { arac: "stok_sorgu", girdi: { kod: "3557" } }, { text: "3557: Black Rose 20, VOLONTE 7 adet." });
+  o.g.length = 0;
+  await yazi(o, PATRON, "merhaba, şuna bir bakar mısın");
+  const t = patronaGiden(o).map((x) => x.govde.text);
+  assert.deepEqual(t, ["3557: Black Rose 20, VOLONTE 7 adet."]);
+  assert.match(JSON.stringify(o.claude.at(-1).messages), /Patron'a izin sorma/);
+  // köprü
+  Object.assign(o.env, { BR_SORUMLU: "222", HEMRA_ID: "333" });
+  const kopru = (son) => { o.stok.depo.sql.exec("INSERT INTO kopru (magaza, son, adet, degisim, kalp) VALUES ('BLACKROSE', ?, 0, ?, ?)", son, son, son); };
+  const ozetEski = o.env.STOK;
+  const sonSinyal = ist(10, 20, 0); // salı akşamı son sinyal
+  await o.env.STOK.get().fetch("https://stok/ozet", { method: "POST", body: "{}" }); // depo hazırlansın
+  kopru(sonSinyal);
+  o.g.length = 0;
+  await v.kopruIzle(o.env, ist(11, 10, 0)); // 10:00 açılış saati → alarm yok
+  assert.equal(o.g.length, 0);
+  await v.kopruIzle(o.env, ist(11, 10, 45));
+  const ekip = o.g.filter((x) => ["222", "333"].includes(String(x.govde.chat_id)));
+  assert.equal(ekip.length, 2);
+  assert.match(ekip[0].govde.text, /^🔌 BLACK ROSE: Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu\?/);
+  assert.equal(patronaGiden(o).length, 0);
+  await v.kopruIzle(o.env, ist(11, 11, 0)); // 15 dk — Patron'a yok
+  assert.equal(patronaGiden(o).length, 0);
+  await v.kopruIzle(o.env, ist(11, 11, 16)); // 31 dk — Patron'a tek satır
+  assert.equal(patronaGiden(o).length, 1);
+  assert.match(patronaGiden(o)[0].govde.text, /^🔴 Köprü sustu: Black Rose mağaza bilgisayarı 20:00'den beri sinyal vermiyor; Merdan ve Hemra'ya 30 dk önce soruldu, düzelmedi\.$/);
+  await v.kopruIzle(o.env, ist(11, 11, 31));
+  assert.equal(patronaGiden(o).length, 1); // tek sefer
+  assert.ok(ozetEski);
 });
 
 test("9 Kasım REPETE: Kemal'den gelen 'Repete al' taslağı Patron'a HEMEN onay kartı (Fuat'a gidecek, ✏️ Düzelt ile adet/renk); onaysız Fuat'a gitmez", async () => {
@@ -1011,7 +1060,8 @@ test("9 Kasım: 3 saattir bekleyen kart → Hemra'ya BİR kez hatırlatma (Sami 
   assert.equal((await postaKarar(o.env, { kaynak: "venom", metin: "📋 Fuat'a gidecek mutabakat (birebir)", kart: true }, ist(10, 11))).kategori, "tekrar kart (birleştirildi)");
   // cuma 20:00 özeti: tek satır sağlık
   const m = await (await import("./venom-bot.js")).aksamOzeti(o.env, ist(13, 20, 1));
-  assert.match(m, /🩺 Bu hafta: \d+ hatayı kendim düzelttim · \d+ mesaj size kurala uymadan geldi · /);
+  assert.ok(m.split("\n").length <= 8, m); // 11 Kasım: en fazla 8 satır; cuma sağlık satırı /detay'da
+  assert.match(JSON.parse(o.depo.get("venom:posta:detay")).metin, /🩺 Bu hafta: \d+ hatayı kendim düzelttim · \d+ mesaj size kurala uymadan geldi · /);
 });
 
 // 9 Kasım (Patron): akşam özetinde günlük 10 onay hedefi satırı
@@ -1418,8 +1468,8 @@ test("Venom kanal: 'sil' niyeti (kod / link / yanıt); bot yapamadıysa Patron'a
   o.env.KEMAL_W = { mesaj: async () => { const { aktarilanGonder } = await import("./venom-bot.js"); await aktarilanGonder(o.env, { bot: "kemal", metod: "sendMessage", metin: "Bunu yapamıyorum: eski paylaşımın yazısını değiştirme yetkim yok.", medya: [] }); return true; }, paylasimSil: async (g) => ({ ok: true, kod: g.kod, silinen: [15001, 15002], ozet: `${g.kod} (t.me/Volonteroseoffical/15001 +1 mesaj, 10.11 14:35)` }) };
   o.cevaplar.push({ arac: "bota_yaz", girdi: { bot: "kemal", metin: "3512 yazısını düzelt" } }, { text: "Kemal yapamadı Patron." });
   await yazi(o, PATRON, "3512 yazısını Kemal düzeltsin");
-  const tum = o.g.filter((x) => String(x.govde.chat_id) === String(PATRON)).map((x) => x.govde.text || "");
-  assert.ok(tum.some((t) => /^⚠️ Kemal yapamadı\. Sebebi: Bunu yapamıyorum/.test(t)), JSON.stringify(tum));
+  const tum = o.g.filter((x) => String(x.govde.chat_id) === String(PATRON) && x.govde.text).map((x) => x.govde.text);
+  assert.deepEqual(tum, ["Yapılamadı, sebep: Kemal: Bunu yapamıyorum: eski paylaşımın yazısını değiştirme yetkim yok. Şu an çözülüyor."]); // 11 Kasım: TEK mesaj, çelişki yok
   assert.match(JSON.stringify(o.claude.at(-1).messages.at(-1)), /KEMAL YAPAMADI/);
   o.g.length = 0;
   await yazi(o, PATRON, "3512 sil");
