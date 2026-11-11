@@ -1573,6 +1573,7 @@ export async function raporSatirlari(env, simdi, tur) {
   const sorun = [];
   if (tur === "sabah") { try { sorun.push(...satirlar(await gunlukTest(env, simdi)).slice(1).filter((x) => /❌/.test(x)).map((x) => x.replace(/^[•\s]*❌\s*/, ""))); } catch (e) { sorun.push(`sabah testi çalışmadı`); } }
   for (const m of ["VOLONTE", "BLACKROSE"]) { const a = await oku(env, `venom:kopruAlarm:${m}`, null); if (a && a.patron) sorun.push(`${BR_AD(m)} mağaza bilgisayarı sinyal vermiyor`); }
+  for (const m of ["VOLONTE", "BLACKROSE"]) { const a = await oku(env, `venom:veriAlarm:${m}`, null); if (a && (a.patron || (a.cevap && a.cevap.ne === "e"))) sorun.push(`${BR_AD(m)} Vegawin verisi gelmiyor (satış sayısı eksik olabilir)`); }
   const dur = await oku(env, "venom:dur", null);
   if (dur && dur.hepsi) sorun.push("bütün botlar durduruldu"); else for (const b of ["kemal", "selin", "sami", "pelin"]) if (dur && dur[b]) sorun.push(`${BOT_AD[b] || b} durduruldu`);
   const genel = sorun.length ? `🔴 ${sorun.length} sorun var: ${sorun.slice(0, 2).join("; ")}${sorun.length > 2 ? ` (+${sorun.length - 2}, /detay)` : ""}` : "✅ Her şey çalışıyor";
@@ -1733,9 +1734,9 @@ export async function kopruIzle(env, simdi) {
   }
   await veriAkisIzle(env, simdi, o, saatNow);
 }
-// 11 Kasım (Patron): köprü sinyal veriyor ama Vegawin'den YENİ veri gelmiyorsa (satış 0 görünür) — Venom önce ekibe sorar (düğmeli, Sami üzerinden),
+// 11 Kasım (Patron): köprü sinyal veriyor ama Vegawin'den BUGÜN HİÇ veri gelmediyse (satış 0 görünür) — Venom 13:00'ten sonra ekibe sorar (düğmeli, Sami üzerinden),
 // cevap gelince Patron'a TEK sonuç satırı; 30 dk cevap yoksa Patron'a tek satır. KV "venom:veriAlarm:<mağaza>"
-export const VERI_ESIK = 3 * 3600;
+export const VERI_SAAT = 13;
 async function veriAkisIzle(env, simdi, o, saatNow) {
   for (const k of (o && o.kopruler) || []) {
     if (!k.kalp || !k.degisim) continue;
@@ -1748,8 +1749,11 @@ async function veriAkisIzle(env, simdi, o, saatNow) {
       if (a.patron) await biriktir(env, { kaynak: "sami", metin: `✅ ${ad}: Vegawin verisi yeniden geliyor`, tur: "bilgi" }, simdi);
       continue;
     }
+    if (a && a.gun !== gunAnahtari(simdi)) a = null; // yeni gün: hâlâ veri yoksa yeniden sorulur
     const canli = simdi - k.kalp < 1800;
-    if (!a && canli && magazaAcikMi(simdi) && saatNow >= 11 && simdi - k.degisim > VERI_ESIK) {
+    const acilis = simdi - ((simdi + SAAT_FARKI) % 86400) + 9 * 3600; // bugün 09:00
+    // Sadece BUGÜN HİÇ veri gelmediyse ve saat 13:00'ü geçtiyse sorulur (öğleden sonraki sakin saatler yanlış alarm vermesin); günde bir kez
+    if (!a && canli && magazaAcikMi(simdi) && saatNow >= VERI_SAAT && k.degisim < acilis) {
       a = { degisim: k.degisim, sor: simdi, gun: gunAnahtari(simdi) };
       const metin = `📊 ${ad}: Mağaza bilgisayarı açık, ama Vegawin'den ${tarihSaat(k.degisim).slice(0, 16)}'den beri yeni bilgi gelmiyor. Bugün ${ad}'da Vegawin'e fiş/fatura girildi mi? (Venom)`;
       const klavye = { inline_keyboard: [[{ text: "✅ Evet, girildi", callback_data: `vd:vs-${k.magaza}:e` }, { text: "❌ Bugün giriş yok", callback_data: `vd:vs-${k.magaza}:h` }]] };

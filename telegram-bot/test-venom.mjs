@@ -901,7 +901,7 @@ test("11 Kasım MESAJ DÜZENİ: botun <b> etiketli yazısı temiz gider; 'kontro
   assert.ok(ozetEski);
 });
 
-test("11 Kasım VERİ AKIŞI: köprü sinyal veriyor ama Vegawin verisi 3 saattir yok → Aziz+Hemra'ya düğmeli soru (Sami üzerinden); 'Evet girildi' → Patron'a TEK sonuç; 'giriş yok' → 'satış 0 doğru'", async () => {
+test("11 Kasım VERİ AKIŞI: köprü sinyal veriyor ama bugün hiç Vegawin verisi yok (13:00 sonrası) → Aziz+Hemra'ya düğmeli soru (Sami üzerinden); 'Evet girildi' → Patron'a TEK sonuç; 'giriş yok' → 'satış 0 doğru'", async () => {
   const v = await import("./venom-bot.js");
   const { cozumAdimi } = await import("./venom-gorev.js");
   const o = ortam();
@@ -909,6 +909,8 @@ test("11 Kasım VERİ AKIŞI: köprü sinyal veriyor ama Vegawin verisi 3 saatti
   await o.env.STOK.get().fetch("https://stok/ozet", { method: "POST", body: "{}" });
   const simdi = ist(11, 14, 0);
   o.stok.depo.sql.exec("INSERT INTO kopru (magaza, son, adet, degisim, kalp) VALUES ('VOLONTE', ?, 0, ?, ?)", simdi - 60, ist(10, 18, 7), simdi - 60);
+  await v.kopruIzle(o.env, ist(11, 12, 0)); // 13:00'ten önce sorulmaz
+  assert.equal((await kuyruguAl(o.env, "giden")).length, 0);
   await v.kopruIzle(o.env, simdi);
   const g = await kuyruguAl(o.env, "giden");
   assert.deepEqual(g.map((x) => x.kime), ["aziz", "hemra"]);
