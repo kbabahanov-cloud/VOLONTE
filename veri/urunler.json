@@ -1,5 +1,26 @@
 [
  {
+  "kod": "3267",
+  "baslik": "Cold-Shoulder Cargo Trouser Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a white mock-neck top with wide-leg cargo trousers. The top features cold-shoulder cutouts, curved seam detailing and striped sleeve bands with a printed slogan, while the trousers combine black, grey pinstripe and white pinstripe panels with framed flap pockets. Easy to wear for city days, travel or relaxed weekends. Produced in Istanbul with careful finishing.",
+   "fr": "Un ensemble deux pièces associant un haut blanc à col montant et un pantalon cargo large. Le haut se distingue par ses épaules dénudées, ses coutures arrondies et ses bandes rayées aux manches avec inscription, tandis que le pantalon mêle panneaux noirs, gris et blancs à fines rayures, avec poches à rabat encadrées. Idéal pour la ville, les voyages ou le week-end. Fabriqué à Istanbul avec soin.",
+   "pt": "Um conjunto de duas peças que combina uma blusa branca de gola alta com calça cargo pantalona. A blusa tem recortes nos ombros, costuras curvas e faixas listradas nas mangas com frase estampada; a calça une painéis preto, cinza e branco risca de giz, com bolsos de lapela emoldurados. Perfeito para a cidade, viagens ou fins de semana. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3267/1.jpg",
+   "galeri/3267/2.jpg",
+   "galeri/3267/3.jpg",
+   "galeri/3267/4.jpg",
+   "galeri/3267/5.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-11"
+ },
+ {
   "kod": "3189",
   "baslik": "Vest Trouser Set Scarf",
   "kategori": "sets",
