@@ -2845,3 +2845,55 @@ test("REPETE (gerçek akış): Patron'un Venom'dan istediği repete → Hemra'ya
   const on = await (await stok("kuyruk-al", { ad: "rkOneri" })).json();
   assert.deepEqual(on.map((x) => [x.kod, x.dagilim, x.adet, x.magaza]), [["3477", "beyaz · büyük 20, küçük 20", 40, "VOLONTE"]]);
 });
+
+// 11 Kasım (Patron, deneme bulgusu): Aziz iki modelde de "Depoda var"a bastı → liste 0 modelle Hemra'ya ONAY KARTI olarak gitmişti
+test("YENİ AKIŞ: 0 modelli liste Hemra'ya onay kartı olarak GİTMEZ — Sami sebebini yazar (düğmesiz bilgi), fabrikaya bir şey gitmez; yanlış basış 'Geri al' ile düzelir; deneme kartı doğrudan Sinem'e gönderilebilir", async () => {
+  const { guncelleme: g2 } = await import("./sami.js");
+  const f = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }, { id: 556, ad: "Sinem" }, { id: 557, ad: "Fuat" }]));
+  const tg2 = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  const bas = (id, data, ad) => g2({ callback_query: { id: "c", from: { id, first_name: ad }, data, message: { chat: { id }, message_id: 9 } } }, o.env);
+  const yazilar = (chat) => o.g.filter((x) => String(x.govde.chat_id) === String(chat)).map((x) => x.govde.text || x.govde.caption || "");
+  const simdi = Math.floor(Date.now() / 1000);
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "akisDeneme", donSn: 180 }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tg2);
+  const k = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).anahtar;
+  await bas(444, `fe:D:${k}:TEST-002`, "Aziz");
+  await bas(444, `fe:D:${k}:TEST-003`, "Aziz");
+  o.g.length = 0;
+  await bas(444, `fe:E:${k}:-`, "Aziz");
+  assert.match(yazilar(444).at(-1), /✅ Kontrol bitti, teşekkürler\. Fabrikaya istenecek model yok; Hemra'ya bilgi verildi\.$/);
+  const hm = o.g.filter((x) => String(x.govde.chat_id) === "333");
+  assert.equal(hm.length, 1);
+  assert.equal(hm[0].govde.text, "🧪 DENEME – üretim yapmayın\n📋 🟦 VOLONTE listesi (" + new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 10).split("-").reverse().join(".") + "): fabrikaya istenecek model yok — onayınız gerekmiyor, fabrikaya bir şey gitmedi.\n📦 Depoda var (Vegawin stoğu düzeltilmeli): TEST-002, TEST-003");
+  assert.equal(hm[0].govde.reply_markup, undefined); // onay kartı DEĞİL: düğme yok
+  assert.ok(!o.g.some((x) => ["555", "556", "557"].includes(String(x.govde.chat_id)))); // fabrikaya hiçbir şey gitmedi
+  // yanlış basış: Aziz TEST-002'de "Geri al" → kart yeniden gelir, "Aynısı" + "Eminim" → bu kez Hemra'ya ONAY kartı
+  await bas(444, `fe:g:${k}:TEST-002`, "Aziz");
+  await bas(444, `fe:o:${k}:TEST-002`, "Aziz");
+  o.g.length = 0;
+  await bas(444, `fe:E:${k}:-`, "Aziz");
+  const hl = o.g.find((x) => String(x.govde.chat_id) === "333" && /Gidecek liste/.test(x.govde.text || ""));
+  assert.match(hl.govde.text, /🟦 VOLONTE LİSTESİ \(1 model\)[\s\S]*TEST-002[\s\S]*📦 Depoda var \(istenmedi; Vegawin stoğu düzeltilmeli\): TEST-003/);
+  assert.deepEqual(hl.govde.reply_markup.inline_keyboard[0].map((b) => b.text), ["✅ Onayla", "✏️ Düzelt"]);
+  // deneme kartı doğrudan SADECE Sinem'e (Aziz / Hemra adımı atlanır)
+  o.g.length = 0;
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "akisSinem", kod: "TEST-002" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi + 300, tg2);
+  assert.deepEqual([...new Set(o.g.map((x) => String(x.govde.chat_id)))], ["556"]);
+  const sk = o.g.find((x) => x.govde.reply_markup);
+  assert.equal(sk.govde.photo, "https://sami.test/test-resim.jpg");
+  assert.match(sk.govde.caption, /^🧪 DENEME – üretim yapmayın\n🟦 VOLONTE\nTEST-002 DENEME · Büyük \(44-50\) · beyaz 16$/);
+  // Sinem "Bitti" → Hemra'nın yeni kartı (Fuat'a onay kartı yok)
+  o.g.length = 0;
+  await bas(556, sk.govde.reply_markup.inline_keyboard.flat().find((b) => /Bitti/.test(b.text)).callback_data, "Sinem");
+  assert.ok(!o.g.some((x) => String(x.govde.chat_id) === "557"));
+  const hk = o.g.find((x) => String(x.govde.chat_id) === "333" && x.govde.reply_markup);
+  assert.match(hk.govde.caption, /🟦 VOLONTE · TEST-002\n❌ Fabrikada bitti \(Sinem\)\.\nMağazada kalan: 4 adet\n[\s\S]*Repete dağılımı: beyaz · büyük 20, küçük 20 \(toplam 40 adet\)\nNe yapalım\?$/);
+  // temizlik: doğrudan gönderilen kart da kapanır
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "akisTemizle" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi + 600, tg2);
+  assert.equal(JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).siparis.length >= 1, true);
+});

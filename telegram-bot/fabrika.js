@@ -406,6 +406,21 @@ export async function birlesikOnay(env, tg, gun, simdi, anahtarlar, { deneme = f
   await ayarYaz(env, `fabrika:${anahtar}`, b);
   await ayarYaz(env, `fabrika:birlesik:${gun}`, [...((await ayarOku(env, `fabrika:birlesik:${gun}`, [])) || []), anahtar]);
   for (const { k, x } of parcalar) { x.asama = "birlesti"; x.birlesik = anahtar; await ayarYaz(env, `fabrika:${k}`, x); }
+  if (b.yeni && !b.liste.length) { // 11 Kasım (Patron): 0 modelli liste Hemra'ya ONAY KARTI olarak GİTMEZ — Sami sebebini kendisi bulur, düğmesiz bilgi yazar
+    const sebep = [
+      b.depoda.length ? `📦 Depoda var (Vegawin stoğu düzeltilmeli): ${b.depoda.join(", ")}` : null,
+      b.istenmeyen.length ? `🚫 İstenmedi: ${b.istenmeyen.join(", ")}` : null,
+      (b.hatali || []).length ? `⚠️ Bot hatası (düzeltilecek): ${b.hatali.join(", ")}` : null,
+      b.fabrikadaBitti.length ? `⛔ Fabrikada bitti (repete kararı bekleniyor): ${b.fabrikadaBitti.join(", ")}` : null,
+      b.kontrolsuz.length ? `⚠️ Kontrol edilmedi: ${b.kontrolsuz.join(", ")}` : null,
+    ].filter(Boolean);
+    const etiket = [...new Set(parcalar.map((p) => magazaAdi(p.x.magaza || MAGAZA)))].join(" + ");
+    b.asama = "bos";
+    const r0 = await tg(env, "sendMessage", { chat_id: b.sorumlu, text: `${deneme ? DENEME : ""}📋 ${etiket} listesi (${gunGoster(gun)}): fabrikaya istenecek model yok — onayınız gerekmiyor, fabrikaya bir şey gitmedi.\n${sebep.length ? sebep.join("\n") : "Sebep: listede model yok."}` });
+    if (r0 && r0.ok) b.hemraMesaj = [b.sorumlu, r0.result.message_id];
+    await ayarYaz(env, `fabrika:${anahtar}`, b);
+    return anahtar;
+  }
   const govde = b.liste.length ? magazaliYaz(b.liste, b.gruplar) : "Fabrikaya bir şey istenmeyecek.";
   const kartMetin = `${deneme ? DENEME : ""}📋 Gidecek liste (${gunGoster(gun)})${b.dunden ? " — dünden kalan" : ""} — ${b.kontrol.join(" · ")}:\n\n${b.acil.length ? `⚡ ACİL (listenin başında, en az 40 adet): ${b.acil.join(", ")}\n\n` : ""}${govde}${b.istenmeyen.length ? `\n\n🚫 Bu sefer istenmeyen: ${b.istenmeyen.join(", ")}` : ""}${b.depoda.length ? `\n\n📦 Depoda var (istenmedi; Vegawin stoğu düzeltilmeli): ${b.depoda.join(", ")}` : ""}${(b.hatali || []).length ? `\n\n⚠️ Bot hatası (listeye girmedi, düzeltilecek): ${b.hatali.join(", ")}` : ""}${b.fabrikadaBitti.length ? `\n\n⛔ Fabrikada bitti, fabrikaya sorulmadı (Patron'un repete kararı bekleniyor): ${b.fabrikadaBitti.join(", ")}` : ""}${b.kontrolsuz.length ? `\n\n⚠️ Kontrol edilmedi (listeye girmedi): ${b.kontrolsuz.join(", ")}` : ""}\n\nGönderilsin mi?${deneme ? (b.zincir ? " (DENEME: onaylanınca SADECE Sinem'e gider; Fuat ve Nuri'ye GİTMEZ)" : " (DENEME: onaylansa da fabrikaya GİTMEZ)") : ""}`.slice(0, 4000);
   const r = await tg(env, "sendMessage", {
@@ -439,7 +454,7 @@ async function kartGonder(env, tg, anahtar, d, { emin = false } = {}) {
   if (yeniDuzen(env, d) && !d.birlesik) { // 10 Kasım: kontrol bitti → Hemra'ya birleşik onay
     d.asama = "kontrolEdildi"; d.kontrolZaman = Math.floor(Date.now() / 1000);
     await ayarYaz(env, `fabrika:${anahtar}`, d);
-    await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: `${d.deneme ? DENEME : ""}✅ Kontrol bitti, teşekkürler. Liste Hemra'nın onayına gidiyor.` });
+    await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: `${d.deneme ? DENEME : ""}✅ Kontrol bitti, teşekkürler. ${d.yeni && !parcaListesi(d).liste.length ? "Fabrikaya istenecek model yok; Hemra'ya bilgi verildi." : "Liste Hemra'nın onayına gidiyor."}` });
     const gun = d.gun || anahtar.slice(0, 10);
     // 10 Kasım: kişi denemesi (…-DK) kendi iki listesiyle birleşir (VOLONTE + Black Rose); eski deneme akışı kendi anahtarlarıyla
     const da = d.deneme ? (await ayarOku(env, "fabrika:denemeAkis", null)) || {} : null;
@@ -1004,7 +1019,7 @@ async function eminVeGeriAl(env, cq, tg, anahtar, d, islem, kod, cevapla) {
   const kim = kisiAd(cq.from);
   if (d.asama === "birlesti") {
     const b = d.birlesik ? await ayarOku(env, `fabrika:${d.birlesik}`, null) : null;
-    if (!b || b.asama !== "onayda") return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: GONDERILDI_YAZI, show_alert: true });
+    if (!b || !["onayda", "bos"].includes(b.asama)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: GONDERILDI_YAZI, show_alert: true }); // "bos": 0 modelli liste (onay kartı gitmemişti) — yanlış basış geri alınabilir
     b.asama = "iptal"; // Hemra'nın onay kartı geçersiz; liste yeniden birleşir
     await ayarYaz(env, `fabrika:${d.birlesik}`, b);
     if (b.hemraMesaj) await tg(env, "editMessageText", { chat_id: b.hemraMesaj[0], message_id: b.hemraMesaj[1], text: `${b.deneme ? DENEME : ""}↩️ ${kim} bir kartı geri aldı (${kod}). Bu liste iptal; düzeltilince yeni liste gelecek.` }).catch(() => null);
@@ -2699,6 +2714,20 @@ async function tekIslem(env, simdi, tg) {
     await tg(env, "sendMessage", { chat_id: aziz, text: `${DENEME}${listeBasi("VOLONTE", 2)}` });
     sonuc.anahtar = k;
     sonuc.kart = await modelParcasi(env, k, tg);
+  } else if (is.tur === "akisSinem") { // deneme: TEST kartı doğrudan SADECE Sinem'e (Aziz / Hemra adımı atlanır) — zincir "Bitti"den devam eder
+    const t = await ayarOku(env, "akis:deneme", null);
+    const sinem = await sinemKimligi(env);
+    const kod = String(is.kod || "TEST-002");
+    const d = t ? await ayarOku(env, `fabrika:${t.k}`, null) : null;
+    const model = (d && (d.modeller || []).find((m) => m.kod === kod)) || { kod, kalan: 4, s7: 18, yil: 46, dagilim: [{ renk: "beyaz", buyuk: 20, kucuk: 20 }], donSn: Number(is.donSn) || 180 };
+    if (!sinem) sonuc.hata = "Sinem kayıtlı değil";
+    else {
+      const rec = await siparisAc(env, { kod, beden: "b", renkler: [{ renk: "beyaz", adet: 16 }], liste: t ? t.k : `${gunAnahtari(simdi)}-TD`, deneme: true, fotoKod: kod, grup: "fabrika", magaza: "VOLONTE", sadece: [sinem] }, simdi);
+      Object.assign(rec, { zincir: true, yeni: true, test: true, testVeri: model });
+      const r = await fabrikayaGonder(env, rec, tg);
+      Object.assign(sonuc, { rec: rec.id, giden: r.giden });
+      await ayarYaz(env, "akis:deneme", { ...(t || { g: gunAnahtari(simdi), zaman: simdi }), ekRecler: [...((t && t.ekRecler) || []), rec.id] });
+    }
   } else if (is.tur === "akisDurum") { // okuma: deneme listesinin ve zincirin durumu
     const t = await ayarOku(env, "akis:deneme", null);
     sonuc.t = t; sonuc.acik = await yeniAkisAcik(env);
@@ -2708,7 +2737,7 @@ async function tekIslem(env, simdi, tg) {
       const b = d && d.birlesik ? await ayarOku(env, `fabrika:${d.birlesik}`, null) : null;
       sonuc.hemraListe = b ? { asama: b.asama, onaylayan: b.onaylayan || null, kart: b.kartMetin || null, depoda: b.depoda || [], recler: b.recler || null } : null;
       sonuc.siparisler = [];
-      for (const id of b ? Object.values(b.recler || {}).flat() : []) { const r = await siparisOku(env, id); if (r) sonuc.siparisler.push({ id: r.id, kod: r.kod, durum: r.durum, cevaplayan: r.cevaplayan || null, hemraOneri: r.hemraOneri || null, hemraKart: r.hemraMesaj ? r.hemraMesaj[3] || null : null, rkVeri: r.rkVeri || null }); }
+      for (const id of [...(b ? Object.values(b.recler || {}).flat() : []), ...(t.ekRecler || [])]) { const r = await siparisOku(env, id); if (r) sonuc.siparisler.push({ id: r.id, kod: r.kod, durum: r.durum, cevaplayan: r.cevaplayan || null, hemraOneri: r.hemraOneri || null, hemraKart: r.hemraMesaj ? r.hemraMesaj[3] || null : null, rkVeri: r.rkVeri || null }); }
     }
   } else if (is.tur === "akisTemizle") { // deneme kayıtları: repete kayıtları silinir, açık kartlar kapanır, sahte "son istek" silinir
     const t = await ayarOku(env, "akis:deneme", null);
@@ -2722,6 +2751,14 @@ async function tekIslem(env, simdi, tg) {
       }
       const bl = (await ayarOku(env, `fabrika:birlesik:${t.g}`, [])) || [], kalan = [];
       sonuc.siparis = [];
+      for (const id of t.ekRecler || []) { // doğrudan Sinem'e gönderilen deneme kartları
+        const r = await siparisOku(env, id);
+        if (!r || r.durum === "kapandi") continue;
+        if (r.durum === "bekliyor") await mesajlariGuncelle(env, r, "🧪 DENEME bitti — kart kapandı.", tg).catch(() => null);
+        Object.assign(r, { durum: "kapandi", iptal: { neden: "deneme bitti", zaman: simdi } });
+        await siparisYaz(env, r);
+        sonuc.siparis.push(id);
+      }
       for (const bk of bl) {
         const b = await ayarOku(env, `fabrika:${bk}`, null);
         if (!b || !b.test) { kalan.push(bk); continue; }
