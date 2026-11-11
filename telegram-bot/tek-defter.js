@@ -36,15 +36,20 @@ export async function kisiAdlari(env) {
 
 // ---------- KARTLAR: iş defterindeki kartları tek satıra indir (saf mantık; test edilir) ----------
 export const kartAilesi = (cb) => (String(cb || "").split("|").filter(Boolean)[0] || "").split(":")[0] || "?";
+export const BILGI_KARTI = /ak[şs]am raporu|sabah raporu|g[üu]n[üu]n [öo]zeti|haftal[ıi]k rapor/i; // rapor = bilgi; iş değildir (12 saat sonra kapanır)
 const yaziylaMi = (r) => r.tur === "karar" && /: "|^"/.test(String(r.ozet || ""));
 // satirlar: iş defteri satırları (kart + karar). repeteler: [{ kod, durum, zaman, onay }] (Fuat'ın onayladığı / açık repeteler)
 // Dönen: { acik: [her iş için en yeni bekleyen kart], kapat: [{ id, neden }] }
-export function kartlariIndir(satirlar, simdi, { repeteler = [] } = {}) {
+// fsAcik: Sami'nin AÇIK fabrika kayıtlarının kimlikleri (Set) — verilirse kapanmış kaydın kartı da kapanır
+const cbParca = (cb) => (String(cb || "").split("|").filter(Boolean)[0] || "").split(":");
+export const ESKI_HEMRA_LISTESI = /onaylanmayanlar \/ sorunlu işler/;
+export function kartlariIndir(satirlar, simdi, { repeteler = [], fsAcik = null } = {}) {
+  const bugun = gunA(simdi);
   const kartlar = (satirlar || []).filter((r) => r.tur === "kart" && !Number(r.deneme));
   const yazili = (satirlar || []).filter(yaziylaMi);
   const gruplar = new Map(), kapat = [], acik = [];
   for (const r of kartlar) {
-    const a = `${r.bot}|${r.kime}|${r.kod || `m${r.mesaj}`}|${kartAilesi(r.cb)}`;
+    const a = `${r.bot}|${r.kime}|${r.kod || `y:${String(r.ozet || r.mesaj).replace(/\d{1,2}[.:]\d{2}/g, "").slice(0, 50)}`}|${kartAilesi(r.cb)}`; // kodsuz kart: aynı yazı = aynı iş (ör. mutabakat kopyaları)
     if (!gruplar.has(a)) gruplar.set(a, []);
     gruplar.get(a).push(r);
   }
@@ -60,18 +65,35 @@ export function kartlariIndir(satirlar, simdi, { repeteler = [] } = {}) {
       else if (r.kod && yazili.some((k) => k.bot === r.bot && String(k.kime) === String(r.kime) && String(k.kod) === String(r.kod) && k.zaman >= r.zaman)) neden = "cevaplandi"; // yazıyla cevap
       else if (r.bot === "sami" && r.kod && rkOnay[String(r.kod)] && r.zaman < rkOnay[String(r.kod)] && kartAilesi(r.cb) !== "rk") neden = "repete"; // repete açıldı
       else if (simdi - r.zaman > KART_ESKI) neden = "eskidi";
+      else if (r.bot === "sami" && samiKartiOldu(r, bugun, fsAcik)) neden = samiKartiOldu(r, bugun, fsAcik);
+      else if (BILGI_KARTI.test(String(r.ozet || "")) && simdi - r.zaman > 12 * 3600) neden = "bilgi";
       if (neden) kapat.push({ id: r.id, neden });
+      else if (BILGI_KARTI.test(String(r.ozet || "")) || YARDIMCI_KART(r)) continue; // rapor / liste sonu / Hemra listesi kartı: iş satırı olmaz
       else acik.push({ ...r, anahtar, kopya: l.filter((y) => y.durum === "bekliyor").length });
     }
   }
   return { acik, kapat };
 }
 
+// Sami kartı hâlâ geçerli mi? Düğmedeki kayıt / liste kimliğinden anlaşılır:
+//  fc:g|r|b|z:<kayıt> fabrika kartı · fk:<…>:<kayıt> "bitti" karar kartı · fo:<…>:<kayıt> Fuat onayı → kayıt kapandıysa kart da kapanır
+//  fe:<…>:<gün>:<kod> eksik listesi kartı · fc:H:<gün…> liste sonu kartı → liste önceki günlerinse kapanır
+//  hl:… eski toplu Hemra listesi (yeni düzende her iş ayrı kart) → kapanır
+function samiKartiOldu(r, bugun, fsAcik) {
+  const p = cbParca(r.cb), a = p[0];
+  if ((a === "fk" || a === "fo" || (a === "fc" && p[1] !== "H")) && fsAcik && p[2] && !fsAcik.has(p[2])) return "kayitKapandi";
+  if ((a === "fe" || (a === "fc" && p[1] === "H")) && /^\d{4}-\d{2}-\d{2}/.test(String(p[2] || "")) && String(p[2]).slice(0, 10) < bugun) return "listeKapandi";
+  if (a === "hl" && ESKI_HEMRA_LISTESI.test(String(r.ozet || ""))) return "eskiListe";
+  return null;
+}
+const YARDIMCI_KART = (r) => { const p = cbParca(r.cb); return (p[0] === "fc" && p[1] === "H") || p[0] === "hl"; };
+
 // ---------- SATIRLAR ----------
 const FS_DURUM = {
   bekliyor: ["acik", "Fabrika", "Fabrikadan istendi, cevap bekleniyor"],
   sureSoruluyor: ["acik", "Fabrika", "Fabrika süre yazacak"],
   repete: ["beklemede", "Fabrika", "Fabrika: gelecek"],
+  gelecek: ["beklemede", "Fabrika", "Fabrika: gelecek"],
   geldi: ["beklemede", "Mağaza", "Mal geldi, Vegawin girişi bekleniyor"],
   bitti: ["acik", "Hemra", "Fabrikada bitti, karar bekleniyor"],
 };
@@ -97,8 +119,10 @@ export function repeteSatiri(r) {
 export function fabrikaSatiri(f) {
   const [durum, kim, yazi] = FS_DURUM[f.durum] || ["acik", "Fabrika", f.durum];
   return { id: `fabrika:${f.id}`, tur: "fabrika", kod: String(f.kod), marka: f.magaza || null, ne: "Fabrika isteği (eksik listesi)", kim, durum, bot: "sami", acildi: f.gonderim || 0, guncel: f.gonderim || 0,
-    kanit: f.durum === "repete" && (f.hazirGun || f.teslimSure) ? `${yazi}${f.teslimSure ? `, ${f.teslimSure}` : ""}${f.hazirGun ? ` (hazır: ${String(f.hazirGun).split("-").reverse().join(".")})` : ""}` : yazi, ek: { fdurum: f.durum } };
+    kanit: ["repete", "gelecek"].includes(f.durum) && (f.hazirGun || f.teslimSure) ? `${yazi}${f.teslimSure ? `, ${f.teslimSure}` : ""}${f.hazirGun ? ` (hazır: ${String(f.hazirGun).split("-").reverse().join(".")})` : ""}` : yazi, ek: { fdurum: f.durum } };
 }
+// Sami'nin fabrika isteğine bağlı kart türleri (düğme öneki): fabrika kartı, "bitti" onayı, Hemra kararı, süre / geldi soruları
+export const FS_AILE = new Set(["fc", "fk", "fo"]);
 export function kartSatiri(r, adlar = {}) {
   return { id: `kart:${r.anahtar}`, tur: "kart", kod: r.kod ? String(r.kod) : null, marka: null, ne: kartNe(r.ozet), kim: adlar[String(r.kime)] || "?", kimId: String(r.kime), durum: "acik", bot: r.bot, acildi: r.zaman, guncel: r.zaman, kanit: null,
     ek: { isdId: r.id, chat: r.chat, mesaj: r.mesaj, hatirlatildi: Number(r.hatirlatildi) || 0, aile: kartAilesi(r.cb) } };
@@ -131,23 +155,42 @@ export async function defterOku(env, simdi, { kapat = true, kuru = false } = {})
     stokIste(env, "/fs-ozet", {}).catch(() => []),
     repeteKayitlari(env).catch(() => []),
   ]);
-  const { acik, kapat: kapanacak } = kartlariIndir(Array.isArray(isd) ? isd : [], simdi, { repeteler: rk.map((r) => ({ kod: r.kod, durum: r.durum, zaman: r.zaman, onay: r.fuat && r.fuat.zaman })) });
+  const { acik, kapat: kapanacak } = kartlariIndir(Array.isArray(isd) ? isd : [], simdi, { repeteler: rk.map((r) => ({ kod: r.kod, durum: r.durum, zaman: r.zaman, onay: r.fuat && r.fuat.zaman })), fsAcik: Array.isArray(fs) ? new Set(fs.map((f) => f.id)) : null });
   if (kapat && !kuru && kapanacak.length) {
     for (const neden of [...new Set(kapanacak.map((x) => x.neden))]) {
       const idler = kapanacak.filter((x) => x.neden === neden).map((x) => x.id);
       for (let i = 0; i < idler.length; i += 150) await stokIste(env, "/isd-isaretle", { idler: idler.slice(i, i + 150), alan: "durum", deger: neden }).catch(() => null);
     }
   }
-  const satirlar = [
-    ...rk.filter((r) => !["red", "iptal", "geldi", "kapandi"].includes(r.durum) || simdi - (r.kapandi || r.zaman || 0) < 3 * 86400).map(repeteSatiri),
-    ...(Array.isArray(fs) ? fs : []).filter((f) => !f.deneme).map(fabrikaSatiri),
-    ...(await venomSatirlari(env, simdi).catch(() => [])),
-    ...acik.map((r) => kartSatiri(r, adlar)),
-  ];
+  // Fabrika istekleri: aynı model için TEK satır (en yeni kayıt); eski tekrarlar ayrı iş sayılmaz
+  const fsYeni = new Map();
+  for (const f of (Array.isArray(fs) ? fs : []).filter((x) => !x.deneme)) { const o = fsYeni.get(String(f.kod)); if (!o || (f.gonderim || 0) >= (o.gonderim || 0)) fsYeni.set(String(f.kod), f); }
+  const fsEski = (Array.isArray(fs) ? fs : []).filter((x) => !x.deneme).length - fsYeni.size;
+  // Kartlar: aynı soru (aynı bot + model + tür + yazı) birden çok kişiye gittiyse TEK iş (kim: hepsi)
+  const birles = new Map();
+  for (const s of acik.map((r) => kartSatiri(r, adlar))) {
+    const a = `${s.bot}|${s.kod || ""}|${s.ek.aile}|${s.ne}`, m = birles.get(a);
+    if (!m) birles.set(a, { ...s, kimIdler: [s.kimId], kimler: [s.kim] });
+    else { if (!m.kimIdler.includes(s.kimId)) { m.kimIdler.push(s.kimId); if (!m.kimler.includes(s.kim)) m.kimler.push(s.kim); m.kim = m.kimler.join(", "); } m.acildi = Math.min(m.acildi, s.acildi); m.ek.hatirlatildi = Math.max(m.ek.hatirlatildi || 0, s.ek.hatirlatildi || 0); }
+  }
+  const venomS = await venomSatirlari(env, simdi).catch(() => []);
+  const rkS = rk.filter((r) => !["red", "iptal", "geldi", "kapandi"].includes(r.durum) || simdi - (r.kapandi || r.zaman || 0) < 3 * 86400).map(repeteSatiri);
+  const fsS = [...fsYeni.values()].map(fabrikaSatiri);
+  // Bir işin kartı ayrı satır olmaz: görev kartı → görev satırı; repete / fabrika kartı → o modelin repete / fabrika satırı (kim: kart kimdeyse)
+  const isVar = new Map();
+  for (const x of [...fsS, ...rkS]) isVar.set(`${x.tur === "repete" ? "rk" : "fs"}|${x.kod}`, x);
+  const kartS = [];
+  for (const s of birles.values()) {
+    if (s.ek.aile === "vg" && venomS.some((g) => g.tur === "gorev" && g.durum !== "bitti")) continue;
+    const sahip = s.bot === "sami" && s.kod ? (s.ek.aile === "rk" ? isVar.get(`rk|${s.kod}`) : FS_AILE.has(s.ek.aile) ? isVar.get(`fs|${s.kod}`) : null) : null;
+    if (sahip && sahip.durum !== "bitti") { sahip.kartta = [...new Set([...(sahip.kartta || []), ...s.kimler])]; if (sahip.tur === "fabrika" && sahip.kartta.length === 1) sahip.kim = sahip.kartta[0]; continue; } // kart tek kişideyse iş onda (ör. Fuat'ın "bitti" onayı)
+    kartS.push(s);
+  }
+  const satirlar = [...rkS, ...fsS, ...venomS, ...kartS];
   // repete açık / beklemede olan modelin fabrika isteği ayrıca "açık iş" sayılmaz (tek satır: repete)
   const repeteli = new Set(satirlar.filter((x) => x.tur === "repete" && x.durum !== "bitti").map((x) => x.kod));
-  const sade = satirlar.filter((x) => !(x.tur === "fabrika" && repeteli.has(x.kod) && x.ek && x.ek.fdurum === "bitti"));
-  const ozet = { zaman: simdi, acik: sade.filter((x) => x.durum === "acik").length, beklemede: sade.filter((x) => x.durum === "beklemede").length, kapatilan: kapanacak.length };
+  const sade = satirlar.filter((x) => !(x.tur === "fabrika" && repeteli.has(x.kod)));
+  const ozet = { zaman: simdi, acik: sade.filter((x) => x.durum === "acik").length, beklemede: sade.filter((x) => x.durum === "beklemede").length, kapatilan: kapanacak.length, fabrikaEskiTekrar: fsEski };
   if (!kuru) await stokIste(env, "/ayar-yaz", { k: "defter:tek", v: JSON.stringify({ ...ozet, satirlar: sade.slice(0, 400) }) }).catch(() => null);
   return { satirlar: sade, kapanan: kapanacak, ozet, adlar };
 }

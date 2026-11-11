@@ -1687,6 +1687,18 @@ test("TEK DEFTER (kök): aynı soru iki kez sayılmaz; yazıyla cevaplanan kapan
   const neden = Object.fromEntries(kapat.map((x) => [x.id, x.neden]));
   assert.deepEqual(neden, { 1: "yenilendi", 2: "repete", 3: "repete", 4: "repete", 6: "eskidi", 7: "cevaplandi" });
   assert.deepEqual(acik.map((x) => x.id).sort(), [5, 9]);
+  // Sami kartı düğmesindeki kayıt / liste kimliğiyle: kapanmış kaydın kartı, önceki günün liste kartı, eski toplu Hemra listesi kapanır; rapor kartı iş değildir
+  const s2 = [
+    k(20, { kod: "3284", cb: "|fk:r:3284-kapali|fk:s:3284-kapali|" }), k(21, { kod: "3254", cb: "|fk:r:3254-acik|fk:s:3254-acik|" }),
+    k(22, { kod: "3490", kime: "501", chat: "501", cb: "|fo:e:3490-kapali|" }), k(23, { kod: "3408", kime: "501", chat: "501", cb: "|fc:g:3408-acik|fc:b:3408-acik|" }),
+    k(24, { kod: "3477", cb: "|fe:k:2026-11-10:3477|" }), k(25, { kod: "3529", cb: "|fe:k:2026-11-11:3529|" }),
+    k(26, { kod: null, ozet: "🌹 BLACK ROSE LİSTESİ – SONU (9 model)", kime: "501", chat: "501", cb: "|fc:H:2026-11-10-T3:B|" }), k(27, { kod: null, ozet: "🟦 VOLONTE LİSTESİ – SONU (1 model)", kime: "501", chat: "501", cb: "|fc:H:2026-11-11-T1:V|" }),
+    k(28, { kod: "3501", kime: "504", chat: "504", ozet: "📋 Hemra: onaylanmayanlar / sorunlu işler (12). Her satır için seçin", cb: "|hl:9cc:a|hl:9cc:m|" }),
+    k(29, { kod: "3279", bot: "kemal", kime: "999", chat: "999", ozet: "🌙 Kemal — 09.11.2026 akşam raporu · Bugün kanala 4 paylaşım yapıldı:", zaman: simdi - 20 * 3600, cb: "|rp:3392|" }),
+  ];
+  const r2 = D.kartlariIndir(s2, simdi, { fsAcik: new Set(["3254-acik", "3408-acik"]) });
+  assert.deepEqual(Object.fromEntries(r2.kapat.map((x) => [x.id, x.neden])), { 20: "kayitKapandi", 22: "kayitKapandi", 24: "listeKapandi", 26: "listeKapandi", 28: "eskiListe", 29: "bilgi" });
+  assert.deepEqual(r2.acik.map((x) => x.id).sort(), [21, 23, 25]); // liste sonu kartı (27) açık kalır ama iş satırı olmaz
   // satır biçimi: ne · kim · marka · durum · kanıt
   const rs = D.repeteSatiri({ id: "3419-x", kod: "3419", magaza: "VOLONTE", durum: "acik", adet: 40, zaman: simdi - 86400, teslim: "2026-11-21", fuat: { kim: "Fuat", zaman: simdi - 3 * 3600, kaynak: "Patron bildirdi (11.11)" } });
   assert.equal(D.defterSatirYazi(rs), "3419 · Repete 40 adet · Fabrika · VOLONTE · beklemede · Fuat onayladı (Patron bildirdi (11.11)), teslim 21.11.2026");
@@ -1767,7 +1779,7 @@ test("5 SORU (Patron'un testi): fabrikaya dün giden (markalar ayrı, ≤4 satı
     await o.ayar("ciro:BLACKROSE", { zaman: simdi - 600, satirlar: [{ tablo: "D0026TBLSATFATBASLIK", yil: 2026, tur: "21", doviz: "$", n: 900, tutar: 250000, kaynak: "satis" }, { tablo: "GUN:2026-11-11", yil: 2026, tur: "21", doviz: "$", n: 3, tutar: 1250.5, kaynak: "satis" }, { tablo: "GUN:2026-11-11", yil: 2026, tur: "22", doviz: "$", n: 1, tutar: 50.5, kaynak: "iade" }, { tablo: "GUN:2026-11-10", yil: 2026, tur: "21", doviz: "$", n: 9, tutar: 7000, kaynak: "satis" }] });
     await yazi(o, PATRON, "Bugün Black Rose kaç adet sattı, kaç dolarlık?");
     const c5 = patronaGiden(o).at(-1).govde.text;
-    assert.equal(c5, "Bugün (19:00'e kadar) satış — Vegawin:\nBlack Rose: 6 adet (2 model) · ciro: 1.200,00 $ (satış 1.250,50, iade 50,50) · 3 fatura\nCiro okuma saati: 18:50.");
+    assert.equal(c5, "Bugün (saat 19:00 itibarıyla) satış — Vegawin:\nBlack Rose: 6 adet (2 model) · ciro: 1.200,00 $ (satış 1.250,50, iade 50,50) · 3 fatura\nCiro okuma saati: 18:50.");
     assert.ok(!/bende yok|not edeyim|kodları/.test(c5));
     // yıllık ciro günlük satırları İKİ KEZ saymaz
     const { ciroBolumu, gunlukCiro } = await import("./ciro.js");
@@ -1775,7 +1787,7 @@ test("5 SORU (Patron'un testi): fabrikaya dün giden (markalar ayrı, ≤4 satı
     assert.equal(gunlukCiro({ zaman: 1, satirlar: [{ tablo: "D0026X", yil: 2026, tur: "21", tutar: 5 }] }, "2026-11-11"), null); // eski köprü: günlük satır yok → "henüz gelmedi"
     // köprü günlük ciro göndermiyorsa: uydurma yok, tek satır sebep + başlatılan çözüm
     await yazi(o, PATRON, "bugün volonte kaç sattı kaç dolar");
-    assert.match(patronaGiden(o).at(-1).govde.text, /VOLONTE: 0 adet \(0 model\) · ciro: Vegawin'den günlük fatura toplamı henüz gelmedi\nGünlük ciro için mağaza bilgisayarındaki köprü güncelleniyor/);
+    assert.match(patronaGiden(o).at(-1).govde.text, /VOLONTE: 0 adet \(0 model\) · ciro: Vegawin'den günlük fatura toplamı henüz gelmedi\nGünlük ciro köprüden henüz gelmedi \(köprü güncellemesi gerekiyor\); gelince bu satırda yazar\./);
     assert.equal(o.claude.length, once); // beş sorunun hiçbiri yapay zekâya gitmedi
   } finally { Date.now = gercek; }
 });

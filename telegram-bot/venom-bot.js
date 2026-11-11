@@ -1956,10 +1956,9 @@ async function claudeIslemAdimi(env, simdi) {
     } else if (is.tur === "mesajDuzelt") { // Patron'daki eski bir Venom mesajını kapat (ör. yanlış alarm): yazı değişir, düğmeler kalkar
       const r = await tg(env, "editMessageText", { chat_id: patron(env), message_id: Number(is.mesaj), text: String(is.metin || "").slice(0, 4000), reply_markup: { inline_keyboard: [] }, disable_web_page_preview: true }).catch((e) => ({ ok: false, description: String(e.message || e) }));
       sonuc.push({ tur: is.tur, mesaj: is.mesaj, ok: Boolean(r && r.ok), yazi: r && r.result ? r.result.text : null, hata: r && !r.ok ? r.description : null });
-    } else if (is.tur === "pelinAnlamaIptal") { // yanlışlıkla açılan Pelin "anlama" kartı: kayıt silinir (para harcanmamıştır)
-      const silinen = [];
-      for (const k of ((await env.KAYIT.list({ prefix: "pelin:anlama:" }).catch(() => ({ keys: [] }))).keys || []).slice(0, 50)) { const q = await oku(env, k.name, null); if (q && String(q.kod) === String(is.kod)) { await env.KAYIT.delete(k.name); silinen.push(k.name.split(":").pop()); } }
-      sonuc.push({ tur: is.tur, kod: is.kod, silinen });
+    } else if (is.tur === "isdKapat") { // iş defterinde bekleyen kartı kapat (kart Telegram'da kapatıldıktan sonra): { idler, neden }
+      await stokIste(env, "/isd-isaretle", { idler: (is.idler || []).slice(0, 100), alan: "durum", deger: String(is.neden || "kapandi").slice(0, 20) }).catch(() => null);
+      sonuc.push({ tur: is.tur, n: (is.idler || []).length });
     } else if (is.tur === "hemraListeOku") { const l = await oku(env, "venom:hemraListe", []); sonuc.push({ tur: is.tur, bekleyen: l.filter((x) => x.durum === "bekliyor").map((x) => ({ ozet: x.ozet, gonderildi: Boolean(x.gonderildi) })), toplam: l.length }); }
     else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }

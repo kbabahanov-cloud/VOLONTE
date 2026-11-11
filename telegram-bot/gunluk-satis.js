@@ -35,11 +35,11 @@ export function magazaSatiri(v, m) {
 // Patron'un sorusuna cevap (en fazla 4 satır). magaza: "VOLONTE" | "BLACKROSE" | null (ikisi AYRI satır)
 export function gunlukSatisMetni(v, simdi, magaza = null) {
   const bugun = v.gun === gunA(simdi);
-  const ne = bugun ? `Bugün (${saatYaz(simdi)}'e kadar)` : v.gun === gunA(simdi - 86400) ? "Dün" : v.gun.split("-").reverse().join(".");
+  const ne = bugun ? `Bugün (saat ${saatYaz(simdi)} itibarıyla)` : v.gun === gunA(simdi - 86400) ? "Dün" : v.gun.split("-").reverse().join(".");
   const l = (magaza ? [magaza] : ["VOLONTE", "BLACKROSE"]).map((m) => magazaSatiri(v, m));
   const okuma = (magaza ? [magaza] : ["VOLONTE", "BLACKROSE"]).map((m) => v[m] && v[m].ciro && v[m].ciro.okuma).filter(Boolean);
   const eksik = (magaza ? [magaza] : ["VOLONTE", "BLACKROSE"]).some((m) => v[m] && !v[m].ciro);
-  return [`${ne} satış — Vegawin:`, ...l, okuma.length ? `Ciro okuma saati: ${saatYaz(Math.min(...okuma))}.` : null, eksik ? "Günlük ciro için mağaza bilgisayarındaki köprü güncelleniyor; ilk rakam gelince buraya yazılır." : null].filter(Boolean).slice(0, 5).join("\n");
+  return [`${ne} satış — Vegawin:`, ...l, okuma.length ? `Ciro okuma saati: ${saatYaz(Math.min(...okuma))}.` : null, eksik ? "Günlük ciro köprüden henüz gelmedi (köprü güncellemesi gerekiyor); gelince bu satırda yazar." : null].filter(Boolean).slice(0, 5).join("\n");
 }
 // Akşam raporu satırı (tek satır, markalar ayrı): "Satış: VOLONTE 12 adet, 840,00 $ · Black Rose 6 adet, 410,00 $"
 export function raporSatisSatiri(v) {
