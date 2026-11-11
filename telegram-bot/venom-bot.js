@@ -1360,6 +1360,15 @@ export async function venomCron(env, simdi) {
     const r = await yaz({ ...env, __izin: "cevap" }, f.metin, { posta: { kaynak: "sami", tur: "cevap", izin: "cevap" } }).catch(() => null);
     await kaydet(env, "venom:fabrikaGittiKanit", { zaman: simdi, metin: f.metin, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null }, 7 * 86400).catch(() => null);
   }
+  // 11 Kasım (Patron): deneme zinciri — gecikende Venom kişiye (Merdan/Aziz/Hemra) yazar; Patron'a sadece sonuç (Sami takip eder)
+  for (const h of await kuyruguAl(env, "zincirHatirlat")) {
+    const r = await tg(env, "sendMessage", { chat_id: h.kime, text: String(h.metin).slice(0, 4000) }).catch(() => null);
+    await kaydet(env, `venom:zincirKanit:${h.id}`, { zaman: simdi, ad: h.ad, metin: h.metin, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null, hata: r && !r.ok ? String(r.description || "").slice(0, 120) : null }, 3 * 86400).catch(() => null);
+  }
+  for (const z of await kuyruguAl(env, "zincirSonuc")) {
+    const r = await yaz({ ...env, __izin: "cevap" }, z.metin, { posta: { kaynak: "sami", tur: "cevap", izin: "cevap" } }).catch(() => null);
+    await kaydet(env, `venom:zincirKanit:${z.id}`, { zaman: simdi, metin: z.metin, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null }, 3 * 86400).catch(() => null);
+  }
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) { if (s.ok && /^(Mesaj|Hatırlatma) .* gitti \(Sami\)\.?$/.test(String(s.aciklama || ""))) continue; /* 10 Kasım: "Mesaj X'e gitti" özete girmez */ await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }

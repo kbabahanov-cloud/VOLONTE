@@ -3,7 +3,7 @@
 //  - Vegawin'e hiçbir şey yazmaz/silmez (zaten sadece okuma köprüsü). Silme, sipariş, fabrikaya gönderme aracı YOK;
 //    Hemra'nın eksik listesine işleme yapar ama fabrikaya gitmeden önce listenin kendi onay kartı (✅ Onayla / ✏️ Düzelt) gelir.
 //  - Fiyat, maliyet, kâr hiçbir cevapta yok (araçlar fiyat vermez). Anlamazsa uydurmaz, "şunu mu demek istedin?" diye sorar.
-//  - Bütçe: ekibin 80 $'ından ayrı, aylık 10 $; 8 $'da Murat'a uyarı; dolunca beyin durur, komutlar çalışır.
+//  - Bütçe: ekibin 80 $'ından ayrı, aylık 30 $ (11 Kasım; önce 10 $); %80'de (24 $) Murat'a uyarı; dolunca beyin durur, komutlar çalışır.
 //  - Sohbet geçmişi ve harcama Sami'nin deposunda (StokDO ayar; KV günlük yazma sınırını harcamaz).
 
 import { ORTAK_KURALLAR } from "./kurallar.js";
@@ -15,7 +15,7 @@ import { indirimliMi } from "./stok.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
 
 export const BEYIN_MODEL = "claude-opus-5-5"; // 11 Kasım (Patron onayı, kalıcı): Haiku → Opus
-export const AYLIK_SINIR_USD = 10;
+export const AYLIK_SINIR_USD = 30; // 11 Kasım (Patron): Opus ile aylık 30 $, %80'de uyarı
 export const UYARI_ORANI = 0.8;
 const FIYAT = { giris: 0.1, cikis: 0.5, okuma: 0.01 }; // $ / milyon token (100K altı istem)
 // 10 Kasım (Patron): kalıba uymayan eksik yazısını OPUS anlar (Sami'nin beyin modeli Patron izni olmadan değiştirilmez)

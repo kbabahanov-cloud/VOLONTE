@@ -813,21 +813,21 @@ test("Sami beyni: Hemra serbest yazı ('siyahtan 5', 'bu sefer isteme') listeye 
   assert.equal(o.claude.length, n);
 });
 
-test("Sami beyni: aylık 10 $ sınır — 8 $'da Murat'a uyarı, dolunca beyin durur (komutlar çalışır); Aziz araçla listeye işleyemez", async () => {
+test("Sami beyni: aylık 30 $ sınır — 24 $'da Murat'a uyarı, dolunca beyin durur (komutlar çalışır); Aziz araçla listeye işleyemez", async () => {
   const { guncelleme: g2 } = await import("./sami.js");
   const o = beyinOrtami([metinCevap("Merhaba"), aracCevap("eksik_listesine_isle", { kararlar: [], hepsini_onceki_gibi: true }), metinCevap("Bunu Hemra yapabilir.")]);
   o.env.EKIP_IDS = "333,444";
   const ayK = `beyin:harcama:${new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7)}`;
-  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "7.9999" }) });
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "23.9999" }) });
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "selam" } }, o.env);
   assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "111" && /%80/.test(x.govde.text)));
   await g2({ message: { chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Aziz" }, text: "hepsini önceki gibi iste" } }, o.env);
   assert.match(o.claude.at(-1).messages.at(-1).content[0].content, /Kontrol kartınızdaki model için/); // 10 Kasım: "sadece Hemra ve Murat" yok
-  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "10" }) });
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "30" }) });
   const n = o.claude.length;
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "bugün ne sattı?" } }, o.env);
   assert.equal(o.claude.length, n);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /bütçesi \(10 \$\) doldu/);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /bütçesi \(30 \$\) doldu/);
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "/stok" } }, o.env);
   assert.ok(cagri(o.g, "sendMessage").length > 0);
 });
@@ -2393,4 +2393,54 @@ test("Venom 'fabrikaya gitti' satırı listenin KENDİ gününü sayar: dün ak�
   const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
   const [y, a, gn] = dun.split("-");
   assert.equal(fg.at(-1).metin, `${gn}.${a}.${y} eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 2 model.`);
+});
+
+// 11 Kasım (Patron): deneme zinciri takibi — gecikende Venom yazar (Merdan / Hemra), Patron'a sadece sonuç; "gittiHesap" okuma
+test("deneme zinciri takibi: Merdan 45 dk cevapsız → Venom'a hatırlatma; Hemra onayı gecikti → Hemra'ya; Sinem iki kartı cevaplayınca Patron'a TEK sonuç (Fuat/Nuri'ye gitmedi)", async () => {
+  const f = await import("./fabrika.js");
+  const { gunAnahtari } = await import("./worker.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557", NURI_ID: "555" });
+  const simdi = Date.UTC(2026, 10, 11, 9, 0) / 1000; // 12:00 (mesai)
+  const g = gunAnahtari(simdi);
+  const yaz = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${k}`, v: JSON.stringify(v) }) });
+  const kuyruk = async (ad) => (await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad }) })).json());
+  const tg2 = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
+  await yaz(`${g}-DK`, { asama: "kontrolEdildi", zaman: simdi - 4000, gun: g, magaza: "VOLONTE", sorumlu: "444", deneme: true, zincir: true, modeller: [{ kod: "3567" }] });
+  await yaz(`${g}-BR-DK`, { asama: "soruldu", zaman: simdi - 3600, gun: g, magaza: "BLACKROSE", sorumlu: "222", deneme: true, zincir: true, modeller: [{ kod: "3459" }] });
+  o.depo.set("sami:zincirTakip", JSON.stringify({ gun: g, basla: simdi - 3600 }));
+  await f.fabrikaZincirAdimi(o.env, simdi, tg2);
+  let h = await kuyruk("zincirHatirlat");
+  assert.deepEqual(h.map((x) => [x.ad, x.kime]), [["merdan", "222"]]);
+  assert.match(h[0].metin, /🧪 DENEME — 3459 kartınız cevap bekliyor/);
+  await f.fabrikaZincirAdimi(o.env, simdi + 600, tg2);
+  assert.equal((await kuyruk("zincirHatirlat")).length, 0); // 2 saat dolmadan tekrar yok
+  // Merdan bitirdi; Hemra onayı bekliyor
+  await yaz(`${g}-BR-DK`, { asama: "kontrolEdildi", zaman: simdi - 3600, gun: g, magaza: "BLACKROSE", deneme: true, zincir: true, modeller: [{ kod: "3459" }] });
+  await yaz(`${g}-D-T1`, { asama: "onayda", zaman: simdi - 3000, gun: g, deneme: true, zincir: true, liste: [] });
+  await yaz(`birlesik:${g}`, [`${g}-D-T1`]);
+  await f.fabrikaZincirAdimi(o.env, simdi + 900, tg2);
+  h = await kuyruk("zincirHatirlat");
+  assert.deepEqual(h.map((x) => [x.ad, x.kime]), [["hemra", "333"]]);
+  // Hemra onayladı → Sinem cevapladı
+  const r1 = await f._test.siparisAc(o.env, { kod: "3567", renkler: [{ renk: "beyaz", adet: 8 }], liste: `${g}-D-T1`, deneme: true, fotoKod: "3567", magaza: "VOLONTE", sadece: ["556"] }, simdi);
+  const r2 = await f._test.siparisAc(o.env, { kod: "3459", renkler: [{ renk: "pudra", adet: 8 }], liste: `${g}-D-T1`, deneme: true, fotoKod: "3459", magaza: "BLACKROSE", sadece: ["556"] }, simdi);
+  Object.assign(r1, { durum: "gelecek", cevaplayan: "Sinem", cevapZaman: simdi + 1500, mesajlar: [[556, 10, "foto"]] });
+  await f._test.siparisYaz(o.env, r1);
+  await yaz(`${g}-D-T1`, { asama: "gonderildi", zaman: simdi - 3000, onayZaman: Date.UTC(2026, 10, 11, 9, 20) / 1000, gun: g, deneme: true, zincir: true, liste: [{}, {}], gonderilecek: [], recler: { VOLONTE: [r1.id], BLACKROSE: [r2.id] } });
+  await f.fabrikaZincirAdimi(o.env, simdi + 1600, tg2);
+  assert.equal((await kuyruk("zincirSonuc")).length, 0); // Sinem 3459'u henüz cevaplamadı
+  Object.assign(r2, { durum: "bitti", cevaplayan: "Sinem", cevapZaman: simdi + 1700, mesajlar: [[556, 11, "foto"]] });
+  await f._test.siparisYaz(o.env, r2);
+  await f.fabrikaZincirAdimi(o.env, simdi + 1800, tg2);
+  const s = await kuyruk("zincirSonuc");
+  assert.equal(s.length, 1);
+  assert.equal(s[0].metin, "🧪 Deneme zinciri tamam: Aziz (3567) ✓ · Merdan (3459) ✓ · Hemra onayladı 12:20 · Sinem: 3567 Gelecek, 3459 Bitti, gelmeyecek. Fuat ve Nuri'ye gitmedi; fabrikaya üretim ve gerçek kayıt yok.");
+  await f.fabrikaZincirAdimi(o.env, simdi + 2100, tg2);
+  assert.equal((await kuyruk("zincirSonuc")).length, 0); // tek sefer
+  // gittiHesap: okuma (yazmaz)
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "gittiHesap", gun: g }]));
+  await f.fabrikaZincirAdimi(o.env, simdi + 2400, tg2);
+  const so = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.match(so.metin, /eksik listesi fabrikaya gitti: VOLONTE 0 model, Black Rose 0 model\./);
 });

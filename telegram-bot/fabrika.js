@@ -1165,6 +1165,23 @@ async function listeBaslik(env, tg, d, magaza, son, anahtar) {
     await tg(env, "sendMessage", { chat_id: k.id, text: `${d.deneme ? DENEME : ""}${son ? listeSonu(magaza, n) : listeBasi(magaza, n)}${!son && n > ACIK_KART_EN_FAZLA ? `\nKartlar ${ACIK_KART_EN_FAZLA}'er gelir: cevap verdikçe yenisi gelir.` : ""}${son && ids.length > 1 ? "\nHepsi aynı sürede gelecekse aşağıdan tek seferde seçebilirsiniz:" : ""}`, ...(son && ids.length > 1 ? { reply_markup: { inline_keyboard: [[{ text: "✅ Hepsi gelecek", callback_data: `fc:H:${anahtar}:${MAGAZA_KISA[magaza]}` }]] } } : {}) }).catch(() => null);
   }
 }
+// 11 Kasım: "fabrikaya gitti" sayımı listenin KENDİ günüyle (d = biten liste; o günün daha önce tamamen gidenleri + kısmen gidenler)
+const gittiMetni = (lg, simdi, giden, bekleyen) => `${lg === gunAnahtari(simdi) ? "Bugünkü" : gunGoster(lg)} eksik listesi fabrikaya gitti: VOLONTE ${(giden.VOLONTE || []).length} model, Black Rose ${(giden.BLACKROSE || []).length} model.${bekleyen.length ? ` Ayrıca: ${bekleyen.join("; ")}.` : ""}`;
+async function gidenSay(env, lg, d, anahtar) {
+  const giden = (await ayarOku(env, `fabrika:fabrikayaGiden:${lg}`, {})) || {};
+  const ekle = (b) => { const atl = new Set(b.atlanan || []); for (const x of b.liste || []) { if (atl.has(x.kod)) continue; const mg = x.magaza || b.magaza || MAGAZA; giden[mg] = [...new Set([...(giden[mg] || []), x.kod])]; } };
+  if (d) ekle(d);
+  const bekleyen = [];
+  for (const k of (await ayarOku(env, `fabrika:birlesik:${lg}`, [])) || []) {
+    if (k === anahtar) continue;
+    const b = await ayarOku(env, `fabrika:${k}`, null);
+    if (!b || b.deneme || b.asama !== "gonderildi") continue;
+    if (!(b.gonderilecek || []).length) ekle(b); // aynı günün daha önce tamamen gidenleri
+    else for (const mg of ["VOLONTE", "BLACKROSE"]) { const n = new Set((b.liste || []).filter((x) => (x.magaza || MAGAZA) === mg).map((x) => x.kod)).size; if (n) bekleyen.push(`${mg === "BLACKROSE" ? "Black Rose" : "VOLONTE"} ${n} modellik liste kısmen gitti (${(b.gonderilecek || []).length} satır fabrikanın cevabını bekliyor)`); } // kısmen giden (5 kart sınırı)
+  }
+  return { giden, bekleyen };
+}
+
 async function gonderimParcasi(env, anahtar, tg, simdi) {
   const d = await ayarOku(env, `fabrika:${anahtar}`, null);
   // 10 Kasım (Patron): fabrikaya da aynı anda en fazla 5 cevapsız kart; kalanlar cevap verdikçe (5 dk'lık görev) gelir
@@ -1227,23 +1244,9 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
       // 11 Kasım HATA DÜZELTMESİ: sayım listenin KENDİ günüyle yapılır (son satır ertesi sabah gidince "bugün" sanılıp
       // önceki akşam giden Black Rose listesi 0 sayılıyordu); mesajda listenin tarihi yazar
       const lg = d.gun || anahtar.slice(0, 10);
-      const gk = `fabrika:fabrikayaGiden:${lg}`;
-      const giden = (await ayarOku(env, gk, {})) || {};
-      const ekle = (b) => { const atl = new Set(b.atlanan || []); for (const x of b.liste || []) { if (atl.has(x.kod)) continue; const mg = x.magaza || b.magaza || MAGAZA; giden[mg] = [...new Set([...(giden[mg] || []), x.kod])]; } };
-      ekle(d);
-      for (const k of (await ayarOku(env, `fabrika:birlesik:${lg}`, [])) || []) { // aynı günün daha önce tamamen gidenleri (defterden önce)
-        if (k === anahtar) continue;
-        const b = await ayarOku(env, `fabrika:${k}`, null);
-        if (b && !b.deneme && b.asama === "gonderildi" && !(b.gonderilecek || []).length) ekle(b);
-      }
-      await ayarYaz(env, gk, giden);
-      const bekleyen = [];
-      for (const k of (await ayarOku(env, `fabrika:birlesik:${lg}`, [])) || []) { // kısmen giden (5 kart sınırı) listeler de söylenir
-        if (k === anahtar) continue;
-        const b = await ayarOku(env, `fabrika:${k}`, null);
-        if (b && !b.deneme && b.asama === "gonderildi" && (b.gonderilecek || []).length) for (const mg of ["VOLONTE", "BLACKROSE"]) { const n = new Set((b.liste || []).filter((x) => (x.magaza || MAGAZA) === mg).map((x) => x.kod)).size; if (n) bekleyen.push(`${mg === "BLACKROSE" ? "Black Rose" : "VOLONTE"} ${n} modellik liste kısmen gitti (${(b.gonderilecek || []).length} satır fabrikanın cevabını bekliyor)`); }
-      }
-      const metin = `${lg === gunAnahtari(simdi) ? "Bugünkü" : `${gunGoster(lg)}`} eksik listesi fabrikaya gitti: VOLONTE ${(giden.VOLONTE || []).length} model, Black Rose ${(giden.BLACKROSE || []).length} model.${bekleyen.length ? ` Ayrıca: ${bekleyen.join("; ")}.` : ""}`;
+      const { giden, bekleyen } = await gidenSay(env, lg, d, anahtar);
+      await ayarYaz(env, `fabrika:fabrikayaGiden:${lg}`, giden);
+      const metin = gittiMetni(lg, simdi, giden, bekleyen);
       await stokIste(env, "/kuyruk-ekle", { ad: "fabrikaGitti", kayit: { id: `fg-${anahtar}-${simdi}`, metin, zaman: simdi } }).catch(() => null);
     }
     if (d && d.liste && d.liste.length) {
@@ -2214,6 +2217,7 @@ export async function repeteMetni(env, m, tg, simdi) {
 export async function fabrikaZincirAdimi(env, simdi, tg) {
   if (await islemlerAdimi(env, simdi, tg)) return; // 10 Kasım: bir kerelik temizlik / deneme işleri (çalışma başına bir iş)
   await zincirTekSeferlik(env, simdi, tg);
+  await zincirTakipAdimi(env, simdi).catch(() => null); // 11 Kasım: deneme zinciri takibi (Venom hatırlatır, Patron'a sadece sonuç)
   await bittiKararAdimi(env, simdi, tg);
   await topluAdimi(env, tg, simdi);
   if (await kagitAcik(env, "sami", "sinemOzeti")) await sinemOzeti(env, simdi, tg);
@@ -2288,6 +2292,50 @@ async function zincirTekSeferlik(env, simdi, tg) {
     }
     await env.KAYIT.put("sami:silKontrolSonuc", JSON.stringify({ zaman: simdi, liste }), { expirationTtl: 7 * 86400 });
   }
+}
+
+// 11 Kasım (Patron): DENEME ZİNCİRİ TAKİBİ — KV "sami:zincirTakip" = {gun, basla}. Aziz/Merdan kartı ya da Hemra onayı 45 dk (mesai 09–20)
+// gecikirse Venom o kişiye yazar (en fazla 2 kez, 2 saat arayla). Sinem iki kartı da cevaplayınca Patron'a Venom'dan TEK sonuç satırı.
+const ZT_GECIKME = 45 * 60;
+const DURUM_AD = { gelecek: "Gelecek", repete: "Repete olacak", sureSoruluyor: "Repete olacak (süre soruluyor)", bitti: "Bitti, gelmeyecek", geldi: "Geldi", kapandi: "Kapandı" };
+const saatYazi = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(11, 16);
+async function zincirTakipAdimi(env, simdi) {
+  const t = await env.KAYIT.get("sami:zincirTakip", "json").catch(() => null);
+  if (!t || !t.gun) return;
+  if (simdi - (t.basla || simdi) > 2 * 86400) { await env.KAYIT.delete("sami:zincirTakip"); return; }
+  const g = t.gun; t.hatirlatma = t.hatirlatma || {};
+  const saat = new Date((simdi + SAAT_FARKI) * 1000).getUTCHours();
+  const mesai = saat >= 9 && saat < 20;
+  let degisti = false;
+  const hatirlat = async (ad, kime, metin, beri) => {
+    const h = t.hatirlatma[ad] || { n: 0, son: 0 };
+    if (!mesai || !kime || simdi - (beri || simdi) < ZT_GECIKME || h.n >= 2 || simdi - h.son < 2 * 3600) return;
+    await stokIste(env, "/kuyruk-ekle", { ad: "zincirHatirlat", kayit: { id: `zh-${ad}-${simdi}`, ad, kime: String(kime), metin, zaman: simdi } }).catch(() => null);
+    t.hatirlatma[ad] = { n: h.n + 1, son: simdi }; degisti = true;
+  };
+  const kodlar = {};
+  for (const [ad, cfg] of [["aziz", MAGAZALAR[0]], ["merdan", MAGAZALAR[1]]]) {
+    const d = await ayarOku(env, `fabrika:${g}${cfg.ek}-DK`, null);
+    if (!d) continue;
+    kodlar[ad] = (d.modeller || []).map((x) => x.kod).join(", ");
+    if (["soruldu", "eminMi"].includes(d.asama)) await hatirlat(ad, cfg.kime(env), `🧪 DENEME — ${kodlar[ad]} kartınız cevap bekliyor: adetleri yazıp "✅ Eminim, gönder"e basın. (Venom)`, d.eminZaman || d.zaman || t.basla);
+  }
+  let b = null; let bk = null;
+  for (const k of (await ayarOku(env, `fabrika:birlesik:${g}`, [])) || []) { const x = await ayarOku(env, `fabrika:${k}`, null); if (x && x.deneme && x.zincir) { b = x; bk = k; } }
+  if (b && b.asama === "onayda") await hatirlat("hemra", sorumlu(env), `🧪 DENEME — ${gunGoster(g)} deneme listesi onayınızı bekliyor (sadece Sinem'e gidecek). Lütfen "Gidecek liste" kartına bakın. (Venom)`, b.zaman);
+  if (b && b.asama === "gonderildi" && !(b.gonderilecek || []).length && !t.sonuc) {
+    const recler = [];
+    for (const id of Object.values(b.recler || {}).flat()) { const r = await siparisOku(env, id); if (r) recler.push(r); }
+    if (recler.length && recler.every((r) => r.cevaplayan)) {
+      const gidenler = new Set(recler.flatMap((r) => (r.mesajlar || []).map((m) => String(m[0]))));
+      const fn = [env.FUAT_ID, env.NURI_ID].filter(Boolean).map(String).some((x) => gidenler.has(x));
+      const sinem = recler.map((r) => `${r.kod} ${DURUM_AD[r.durum] || r.durum}${r.hazirGun ? ` (${String(r.hazirGun).slice(8, 10)}.${String(r.hazirGun).slice(5, 7)} hazır)` : ""}`).join(", ");
+      const metin = `🧪 Deneme zinciri tamam: Aziz (${kodlar.aziz || "-"}) ✓ · Merdan (${kodlar.merdan || "-"}) ✓ · Hemra onayladı${b.onayZaman ? ` ${saatYazi(b.onayZaman)}` : ""} · Sinem: ${sinem}. ${fn ? "⚠️ Fuat/Nuri'ye de gitti!" : "Fuat ve Nuri'ye gitmedi"}; fabrikaya üretim ve gerçek kayıt yok.`;
+      await stokIste(env, "/kuyruk-ekle", { ad: "zincirSonuc", kayit: { id: `zs-${bk}`, metin, zaman: simdi } }).catch(() => null);
+      t.sonuc = { zaman: simdi, metin }; degisti = true;
+    }
+  }
+  if (degisti) await env.KAYIT.put("sami:zincirTakip", JSON.stringify(t), { expirationTtl: 3 * 86400 });
 }
 
 // 10 Kasım (Patron, BÜTÜN HATALAR): bir kerelik işler — KV "sami:islemler" = [{ tur, ... }] → sonuç "sami:islemSonuc"
@@ -2446,6 +2494,10 @@ async function tekIslem(env, simdi, tg) {
     for (const m of ["VOLONTE", "BLACKROSE"]) { const x = await stokIste(env, "/satis-sayim", { gun: is.gun || gunAnahtari(simdi), magaza: m }).catch(() => null); if (x) sonuc.m[m] = { toplam: x.toplam, model: x.model, indirimliAdet: x.indirimliAdet, ilk8: (x.liste || []).slice(0, 8).reduce((t, y) => t + y.satilan, 0) }; }
   } else if (is.tur === "kanitOku") { // gerçek akış kanıtı (Telegram'ın döndürdüğü mesajlar) — StokDO "kanit:gercek:<gün>"
     sonuc.l = ((await ayarOku(env, `kanit:gercek:${is.gun || gunAnahtari(simdi)}`, [])) || []).filter((x) => !is.basla || x.zaman >= is.basla).slice(-(is.son || 60));
+  } else if (is.tur === "gittiHesap") { // 11 Kasım: okuma — Venom'un "fabrikaya gitti" satırı o gün için ne derdi (hiçbir şey yazmaz/göndermez)
+    const lg = is.gun || gunAnahtari(simdi);
+    const { giden, bekleyen } = await gidenSay(env, lg, null, null);
+    sonuc.metin = gittiMetni(lg, simdi, giden, bekleyen); sonuc.giden = giden;
   } else if (is.tur === "listeDurum") { // 10 Kasım: bugünün ve dünün liste durumu (okuma; hiçbir şey göndermez)
     sonuc.satisAcik = (await env.KAYIT.get("sami:satisAcik")) === "1";
     sonuc.gunler = {};
