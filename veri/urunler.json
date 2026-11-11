@@ -1,5 +1,26 @@
 [
  {
+  "kod": "3269",
+  "baslik": "Lace Button-Front Maxi Dress",
+  "kategori": "evening",
+  "aciklama": {
+   "en": "A floor-length lace dress with a fitted bodice and softly gathered A-line skirt. A scalloped stand collar, a long row of covered buttons and sheer sleeves finished with buttoned cuffs define the look, while a satin tie belt marks the waist and stone floral motifs trace the hem. Made for weddings, receptions and special evenings. Produced in Istanbul with careful workmanship.",
+   "fr": "Une robe longue en dentelle au buste ajusté et à la jupe évasée légèrement froncée. Col montant festonné, longue rangée de boutons recouverts et manches transparentes à poignets boutonnés en font le caractère, tandis qu'une ceinture nouée satinée souligne la taille et des motifs floraux en strass ornent le bas. Idéale pour mariages, réceptions et soirées. Fabriquée à Istanbul avec soin.",
+   "pt": "Um vestido longo em renda, com corpo ajustado e saia evasê suavemente franzida. A gola alta recortada, a longa fileira de botões forrados e as mangas transparentes com punhos abotoados marcam o modelo, enquanto um cinto de laço acetinado define a cintura e motivos florais em pedraria enfeitam a barra. Pensado para casamentos, recepções e noites especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3269/1.jpg",
+   "galeri/3269/2.jpg",
+   "galeri/3269/3.jpg",
+   "galeri/3269/4.jpg",
+   "galeri/3269/5.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-11"
+ },
+ {
   "kod": "3202",
   "baslik": "Belted Lace Shirt Dress",
   "kategori": "dresses",
