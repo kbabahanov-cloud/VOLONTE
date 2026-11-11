@@ -361,7 +361,11 @@ export async function rkHemraYazi(env, m, tg, simdi) {
   const rec = await rkOku(env, st.id);
   if (!rec || rec.durum !== "hemra") { await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null); return false; }
   const d = dagilimCoz(metin);
-  if (!d) { await yaz(`${D(rec)}Dağılımı anlayamadım. Renk, beden ve adedi yazın; örnek: beyaz büyük 20 küçük 20`); return true; }
+  if (!d) {
+    if (!/b[üu]y[üu]k|buyuk|k[üu][çc][üu]k|kucuk|\buly\b|ki[çc]i/i.test(metin)) return false; // dağılıma benzemeyen yazı başka işe aittir (ör. eksik listesi) — yutulmaz
+    await yaz(`${D(rec)}Dağılımı anlayamadım. Renk, beden ve adedi yazın; örnek: beyaz büyük 20 küçük 20`);
+    return true;
+  }
   if (dagilimAdet(d) < REPETE_EN_AZ) { await yaz(`${D(rec)}Repete en az ${REPETE_EN_AZ} adet olmalı (yazdığınız toplam ${dagilimAdet(d)}). Yeniden yazın.`); return true; }
   Object.assign(rec, { dagilim: d, adet: dagilimAdet(d) });
   await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null);
