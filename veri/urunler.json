@@ -1,5 +1,25 @@
 [
  {
+  "kod": "3202",
+  "baslik": "Belted Lace Shirt Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A long-sleeved lace shirt dress with a fitted bodice and a full, flowing skirt. A pointed collar and pearl-style buttons define the front, while sheer chiffon panels set between the lace give the skirt soft movement; a black belt marks the waist. Wear it to daytime celebrations, receptions or elegant gatherings. Made in Istanbul with careful attention to finishing.",
+   "fr": "Une robe chemise en dentelle à manches longues, au buste ajusté et à la jupe ample et fluide. Le col pointu et les boutons façon perle structurent le devant, tandis que des panneaux de mousseline transparente insérés entre la dentelle donnent du mouvement à la jupe ; une ceinture noire marque la taille. Idéale pour les cérémonies de journée, les réceptions ou les rendez-vous élégants. Fabriquée à Istanbul avec des finitions soignées.",
+   "pt": "Um vestido chemise de renda com mangas compridas, corpete ajustado e saia ampla e fluida. A gola de bico e os botões tipo pérola marcam a frente, enquanto painéis de chiffon transparente entre a renda dão leveza ao movimento da saia; um cinto preto define a cintura. Perfeito para celebrações de dia, recepções ou encontros elegantes. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3202/1.jpg",
+   "galeri/3202/2.jpg",
+   "galeri/3202/3.jpg",
+   "galeri/3202/4.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-11"
+ },
+ {
   "kod": "3489",
   "baslik": "Corset Pleated Evening Gown",
   "kategori": "evening",
