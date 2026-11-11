@@ -1792,6 +1792,7 @@ async function claudeIslemAdimi(env, simdi) {
       const sat = {}; for (const m of ["VOLONTE", "BLACKROSE"]) { const x = await stokIste(env, "/satis-sayim", { gun: gunAnahtari(simdi), magaza: m }).catch(() => null); sat[m] = x ? { toplam: x.toplam, model: x.model } : null; }
       sonuc.push({ tur: is.tur, zaman: simdi, kopruler: (o && o.kopruler) || null, alarm, satis: sat, sustu: ((o && o.kopruler) || []).map((k) => ({ m: k.magaza, sustu: kopruSustu(Math.max(k.son || 0, k.kalp || 0), simdi) })) });
     } else if (is.tur === "kopruSifirla") { for (const m of is.magazalar || []) await env.KAYIT.delete(`venom:kopruAlarm:${m}`).catch(() => null); sonuc.push({ tur: is.tur, ok: true }); }
+    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
   }
   await kaydet(env, "venom:claudeIslemSonuc", { zaman: simdi, sonuc }, 3 * 86400);
