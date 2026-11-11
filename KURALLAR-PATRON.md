@@ -23,6 +23,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 ## C. Tek kapı ve kişiler
 11. **Tek kapı:** hiçbir bot Patron'a doğrudan yazmaz; Patron'a sadece Venom yazar.
 12. **Venom Patron'a sadece:** para, repete/stok kararı, silme/kural değişikliği, çözemediği iş, Patron'un sorusu, kritik acil. Rapor 09:40 ve 20:00, en fazla 10 satır; günde en fazla 10 mesaj. Robot satırları ("mesaj X'e gitti") Patron'a gitmez.
+46. **Venom sadece Patron'a cevap verir;** ekiple (Hemra, Aziz, Merdan, fabrika) Sami üzerinden konuşur.
 13. **Sohbetten kalıcı kural çıkarılmaz;** kalıcı kural sadece Patron açıkça söyleyince.
 14. **Hemra koordinatör;** sorunlar önce bot/ekip ile çözülür.
 15. **Fiyat, kâr ve satış sadece Patron'a.** Janet sadece kodla satış fiyatını görür. Fabrikaya fiyat/stok gitmez.
@@ -52,6 +53,8 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 29. **Fabrika zinciri:** "Bitti" → Fuat onayı → Hemra karar kartı → Venom'dan Patron'a. "Bitti" kartı Merdan/Aziz'e gitmez. Her karar kanıt defterine (tarih/saat/kim/aynen metin; Patron kararında hangi düğme).
 30. **Fabrikaya giden listeler** mağaza mağaza ayrı, başı/sonu yazılı; liste bitmeden "emin misin?" özeti.
 43. **Açık repete varken aynı modele yeni repete verilmez:** bir modelin repetesi fabrikadayken (mal gelmeden) o modele ikinci repete açılmaz.
+44. **Repete kartı:** renk / beden / adet dağılımını biz belirleriz, fabrika değiştirmez. Fuat'ın kartında fotoğraf + kod + dağılım ve sadece şu düğmeler olur: Onaylıyorum → 10 gün, Onaylıyorum → 15 gün, Yapamam (sebebini yazar). Fuat yazıyla da cevap verebilir ("3419 onaylıyorum 10 gün"); Sami kaydeder. Patron'un kartı sade: dağılım + [Onaylıyorum] [Reddediyorum]. Hemra'nın kartında satış hızı yazar (son 7 günde satılan + kaç günde biter).
+45. **Repete takibi:** Fuat onaylayınca repete kaydı açılır ve Patron'a tek satır gelir ("3419 · 40 adet · Fuat onayladı · teslim: tarih"). Fuat 24 saat cevap vermezse önce Fuat'a, sonra Hemra'ya hatırlatılır; teslim günü geçerse Fuat'a sorulur; mal gelince kayıt kendiliğinden kapanır. (44–45 önce deneme yolunda; Patron telefonda beğenince gerçek akışa bağlanır.)
 
 ## H. Gizlilik
 31. **Depo herkese açık:** Telegram kimliği, telefon, kullanıcı adı, fiyat, şifre depoya yazılmaz; gizli kayıtta durur. Şifre asla yazdırılmaz. Kişisel bilgi dış servislere gönderilmez.
@@ -67,5 +70,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 38. **Mesajlarda <b> gibi kod etiketi görünmez;** biçimsiz gönderimde etiketler temizlenir.
 39. **Venom Patron'a "kontrol edeyim mi?", "yazayım mı?" diye sormaz;** kontrol eder, çözer, sonucu tek mesajla bildirir.
 40. **Çelişkili mesaj yasak:** bot "yapamadım" deyip Venom "düzeltildi" diyemez. Venom önce kanıtla doğrular (kanal mesaj numarası, site linki), sonra TEK mesaj: "Tamam, kanıt: …" ya da "Yapılamadı, sebep: …, şu an çözülüyor". Sıraya alınan iş "tamam" sayılmaz.
-41. **Köprü alarmı Patron'a doğrudan gelmez:** Venom önce Merdan ve Hemra'ya yazar ("Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu?"); 30 dakikada düzelmezse Patron'a tek satır. Cumartesi, pazar ve 09:00–10:30 açılışta alarm yok.
+41. **Köprü alarmı Patron'a doğrudan gelmez:** bilgisayardan sinyal yoksa Venom önce mağazanın sorumlusuna (VOLONTE → Aziz, Black Rose → Merdan) ve Hemra'ya yazar ("Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu?"); 30 dakikada düzelmezse Patron'a tek satır. Cumartesi, pazar ve 09:00–10:30 açılışta alarm yok. Sinyal varsa Venom soru sormaz: Vegawin'e giriş olmaması normaldir.
 42. **Kontrol ilkesi:** Venom önce kendisi çözer; Patron'a sadece çözülmüş hali ya da gerçek karar gelir.
+47. **Venom listeleri temiz:** biten ya da 3 günden eski iş listeden kendiliğinden düşer (şüpheliyse Venom önce kanıtla kontrol eder); aynı iş iki kez yazılmaz; satır yarım kesilmez; iç kod adı Patron'a gösterilmez.
+48. **"Bekleyenler"de sadece Patron kararı bekleyen işler olur,** her birinin altında kendi düğmesi; bilgi satırı (ör. "Sitede 165 model") olmaz. Ne olduğu belli olmayan iş tek cümleyle açıklanır.
