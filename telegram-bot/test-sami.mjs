@@ -756,7 +756,7 @@ test("fotoğraf tamamlama: sitede yoksa kanal fotoğrafı (yazısı değiştiril
   assert.deepEqual(sonuc.secimler, ["3194"]); // seçim korundu
 });
 
-// ---------- Sami'nin beyni (Haiku) ----------
+// ---------- Sami'nin beyni (Opus) ----------
 function beyinOrtami(cevaplar) {
   const o = ortam();
   Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", ANTHROPIC_API_KEY: "k" });
@@ -775,12 +775,12 @@ function beyinOrtami(cevaplar) {
 const metinCevap = (text) => ({ stop_reason: "end_turn", content: [{ type: "text", text }] });
 const aracCevap = (name, input) => ({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name, input }] });
 
-test("Sami beyni: normal soru → Haiku araçla stok okur; araç sonucunda fiyat yok; fabrika kişisi beyni kullanamaz", async () => {
+test("Sami beyni: normal soru → Opus araçla stok okur; araç sonucunda fiyat yok; fabrika kişisi beyni kullanamaz", async () => {
   const { guncelleme: g2 } = await import("./sami.js");
   const o = beyinOrtami([aracCevap("stok_bilgisi", { kod: "3596" }), metinCevap("3596'dan 12 adet kaldı.")]);
   await o.yaz("VOLONTE", [{ kod: "3596", adet: 12, fiyat: 77 }], ist(8));
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "3596'dan kaç tane kaldı?" } }, o.env);
-  assert.equal(o.claude[0].model, "claude-haiku-5-5");
+  assert.equal(o.claude[0].model, "claude-opus-5-5");
   const sonuc = o.claude[1].messages.at(-1).content[0].content;
   assert.match(sonuc, /"toplam":12/);
   assert.ok(!/77|fiyat/.test(sonuc)); // fiyat beyne hiç gitmez
@@ -2373,4 +2373,24 @@ test("satış sayımı (10 Kasım): ofis ile Sami AYNI yöntem — toplam BÜTÜ
   const r = await satisSayimKontrol(o.env, simdi + 300);
   assert.match(r.metin, /Satış sayısı uyuşmuyor .*BLACK ROSE: ofis 45, Sami 61/);
   assert.match(JSON.parse(o.depo.get("venom:yetenekIstekleri")).at(-1).istek, /Satış sayısı uyuşmuyor/);
+});
+
+// 11 Kasım HATA: VOLONTE listesinin son satırları (5 kart sınırı) ertesi sabah gidince Venom satırı "bugün" sayıyordu → önceki akşam giden Black Rose "0 model"
+test("Venom 'fabrikaya gitti' satırı listenin KENDİ gününü sayar: dün akşam giden Black Rose + bu sabah biten VOLONTE → ikisi de sayılır, tarih yazar", async () => {
+  const f = await import("./fabrika.js");
+  const { gunAnahtari } = await import("./worker.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }]));
+  const simdi = Math.floor(Date.now() / 1000), dun = gunAnahtari(simdi - 86400);
+  const yaz = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fabrika:${k}`, v: JSON.stringify(v) }) });
+  const tg2 = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  o.depo.set("kodlar", JSON.stringify({ 3394: [{ ids: [650], tarih: 1 }] })); // kanaldaki fotoğraf (fabrika kartı için)
+  await yaz(`${dun}-T3`, { asama: "gonderildi", gun: dun, magaza: "BLACKROSE", liste: [{ kod: "3279", magaza: "BLACKROSE", renkler: [{ renk: "siyah", adet: 5 }] }, { kod: "3514", magaza: "BLACKROSE", renkler: [{ renk: "bej", adet: 5 }] }], gonderilecek: [], giden: 6, fabrikaBildirildi: simdi - 50000 });
+  await yaz(`${dun}-T4`, { asama: "gonderildi", gun: dun, magaza: "VOLONTE", liste: [{ kod: "3394", magaza: "VOLONTE", renkler: [{ renk: "pudra", adet: 8 }] }], gonderilecek: [0], giden: 0 });
+  await yaz(`birlesik:${dun}`, [`${dun}-T3`, `${dun}-T4`]);
+  await f._test.gonderimParcasi(o.env, `${dun}-T4`, tg2, simdi);
+  const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
+  const [y, a, gn] = dun.split("-");
+  assert.equal(fg.at(-1).metin, `${gn}.${a}.${y} eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 2 model.`);
 });

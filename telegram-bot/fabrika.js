@@ -1224,23 +1224,26 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
       // 10 Kasım (Patron): liste fabrikaya ulaşınca Patron'a Venom'dan TEK satır — bugün fabrikaya giden modeller, mağaza mağaza
       d.fabrikaBildirildi = simdi;
       await ayarYaz(env, `fabrika:${anahtar}`, d);
-      const gk = `fabrika:fabrikayaGiden:${gunAnahtari(simdi)}`;
+      // 11 Kasım HATA DÜZELTMESİ: sayım listenin KENDİ günüyle yapılır (son satır ertesi sabah gidince "bugün" sanılıp
+      // önceki akşam giden Black Rose listesi 0 sayılıyordu); mesajda listenin tarihi yazar
+      const lg = d.gun || anahtar.slice(0, 10);
+      const gk = `fabrika:fabrikayaGiden:${lg}`;
       const giden = (await ayarOku(env, gk, {})) || {};
       const ekle = (b) => { const atl = new Set(b.atlanan || []); for (const x of b.liste || []) { if (atl.has(x.kod)) continue; const mg = x.magaza || b.magaza || MAGAZA; giden[mg] = [...new Set([...(giden[mg] || []), x.kod])]; } };
       ekle(d);
-      for (const k of (await ayarOku(env, `fabrika:birlesik:${gunAnahtari(simdi)}`, [])) || []) { // bugün daha önce tamamen gidenler (defterden önce)
+      for (const k of (await ayarOku(env, `fabrika:birlesik:${lg}`, [])) || []) { // aynı günün daha önce tamamen gidenleri (defterden önce)
         if (k === anahtar) continue;
         const b = await ayarOku(env, `fabrika:${k}`, null);
         if (b && !b.deneme && b.asama === "gonderildi" && !(b.gonderilecek || []).length) ekle(b);
       }
       await ayarYaz(env, gk, giden);
       const bekleyen = [];
-      for (const k of (await ayarOku(env, `fabrika:birlesik:${gunAnahtari(simdi)}`, [])) || []) { // kısmen giden (5 kart sınırı) listeler de söylenir
+      for (const k of (await ayarOku(env, `fabrika:birlesik:${lg}`, [])) || []) { // kısmen giden (5 kart sınırı) listeler de söylenir
         if (k === anahtar) continue;
         const b = await ayarOku(env, `fabrika:${k}`, null);
         if (b && !b.deneme && b.asama === "gonderildi" && (b.gonderilecek || []).length) for (const mg of ["VOLONTE", "BLACKROSE"]) { const n = new Set((b.liste || []).filter((x) => (x.magaza || MAGAZA) === mg).map((x) => x.kod)).size; if (n) bekleyen.push(`${mg === "BLACKROSE" ? "Black Rose" : "VOLONTE"} ${n} modellik liste kısmen gitti (${(b.gonderilecek || []).length} satır fabrikanın cevabını bekliyor)`); }
       }
-      const metin = `Bugünkü eksik listesi fabrikaya gitti: VOLONTE ${(giden.VOLONTE || []).length} model, Black Rose ${(giden.BLACKROSE || []).length} model.${bekleyen.length ? ` Ayrıca: ${bekleyen.join("; ")}.` : ""}`;
+      const metin = `${lg === gunAnahtari(simdi) ? "Bugünkü" : `${gunGoster(lg)}`} eksik listesi fabrikaya gitti: VOLONTE ${(giden.VOLONTE || []).length} model, Black Rose ${(giden.BLACKROSE || []).length} model.${bekleyen.length ? ` Ayrıca: ${bekleyen.join("; ")}.` : ""}`;
       await stokIste(env, "/kuyruk-ekle", { ad: "fabrikaGitti", kayit: { id: `fg-${anahtar}-${simdi}`, metin, zaman: simdi } }).catch(() => null);
     }
     if (d && d.liste && d.liste.length) {
@@ -2651,7 +2654,7 @@ export async function fabrikaDenemesi(env, m, tg, simdi) {
   });
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: `🧪 Deneme başladı: Hemra'ya onay kartı gitti. Bütün adımlar "🧪 DENEME" ile işaretli; kanalda paylaşım ve silme yapılmaz. Bitince size özet gelecek.` });
 }
-export const _test = { siparisAc, hemraKarti, siparisYaz, fabrikayaGonder }; // testler için
+export const _test = { siparisAc, hemraKarti, siparisYaz, fabrikayaGonder, gonderimParcasi }; // testler için
 
 // ---------- 10 Kasım (Patron): SERBEST YAZIM ÇÖZÜCÜ (yapay zekâ yok) ----------
 // Kelime sırası serbest (pudra büyük / büyük pudra), Türkçe harfsiz (buyuk, kucuk), "adet" yazılsın/yazılmasın, bitişik (4adet, 12ad),

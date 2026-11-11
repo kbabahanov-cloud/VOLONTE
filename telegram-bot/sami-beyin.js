@@ -1,4 +1,4 @@
-// SAYIM SAMİ'NİN BEYNİ (kullanıcı kararı 29 Ekim) — Claude Haiku 5.5, komutsuz normal sohbet.
+// SAYIM SAMİ'NİN BEYNİ (kullanıcı kararı 29 Ekim; 11 Kasım Patron kararı: genel sohbet beyni OPUS, kalıcı) — komutsuz normal sohbet.
 //  - Sadece Murat, Merdan (yönetici) ve Hemra, Aziz (ekip) konuşabilir; fabrika ve Celal sadece düğme kullanır.
 //  - Vegawin'e hiçbir şey yazmaz/silmez (zaten sadece okuma köprüsü). Silme, sipariş, fabrikaya gönderme aracı YOK;
 //    Hemra'nın eksik listesine işleme yapar ama fabrikaya gitmeden önce listenin kendi onay kartı (✅ Onayla / ✏️ Düzelt) gelir.
@@ -14,7 +14,7 @@ import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
 
-export const BEYIN_MODEL = "claude-haiku-5-5";
+export const BEYIN_MODEL = "claude-opus-5-5"; // 11 Kasım (Patron onayı, kalıcı): Haiku → Opus
 export const AYLIK_SINIR_USD = 10;
 export const UYARI_ORANI = 0.8;
 const FIYAT = { giris: 0.1, cikis: 0.5, okuma: 0.01 }; // $ / milyon token (100K altı istem)
@@ -178,7 +178,7 @@ export async function beyinDenemesi(env, simdi, tg) {
     sonuc.push({ soru, cevap });
   }
   await env.KAYIT.put("sami:beyinDenemeSonuc", JSON.stringify({ zaman: simdi, sonuc }), { expirationTtl: 7 * 86400 });
-  await tg(env, "sendMessage", { chat_id: murat(env), text: `🧪 Sami'nin beyni deneme (Haiku):\n\n${sonuc.map((x) => `❓ ${x.soru}\n💬 ${x.cevap}`).join("\n\n")}`.slice(0, 4000) });
+  await tg(env, "sendMessage", { chat_id: murat(env), text: `🧪 Sami'nin beyni deneme (Opus):\n\n${sonuc.map((x) => `❓ ${x.soru}\n💬 ${x.cevap}`).join("\n\n")}`.slice(0, 4000) });
 }
 
 // ---------- 10 Kasım (Patron): KALIBA UYMAYAN EKSİK YAZISI — OPUS ANLAR ----------
