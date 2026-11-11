@@ -39,6 +39,7 @@ import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
 import { rkDugme, rkYazi, rkHemraYazi, repeteKartAdimi, TEST_RESIM_YOLU } from "./repete-kart.js"; // 11 Kasım: repete kartı (önce deneme yolunda)
 import { testResimBayt } from "./repete-test-resim.js";
+import { kartIzle, kartBasildi, kartTakipAdimi } from "./kart-takip.js"; // 11 Kasım (kural 54): kart takibi
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi, teyitDugmesi } from "./fabrika.js";
@@ -56,6 +57,7 @@ async function tg(env, metod, govde) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "sami", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
   if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "sami", metod, govde, r); return r; }
   const r = await tgGercek(env, metod, govde);
+  await kartIzle(env, metod, govde, r); // 11 Kasım (kural 54): elemana giden her kart takip edilir (basılmazsa hatırlatma → Venom)
   await defterTg(env, "sami", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
   await gercekKanit(env, metod, govde, r);
   return r;
@@ -125,7 +127,8 @@ export default {
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
     const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
     const siparis = (e, t) => siparisTakip(e, t, tg);
-    const repeteKart = (e, t) => repeteKartAdimi(e, t, tg); // 11 Kasım: repete kartı — Patron kararı, hatırlatma, teslim günü, mal geldi
+    const repeteKart = (e, t) => repeteKartAdimi(e, t, tg);
+    const kartTakip = (e, t) => kartTakipAdimi(e, t, tg); // 11 Kasım (kural 54): 30 dk hatırlatma, 1 saat → Venom // 11 Kasım: repete kartı — Patron kararı, hatırlatma, teslim günü, mal geldi
     const zincir = (e, t) => fabrikaZincirAdimi(e, t, tg); // 10 Kasım: Patron kararı, toplu cevap, Sinem 18:00 özeti, bir kerelik işler
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = async (e, t) => { if (await kagitAcik(e, "sami", "stokSorgu")) await stokSorguTakip(e, t, tg); };
@@ -136,7 +139,7 @@ export default {
     const siteOzet = async (e, t) => { await siteDenemesi(e); if (await kagitAcik(e, "sami", "siteHaftalik")) await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
     const siteBakis = (e, t) => siteBakisYaz(e, t); // 9 Kasım: repete raporu için model başına sitede bakılma (günde bir)
     const satisKontrol = (e, t) => satisSayimKontrol(e, t); // 10 Kasım (Patron): ofis ile Sami'nin satış sayısı her gün karşılaştırılır
-    const isler = env.BOT_TOKEN ? { webhookKur, repeteKart, satisKontrol, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, repeteKart, kartTakip, satisKontrol, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -187,6 +190,7 @@ export async function guncelleme(u, env) {
   if (u.callback_query) {
     const cq = u.callback_query;
     await defterKarar(env, "sami", cq); // 9 Kasım: iş defteri
+    if (cq.message && cq.message.chat) await kartBasildi(env, cq.message.chat.id, cq.message.message_id); // 11 Kasım (kural 54): asıl kanıt = basış
     const simdiD = Math.floor(Date.now() / 1000);
     // Fabrika düğmeleri: fabrika kişileri de basabilir (sadece bunlar)
     if (cq.data === GUNCEL) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "⏩ Güncel kart aşağıda" });
@@ -211,6 +215,7 @@ export async function guncelleme(u, env) {
   if (u.channel_post) return kanalPaylasimi(u.channel_post, env);
   const m = u.message;
   if (!m || !m.from || m.chat.type !== "private") return;
+  await kartBasildi(env, m.chat.id); // 11 Kasım (kural 54): kişi yazdı → kartını gördü
   if (await odemeMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Patron: /odeme + dekont (sadece Patron)
   if (await fiyatKisisiMi(env, m.from.id)) return fiyatCevabi(env, m, tg); // 9 Kasım: Janet — SADECE fiyat, başka hiçbir şey
   if (await rkYazi(env, m, tg, Math.floor(Date.now() / 1000))) return; // 11 Kasım: Fuat "3419 onaylıyorum 10 gün" / "yapamam …" (repete kartı)

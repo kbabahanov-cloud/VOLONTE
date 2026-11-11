@@ -1476,7 +1476,8 @@ export async function venomCron(env, simdi) {
   }
   // 11 Kasım: Claude Code'un bir kerelik işleri — KV "venom:claudeIslem" = [{tur:"testMesaj", metin} | {tur:"kopruOku"}] → "venom:claudeIslemSonuc"
   try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
-  try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); } // 11 Kasım: repete kartı (Patron kartı + tek satır sonuç)
+  try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); }
+  try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); } // 11 Kasım (kural 54) // 11 Kasım: repete kartı (Patron kartı + tek satır sonuç)
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) { if (s.ok && /^(Mesaj|Hatırlatma) .* gitti \(Sami\)\.?$/.test(String(s.aciklama || ""))) continue; /* 10 Kasım: "Mesaj X'e gitti" özete girmez */ await bildir(env, `${s.ok ? "✅" : "⚠️"} ${s.aciklama}`, { simdi, kaynak: /^(pp|kys|kms|kv|kid)-/.test(String(s.id || "")) ? "kemal" : "venom", tur: "bilgi" }); if (/^(pp|kys|kms|kv)-/.test(String(s.id || ""))) await isCevap(env, "kemal", simdi).catch(() => null); }
   try { await paylasimGonder(env, simdi); } catch (e) { await hataYaz(env, "paylas", e); }
@@ -1742,6 +1743,17 @@ async function rkAdimi(env, simdi) {
     if (s2.biriktir) { await biriktir(env, { kaynak: "sami", metin: s2.metin, tur: "bilgi" }, simdi); continue; }
     const r = await yaz({ ...env, __izin: "cevap" }, s2.metin, { posta: { kaynak: "sami", tur: "cevap", izin: "cevap" } }).catch(() => null);
     await rkKanit(env, s2.rid, "Patron'a sonuç (tek satır)", r, s2.metin, null, simdi);
+  }
+}
+// 11 Kasım (Patron, kural 54): 1 saat basılmayan kart — Venom Hemra'ya yazar (Sami üzerinden); sebebi Sami araştırdı
+// (bot engellendi mi, kart kayıtlı hesaba mı gitti). Patron'a SADECE çözülemeyen durum (engel / kayıtsız hesap) TEK satır.
+async function kartCevapsizAdimi(env, simdi) {
+  for (const k of await kuyruguAl(env, "kartCevapsiz")) {
+    const kim = k.kim || `kayıtlı olmayan hesap (${k.chat})`;
+    const saatS = tarihSaat(k.zaman).slice(11, 16);
+    if (k.kim !== "Hemra") await kuyrugaEkle(env, "giden", { id: `kc-h:${k.chat}:${k.mesaj}`, kime: "hemra", tur: "mesaj", metin: `📌 ${kim} ${saatS}'te gelen karta 1 saattir basmadı (bir kez hatırlatıldı): ${k.ozet || "kart"}.${k.engel ? ` Sebep: ${k.engel}.` : ""} Arayıp sorar mısınız? (Venom)` }).catch(() => null);
+    if (k.engel || k.kayitsiz) await bildir(env, `⚠️ Kart ${kim} hesabına ulaşmıyor: ${k.kayitsiz ? "kart kayıtlı bir hesaba gitmemiş" : `Telegram: ${k.engel}`} (${saatS}, "${(k.ozet || "").slice(0, 60)}"). Hemra'ya bildirildi; hesabın düzeltilmesi gerekiyor.`, { simdi, kaynak: "venom", tur: "kritik" });
+    else await biriktir(env, { kaynak: "sami", metin: `📌 ${kim} ${saatS} kartına 1 saattir basmadı; Hemra'ya bildirildi.`, tur: "bilgi" }, simdi);
   }
 }
 async function rkKararDugmesi(env, cq, simdi, cevap) {

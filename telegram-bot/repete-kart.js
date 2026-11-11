@@ -428,6 +428,16 @@ async function islemler(env, simdi, tg) {
         s.kayitlar = [];
         for (const id of ids.slice(-20)) { const r = await rkOku(env, id); if (r) s.kayitlar.push({ ...ozet(r), kanit: is.kanit === false ? undefined : r.kanit, fuatHaber: r.fuatHaber || undefined }); }
         s.acik = await ayarOku(env, "rk:acik", []);
+      } else if (is.tur === "fuataYeniden") { // Fuat kartı görmüyorsa: eski kart Telegram'da duruyor mu bakılır, sonra kart yeniden gönderilir
+        const rec = await rkOku(env, is.id);
+        if (!rec || rec.durum !== "fuat") { s.hata = `kayıt ${rec ? rec.durum : "yok"}`; sonuc.push(s); continue; }
+        const m = rec.mesajlar.fuat;
+        const kontrol = m ? await tg(env, "editMessageReplyMarkup", { chat_id: m[0], message_id: m[1], reply_markup: fuatKlavye(rec) }) : null;
+        s.eskiKart = { chat: m && m[0], mesaj: m && m[1], telegram: kontrol ? (kontrol.ok ? "duruyor" : String(kontrol.description || "")) : "kayıt yok" };
+        if (m) await kartDuzenle(env, tg, rec, "Fuat", m, `${fuatMetni(rec)}\n\n⏩ Bu kart yenilendi — güncel kart aşağıda.`, null, simdi);
+        s.gitti = await fuataGonder(env, tg, rec, simdi, "Fuat (yeniden gönderildi)");
+        await rkYaz(env, rec);
+        s.kanit = rec.kanit.slice(-2);
       } else if (is.tur === "engelDene") {
         const e = await acikRepete(env, is.kod, { deneme: Boolean(is.deneme) });
         s.engel = e ? engelMetni(e) : null;

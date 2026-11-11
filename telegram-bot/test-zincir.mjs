@@ -163,3 +163,46 @@ test("TEKRAR YASAK: Patron aynı mesajı (\"test\") Fuat'a 4 kez isterse sadece 
   const sonuc = await kuyruguAl(o.venomEnv, "sonuc");
   assert.ok(sonuc.some((x) => !x.ok && /zaten gitmişti; ikinci kez GÖNDERİLMEDİ/.test(x.aciklama)));
 });
+
+test("KART TAKİBİ (kural 54): basılmayan kart 30 dk (mesai) → kişiye bir kez 'Size kart geldi'; 1 saat → Venom Hemra'ya yazar; basılan / düzenlenen kart takipten düşer; engel → Patron'a tek satır", async () => {
+  const o = ortam();
+  const kt = await import("./kart-takip.js");
+  const venom = await import("./venom-bot.js");
+  const { venomGidenAdimi } = await import("./venom-kopru.js");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: FUAT, ad: "Fuat" }, { id: SINEM, ad: "Sinem" }]));
+  o.depo.set("venom:bot:klavye:v1", "1");
+  const tg = (e, m, g) => globalThis.fetch(`https://api.telegram.org/botsami-token/${m}`, { method: "POST", body: JSON.stringify(g) }).then((r) => r.json());
+  const kart = { chat_id: FUAT, caption: "🧪 DENEME – üretim yapmayın\n🔁 REPETE · TEST-002 · beyaz · büyük 20, küçük 20", reply_markup: { inline_keyboard: [[{ text: "✅ 4-8 gün", callback_data: "rk:f8:x" }]] } };
+  const bas = Date.UTC(2026, 10, 11, 9, 0) / 1000; // çarşamba 12:00
+  const gercek = Date.now;
+  try {
+    Date.now = () => bas * 1000;
+    await kt.kartIzle(o.samiEnv, "sendPhoto", kart, { ok: true, result: { message_id: 2088 } });
+    await kt.kartIzle(o.samiEnv, "sendPhoto", { ...kart, chat_id: SINEM }, { ok: true, result: { message_id: 3000 } });
+    await kt.kartIzle(o.samiEnv, "sendMessage", { ...kart, chat_id: PATRON }, { ok: true, result: { message_id: 9 } }); // Patron takip edilmez
+    await kt.kartBasildi(o.samiEnv, SINEM, 3000); // Sinem bastı → takipten düşer
+  } finally { Date.now = gercek; }
+  await kt.kartTakipAdimi(o.samiEnv, bas + 20 * 60, tg);
+  assert.equal(o.giden.length, 0);
+  await kt.kartTakipAdimi(o.samiEnv, bas + 31 * 60, tg);
+  assert.deepEqual(o.giden.map((x) => [x.kime, x.yazi]), [["Fuat", kt.HATIRLATMA_YAZI]]);
+  await kt.kartTakipAdimi(o.samiEnv, bas + 45 * 60, tg);
+  assert.equal(o.giden.length, 1); // bir kez
+  await kt.kartTakipAdimi(o.samiEnv, bas + 61 * 60, tg);
+  await venom.venomCron(o.venomEnv, bas + 62 * 60);
+  await venomGidenAdimi(o.samiEnv, bas + 63 * 60, tg);
+  assert.ok(o.giden.some((x) => x.kime === "Hemra" && /^📌 Fuat 12:00'te gelen karta 1 saattir basmadı \(bir kez hatırlatıldı\): 🔁 REPETE · TEST-002/.test(x.yazi)));
+  assert.ok(!o.giden.some((x) => x.kime === "Patron")); // engel yok → Patron'a gelmez
+  // engelli hesap: Telegram 403 → Patron'a tek satır
+  const eskiFetch = globalThis.fetch;
+  globalThis.fetch = async (u, i) => (/sendChatAction|sendMessage/.test(String(u)) && /sami-token/.test(String(u)) && String(JSON.parse(i.body).chat_id) === String(NURI) ? Response.json({ ok: false, description: "Forbidden: bot was blocked by the user" }) : eskiFetch(u, i));
+  try {
+    Date.now = () => bas * 1000;
+    await kt.kartIzle(o.samiEnv, "sendPhoto", { ...kart, chat_id: NURI }, { ok: true, result: { message_id: 4000 } });
+    Date.now = gercek;
+    await kt.kartTakipAdimi(o.samiEnv, bas + 31 * 60, tg);
+    await kt.kartTakipAdimi(o.samiEnv, bas + 61 * 60, tg);
+    await venom.venomCron(o.venomEnv, bas + 67 * 60);
+  } finally { globalThis.fetch = eskiFetch; Date.now = gercek; }
+  assert.deepEqual(o.giden.filter((x) => x.kime === "Patron").map((x) => x.yazi), ["⚠️ Kart Nuri hesabına ulaşmıyor: Telegram: Forbidden: bot was blocked by the user (12:00, \"🔁 REPETE · TEST-002 · beyaz · büyük 20, küçük 20\"). Hemra'ya bildirildi; hesabın düzeltilmesi gerekiyor."]);
+});
