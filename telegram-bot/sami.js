@@ -37,7 +37,7 @@ import { guvenliGonder } from "./tg-guvenli.js";
 import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
-import { rkDugme, rkYazi, repeteKartAdimi, TEST_RESIM_YOLU } from "./repete-kart.js"; // 11 Kasım: repete kartı (önce deneme yolunda)
+import { rkDugme, rkYazi, rkHemraYazi, repeteKartAdimi, TEST_RESIM_YOLU } from "./repete-kart.js"; // 11 Kasım: repete kartı (önce deneme yolunda)
 import { testResimBayt } from "./repete-test-resim.js";
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
@@ -213,6 +213,7 @@ export async function guncelleme(u, env) {
   if (await odemeMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Patron: /odeme + dekont (sadece Patron)
   if (await fiyatKisisiMi(env, m.from.id)) return fiyatCevabi(env, m, tg); // 9 Kasım: Janet — SADECE fiyat, başka hiçbir şey
   if (await rkYazi(env, m, tg, Math.floor(Date.now() / 1000))) return; // 11 Kasım: Fuat "3419 onaylıyorum 10 gün" / "yapamam …" (repete kartı)
+  if (await rkHemraYazi(env, m, tg, Math.floor(Date.now() / 1000))) return; // 11 Kasım: Hemra "3419 repete tekrar aç" / repete dağılımı yazısı
   if (await gorevAciklamaMesaji(env, m, tg)) return; // 9 Kasım: Venom görevi — ✏️ açıklama
   if (!izinli(m.from.id, env)) {
     if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması

@@ -1613,3 +1613,27 @@ test("eksik listesi fabrikaya ulaşınca Patron'a Venom'dan TEK satır (kuyruk '
   assert.equal(String(giden[0].govde.chat_id), String(PATRON));
   assert.equal(JSON.parse(o.depo.get("venom:fabrikaGittiKanit")).ok, true);
 });
+
+// 11 Kasım (Patron, SON HAL): "3419 repete tekrar aç" → Sami'ye; yeni akış gerçek akışa bağlıyken repete SADECE kartla (Fuat'a düz yazı taslağı yok)
+test("11 Kasım REPETE SON HAL (Venom): Patron 'TEST-002 repete tekrar aç' → Sami kuyruğu (yapay zekâ çağrılmaz); yeni akış açıkken repete isteği → Hemra'ya dağılım kartı kuyruğu, Fuat'a düz yazı taslağı YOK; kapalıyken eski taslak", async () => {
+  const v = await import("./venom-bot.js");
+  const o = ortam();
+  await yazi(o, PATRON, "TEST-002 repete tekrar aç");
+  assert.equal(o.claude.length, 0);
+  assert.deepEqual((await kuyruguAl(o.env, "rkKarar")).map((x) => [x.karar, x.kod, x.kim]), [["tekrarAc", "TEST-002", "Patron"]]);
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["Tamam Patron, TEST-002 repete kartını Fuat'a yeniden gönderiyorum."]);
+  // anahtar kapalı: eski yol (Fuat'a gidecek taslak kartı)
+  o.g.length = 0;
+  o.env.__sohbette = true;
+  await v.aracCalistir(o.env, "mesaj_taslagi", { kime: "fuat", metin: "Fuat Bey merhaba, 3490 modelinden repete rica ediyoruz: siyah 8. Toplam yaklaşık 40 adet. Ne zaman hazır olur?" }, ist(11, 16));
+  assert.ok(patronaGiden(o).some((x) => /Fuat'a gidecek mesaj/.test(x.govde.text)));
+  assert.equal((await kuyruguAl(o.env, "rkBaslat")).length, 0);
+  // anahtar açık: düz yazı yolu kapalı
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: "akis:yeni", v: "1" }) });
+  o.g.length = 0;
+  const cevap = await v.aracCalistir({ ...o.env, __izin: "cevap" }, "mesaj_taslagi", { kime: "fuat", metin: "Fuat Bey merhaba, 3490 modelinden repete rica ediyoruz: siyah 8. Toplam yaklaşık 40 adet. Ne zaman hazır olur?" }, ist(11, 16, 5));
+  assert.match(cevap, /^Repete artık KARTLA isteniyor/);
+  assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["3490"]]);
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 3490 repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Fuat'a kart gider."]);
+  assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek mesaj/.test(x.govde.text)));
+});

@@ -30,6 +30,7 @@ import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri }
 import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
 import { acikRepete, engelMetni } from "./repete-kart.js"; // 11 Kasım: repete kartı + kural 43
+import { yeniAkisAcik } from "./fabrika.js"; // 11 Kasım: yeni akış gerçek akışa bağlıysa repete SADECE kartla (eski düz yazı yolu kapalı)
 import { kanitGecmisi, kanitMetni, kanitTarih, MAGAZA_BASLIK } from "./fabrika.js";
 import { kisiSorusu, kisiCevabi, botOzeti, kartListe } from "./venom-defter.js";
 import { donemAraligi, soruParcalari, raporMetni, kodSayili, usd } from "./venom-rapor.js";
@@ -346,7 +347,14 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (!k) return "Bu kişiyi tanımıyorum.";
     if (k.dis) { const yasak = fuatSuzgec(g.metin); if (yasak) return `Bu metin ${k.e} gidemez: gizli bilgi içeriyor (${yasak.join(", ")}). Patron'a söyle, metni değiştir.`; }
     if (g.kime === "fuat" && /repete/i.test(String(g.metin || ""))) { // 11 Kasım KURAL 43
-      for (const kod of [...new Set(String(g.metin).match(/\b\d{3,5}\b/g) || [])]) { const acik = await acikRepete(env, kod).catch(() => null); if (acik) return `AÇIK REPETE VAR — taslak HAZIRLANMADI. Patron'a aynen şunu söyle: ${engelMetni(acik)}`; }
+      const kodlar = [...new Set(String(g.metin).match(/\b\d{3,5}\b/g) || [])];
+      for (const kod of kodlar) { const acik = await acikRepete(env, kod).catch(() => null); if (acik) return `AÇIK REPETE VAR — taslak HAZIRLANMADI. Patron'a aynen şunu söyle: ${engelMetni(acik)}`; }
+      if (kodlar.length && (await yeniAkisAcik(env))) { // eski düz yazı yolu KAPALI: repete kartla istenir (Hemra dağılımı onaylar → Patron kartı → Fuat kartı)
+        await kuyrugaEkle(env, "rkBaslat", { id: `rb:${kodlar.join("-")}:${simdi}`, kodlar, kim: "Patron", zaman: simdi });
+        const bilgi = `🔁 ${kodlar.join(", ")} repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Fuat'a kart gider.`;
+        if (!env.__llmArac) await yaz(env, bilgi, { posta: { izin: "cevap" } });
+        return `Repete artık KARTLA isteniyor (Fuat'a düz yazı gitmez). Yapılan: ${bilgi} Patron'a sadece bunu söyle.`;
+      }
     }
     await kartAc(env, { tur: "mesaj", kime: g.kime, govde: g.metin }, `✉️ ${k.e} gidecek mesaj (Sami adına, birebir):\n\n${g.metin}`, simdi);
     return "Onay kartı Patron'a gösterildi; onaylamadan gitmez.";
@@ -1296,6 +1304,7 @@ export async function sohbet(env, metin, simdi) {
     const sonuclar = [];
     for (const a of kullan) {
       let s;
+      env.__llmArac = true; // araç yapay zekâ turunda çağrıldı (cevabı Venom yazar; araç Patron'a ayrıca yazmaz)
       try { s = await aracCalistir(env, a.name, a.input || {}, simdi); } catch (e) { await hataYaz(env, `arac:${a.name}`, e); s = "Bu iş şu an yapılamadı (hata Claude Code'a iletildi)."; }
       sonuclar.push({ type: "tool_result", tool_use_id: a.id, content: s });
     }
@@ -2259,6 +2268,10 @@ export async function postaKomut(env, m, metin, simdi) {
 }
 export async function sabitKomut(env, metin, simdi) {
   const t = String(metin || "").trim().toLocaleLowerCase("tr");
+  { // 11 Kasım: "3419 repete tekrar aç" — Fuat "Yapamam" dediği için beklemede olan repete kartı Fuat'a yeniden gider (Sami gönderir)
+    const ta = String(metin || "").match(/^\s*(test-\d+|\d{3,6})\s+repete(?:yi|sini)?\s+tekrar\s+a[çc]/i);
+    if (ta) { const kod = ta[1].toLocaleUpperCase("tr"); await kuyrugaEkle(env, "rkKarar", { id: `ta:${kod}:${simdi}`, karar: "tekrarAc", kod, kim: "Patron", zaman: simdi }); return `Tamam Patron, ${kod} repete kartını Fuat'a yeniden gönderiyorum.`; }
+  }
   if (t === "📋 bekleyenler") { await bekleyenleriGonder(env, simdi); return true; }
   if (t === "📊 bugün ne oldu") return [await gunOzetiKisa(env, simdi)].join("\n");
   if (t === "⛔ durdur") { await tg(env, "sendMessage", { chat_id: patron(env), text: "⛔ Bütün botların paylaşım / üretim / site yazma işleri durdurulsun mu?", reply_markup: { inline_keyboard: [[{ text: "⛔ Evet, hepsini durdur", callback_data: "vd:e" }, { text: "Vazgeç", callback_data: "vd:x" }]] } }); return true; }
