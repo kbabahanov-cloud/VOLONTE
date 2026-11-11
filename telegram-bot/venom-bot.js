@@ -25,7 +25,7 @@ import { ORTAK_KURALLAR, BOT_YETENEKLERI, VENOM_KURALLARI, MARKA_KARARLARI } fro
 import { isKaydet, isCevap, isHatirlat, bitmeyenIsler, hataAlarmi, hataSayilari, geriAlBul, satisUyarisi, stokBitiyor, paylasilmayanlar, paraOzeti, hatirlaticiEkle, vadesiGelenler, yedekAl, gunA } from "./venom-yonetim.js";
 import { durYaz, durDurumu, _durOnbellekSifirla } from "./durdurma.js";
 import { IZINLER, postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, PERSONEL_KARTI, kategori as postaKategori } from "./venom-posta.js";
-import { kopruSustu, haftaIci } from "./magaza-saat.js";
+import { kopruSustu, haftaIci, magazaAcik as magazaAcikMi } from "./magaza-saat.js";
 import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri } from "./venom-model.js";
 import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
@@ -124,6 +124,7 @@ const mudurAraclari = (env, simdi) => ({
   patronaKart: (metin, klavye) => bildir(env, metin, { simdi, tur: "kart", izin: "cozulemeyen", ek: { reply_markup: klavye } }),
   defter: (ozet, kod) => defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: String(ozet).slice(0, 200), kod: kod || null }),
   botaDugme: async (rid) => { const k = await oku(env, `venom:bot:dugme:${rid}`, null); return k ? botaSor(env, k.bot, "dugme", k.data, rid) : null; },
+  veriCevap: (d) => veriCevap(env, d, simdi), // 11 Kasım: Vegawin verisi gelmiyor sorusunun cevabı
   listeyeEkle: (x) => listeyeEkle(env, x, simdi), // 9 Kasım (ekip düzeni): çözülemeyen → Hemra'nın toplu listesi
 });
 // 9 Kasım (ekip düzeni): Hemra'nın seçimini uygula — kartın kendisi seçilen kişiye (bot gönderir), devir, görev, Patron'a sor
@@ -1401,8 +1402,7 @@ export async function venomCron(env, simdi) {
   }
   // 11 Kasım (Patron): deneme zinciri — gecikende Venom kişiye (Merdan/Aziz/Hemra) yazar; Patron'a sadece sonuç (Sami takip eder)
   for (const h of await kuyruguAl(env, "zincirHatirlat")) {
-    const r = await tg(env, "sendMessage", { chat_id: h.kime, text: String(h.metin).slice(0, 4000) }).catch(() => null);
-    await kaydet(env, `venom:zincirKanit:${h.id}`, { zaman: simdi, ad: h.ad, metin: h.metin, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null, hata: r && !r.ok ? String(r.description || "").slice(0, 120) : null }, 3 * 86400).catch(() => null);
+    await kuyrugaEkle(env, "giden", { id: `zh-${h.id}`, kime: h.ad, metin: String(h.metin).slice(0, 4000), tur: "mesaj" }).catch(() => null); // ekip Sami'ye yazar → Sami üzerinden (kanıt: arşiv "venom-gitti")
   }
   for (const z of await kuyruguAl(env, "zincirSonuc")) {
     const r = await yaz({ ...env, __izin: "cevap" }, z.metin, { posta: { kaynak: "sami", tur: "cevap", izin: "cevap" } }).catch(() => null);
@@ -1699,11 +1699,11 @@ async function ozetKaydet(env, tur, parcalar, simdi) {
 // 11 Kasım (Patron, KÖPRÜ ALARMI): Patron'a doğrudan GELMEZ. Sinyal yoksa Venom önce Merdan ve Hemra'ya sorar;
 // 30 dk'da düzelmezse Patron'a TEK satır. Cumartesi/pazar ve açılış (09:00–10:30) alarm yok. KV "venom:kopruAlarm:<mağaza>" = {son, ekip, patron}
 export const KOPRU_ACILIS_SONU = 10.5;
+const magazaKisileri = (m) => [m === "BLACKROSE" ? "merdan" : "aziz", "hemra"]; // VOLONTE → Aziz, BLACK ROSE → Merdan; ikisinde Hemra (Sami üzerinden)
 export async function kopruIzle(env, simdi) {
   if (!env.STOK) return;
   const o = await stokIste(env, "/ozet", {}).catch(() => null);
   const saatNow = ((simdi + SAAT_FARKI) % 86400) / 3600;
-  const kisiler = (m) => [...new Set([m === "BLACKROSE" ? "BR_SORUMLU" : "AZIZ_ID", "HEMRA_ID"].flatMap((k) => String(env[k] || "").split(",").map((x) => x.trim()).filter(Boolean)))]; // VOLONTE → Aziz, BLACK ROSE → Merdan; ikisinde Hemra
   const sustu = [];
   for (const k of (o && o.kopruler) || []) {
     if (!k.kalp) continue; // eski köprü (sadece değişiklikte gönderir) izlenmez
@@ -1728,9 +1728,53 @@ export async function kopruIzle(env, simdi) {
   if (sustu.length) { // ekibe TEK mesaj (iki mağaza birlikte)
     const ad = sustu.map((m) => (m === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE")).join(" ve ");
     const metin = `🔌 ${ad}: Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu? 1 saattir sinyal gelmiyor. Bilgisayarı açıp kontrol edip buraya "tamam" yazın. (Venom)`;
-    const r = [];
-    for (const c of [...new Set(sustu.flatMap(kisiler))]) r.push(await tg(env, "sendMessage", { chat_id: c, text: metin }).catch(() => null));
-    for (const m of sustu) { const a = await oku(env, `venom:kopruAlarm:${m}`, null); await kaydet(env, `venom:kopruAlarm:${m}`, { ...(a || {}), ekip: simdi, ekipKanit: r.map((x) => (x && x.ok ? x.result.message_id : null)) }, 7 * 86400); }
+    for (const kim of [...new Set(sustu.flatMap(magazaKisileri))]) await kuyrugaEkle(env, "giden", { id: `kp-${kim}-${simdi}`, kime: kim, metin, tur: "mesaj" }).catch(() => null); // ekip Sami'ye yazar → Sami üzerinden
+    for (const m of sustu) { const a = await oku(env, `venom:kopruAlarm:${m}`, null); await kaydet(env, `venom:kopruAlarm:${m}`, { ...(a || {}), ekip: simdi }, 7 * 86400); }
+  }
+  await veriAkisIzle(env, simdi, o, saatNow);
+}
+// 11 Kasım (Patron): köprü sinyal veriyor ama Vegawin'den YENİ veri gelmiyorsa (satış 0 görünür) — Venom önce ekibe sorar (düğmeli, Sami üzerinden),
+// cevap gelince Patron'a TEK sonuç satırı; 30 dk cevap yoksa Patron'a tek satır. KV "venom:veriAlarm:<mağaza>"
+export const VERI_ESIK = 3 * 3600;
+async function veriAkisIzle(env, simdi, o, saatNow) {
+  for (const k of (o && o.kopruler) || []) {
+    if (!k.kalp || !k.degisim) continue;
+    const anahtar = `venom:veriAlarm:${k.magaza}`, ad = k.magaza === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE";
+    let a = await oku(env, anahtar, null);
+    if (a && k.degisim > (a.degisim || 0)) { // veri yeniden akıyor
+      await env.KAYIT.delete(anahtar).catch(() => null);
+      const l = await oku(env, `venom:cozdum:${gunAnahtari(simdi)}`, []);
+      await kaydet(env, `venom:cozdum:${gunAnahtari(simdi)}`, [...l, `${ad} Vegawin verisi yeniden akıyor`].slice(-20), 3 * 86400);
+      if (a.patron) await biriktir(env, { kaynak: "sami", metin: `✅ ${ad}: Vegawin verisi yeniden geliyor`, tur: "bilgi" }, simdi);
+      continue;
+    }
+    const canli = simdi - k.kalp < 1800;
+    if (!a && canli && magazaAcikMi(simdi) && saatNow >= 11 && simdi - k.degisim > VERI_ESIK) {
+      a = { degisim: k.degisim, sor: simdi, gun: gunAnahtari(simdi) };
+      const metin = `📊 ${ad}: Mağaza bilgisayarı açık, ama Vegawin'den ${tarihSaat(k.degisim).slice(0, 16)}'den beri yeni bilgi gelmiyor. Bugün ${ad}'da Vegawin'e fiş/fatura girildi mi? (Venom)`;
+      const klavye = { inline_keyboard: [[{ text: "✅ Evet, girildi", callback_data: `vd:vs-${k.magaza}:e` }, { text: "❌ Bugün giriş yok", callback_data: `vd:vs-${k.magaza}:h` }]] };
+      for (const kim of magazaKisileri(k.magaza)) await kuyrugaEkle(env, "giden", { id: `vs-${k.magaza}-${kim}-${simdi}`, kime: kim, metin, klavye, tur: "gorev" }).catch(() => null);
+      await kaydet(env, anahtar, a, 2 * 86400);
+    } else if (a && !a.cevap && !a.patron && simdi - a.sor >= 1800) {
+      a.patron = simdi;
+      await bildir(env, `🔴 Köprü sustu: ${ad} — Vegawin'den ${tarihSaat(a.degisim).slice(0, 16)}'den beri veri gelmiyor (satış 0 görünüyor); ${k.magaza === "BLACKROSE" ? "Merdan" : "Aziz"} ve Hemra 30 dk'dır cevap vermedi.`, { simdi, kaynak: "venom", tur: "kritik" });
+      await kaydet(env, anahtar, a, 2 * 86400);
+    }
+  }
+}
+// Ekibin "vd:vs-<mağaza>:e|h" cevabı (Sami → venomDugme → cozumAdimi)
+export async function veriCevap(env, d, simdi) {
+  const m = String(d.cid).replace(/^vs-/, ""), ad = m === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE", anahtar = `venom:veriAlarm:${m}`;
+  const a = await oku(env, anahtar, null);
+  if (!a || a.cevap) return;
+  a.cevap = { kim: d.kim, ne: d.rid, zaman: simdi };
+  await kaydet(env, anahtar, a, 2 * 86400);
+  if (d.rid === "e") {
+    for (const kim of magazaKisileri(m)) await kuyrugaEkle(env, "giden", { id: `vsy-${m}-${kim}-${simdi}`, kime: kim, metin: `🔧 ${ad}: Teşekkürler. Lütfen mağaza bilgisayarında Sami köprüsünü kapatıp yeniden açın (olmazsa bilgisayarı yeniden başlatın). Bilgi gelmeye başlayınca Venom görür. (Venom)`, tur: "mesaj" }).catch(() => null);
+    await bildir(env, `🔴 Köprü sustu: ${ad} satış sayısı gerçek değil — ${d.kim} "bugün Vegawin'e giriş yapıldı" dedi, ama ${tarihSaat(a.degisim).slice(0, 16)}'den beri veri gelmiyor. Köprünün yeniden başlatılmasını istedim; düzelince raporda görünür.`, { simdi, kaynak: "venom", tur: "kritik" });
+  } else {
+    await biriktir(env, { kaynak: "venom", metin: `✅ ${ad} satış 0 doğru: ${d.kim} bugün Vegawin'e giriş olmadığını söyledi.`, tur: "bilgi" }, simdi);
+    await yaz(env, `✅ ${ad} satış 0 doğru: ${d.kim} bugün Vegawin'e giriş olmadığını söyledi.`, { posta: { izin: "cevap" } });
   }
 }
 async function claudeIslemAdimi(env, simdi) {

@@ -887,9 +887,9 @@ test("11 Kasım MESAJ DÜZENİ: botun <b> etiketli yazısı temiz gider; 'kontro
   await v.kopruIzle(o.env, ist(11, 10, 0)); // 10:00 açılış saati → alarm yok
   assert.equal(o.g.length, 0);
   await v.kopruIzle(o.env, ist(11, 10, 45));
-  const ekip = o.g.filter((x) => ["222", "333"].includes(String(x.govde.chat_id)));
-  assert.equal(ekip.length, 2);
-  assert.match(ekip[0].govde.text, /^🔌 BLACK ROSE: Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu\?/);
+  const ekip = await kuyruguAl(o.env, "giden"); // ekip Sami üzerinden
+  assert.deepEqual(ekip.map((x) => x.kime), ["merdan", "hemra"]);
+  assert.match(ekip[0].metin, /^🔌 BLACK ROSE: Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu\?/);
   assert.equal(patronaGiden(o).length, 0);
   await v.kopruIzle(o.env, ist(11, 11, 0)); // 15 dk — Patron'a yok
   assert.equal(patronaGiden(o).length, 0);
@@ -899,6 +899,35 @@ test("11 Kasım MESAJ DÜZENİ: botun <b> etiketli yazısı temiz gider; 'kontro
   await v.kopruIzle(o.env, ist(11, 11, 31));
   assert.equal(patronaGiden(o).length, 1); // tek sefer
   assert.ok(ozetEski);
+});
+
+test("11 Kasım VERİ AKIŞI: köprü sinyal veriyor ama Vegawin verisi 3 saattir yok → Aziz+Hemra'ya düğmeli soru (Sami üzerinden); 'Evet girildi' → Patron'a TEK sonuç; 'giriş yok' → 'satış 0 doğru'", async () => {
+  const v = await import("./venom-bot.js");
+  const { cozumAdimi } = await import("./venom-gorev.js");
+  const o = ortam();
+  Object.assign(o.env, { BR_SORUMLU: "222", HEMRA_ID: "333", AZIZ_ID: "444" });
+  await o.env.STOK.get().fetch("https://stok/ozet", { method: "POST", body: "{}" });
+  const simdi = ist(11, 14, 0);
+  o.stok.depo.sql.exec("INSERT INTO kopru (magaza, son, adet, degisim, kalp) VALUES ('VOLONTE', ?, 0, ?, ?)", simdi - 60, ist(10, 18, 7), simdi - 60);
+  await v.kopruIzle(o.env, simdi);
+  const g = await kuyruguAl(o.env, "giden");
+  assert.deepEqual(g.map((x) => x.kime), ["aziz", "hemra"]);
+  assert.match(g[0].metin, /^📊 VOLONTE: Mağaza bilgisayarı açık, ama Vegawin'den 10\.11\.2026 18:07'den beri yeni bilgi gelmiyor\./);
+  assert.ok(!/sat[ıi][sş]/i.test(g[0].metin)); // ekip süzgeci: satış kelimesi yok
+  assert.deepEqual(g[0].klavye.inline_keyboard[0].map((b) => b.callback_data), ["vd:vs-VOLONTE:e", "vd:vs-VOLONTE:h"]);
+  assert.equal(patronaGiden(o).length, 0);
+  // Aziz "Evet, girildi"
+  await kuyrugaEkle(o.env, "venomDugme", { id: "vs-VOLONTE:e", cid: "vs-VOLONTE", rid: "e", kim: "Aziz", text: "✅ Evet, girildi", zaman: simdi + 300 });
+  const f = { veriCevap: (d) => v.veriCevap(o.env, d, simdi + 300), botaDugme: async () => null, biriktir: async () => null, defter: async () => null };
+  await cozumAdimi(o.env, simdi + 300, f);
+  const p = patronaGiden(o);
+  assert.equal(p.length, 1);
+  assert.match(p[0].govde.text, /^🔴 Köprü sustu: VOLONTE satış sayısı gerçek değil — Aziz "bugün Vegawin'e giriş yapıldı" dedi/);
+  const y = await kuyruguAl(o.env, "giden");
+  assert.deepEqual(y.map((x) => x.kime), ["aziz", "hemra"]);
+  assert.match(y[0].metin, /Sami köprüsünü kapatıp yeniden açın/);
+  await v.kopruIzle(o.env, simdi + 2400); // cevap verildi → 30 dk Patron satırı YOK
+  assert.equal(patronaGiden(o).length, 1);
 });
 
 test("9 Kasım REPETE: Kemal'den gelen 'Repete al' taslağı Patron'a HEMEN onay kartı (Fuat'a gidecek, ✏️ Düzelt ile adet/renk); onaysız Fuat'a gitmez", async () => {

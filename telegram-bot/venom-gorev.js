@@ -160,6 +160,7 @@ export async function cozumAdimi(env, simdi, f) {
   let degisti = false;
   // Hemra/Merdan'ın devredilen kartta bastığı düğmeler (Sami → "venomDugme")
   for (const d of await kuyruguAl(env, "venomDugme").catch(() => [])) {
+    if (/^vs-/.test(String(d.cid)) && f.veriCevap) { await f.veriCevap(d).catch(() => null); continue; } // 11 Kasım: Vegawin verisi sorusu
     const c = l.find((x) => x.id === d.cid);
     const r = await f.botaDugme(d.rid).catch(() => null);
     if (c && c.durum !== "kapandi") { c.durum = "kapandi"; c.kapanis = simdi; c.adimlar.push({ zaman: simdi, ne: `${d.kim} "${d.text || "düğme"}" bastı${r ? "" : " (bota iletilemedi)"}` }); degisti = true;
@@ -210,7 +211,7 @@ function devirKlavye(c, patrona = false) {
 }
 
 // ---------- Sami tarafı (Hemra / Merdan düğmeleri) ----------
-const kimAdi = (env, id) => { for (const k of GOREV_KISILER) if (String(KISILER[k].id(env) || "") === String(id)) return KISILER[k].ad; return null; };
+const kimAdi = (env, id) => { for (const k of [...GOREV_KISILER, "aziz"]) if (String(KISILER[k].id(env) || "") === String(id)) return KISILER[k].ad; return null; }; // 11 Kasım: Aziz de (VOLONTE veri sorusu)
 export async function gorevDugmesi(env, cq, tg) {
   const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const kim = kimAdi(env, cq.from.id) || (String(env.MURAT_ID || "").split(",").map((x) => x.trim()).includes(String(cq.from.id)) ? "Patron" : null);
