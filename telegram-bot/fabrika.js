@@ -2494,6 +2494,9 @@ async function tekIslem(env, simdi, tg) {
     for (const m of ["VOLONTE", "BLACKROSE"]) { const x = await stokIste(env, "/satis-sayim", { gun: is.gun || gunAnahtari(simdi), magaza: m }).catch(() => null); if (x) sonuc.m[m] = { toplam: x.toplam, model: x.model, indirimliAdet: x.indirimliAdet, ilk8: (x.liste || []).slice(0, 8).reduce((t, y) => t + y.satilan, 0) }; }
   } else if (is.tur === "kanitOku") { // gerçek akış kanıtı (Telegram'ın döndürdüğü mesajlar) — StokDO "kanit:gercek:<gün>"
     sonuc.l = ((await ayarOku(env, `kanit:gercek:${is.gun || gunAnahtari(simdi)}`, [])) || []).filter((x) => !is.basla || x.zaman >= is.basla).slice(-(is.son || 60));
+  } else if (is.tur === "gidenSifirla") { // 11 Kasım: eski hatanın yanlış güne yazdığı "fabrikaya giden" sayımı silinir {gun}
+    sonuc.eski = await ayarOku(env, `fabrika:fabrikayaGiden:${is.gun}`, null);
+    await ayarYaz(env, `fabrika:fabrikayaGiden:${is.gun}`, {});
   } else if (is.tur === "gittiHesap") { // 11 Kasım: okuma — Venom'un "fabrikaya gitti" satırı o gün için ne derdi (hiçbir şey yazmaz/göndermez)
     const lg = is.gun || gunAnahtari(simdi);
     const { giden, bekleyen } = await gidenSay(env, lg, null, null);

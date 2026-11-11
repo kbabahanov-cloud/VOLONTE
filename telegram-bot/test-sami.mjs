@@ -2443,4 +2443,10 @@ test("deneme zinciri takibi: Merdan 45 dk cevapsız → Venom'a hatırlatma; Hem
   await f.fabrikaZincirAdimi(o.env, simdi + 2400, tg2);
   const so = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
   assert.match(so.metin, /eksik listesi fabrikaya gitti: VOLONTE 0 model, Black Rose 0 model\./);
+  await yaz(`fabrikayaGiden:${g}`, { VOLONTE: ["3394"] });
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "gidenSifirla", gun: g }, { tur: "gittiHesap", gun: g }]));
+  await f.fabrikaZincirAdimi(o.env, simdi + 2700, tg2);
+  const ss = JSON.parse(o.depo.get("sami:islemSonuc"));
+  assert.deepEqual(ss.at(-2).eski, { VOLONTE: ["3394"] });
+  assert.match(ss.at(-1).metin, /VOLONTE 0 model, Black Rose 0 model\./);
 });
