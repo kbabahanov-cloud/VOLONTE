@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026110304"
+$SURUM = "2026111101"
 
 function Gunluge([string]$m) {
   try {
@@ -346,6 +346,45 @@ function CiroOku([string]$sifre) {
   }
   return $ciroSatir
 }
+# ---- Günlük ciro (11 Kasım; Patron: "bugün kaç adet, kaç dolarlık") — SADECE SELECT ----
+# Aynı satış fatura başlıkları (21) ve satıştan iade (22); sadece DÜN ve BUGÜN, gün × para birimi → adet, TUTAR.
+# Yıllık satırlarla aynı kalıpta gider; "tablo" alanı "GUN:yyyy-AA-gg" olur (Venom günlük satırı buradan tanır).
+# Alış, maliyet, kâr, müşteri ASLA okunmaz.
+function GunlukCiroOku([string]$sifre) {
+  $gcSatir = @()
+  $gcBas = (Get-Date).Date.AddDays(-1); $gcBit = (Get-Date).Date.AddDays(1)
+  $gcTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLSATFAT%BASLIK%" }
+  foreach ($gt in $gcTablolar.Rows) {
+    $gtAd = [string]$gt.AD
+    $gtSut = @(Sutunlar $sifre $gtAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($gtSut -notcontains "TARIH") -or ($gtSut -notcontains "BELGETIPI")) { continue }
+    $gtTutar = if ($gtSut -contains "TUTAR") { "TUTAR" } elseif ($gtSut -contains "ARATOPLAM") { "ARATOPLAM" } else { $null }
+    if (-not $gtTutar) { continue }
+    $gtDoviz = if ($gtSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $gtIptal = if ($gtSut -contains "IPTAL") { " AND ISNULL(IPTAL, 0) = 0" } else { "" }
+    $gtSorgu = "SELECT CONVERT(char(10), TARIH, 23) AS G" + $(if ($gtDoviz) { ", [$gtDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST([$gtTutar] AS FLOAT)) AS TOPLAMI FROM [$gtAd] WHERE BELGETIPI = 21$gtIptal AND TARIH >= @bas AND TARIH < @bit GROUP BY CONVERT(char(10), TARIH, 23)" + $(if ($gtDoviz) { ", [$gtDoviz]" } else { "" })
+    foreach ($gx in (Sorgu $sifre $gtSorgu @{ bas = $gcBas; bit = $gcBit }).Rows) {
+      $gxGun = ([string]$gx.G).Trim()
+      if ($gxGun -notmatch '^\d{4}-\d{2}-\d{2}$') { continue }
+      $gcSatir += @{ tablo = "GUN:$gxGun"; yil = [int]$gxGun.Substring(0, 4); tur = "21"; doviz = $(if ($gtDoviz) { ([string]$gx.D).Trim() } else { "" }); n = [int]$gx.N; tutar = (Num $gx.TOPLAMI); aratoplam = $null }
+    }
+  }
+  $giTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLALFAT%BASLIK%" }
+  foreach ($gi in $giTablolar.Rows) {
+    $giAd = [string]$gi.AD
+    $giSut = @(Sutunlar $sifre $giAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($giSut -notcontains "TARIH") -or ($giSut -notcontains "BELGETIPI") -or ($giSut -notcontains "TUTAR")) { continue }
+    $giDoviz = if ($giSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $giIptal = if ($giSut -contains "IPTAL") { " AND ISNULL(IPTAL, 0) = 0" } else { "" }
+    $giSorgu = "SELECT CONVERT(char(10), TARIH, 23) AS G" + $(if ($giDoviz) { ", [$giDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(TUTAR AS FLOAT)) AS TOPLAMI FROM [$giAd] WHERE BELGETIPI = 22$giIptal AND TARIH >= @bas AND TARIH < @bit GROUP BY CONVERT(char(10), TARIH, 23)" + $(if ($giDoviz) { ", [$giDoviz]" } else { "" })
+    foreach ($ix in (Sorgu $sifre $giSorgu @{ bas = $gcBas; bit = $gcBit }).Rows) {
+      $ixGun = ([string]$ix.G).Trim()
+      if ($ixGun -notmatch '^\d{4}-\d{2}-\d{2}$') { continue }
+      $gcSatir += @{ tablo = "GUN:$ixGun"; yil = [int]$ixGun.Substring(0, 4); tur = "22"; kaynak = "iade"; doviz = $(if ($giDoviz) { ([string]$ix.D).Trim() } else { "" }); n = [int]$ix.N; tutar = (Num $ix.TOPLAMI); aratoplam = $null }
+    }
+  }
+  return $gcSatir
+}
 # ---- Gider keşfi (3 Kasım, Patron: giderler nerede?) — SADECE SELECT, sürüm başına bir kez ----
 # Adında MASRAF/KASA/GIDER/BANKA/MUHASEBE/PERSONEL/MAAS/HESAP/ODEME/TEDIYE geçen tablolar: satır sayısı, sütun ADLARI, son 13
 # ayın ay ay adet + tutar toplamları ve kısa kod sütunlarının (KOD/TIP/TUR/GRUP) dağılımı. Kişi adı, ünvan, açıklama, TC,
@@ -598,11 +637,16 @@ function Esitle([switch]$Zorla) {
     try { GiderKesifGonder (Duz $g.Anahtar) @(GiderKesif (Duz $g.Sifre)) (MaliKesif (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $gkDosya; $satisNot += ", mali keşif gönderildi" }
     catch { $satisNot += ", gider keşfi yapılamadı: $($_.Exception.Message)" }
   }
-  # Yıllık ciro: 6 saatte bir (sadece Patron'un raporu için); hata olursa diğer işler etkilenmez
+  # Ciro: yıllık + günlük (dün, bugün) birlikte, 30 dakikada bir (11 Kasım; sadece Patron'un raporu için).
+  # Hata olursa diğer işler etkilenmez; günlük okunamazsa yıllık yine gider.
   $ciroDosya = Join-Path $VeriKlasoru "ciro-son-$($Ayar.magaza).txt"
   $ciroSon = if (Test-Path $ciroDosya) { [datetime]::Parse((Get-Content $ciroDosya -Raw).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } else { [datetime]::MinValue }
-  if ($Zorla -or ((Get-Date) - $ciroSon).TotalMinutes -ge 360) {
-    try { CiroGonder (Duz $g.Anahtar) @(CiroOku (Duz $g.Sifre)); (Get-Date).ToString("o") | Set-Content $ciroDosya; $satisNot += ", ciro gönderildi" }
+  if ($Zorla -or ((Get-Date) - $ciroSon).TotalMinutes -ge 30) {
+    try {
+      $ciroYillik = @(CiroOku (Duz $g.Sifre)); $ciroGunluk = @()
+      try { $ciroGunluk = @(GunlukCiroOku (Duz $g.Sifre)) } catch { $satisNot += ", günlük ciro okunamadı: $($_.Exception.Message)" }
+      CiroGonder (Duz $g.Anahtar) @($ciroYillik + $ciroGunluk); (Get-Date).ToString("o") | Set-Content $ciroDosya; $satisNot += ", ciro gönderildi (günlük $($ciroGunluk.Count) satır)"
+    }
     catch { $satisNot += ", ciro okunamadı: $($_.Exception.Message)" }
   }
   return "$($simdiki.Count) model, $($degisen.Count) değişiklik gönderildi$satisNot"

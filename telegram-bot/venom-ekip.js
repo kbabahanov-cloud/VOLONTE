@@ -30,36 +30,58 @@ export async function koordinator(env, simdi) {
 // Listeye ekle (aynı iş iki kez eklenmez). x: { tur: "kart"|"cozum"|"gorev", ozet, ref, bot, chat, mesaj, isdId, cid, kod }
 export async function listeyeEkle(env, x, simdi) {
   const l = await oku(env, "venom:hemraListe", []);
-  if (l.some((y) => y.ref === x.ref && y.durum === "bekliyor")) return null;
+  if (l.some((y) => y.ref === x.ref && (y.durum === "bekliyor" || simdi - y.zaman < 3 * 86400))) return null; // 11 Kasım: cevaplanan / dağıtılan soru bir daha sorulmaz
   const kayit = { id: kisaId(), zaman: simdi, durum: "bekliyor", ...x };
   await kaydet(env, "venom:hemraListe", [...l.filter((y) => y.durum === "bekliyor" || simdi - y.zaman < 7 * 86400), kayit].slice(-150), 14 * 86400);
   return kayit;
 }
-// Onay merdiveninden sonra hâlâ cevapsız (Aziz / Merdan) → listeye
-export async function eskalasyonTopla(env, simdi, stokIste) {
+// 11 Kasım (TEK DEFTER, Patron): Hemra'nın kartı SADECE tek defterden üretilir.
+// Onay merdiveninden sonra hâlâ cevapsız (Aziz / Merdan) işler → listeye; her İŞ tek satır (aynı kartın kopyaları tek iş).
+// defter: defterOku(env, simdi) sonucu
+export async function eskalasyonTopla(env, simdi, defter) {
   const az = kisiId(env, "aziz"), me = kisiId(env, "merdan");
-  const bek = await stokIste(env, "/isd-bekleyen", { enEski: simdi - 5 * 86400 }).catch(() => []);
   let n = 0;
-  for (const r of Array.isArray(bek) ? bek : []) {
-    if (![az, me].includes(String(r.kime)) || !Number(r.hatirlatildi) || mesaiSuresi(Number(r.hatirlatildi), simdi) < 3 * 3600) continue;
-    const kim = String(r.kime) === az ? "Aziz" : "Merdan";
-    if (await listeyeEkle(env, { tur: "kart", ref: `isd:${r.id}`, isdId: r.id, bot: r.bot, chat: r.chat, mesaj: r.mesaj, kod: r.kod, ozet: `${r.kod || "kart"} (${r.bot}) — ${kim} cevap vermedi: ${String(r.ozet || "").slice(0, 70)}` }, simdi)) n++;
+  for (const x of ((defter && defter.satirlar) || []).filter((s) => s.tur === "kart" && s.durum === "acik" && [az, me].includes(String(s.kimId)) && s.ek && s.ek.hatirlatildi && mesaiSuresi(Number(s.ek.hatirlatildi), simdi) >= 3 * 3600)) {
+    if (await listeyeEkle(env, { tur: "kart", ref: x.id, isdId: x.ek.isdId, bot: x.bot, chat: x.ek.chat, mesaj: x.ek.mesaj, kod: x.kod, ozet: `${x.kod ? `${x.kod}: ` : ""}${String(x.ne).replace(new RegExp(`^${x.kod || "\\u0000"}\\s*[:·–-]\\s*`), "")} — ${x.kim} cevap vermedi` }, simdi)) n++;
   }
   return n;
 }
-// 11:00 / 16:00 toplu liste (koordinatöre, Sami'den). Satır başı 4 düğme; en fazla 12 iş (kalan bir sonrakine)
-export async function hemraListesiGonder(env, simdi, { stokIste, biriktir }) {
-  if (!haftaIci(simdi)) return 0;
-  await eskalasyonTopla(env, simdi, stokIste).catch(() => 0);
+// Listede bekleyen iş hâlâ açık mı? (tek defterde kapandıysa listeden düşer: cevaplandı, yenilendi, repete açıldı, eskidi)
+export async function listeyiTemizle(env, simdi, defter) {
   const l = await oku(env, "venom:hemraListe", []);
-  const bek = l.filter((x) => x.durum === "bekliyor").slice(0, 12);
+  const acikRef = new Set(((defter && defter.satirlar) || []).filter((s) => s.tur === "kart" && s.durum === "acik").map((s) => s.id));
+  const acikIsd = new Set(((defter && defter.satirlar) || []).filter((s) => s.tur === "kart" && s.durum === "acik").map((s) => Number(s.ek && s.ek.isdId)));
+  const cozum = await oku(env, "venom:cozum", []);
+  let n = 0;
+  for (const x of l) {
+    if (x.durum !== "bekliyor") continue;
+    const acik = x.tur === "kart" ? (String(x.ref).startsWith("kart:") ? acikRef.has(x.ref) : acikIsd.has(Number(x.isdId)))
+      : x.tur === "cozum" ? cozum.some((c) => c.id === x.cid && c.durum === "listede") && simdi - x.zaman < 3 * 86400
+        : simdi - x.zaman < 3 * 86400;
+    if (!acik) { x.durum = "kapandi"; x.kapanis = simdi; n++; }
+  }
+  // aynı model + aynı iş yazısı iki kez durmaz
+  const gorulen = new Set();
+  for (const x of l) { if (x.durum !== "bekliyor") continue; const a = `${x.kod || ""}|${String(x.ozet).slice(0, 60)}`; if (gorulen.has(a)) { x.durum = "kapandi"; x.kapanis = simdi; n++; } else gorulen.add(a); }
+  if (n) await kaydet(env, "venom:hemraListe", l, 14 * 86400);
+  return { kapanan: n, kalan: l.filter((x) => x.durum === "bekliyor") };
+}
+export const HEMRA_EN_FAZLA = 5; // 11 Kasım (Patron): Hemra'nın kartı en fazla 5 iş
+// 11:00 / 16:00 (koordinatöre, Sami'den): en fazla 5 İŞ, her iş AYRI kart ve altında KENDİ düğmeleri; tekrar ve bilgi satırı yok.
+// Bir iş bir kez gönderilir (cevap gelmeyeni Sami'nin kart takibi hatırlatır, kural 54).
+export async function hemraListesiGonder(env, simdi, { biriktir, defter }) {
+  if (!haftaIci(simdi)) return 0;
+  await eskalasyonTopla(env, simdi, defter).catch(() => 0);
+  await listeyiTemizle(env, simdi, defter).catch(() => null);
+  const l = await oku(env, "venom:hemraListe", []);
+  const bek = l.filter((x) => x.durum === "bekliyor" && !x.gonderildi).slice(0, HEMRA_EN_FAZLA);
   if (!bek.length) return 0;
   const kim = await koordinator(env, simdi);
-  const ad = KISILER[kim].ad;
-  const metin = [`📋 ${ad}: onaylanmayanlar / sorunlu işler (${bek.length}). Her satır için seçin; seçtiğiniz kişiye kart kendiliğinden gider.`, "", ...bek.map((x, i) => `${i + 1}. ${x.ozet}`)].join("\n").slice(0, 4000);
-  const klavye = bek.map((x, i) => Object.entries(SECENEK).map(([s, [t]]) => ({ text: `${i + 1}· ${t}`, callback_data: `hl:${x.id}:${s}` })));
-  await kuyrugaEkle(env, "giden", { id: `hl-${gunAnahtari(simdi)}-${saat(simdi) < 13 ? "s" : "o"}-${kim}`, kime: kim, metin, klavye: { inline_keyboard: klavye }, tur: "gorev" });
-  for (const x of bek) x.gonderildi = x.gonderildi || simdi;
+  for (const x of bek) {
+    const klavye = [Object.entries(SECENEK).slice(0, 2), Object.entries(SECENEK).slice(2)].map((satir) => satir.map(([s, [t2]]) => ({ text: t2, callback_data: `hl:${x.id}:${s}` })));
+    await kuyrugaEkle(env, "giden", { id: `hl-${x.id}-${kim}`, kime: kim, metin: `📋 ${String(x.ozet).slice(0, 300)}`, klavye: { inline_keyboard: klavye }, tur: "gorev" });
+    x.gonderildi = simdi;
+  }
   await kaydet(env, "venom:hemraListe", l, 14 * 86400);
   if (kim !== "hemra") await biriktir(`📋 Koordinasyon bugün Merdan'da (Hemra ${(await env.KAYIT.get("venom:hemraIzinli").catch(() => null)) === gunAnahtari(simdi) ? "izinli" : "listeye cevap vermedi"}).`).catch(() => null);
   return bek.length;
@@ -72,7 +94,8 @@ export async function hemraDugmesi(env, cq, tg) {
   if (!kim || !SECENEK[s]) return cevap("Bu liste koordinatörün.");
   await kuyrugaEkle(env, "hemraKarar", { id: `${id}:${s}`, lid: id, s, kim: KISILER[kim].ad, zaman: Math.floor(Date.now() / 1000) });
   await cevap("Kaydedildi ✅");
-  const k = ((cq.message && cq.message.reply_markup && cq.message.reply_markup.inline_keyboard) || []).map((r) => (r.some((b) => String(b.callback_data || "").startsWith(`hl:${id}:`)) ? [{ text: `✔ ${r[0].text.split("·")[0]}· ${SECENEK[s][0]}`, callback_data: "vg:-" }] : r));
+  let yazildi = false;
+  const k = ((cq.message && cq.message.reply_markup && cq.message.reply_markup.inline_keyboard) || []).map((r) => { if (!r.some((b) => String(b.callback_data || "").startsWith(`hl:${id}:`))) return r; if (yazildi) return null; yazildi = true; return [{ text: `✔ ${SECENEK[s][0]}`, callback_data: "vg:-" }]; }).filter(Boolean);
   return tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: k } });
 }
 // Venom: seçimleri uygula. f: { kartIlet(item, hedefKim), devret(item, hedefKim), gorevVer(item, hedefKim), patronaSor(item), biriktir }

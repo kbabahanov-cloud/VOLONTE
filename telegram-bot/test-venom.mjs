@@ -190,8 +190,10 @@ test("Pelin işi: maliyet kartı (aylık sınır), kurulum yoksa kart açılmaz;
   const o = ortam();
   const { aracCalistir } = await import("./venom-bot.js");
   // 6 Kasım: sağlamlaştırma haftası — Patron açıkça istemedikçe Pelin üretimi başlamaz
-  assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557"], test: true }, ist(3, 12)), /duraklatıldı/);
-  o.env.__patronMetni = "3557 için video üret";
+  assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557"], test: true }, ist(3, 12)), /BAŞLATILMADI/);
+  o.env.__patronMetni = "3557 için video üret"; // 11 Kasım: "Pelin" demeden Pelin başlamaz (para harcayan iş yanlış anlamayla başlamaz)
+  assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557"], test: true }, ist(3, 12)), /BAŞLATILMADI/);
+  o.env.__patronMetni = "Pelin 3557 için video üret";
   assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557"], test: true }, ist(3, 12)), /kurulum yapılmamış/);
   const sc = JSON.stringify({ yuz: { anahtar: "a", manken: 0 }, ortamlar: [{ ad: "retro", sahne: "x", hareket: "y" }], arac: "veo" });
   o.depo.set("pelin:secim", sc); o.depo.set("venom:pelinSecim", sc); // Pelin'in kendi kaydı + Venom'un aynası
@@ -558,17 +560,20 @@ test("SAĞLAMLAŞTIRMA (6 Kasım) — 'aracım yok' denmez: not alınır; 09:30 
 
 import { kodRenk, uretNiyeti } from "./venom-bot.js";
 test("ANLAMA (6 Kasım, D8–D10): üretim / paylaş / açıklamasız dosya ayrımı; tek satır 'Anladım'; 'hayır' geri alır ve kaydeder; akşam raporunda anlamadıklarım", async () => {
-  assert.deepEqual(uretNiyeti("3627 beyaz fotoğrafını yap"), { kod: "3627", renk: "beyaz" });
-  assert.deepEqual(uretNiyeti("36 27 beyaz videosunu çek"), { kod: "3627", renk: "beyaz" });
-  assert.equal(uretNiyeti("3627 beyaz paylaş"), null);
-  assert.deepEqual(uretNiyeti("3627 beyaz üret"), { kod: "3627", renk: "beyaz" }); // Türkçe harfle başlayan kelime (eski \b hatası)
+  // 11 Kasım (Patron): Pelin SADECE açıkça "Pelin" denirse; "fotoğraf" kelimesi Pelin sebebi değil
+  assert.equal(uretNiyeti("3627 beyaz fotoğrafını yap"), null);
+  assert.equal(uretNiyeti("Merdan'a söyle, yarın 12:00'ye kadar 3394'ün fotoğrafını çeksin"), null);
+  assert.deepEqual(uretNiyeti("Pelin 3627 beyaz fotoğrafını yap"), { kod: "3627", renk: "beyaz" });
+  assert.deepEqual(uretNiyeti("pelin 36 27 beyaz videosunu çek"), { kod: "3627", renk: "beyaz" });
+  assert.equal(uretNiyeti("Pelin 3627 beyaz paylaş"), null);
+  assert.deepEqual(uretNiyeti("Pelin'e 3627 beyaz üret"), { kod: "3627", renk: "beyaz" }); // Türkçe harfle başlayan kelime (eski \b hatası)
   assert.equal(paylasNiyeti("3627 beyaz paylaşalım mı"), null);
   assert.equal(uretNiyeti("3627 videosu ne zaman gelir?"), null);
   assert.deepEqual(kodRenk("3627 koyu bordo büyük"), { kod: "3627", renk: "koyu bordo", beden: "b" });
   const o = ortam();
   const pelinGiden = [];
   o.env.PELIN_W = { mesaj: async (m) => { pelinGiden.push(m); return true; } };
-  await yazi(o, PATRON, "3627 beyaz videosunu yap");
+  await yazi(o, PATRON, "Pelin 3627 beyaz videosunu yap");
   assert.deepEqual(pelinGiden, ["/uret 3627 beyaz"]);
   assert.equal(o.claude.length, 0);
   assert.ok(patronaGiden(o).some((x) => /🧭 Anladım: 3627 beyaz → Pelin'e fotoğraf \+ video üretimi/.test(x.govde.text)));
@@ -851,7 +856,8 @@ test("11 Kasım RAPOR DÜZENİ: sabah 09:40 en fazla 8 satır, sabit sıra (gene
   assert.match(s[0], /^☀️ Günaydın Patron — .* \(ayrıntı \/detay\)$/);
   assert.match(s[1], /^(✅ Her şey çalışıyor|🔴 \d+ sorun var: )/);
   assert.equal(s[2], "🟡 Kararınız bekleniyor: repete 3490");
-  assert.match(s[3], /^💰 Satış dün: VOLONTE \S+, Black Rose \S+$/);
+  assert.match(s[3], /^💰 Satış dün: VOLONTE \S+ adet( · |, )/); // 11 Kasım: adet + (varsa) ciro, markalar ayrı
+  assert.match(s[3], /Black Rose \S+ adet/);
   assert.match(s[4], /^📣 Kanal dün: \S+ paylaşım$/);
   assert.equal(s[5], "🌐 Site: 2 model, dün 1 eklendi");
   assert.match(s[6], /^🏭 Fabrika: /);
@@ -1220,8 +1226,10 @@ test("görev: iki kişiye düğmeli kart; biri seçince iki kopya güncellenir; 
   assert.equal(kart.length, 2); // 10 + 2
   assert.match(kart[0].metin, /^Merdan, Hemra: Selin'de 12 modelin fotoğrafı yok/);
   assert.match(kart[0].metin, /⏰ Son saat: 10\.11 18:00 · kart 1\/2/);
-  assert.deepEqual(kart[0].klavye.inline_keyboard[0].map((b) => b.text), ["3040 📷 Bugün çekerim", "3040 🏭 Fabrikada", "3040 ❌ Satıldı/bitti"]);
-  assert.deepEqual(kart[0].klavye.inline_keyboard[1].map((b) => b.text), ["3040 🔍 Bulamadım", "3040 ✏️ Açıklama yaz"]);
+  assert.deepEqual(kart[0].klavye.inline_keyboard[0].map((b) => b.text), ["3040 📷 Bugün çekerim", "3040 🏭 Fabrikada"]); // kural 19: satırda en fazla 2 düğme
+  assert.deepEqual(kart[0].klavye.inline_keyboard[1].map((b) => b.text), ["3040 ❌ Satıldı/bitti", "3040 🔍 Bulamadım"]);
+  assert.deepEqual(kart[0].klavye.inline_keyboard[2].map((b) => b.text), ["3040 ✏️ Açıklama yaz"]);
+  assert.ok(kart[0].klavye.inline_keyboard.every((r) => r.length <= 2));
   // Sami gönderir: 2 kişi × 2 kart, düğmeli
   await venomGidenAdimi(o.env, t0, o.samiTg);
   const gonder = o.samiG.filter((x) => x.metod === "sendMessage");
@@ -1458,29 +1466,51 @@ test("manken kuralı: büyük bedeni olan bütün modeller (38-50 dahil) dolgun 
   assert.equal(s.yuzler.kucuk.ad, "2 numaralı siyahi kız");
 });
 
-test("ekip düzeni: Hemra'ya 11:00 toplu liste (4 düğme), seçim → kart seçilen kişiye; izinliyse Merdan; akşam satırı", async () => {
+test("ekip düzeni (11 Kasım, TEK DEFTER): Hemra'ya en fazla 5 iş, her iş AYRI kart + kendi düğmeleri (satırda 2); tekrar yok; defterde kapanan iş düşer; seçim → kart seçilen kişiye", async () => {
   const o = ortam();
   const E = await import("./venom-ekip.js");
   const K = await import("./venom-kopru.js");
+  const D = await import("./tek-defter.js");
   const { kartIletAdimi } = await import("./kart-tekrar.js");
   o.env.AZIZ_ID = "505";
   const t = ist(10, 11);
-  await E.listeyeEkle(o.env, { tur: "kart", ref: "isd:1", isdId: 1, bot: "kemal", chat: "504", mesaj: 7, kod: "3493", ozet: "3493 (kemal): ⬆️ 3493" }, t);
-  await E.listeyeEkle(o.env, { tur: "kart", ref: "isd:1", isdId: 1, bot: "kemal", chat: "504", mesaj: 7, kod: "3493", ozet: "tekrar" }, t); // aynı iş iki kez yok
-  assert.equal(await E.hemraListesiGonder(o.env, t, { stokIste: async () => [], biriktir: async () => {} }), 1);
-  const g = (await K.kuyruguAl(o.env, "giden"))[0];
-  assert.equal(g.kime, "hemra");
-  assert.match(g.metin, /^📋 Hemra: onaylanmayanlar \/ sorunlu işler \(1\)/);
-  assert.deepEqual(g.klavye.inline_keyboard[0].map((b) => b.text), ["1· 👤 Aziz'e ver", "1· 👤 Merdan'a ver", "1· ✋ Ben hallederim", "1· ❓ Patron'a sor"]);
+  const isd = (kayitlar) => o.env.STOK.get().fetch("https://stok/isd-yaz", { method: "POST", body: JSON.stringify({ kayitlar }) });
+  const kart = (kime, kod, mesaj, zaman, cb = `sz:${kod}:x`) => ({ zaman, bot: "kemal", tur: "kart", kime, kod, ozet: `⬆️ ${kod} öneri kartı`, chat: kime, mesaj, cbler: [cb] });
+  // Aziz'e 7 ayrı modelin kartı + 3493 için aynı kart İKİ kez (yeniden gönderilmiş) → 7 iş, tekrar yok
+  await isd([kart("505", "3493", 7, t - 9 * 3600), kart("505", "3493", 8, t - 8 * 3600), ...["3501", "3502", "3503", "3504", "3505", "3506"].map((k, i) => kart("505", k, 20 + i, t - 8 * 3600))]);
+  const bek = await (await o.env.STOK.get().fetch("https://stok/isd-bekleyen", { method: "POST", body: "{}" })).json();
+  await o.env.STOK.get().fetch("https://stok/isd-isaretle", { method: "POST", body: JSON.stringify({ idler: bek.map((x) => x.id), alan: "hatirlatildi", deger: ist(9, 12) }) }); // dün hatırlatıldı
+  const df = await D.defterOku(o.env, t);
+  assert.equal(df.kapanan.length, 1); // 3493'ün eski kopyası kökten kapandı
+  assert.equal(df.kapanan[0].neden, "yenilendi");
+  assert.equal(df.satirlar.filter((x) => x.tur === "kart").length, 7); // her iş TEK satır
+  assert.match(D.defterSatirYazi(df.satirlar.find((x) => x.kod === "3493")), /^3493 · ⬆️ 3493 öneri kartı · Aziz · açık$/);
+  assert.equal(await E.hemraListesiGonder(o.env, t, { defter: df, biriktir: async () => {} }), 5); // en fazla 5 iş
+  const giden = await K.kuyruguAl(o.env, "giden");
+  assert.equal(giden.length, 5); // her iş AYRI kart
+  assert.ok(giden.every((g) => g.kime === "hemra" && g.klavye.inline_keyboard.length === 2 && g.klavye.inline_keyboard.every((r) => r.length === 2))); // kendi düğmeleri, satırda 2
+  assert.equal(new Set(giden.map((g) => g.metin)).size, 5); // tekrar yok
+  assert.match(giden[0].metin, /^📋 3493: ⬆️ 3493 öneri kartı — Aziz cevap vermedi$/); // bilgi satırı / iç ad yok
+  assert.deepEqual(giden[0].klavye.inline_keyboard.flat().map((b) => b.text), ["👤 Aziz'e ver", "👤 Merdan'a ver", "✋ Ben hallederim", "❓ Patron'a sor"]);
+  // aynı liste ikinci kez gitmez: kalan 2 iş gider, ilk 5 TEKRAR gitmez
+  assert.equal(await E.hemraListesiGonder(o.env, t + 5 * 3600, { defter: await D.defterOku(o.env, t + 5 * 3600), biriktir: async () => {} }), 2);
+  await K.kuyruguAl(o.env, "giden");
+  assert.equal(await E.hemraListesiGonder(o.env, t + 6 * 3600, { defter: await D.defterOku(o.env, t + 6 * 3600), biriktir: async () => {} }), 0);
+  // Aziz 3501'i cevaplar → tek defterde kapanır → Hemra'nın listesinden düşer
+  await isd([{ zaman: t + 60, bot: "kemal", tur: "karar", kime: "505", kod: "3501", ozet: "3501: Paylaş", cb: "sz:3501:x", sonuc: "Aziz: Paylaş" }]);
+  const tm = await E.listeyiTemizle(o.env, t + 120, await D.defterOku(o.env, t + 120));
+  assert.equal(tm.kapanan, 1);
+  assert.ok(!tm.kalan.some((x) => x.kod === "3501"));
+  // seçim: Hemra "Merdan'a ver" → kart Merdan'a; düğmeler tek "✔" satırına iner
+  const g = giden[0];
   await E.hemraDugmesi(o.env, { id: "q", from: { id: 504 }, data: g.klavye.inline_keyboard[0][1].callback_data, message: { chat: { id: 504 }, message_id: 9, reply_markup: g.klavye } }, o.samiTg);
+  assert.deepEqual(o.samiG.at(-1).govde.reply_markup.inline_keyboard, [[{ text: "✔ 👤 Merdan'a ver", callback_data: "vg:-" }]]);
   const verilen = [];
   await E.hemraKararAdimi(o.env, t + 60, { kartIlet: async (x, kim) => { verilen.push([x.kod, kim]); await K.kuyrugaEkle(o.env, `kartIlet:${x.bot}`, { id: "k1", chat: x.chat, mesaj: x.mesaj, hedef: E.kisiId(o.env, kim), kim: "Hemra", ozet: x.ozet }); }, devret: async () => {}, gorevVer: async () => {}, patronaSor: async () => {}, biriktir: async () => {} });
   assert.deepEqual(verilen, [["3493", "merdan"]]);
   const kg = [];
   await kartIletAdimi(o.env, "kemal", async (e, m, gv) => { kg.push({ m, gv }); return { ok: true, result: { message_id: 1 } }; });
   assert.equal(String(kg[0].gv.chat_id), MERDAN);
-  const l = JSON.parse(o.depo.get("venom:hemraListe"));
-  assert.deepEqual(E.hemraSatirlari(l, t), ["📋 Hemra listesi: 1 iş, 1 dağıtıldı, 0 bekliyor"]);
   o.depo.set("venom:hemraIzinli", "2026-11-10");
   assert.equal(await E.koordinator(o.env, t), "merdan");
   assert.equal(E.markaSorumlusu("VOLONTE"), "aziz");
@@ -1636,4 +1666,156 @@ test("11 Kasım REPETE SON HAL (Venom): Patron 'TEST-002 repete tekrar aç' → 
   assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["3490"]]);
   assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 3490 repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Fuat'a kart gider."]);
   assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek mesaj/.test(x.govde.text)));
+});
+
+// ---------- 11 Kasım (Patron): VENOM VE SİSTEM — KÖKTEN DÜZELTME ----------
+test("TEK DEFTER (kök): aynı soru iki kez sayılmaz; yazıyla cevaplanan kapanır; repetesi açılan modelin eski kartları kapanır; 3 günden eski düşer; her iş tek satır", async () => {
+  const D = await import("./tek-defter.js");
+  const simdi = ist(11, 19);
+  const k = (id, o) => ({ id, zaman: simdi - 3600, bot: "sami", tur: "kart", kime: "503", kod: "3419", ozet: "🏭 Sinem · 3419 → Bitti · ne yapalım?", chat: "503", mesaj: id, durum: "bekliyor", deneme: 0, cb: "|fh:r:a1|fh:b:a1|", ...o });
+  const satirlar = [
+    k(1, { zaman: simdi - 30 * 3600 }), k(2, { zaman: simdi - 20 * 3600 }), // aynı kişi, aynı model, aynı soru → eskisi kapanır
+    k(3, { kime: "504", chat: "504", zaman: simdi - 20 * 3600 }), // Hemra'daki kopya
+    k(4, { kime: "501", chat: "501", zaman: simdi - 20 * 3600, cb: "|fs:g:x|fs:b:x|" }), // Fuat'taki fabrika kartı
+    k(5, { kod: "3394", zaman: simdi - 2 * 3600, cb: "|fe:A:3394|" }), // başka model: açık kalır
+    k(6, { kod: "3627", zaman: simdi - 4 * 86400, cb: "|fe:A:3627|" }), // 3 günden eski
+    k(7, { kod: "3500", kime: "505", chat: "505", zaman: simdi - 5 * 3600, cb: "|fe:A:3500|" }),
+    { id: 8, zaman: simdi - 3600, bot: "sami", tur: "karar", kime: "505", kod: "3500", ozet: '3500: "siyah 20 beyaz 20"' }, // yazıyla cevap
+    k(9, { kod: "3419", kime: "501", chat: "501", zaman: simdi - 1800, cb: "|rk:f8:r1|rk:f15:r1|" }), // repete kartının KENDİSİ kapanmaz
+  ];
+  const { acik, kapat } = D.kartlariIndir(satirlar, simdi, { repeteler: [{ kod: "3419", durum: "acik", zaman: simdi - 4 * 3600, onay: simdi - 3 * 3600 }] });
+  const neden = Object.fromEntries(kapat.map((x) => [x.id, x.neden]));
+  assert.deepEqual(neden, { 1: "yenilendi", 2: "repete", 3: "repete", 4: "repete", 6: "eskidi", 7: "cevaplandi" });
+  assert.deepEqual(acik.map((x) => x.id).sort(), [5, 9]);
+  // satır biçimi: ne · kim · marka · durum · kanıt
+  const rs = D.repeteSatiri({ id: "3419-x", kod: "3419", magaza: "VOLONTE", durum: "acik", adet: 40, zaman: simdi - 86400, teslim: "2026-11-21", fuat: { kim: "Fuat", zaman: simdi - 3 * 3600, kaynak: "Patron bildirdi (11.11)" } });
+  assert.equal(D.defterSatirYazi(rs), "3419 · Repete 40 adet · Fabrika · VOLONTE · beklemede · Fuat onayladı (Patron bildirdi (11.11)), teslim 21.11.2026");
+  assert.equal(D.defterSatirYazi(D.fabrikaSatiri({ id: "f1", kod: "3394", magaza: "BLACKROSE", durum: "bekliyor", gonderim: simdi })), "3394 · Fabrika isteği (eksik listesi) · Fabrika · Black Rose · açık · Fabrikadan istendi, cevap bekleniyor");
+});
+
+test("5 SORU (Patron'un testi): fabrikaya dün giden (markalar ayrı, ≤4 satır) · repete durumu (kayıttan) · kanal kontrolü ('$' fiyat değil, söz tekrarı yok) · 'Merdan'a söyle' → Sami üzerinden Merdan'a, Pelin'e GİTMEZ · günlük satış adet + ciro", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const simdi = ist(11, 19);
+  const gercek = Date.now; Date.now = () => simdi * 1000;
+  try {
+    const pelinGiden = [], kemalIs = [];
+    o.env.PELIN_W = { mesaj: async (m) => { pelinGiden.push(m); return true; } };
+    o.env.KEMAL_W = { paylasimDuzelt: async (g) => { kemalIs.push(g); return { ok: true, yerinde: true, kod: g.kod, duzeltilen: 1 }; } };
+    o.env.AZIZ_ID = "505";
+    // 1) Fabrikaya dün hangi modeller gitti?  (Sami'nin kendi kaydı: VOLONTE 8, Black Rose 9 = 17)
+    await o.ayar("fabrika:fabrikayaGiden:2026-11-10", { VOLONTE: ["3419", "3394", "3408", "3477", "3573", "3599", "3604", "3607"], BLACKROSE: ["3459", "3490", "3514", "3585", "3588", "3594", "3611", "3630", "3635"] });
+    await yazi(o, PATRON, "Fabrikaya dün hangi modeller gitti?");
+    const c1 = patronaGiden(o).at(-1).govde.text;
+    assert.equal(c1, "Dün (10.11) fabrikaya 17 model gitti.\nVOLONTE (8): 3394, 3408, 3419, 3477, 3573, 3599, 3604, 3607\nBlack Rose (9): 3459, 3490, 3514, 3585, 3588, 3594, 3611, 3630, 3635");
+    assert.ok(c1.split("\n").length <= 4);
+    // 2) 3419'un repetesi ne durumda?  (repete kaydı: Fuat onayladı, 40 adet, teslim 21.11)
+    await o.ayar("rk:3419-toc8", { id: "3419-toc8", kod: "3419", magaza: "VOLONTE", deneme: false, durum: "acik", adet: 40, zaman: simdi - 4 * 3600, teslim: "2026-11-21", fuat: { kim: "Fuat", zaman: simdi - 4 * 3600, gun: 10, kaynak: "Patron bildirdi (11.11)" } });
+    await o.ayar("rk:acik", ["3419-toc8"]); await o.ayar("rk:hepsi", ["3419-toc8"]);
+    await yazi(o, PATRON, "3419’un repetesi ne durumda?");
+    const c2 = patronaGiden(o).at(-1).govde.text;
+    assert.equal(c2, "3419 (VOLONTE) repete: 40 adet, üretimde.\nFuat onayladı (Patron bildirdi (11.11)), teslim 21.11.2026.");
+    assert.ok(!/kayıtta yok|kart açık/.test(c2));
+    // 3) Kanalda 3529'u kontrol et: "PRICE. $" fiyat DEĞİL → sorun yok; Patron'un sözü tekrar edilmez; Kemal'e iş gitmez
+    o.depo.set("venom:kanal:son", JSON.stringify([
+      { id: 11322, zaman: ist(1, 13) - 180 * 86400, kod: "3529", medya: "video", yazi: "❌ SOLD OUT / ÉPUISÉ\n\n✅CODE. 3529\n\n✅PRICE. $\n\n✅SIZE.  38/40/42/44.", sorunlar: ["yazıda FİYAT var"], duzenlendi: true },
+      { id: 14958, zaman: ist(9, 20), kod: "3529", medya: "albüm (foto)", yazi: "❌ SOLD OUT / ÉPUISÉ\n✅ CODE: 3529\n🎨 Colors / Couleurs: black\nBLACK ROSE – Premium Women's Fashion", sorunlar: [], duzenlendi: true },
+    ]));
+    await yazi(o, PATRON, "Kanalda 3529’un yazısını kontrol et, sorun varsa Kemal’e düzelttir.");
+    const c3 = patronaGiden(o).at(-1).govde.text;
+    assert.equal(c3, "3529: kanalda 2 paylaşım (en yenisi 09.11 20:00). Sorun yok: fiyat yok, marka imzası doğru.");
+    assert.ok(!/Anladım|kontrol ediyorsun|düzelttireceksin/.test(c3));
+    assert.equal(kemalIs.length, 0);
+    // gerçek tutar olursa: Venom SORMADAN düzelttirir, tek satır sonuç + kanıt
+    o.depo.set("venom:kanal:son", JSON.stringify([{ id: 15001, zaman: ist(10, 14), kod: "3512", medya: "video", yazi: "✅CODE 3512\n✅PRICE. 45$\n✅SIZE. 38/40", sorunlar: [], duzenlendi: false }]));
+    o.depo.set("kanal", JSON.stringify({ id: -100, kullanici: "kanaladi" }));
+    await yazi(o, PATRON, "kanalda 3512 kontrol et");
+    assert.match(patronaGiden(o).at(-1).govde.text, /^3512: 10\.11 14:00 paylaşımında yazıda FİYAT var → Kemal yazıyı düzeltti\. Kanıt: https:\/\/t\.me\/kanaladi\/15001$/);
+    assert.deepEqual(kemalIs, [{ kod: "3512", ids: [15001], yerinde: true, kim: "Venom (kanal kontrolü)" }]);
+    assert.ok(!patronaGiden(o).some((x) => /yaptırabilirim|ay[ıi]m m[ıi]\?/.test(x.govde.text)));
+    // 4) "Merdan'a söyle, yarın 12:00'ye kadar 3394'ün fotoğrafını çeksin" → Merdan'a (Sami), Pelin'e DEĞİL, yapay zekâ yok, para yok
+    const once = o.claude.length;
+    await yazi(o, PATRON, "Merdan’a söyle, yarın 12:00’ye kadar 3394’ün fotoğrafını çeksin");
+    assert.deepEqual(pelinGiden, []); // Pelin ÇALIŞMADI
+    assert.equal(o.claude.length, once); // yapay zekâsız yönlendirme
+    const c4 = patronaGiden(o).at(-1).govde.text;
+    assert.match(c4, /^Merdan'a kart Sami'nin sırasında \(birkaç dakika içinde gider\): "Yarın 12:00’ye kadar 3394’ün fotoğrafını çeksin"\nSon saat 12\.11 12:00\. Gitmezse ya da cevap gelmezse haber veririm\.$/);
+    await venomGidenAdimi(o.env, simdi + 60, o.samiTg); // Sami gönderir
+    const kart = o.samiG.filter((x) => x.metod === "sendMessage").at(-1);
+    assert.equal(String(kart.govde.chat_id), MERDAN);
+    assert.match(kart.govde.text, /^Merdan: Patron'dan: Yarın 12:00’ye kadar 3394’ün fotoğrafını çeksin\n⏰ Son saat: 12\.11 12:00\n\n1\. 3394\n\nDüğmeden seçin\.$/);
+    assert.ok(kart.govde.reply_markup.inline_keyboard.every((r) => r.length <= 2));
+    assert.equal(kart.govde.reply_markup.inline_keyboard[0][0].text, "3394 📷 Bugün çekerim");
+    // Merdan basınca sonuç Patron'a TEK satır
+    const G = await import("./venom-gorev.js");
+    const gid = JSON.parse(o.depo.get("venom:gorevler"))[0].id;
+    await kuyrugaEkle(o.env, "gorevCevap", { id: "c1", gid, i: 0, s: "c", kim: "Merdan", zaman: simdi + 120 });
+    const yazilan = [];
+    await G.gorevAdimi(o.env, simdi + 180, { biriktir: async () => {}, patronaKart: async () => {}, defter: async () => {}, patronaYaz: async (m) => { yazilan.push(m); } });
+    assert.deepEqual(yazilan, ['✅ Yarın 12:00’ye kadar 3394’ün fotoğrafını çeksin — 3394: Merdan "Bugün çekerim"']);
+    // yazım çeşitleri (kural 33): Türkçe harfsiz, bitişik, büyük harf, iki kişi, kodsuz iş
+    assert.deepEqual(v.kisiyeSoyleCoz("merdana soyle 3394 videosunu ceksin", simdi).kimler, ["merdan"]);
+    assert.equal(v.kisiyeSoyleCoz("merdana soyle 3394 videosunu ceksin", simdi).kalip, "video");
+    assert.deepEqual(v.kisiyeSoyleCoz("AZİZ'E SÖYLE DEPOYU SAYSIN", simdi).kimler, ["aziz"]);
+    assert.deepEqual(v.kisiyeSoyleCoz("Hemra'ya ve Merdan'a yaz: vitrin değişsin", simdi).kimler.sort(), ["hemra", "merdan"]);
+    assert.deepEqual(v.kisiyeSoyleCoz("Hemra'ya sor, 3627 nerede", simdi).kodlar, ["3627"]);
+    assert.equal(v.kisiyeSoyleCoz("Fuat'a yaz mutabakatı kontrol etsin", simdi), null); // fabrika: onay kartı yolu (değişmedi)
+    assert.equal(v.kisiyeSoyleCoz("Merdan bugün ne yaptı", simdi), null);
+    assert.equal(v.kisiyeSoyleCoz("Merdan’a söyle, yarın 12:00’ye kadar 3394’ün fotoğrafını çeksin", simdi).son, ist(12, 12));
+    // 5) Bugün Black Rose kaç adet sattı, kaç dolarlık?  (adet: satış sayımı; ciro: köprünün günlük fatura satırları)
+    await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun: "2026-11-11", kalemler: [{ kod: "3490", adet: 4 }, { kod: "3632", adet: 2 }] }) });
+    await o.ayar("ciro:BLACKROSE", { zaman: simdi - 600, satirlar: [{ tablo: "D0026TBLSATFATBASLIK", yil: 2026, tur: "21", doviz: "$", n: 900, tutar: 250000, kaynak: "satis" }, { tablo: "GUN:2026-11-11", yil: 2026, tur: "21", doviz: "$", n: 3, tutar: 1250.5, kaynak: "satis" }, { tablo: "GUN:2026-11-11", yil: 2026, tur: "22", doviz: "$", n: 1, tutar: 50.5, kaynak: "iade" }, { tablo: "GUN:2026-11-10", yil: 2026, tur: "21", doviz: "$", n: 9, tutar: 7000, kaynak: "satis" }] });
+    await yazi(o, PATRON, "Bugün Black Rose kaç adet sattı, kaç dolarlık?");
+    const c5 = patronaGiden(o).at(-1).govde.text;
+    assert.equal(c5, "Bugün (19:00'e kadar) satış — Vegawin:\nBlack Rose: 6 adet (2 model) · ciro: 1.200,00 $ (satış 1.250,50, iade 50,50) · 3 fatura\nCiro okuma saati: 18:50.");
+    assert.ok(!/bende yok|not edeyim|kodları/.test(c5));
+    // yıllık ciro günlük satırları İKİ KEZ saymaz
+    const { ciroBolumu, gunlukCiro } = await import("./ciro.js");
+    assert.match(ciroBolumu("BLACK ROSE", JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "ciro:BLACKROSE" }) })).json()).v)).join("\n"), /2026: satış 250\.000,00 \$ · iade 0,00 \$ · NET 250\.000,00 \$ \(900 fatura\)/);
+    assert.equal(gunlukCiro({ zaman: 1, satirlar: [{ tablo: "D0026X", yil: 2026, tur: "21", tutar: 5 }] }, "2026-11-11"), null); // eski köprü: günlük satır yok → "henüz gelmedi"
+    // köprü günlük ciro göndermiyorsa: uydurma yok, tek satır sebep + başlatılan çözüm
+    await yazi(o, PATRON, "bugün volonte kaç sattı kaç dolar");
+    assert.match(patronaGiden(o).at(-1).govde.text, /VOLONTE: 0 adet \(0 model\) · ciro: Vegawin'den günlük fatura toplamı henüz gelmedi\nGünlük ciro için mağaza bilgisayarındaki köprü güncelleniyor/);
+    assert.equal(o.claude.length, once); // beş sorunun hiçbiri yapay zekâya gitmedi
+  } finally { Date.now = gercek; }
+});
+
+test("VENOM GENEL KURALLAR (11 Kasım): '$' tek başına fiyat değil; '…yapayım mı / not edeyim mi?' sorulmaz; 'Anladım' satırı yok; araç çalışmadan 'hazır' denmez; cevap en fazla 5 satır; kanal alarmı tekrar etmez ve sormadan düzeltir", async () => {
+  const v = await import("./venom-bot.js");
+  // fiyat ancak gerçek tutarsa
+  for (const y of ["✅PRICE. $", "PRICE.", "prix: demandez", "fiyat için yazın", "CODE 3529 $", "SIZE. 38/40/42/44"]) assert.equal(v.fiyatVar(y, "3529"), false, y);
+  for (const y of ["PRICE. 45$", "$ 45", "45 usd", "fiyat 1.250 TL", "€30"]) assert.equal(v.fiyatVar(y, "3529"), true, y);
+  // izin sorusu
+  for (const y of ["Bunu not edeyim mi?", "Kontrol edeyim mi?", "Kemal'e yaptırayım mı?", "İstersen kodları çekebilirim, ister misin?", "Şimdi göndereyim mi ?"]) assert.ok(v.IZIN_SORUSU.test(y), y);
+  for (const y of ["3 model gitti.", "Hangi renk?", "Silinsin mi?"]) assert.ok(!v.IZIN_SORUSU.test(y), y);
+  assert.equal(v.anladimSil("🧭 Anladım: 3529'un kanal yazısını kontrol ediyorsun.\n\nSorun yok."), "Sorun yok.");
+  assert.ok(v.YAPTIM_IDDIASI.test("Patron, kart hazır.") && v.YAPTIM_IDDIASI.test("Fuat'a gönderdim") && !v.YAPTIM_IDDIASI.test("Hazırım Patron"));
+  // sohbet: araçsız "hazır" → sistem bir kez uyarır; yine araç yoksa "yapıldı" denmez
+  const o = ortam();
+  o.cevaplar.push({ text: "Patron, kart hazır. Onaylayınca gider." }, { text: "Kartı oluşturdum, hazır." });
+  await yazi(o, PATRON, "vitrin için bir not hazırla");
+  assert.equal(o.claude.length, 2);
+  assert.match(JSON.stringify(o.claude[1].messages.at(-1)), /hiçbir araç ÇALIŞMADI/);
+  assert.match(patronaGiden(o).at(-1).govde.text, /^Yapılamadı: bu iş için araç çalışmadı/);
+  // sohbet: "Anladım" satırı ve izin sorusu Patron'a gitmez; 5 satırı geçen cevap kısaltılır
+  const o2 = ortam();
+  o2.cevaplar.push({ text: "🧭 Anladım: stok soruyorsun.\n\n1\n2\n3\n4\n5\n6\n7" }, { text: "3557: 20 adet.\nBaşka model bakayım mı?" }, { text: "3557: 20 adet." });
+  await yazi(o2, PATRON, "vitrin nasıl olsun");
+  assert.match(JSON.stringify(o2.claude[1].messages.at(-1)), /EN FAZLA 5 satır/);
+  const son = patronaGiden(o2).at(-1).govde.text;
+  assert.equal(son, "3557: 20 adet.");
+  // kanal alarmı: "PRICE. $" → alarm YOK; gerçek fiyat → Kemal SORMADAN düzeltir, Patron'a tek sonuç; aynı paylaşım için ikinci mesaj yok
+  const o3 = ortam();
+  const duzelt = [];
+  o3.env.KEMAL_W = { paylasimDuzelt: async (g) => { duzelt.push(g); return { ok: true, yerinde: true }; } };
+  o3.depo.set("kanal", JSON.stringify({ id: -100, kullanici: "kanaladi" }));
+  const post = (id, caption, ed = false) => guncelleme({ update_id: uid++, [ed ? "edited_channel_post" : "channel_post"]: { message_id: id, date: ist(11, 17), chat: { id: -100, type: "channel" }, caption, video: { file_id: "v" } } }, o3.env);
+  await post(13312, "❌ SOLD OUT / ÉPUISÉ\n\n✅CODE.3529\n\n✅PRICE. $\n\n✅SIZE.  44/46/48/50", true);
+  assert.equal(patronaGiden(o3).length, 0);
+  await post(15020, "✅CODE 3512\n✅PRICE. 45$");
+  await post(15020, "✅CODE 3512\n✅PRICE. 45$", true);
+  assert.equal(duzelt.length, 1);
+  const pm = patronaGiden(o3);
+  assert.equal(pm.length, 1);
+  assert.equal(pm[0].govde.text, "🧹 Kanal: 3512 paylaşımında sorun vardı (yazıda FİYAT var) → Kemal yazıyı düzeltti.\nKanıt: https://t.me/kanaladi/15020");
 });

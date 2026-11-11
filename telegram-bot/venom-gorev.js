@@ -52,7 +52,7 @@ export function gorevKartlari(g) {
       "",
       ...dilim.map((k, i) => `${p * PARCA + i + 1}. ${k.kod}${k.not ? ` — ${k.not}` : ""}`),
       "",
-      "Her model için bir düğme seçin. İkinizden birinin cevabı yeter.",
+      (g.kimler || GOREV_KISILER).length > 1 ? "Her model için bir düğme seçin. İkinizden birinin cevabı yeter." : "Düğmeden seçin.",
     ].join("\n").slice(0, 4000);
     const klavye = [];
     dilim.forEach((k, i) => {
@@ -60,7 +60,7 @@ export function gorevKartlari(g) {
       if (k.secim) { klavye.push([{ text: `✔ ${k.kod}: ${secimAdi(g.kalip, k.secim)} (${k.kim || "?"})`, callback_data: "vg:-" }]); return; }
       const s = SECIMLER[g.kalip] || SECIMLER.genel;
       const d = (x) => ({ text: `${k.kod} ${x[1]}`, callback_data: `vg:${g.id}:${n}:${x[0]}` });
-      if (s.length > 3) { klavye.push(s.slice(0, 3).map(d)); klavye.push(s.slice(3).map(d)); } else klavye.push(s.map(d));
+      for (let j = 0; j < s.length; j += 2) klavye.push(s.slice(j, j + 2).map(d)); // kural 19: satırda en fazla 2 düğme
     });
     parcalar.push({ metin, klavye: { inline_keyboard: klavye } });
   }
@@ -77,7 +77,7 @@ export async function gorevAc(env, g, simdi) {
   const gorev = { id: kisaId(), zaman: simdi, durum: "acik", hatirlatma: 0, kimler: GOREV_KISILER, kalip: g.kalip || "genel", ...g,
     kalemler: (g.kalemler || []).slice(0, 60).map((k) => ({ kod: String(k.kod), not: k.not || null, secim: null, kim: null, aciklama: null })) };
   for (const kisi of gorev.kimler) {
-    gorevKartlari(gorev).forEach((p, i) => kuyrugaEkle(env, "giden", { id: `gv-${gorev.id}-${kisi}-${i}`, kime: kisi, metin: p.metin, klavye: p.klavye, tur: "gorev", gorev: gorev.id, parca: i }).catch(() => null));
+    await Promise.all(gorevKartlari(gorev).map((p, i) => kuyrugaEkle(env, "giden", { id: `gv-${gorev.id}-${kisi}-${i}`, kime: kisi, metin: p.metin, klavye: p.klavye, tur: "gorev", gorev: gorev.id, parca: i }).catch(() => null)));
   }
   await kaydet(env, "venom:gorevler", [...l.filter((x) => ["acik", "yapilmadi"].includes(x.durum) || simdi - x.zaman < 14 * 86400), gorev].slice(-80), 30 * 86400);
   await sayac(env, "gorev", simdi);
@@ -115,7 +115,11 @@ export async function gorevAdimi(env, simdi, f) {
     if (!kalan.length) { await gorevKapat(env, g, simdi, f); degisti = true; continue; }
     // 9 Kasım (onay merdiveni): hatırlatma = KARTIN KENDİSİ, 3 saat (mesai) sonra bir kez — Sami yapar (kart-tekrar.js).
     // Süre dolduğunda hâlâ cevapsızsa görev "yapılmadı" → akşam özetinde tek satır. Ara mesaj yok.
-    if (simdi >= g.son && g.durum !== "yapilmadi") { g.durum = "yapilmadi"; degisti = true; }
+    if (simdi >= g.son && g.durum !== "yapilmadi") {
+      g.durum = "yapilmadi"; degisti = true;
+      // 11 Kasım: Patron'un verdiği iş ("Merdan'a söyle …") son saatte cevapsızsa Patron'a TEK satır (Hemra'ya Sami'nin kart takibi bildirir)
+      if (g.patron && f.patronaYaz) await f.patronaYaz(`⏰ ${kimler(g).join(", ")} son saate (${gunSaatYaz(g.son)}) kadar cevap vermedi: ${String(g.metin).replace(/^Patron'dan:\s*/, "").slice(0, 160)}`).catch(() => null);
+    }
   }
   if (degisti) await kaydet(env, "venom:gorevler", l, 30 * 86400);
   return l;
@@ -124,7 +128,8 @@ async function gorevKapat(env, g, simdi, f) {
   g.durum = "bitti"; g.bitis = simdi;
   const say = {}; for (const k of g.kalemler) say[k.secim] = (say[k.secim] || 0) + 1;
   const ozet = Object.entries(say).map(([s, n]) => `${n} ${secimAdi(g.kalip, s).replace(/^\S+\s/, "").toLocaleLowerCase("tr")}`).join(", ");
-  await f.biriktir(`✅ Bitti: ${g.baslik} — ${ozet}.`).catch(() => null);
+  if (g.patron && f.patronaYaz) await f.patronaYaz(`✅ ${String(g.metin).replace(/^Patron'dan:\s*/, "").slice(0, 120)} — ${g.kalemler.map((k) => `${/^\d/.test(k.kod) ? `${k.kod}: ` : ""}${k.kim || "?"} "${secimAdi(g.kalip, k.secim).replace(/^\S+\s/, "")}"${k.aciklama ? ` (${String(k.aciklama).slice(0, 80)})` : ""}`).join("; ")}`).catch(() => null); // 11 Kasım: Patron'un işinin sonucu, tek satır
+  else await f.biriktir(`✅ Bitti: ${g.baslik} — ${ozet}.`).catch(() => null);
   await f.defter(`görev kapandı: ${g.baslik} (${ozet})`, null).catch(() => null);
   // Bulamadım / yapamadım (+ açıklamalar) → Patron'a TEK kart: ne denendi, neden olmadı, hangi karar lazım
   const cozulmeyen = g.kalemler.filter((k) => COZULEMEDI.has(k.secim));

@@ -1252,6 +1252,8 @@ async function gidenSay(env, lg, d, anahtar) {
   }
   return { giden, bekleyen };
 }
+// 11 Kasım (TEK DEFTER): Venom "fabrikaya dün hangi modeller gitti?" sorusunu buradan okur (Sami'nin kendi kaydı; gittiMetni ile aynı sayım)
+export const fabrikayaGidenler = (env, gun) => gidenSay(env, gun, null, null);
 
 async function gonderimParcasi(env, anahtar, tg, simdi) {
   const d = await ayarOku(env, `fabrika:${anahtar}`, null);

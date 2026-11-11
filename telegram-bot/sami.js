@@ -98,6 +98,7 @@ function gizliEsit(a, b) {
 // TEK KAPI (5 Kasım): Venom'dan Sami düğmesi (sami-giris.js "VenomKapisi")
 export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
 export async function repeteAdim(env) { await repeteKartAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: Venom → hemen (5 dk bekleme yok)
+export async function gidenAdim(env) { await venomGidenAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: "Merdan'a söyle" → kart HEMEN (5 dk bekleme yok)
 export async function venomMesaj(env, metin) { await guncelleme(sahteMesaj(env, metin), env); return true; }
 
 export default {

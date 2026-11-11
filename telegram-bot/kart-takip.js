@@ -57,8 +57,13 @@ export async function kartTakipAdimi(env, simdi, tg) {
   const l = await oku(env);
   let d = false;
   const adlar = await kayitliKisiler(env);
+  // 11 Kasım (TEK DEFTER): kart ortak defterde kapandıysa (cevaplandı, yenilendi, repete açıldı, eskidi) takip de biter
+  let defter = null;
+  if (l.some((x) => !x.bitti && mesaiSuresi(x.zaman, simdi) >= HATIRLAT_SN)) { const ds = await stok(env, "/isd-oku", { basla: simdi - 4 * 86400, bitis: simdi + 60, bot: "sami", denemeDahil: true }).catch(() => null); if (Array.isArray(ds)) defter = ds.filter((r) => r.tur === "kart"); }
   for (const x of l) {
     if (x.bitti) continue;
+    const dk = defter && defter.find((r) => String(r.chat) === x.chat && Number(r.mesaj) === Number(x.mesaj));
+    if (dk && dk.durum !== "bekliyor") { x.bitti = simdi; x.neden = `defterde ${dk.durum}`; d = true; continue; }
     if (simdi - x.zaman > 3 * 86400) { x.bitti = simdi; x.neden = "3 gün"; d = true; continue; }
     const gecen = mesaiSuresi(x.zaman, simdi);
     if (!x.hat && gecen >= HATIRLAT_SN) {
