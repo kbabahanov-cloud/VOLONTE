@@ -51,6 +51,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 28. **Repete her zaman taslak, en az 40 adet;** Patron onayıyla fabrikaya.
 29. **Fabrika zinciri:** "Bitti" → Fuat onayı → Hemra karar kartı → Venom'dan Patron'a. "Bitti" kartı Merdan/Aziz'e gitmez. Her karar kanıt defterine (tarih/saat/kim/aynen metin; Patron kararında hangi düğme).
 30. **Fabrikaya giden listeler** mağaza mağaza ayrı, başı/sonu yazılı; liste bitmeden "emin misin?" özeti.
+43. **Açık repete varken aynı modele yeni repete verilmez:** bir modelin repetesi fabrikadayken (mal gelmeden) o modele ikinci repete açılmaz.
 
 ## H. Gizlilik
 31. **Depo herkese açık:** Telegram kimliği, telefon, kullanıcı adı, fiyat, şifre depoya yazılmaz; gizli kayıtta durur. Şifre asla yazdırılmaz. Kişisel bilgi dış servislere gönderilmez.
