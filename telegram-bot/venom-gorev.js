@@ -160,7 +160,6 @@ export async function cozumAdimi(env, simdi, f) {
   let degisti = false;
   // Hemra/Merdan'ın devredilen kartta bastığı düğmeler (Sami → "venomDugme")
   for (const d of await kuyruguAl(env, "venomDugme").catch(() => [])) {
-    if (/^vs-/.test(String(d.cid)) && f.veriCevap) { await f.veriCevap(d).catch(() => null); continue; } // 11 Kasım: Vegawin verisi sorusu
     const c = l.find((x) => x.id === d.cid);
     const r = await f.botaDugme(d.rid).catch(() => null);
     if (c && c.durum !== "kapandi") { c.durum = "kapandi"; c.kapanis = simdi; c.adimlar.push({ zaman: simdi, ne: `${d.kim} "${d.text || "düğme"}" bastı${r ? "" : " (bota iletilemedi)"}` }); degisti = true;

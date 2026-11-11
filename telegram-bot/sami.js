@@ -37,6 +37,8 @@ import { guvenliGonder } from "./tg-guvenli.js";
 import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
+import { rkDugme, rkYazi, repeteKartAdimi, TEST_RESIM_YOLU } from "./repete-kart.js"; // 11 Kasım: repete kartı (önce deneme yolunda)
+import { testResimBayt } from "./repete-test-resim.js";
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi, teyitDugmesi } from "./fabrika.js";
@@ -105,6 +107,7 @@ export default {
       await guncelleme(u, env);
       return new Response("ok");
     }
+    if (istek.method === "GET" && url.pathname === TEST_RESIM_YOLU) return new Response(testResimBayt(), { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400" } }); // deneme repete kartının yer tutucu resmi
     return new Response("Sayım Sami çalışıyor (sadece okur).");
   },
   async scheduled(olay, env) {
@@ -121,6 +124,7 @@ export default {
     // yine hazırlanır ve ortak hafızaya bırakılır (toplu rapora girer).
     const fabrika = (e, t) => fabrikaAdimi(e, t, tg);
     const siparis = (e, t) => siparisTakip(e, t, tg);
+    const repeteKart = (e, t) => repeteKartAdimi(e, t, tg); // 11 Kasım: repete kartı — Patron kararı, hatırlatma, teslim günü, mal geldi
     const zincir = (e, t) => fabrikaZincirAdimi(e, t, tg); // 10 Kasım: Patron kararı, toplu cevap, Sinem 18:00 özeti, bir kerelik işler
     const beyinDeneme = (e, t) => beyinDenemesi(e, t, tg);
     const stokSorgu = async (e, t) => { if (await kagitAcik(e, "sami", "stokSorgu")) await stokSorguTakip(e, t, tg); };
@@ -131,7 +135,7 @@ export default {
     const siteOzet = async (e, t) => { await siteDenemesi(e); if (await kagitAcik(e, "sami", "siteHaftalik")) await siteHaftalik(e, t, tg, String(e.MURAT_ID || "").split(",")[0].trim()); };
     const siteBakis = (e, t) => siteBakisYaz(e, t); // 9 Kasım: repete raporu için model başına sitede bakılma (günde bir)
     const satisKontrol = (e, t) => satisSayimKontrol(e, t); // 10 Kasım (Patron): ofis ile Sami'nin satış sayısı her gün karşılaştırılır
-    const isler = env.BOT_TOKEN ? { webhookKur, satisKontrol, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
+    const isler = env.BOT_TOKEN ? { webhookKur, repeteKart, satisKontrol, sorular, sabahRaporu, stokTablosu, harcamaTablosu, fabrika, siparis, zincir, beyinDeneme, stokSorgu, siteOzet, siteBakis, dokum, paylasilmamis, mutabakat, venomGiden } : { sabahRaporu, stokTablosu, harcamaTablosu };
     for (const [ad, f] of Object.entries(isler)) {
       try {
         await f(env, simdi);
@@ -192,6 +196,7 @@ export async function guncelleme(u, env) {
     if (String(cq.data || "").startsWith("mt:")) return mutabakatDugmesi(env, cq, tg, simdiD); // Patron ve Fuat (yetki içeride)
     if (String(cq.data || "").startsWith("oz:")) return isOzetiDugmesi(env, cq, tg, simdiD); // Fuat'a iş özeti (sadece Patron)
     if (String(cq.data || "").startsWith("ad:")) return adetDugmesi(env, cq, tg, simdiD); // Fuat'a adet listesi (sadece Patron)
+    if (String(cq.data || "").startsWith("rk:")) return rkDugme(env, cq, tg, simdiD); // 11 Kasım: repete kartı (Hemra / Fuat; yetki içeride)
     if (/^v[gd]:/.test(String(cq.data || ""))) return gorevDugmesi(env, cq, tg);
     if (/^hl:/.test(String(cq.data || ""))) return hemraDugmesi(env, cq, tg); // 9 Kasım: Hemra'nın toplu listesi // 9 Kasım: Venom görev kartı (Hemra / Merdan)
     if (!izinli(cq.from.id, env)) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Yetkiniz yok." });
@@ -207,6 +212,7 @@ export async function guncelleme(u, env) {
   if (!m || !m.from || m.chat.type !== "private") return;
   if (await odemeMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Patron: /odeme + dekont (sadece Patron)
   if (await fiyatKisisiMi(env, m.from.id)) return fiyatCevabi(env, m, tg); // 9 Kasım: Janet — SADECE fiyat, başka hiçbir şey
+  if (await rkYazi(env, m, tg, Math.floor(Date.now() / 1000))) return; // 11 Kasım: Fuat "3419 onaylıyorum 10 gün" / "yapamam …" (repete kartı)
   if (await gorevAciklamaMesaji(env, m, tg)) return; // 9 Kasım: Venom görevi — ✏️ açıklama
   if (!izinli(m.from.id, env)) {
     if (await mutabakatFarkMesaji(env, m, tg, Math.floor(Date.now() / 1000))) return; // Fuat: mutabakat farkı açıklaması

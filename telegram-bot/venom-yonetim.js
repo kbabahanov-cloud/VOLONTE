@@ -10,10 +10,16 @@ export const gunA = (t) => new Date((t + 3 * 3600) * 1000).toISOString().slice(0
 const saatA = (t) => new Date((t + 3 * 3600) * 1000).toISOString().slice(11, 16);
 const BOT_AD = { kemal: "Kemal", selin: "Selin", pelin: "Pelin", sami: "Sami" };
 
+// 11 Kasım (Patron): satır kelime ortasında kesilmez; iç kod adı (araç adı) Patron'a gösterilmez
+export const kisaYaz = (t, n = 160) => { const d = String(t || "").replace(/\s+/g, " ").trim(); return d.length <= n ? d : `${d.slice(0, n - 1).replace(/\s+\S*$/, "")}…`; };
+const kodAdiSil = (t) => String(t || "").replace(/(?<![@/\w.])[a-z]+(?:_[a-z]*)+(?!\w)/g, " ").replace(/\s+/g, " ").replace(/ +([.,;:!?)])/g, "$1").trim();
+export const isBasligi = (ne) => { const d = kodAdiSil(ne); const m = d.match(/^.*?[.!?](?=\s|$)/); return kisaYaz(m ? m[0] : d, 170); };
+export const IS_ESKI = 3 * 86400;
+
 // ---------- 4) İŞ TAKİBİ: Venom'un verdiği her iş; 30 dk cevap yoksa hatırlat; akşam bitmeyenler ----------
 export async function isKaydet(env, bot, ne, simdi) {
   const l = await oku(env, "venom:bot:isler", []);
-  l.push({ id: `${simdi}-${Math.random().toString(36).slice(2, 6)}`, bot, ne: String(ne).slice(0, 120), zaman: simdi, durum: "bekliyor" });
+  l.push({ id: `${simdi}-${Math.random().toString(36).slice(2, 6)}`, bot, ne: kisaYaz(kodAdiSil(ne), 300), zaman: simdi, durum: "bekliyor" });
   await kaydet(env, "venom:bot:isler", l.slice(-60), 7 * 86400).catch(() => null);
 }
 export async function isCevap(env, bot, simdi) {
@@ -31,11 +37,30 @@ export async function isHatirlat(env, simdi) {
   for (const x of geciken) x.hatirlatildi = simdi;
   for (const x of l) if (x.durum === "bekliyor" && simdi - x.zaman > 86400) x.durum = "zamanAsimi";
   await kaydet(env, "venom:bot:isler", l, 7 * 86400).catch(() => null);
-  return `⏰ 30 dakikadır cevap gelmeyen iş${geciken.length > 1 ? "ler" : ""}:\n${geciken.map((x) => `• ${BOT_AD[x.bot] || x.bot}: ${x.ne} (${saatA(x.zaman)})`).join("\n")}\nTakip ediyorum; gerekirse tekrar isteyeyim mi?`;
+  return `⏰ 30 dakikadır cevap gelmeyen iş${geciken.length > 1 ? "ler" : ""}:\n${geciken.map((x) => `• ${BOT_AD[x.bot] || x.bot}: ${isBasligi(x.ne)} (${saatA(x.zaman)})`).join("\n")}\nTakip ediyorum.`;
 }
-export async function bitmeyenIsler(env, simdi, sure = 86400) {
-  const l = (await oku(env, "venom:bot:isler", [])).filter((x) => x.durum !== "bitti" && simdi - x.zaman < 7 * 86400);
-  return l.length ? `📌 Bitmeyen işler (${l.length}):\n${l.slice(-10).map((x) => `• ${BOT_AD[x.bot] || x.bot}: ${x.ne} (${gunA(x.zaman).slice(5)} ${saatA(x.zaman)}${x.durum === "zamanAsimi" ? ", 24 saati geçti" : ""})`).join("\n")}` : "📌 Bitmeyen iş yok.";
+// 11 Kasım (Patron): biten ya da 3 günden eski iş listeden düşer. Şüpheli iş önce KANITLA kontrol edilir:
+// Kemal'in kanal işi — son kanal taraması o kodlar için temizse ve tarama, kodun son sorunlu paylaşımından SONRA yapıldıysa iş bitmiştir.
+export async function isleriTemizle(env, simdi) {
+  const l = await oku(env, "venom:bot:isler", []);
+  let degisti = false, tara, kanal;
+  for (const x of l) {
+    if (["bitti", "eskidi"].includes(x.durum)) continue;
+    if (simdi - x.zaman > IS_ESKI) { x.durum = "eskidi"; degisti = true; continue; }
+    const kodlar = [...new Set(String(x.ne).match(/\b\d{4,5}\b/g) || [])];
+    if (x.bot !== "kemal" || !kodlar.length || !/payla[sş]|yaz[ıi]|sil|d[üu]zelt|kanal|fiyat/i.test(x.ne)) continue;
+    if (tara === undefined) { tara = await oku(env, "kemal:kanalTaraSonuc", null); kanal = await oku(env, "venom:kanal:son", []); }
+    if (!tara || !Array.isArray(tara.eski)) continue;
+    const eskiKod = new Set(tara.eski.map((e) => String((e && e.kod) || e)));
+    const sonSorun = Math.max(0, ...kanal.filter((p) => kodlar.includes(String(p.kod)) && (p.sorunlar || []).length).map((p) => p.zaman || 0));
+    if (!kodlar.some((k) => eskiKod.has(k)) && tara.zaman > sonSorun) { Object.assign(x, { durum: "bitti", bitis: simdi, kanit: `kanal taraması ${gunA(tara.zaman).slice(5)} ${saatA(tara.zaman)}: ${kodlar.join(", ")} için sorunlu paylaşım yok` }); degisti = true; }
+  }
+  if (degisti) await kaydet(env, "venom:bot:isler", l, 7 * 86400).catch(() => null);
+  return l;
+}
+export async function bitmeyenIsler(env, simdi) {
+  const l = (await isleriTemizle(env, simdi)).filter((x) => !["bitti", "eskidi"].includes(x.durum));
+  return l.length ? `📌 Bitmeyen işler (${l.length}):\n${l.slice(-10).map((x) => `• ${BOT_AD[x.bot] || x.bot}: ${isBasligi(x.ne)} (${gunA(x.zaman).slice(8)}.${gunA(x.zaman).slice(5, 7)} ${saatA(x.zaman)}${x.durum === "zamanAsimi" ? ", 24 saati geçti" : ""})`).join("\n")}` : "📌 Bitmeyen iş yok.";
 }
 
 // ---------- 8) HATA ALARMI: bir bot 2 saat içinde 3 ayrı hata → Venom o botu durdurur, Patron'a haber ----------

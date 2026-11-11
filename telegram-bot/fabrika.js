@@ -18,6 +18,7 @@ import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI } from "./stok.js";
 import { patronMu, silKuyrugu, geriKuyrugu, magazaStoklari, magazaStogu, STOK_KURALI } from "./sil.js";
 import { fuatSuzgec } from "./mutabakat.js";
+import { acikRepete, engelMetni, rkGeldi } from "./repete-kart.js"; // 11 Kasım: repete kartı (kural 43: açık repete varken yeni repete yok)
 
 const SAAT_FARKI = 3 * 3600;
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
@@ -1573,6 +1574,7 @@ async function repeteGeldi(env, rec, kim, renkler, tg, simdi) {
   await mesajlariGuncelle(env, rec, `📦 ${ne} (${kim} bildirdi)${rec.gelenAdet != null ? ` — ${rec.gelenAdet} adet (istenen ${rec.istenenAdet})` : ""}`, tg);
   await bildir(env, rec, `📦 ${rec.magaza ? `${magazaAdi(rec.magaza)} · ` : ""}${rec.kod} ${ne.toLocaleLowerCase("tr")} – ${rec.gelenAdet != null ? `${rec.gelenAdet} adet (istenen ${rec.istenenAdet})` : renkSeri(rec.gelenRenkler).replace(/ seri/g, "")} (${kim} bildirdi)`, tg);
   if (rec.deneme) await denemeKaydi(env, rec.liste, `Repete geldi bildirildi (${kim})`);
+  if (!rec.deneme) await rkGeldi(env, rec.kod, kim, simdi, tg).catch(() => null); // 11 Kasım: açık repete kaydı mal gelince kendiliğinden kapanır
   // Kemal'e haber: paylaşımı hazırlayıp Murat'a ve Hemra'ya onaya gönderir (denemede kanalda PAYLAŞMAZ)
   const sira = (await env.KAYIT.get("venom:repetePaylas", "json")) || [];
   sira.push({ id: rec.id, kod: rec.kod, renkler: rec.gelenRenkler, bildiren: kim, deneme: rec.deneme, liste: rec.liste, zaman: simdi });
@@ -1970,6 +1972,10 @@ export async function zincirDugmesi(env, cq, tg, simdi) {
   if (!rec || !["bitti", "gelecek", "repete", "bekliyor"].includes(rec.durum) || rec.hemraOneri) return cevapla(rec && rec.hemraOneri ? `${rec.hemraOneri.kim} zaten seçti.` : "Bu karar artık geçerli değil.");
   let oneri = { r: "repete", s: "sil", w: "bekle", q: "sor" }[islem];
   if (!oneri) return cevapla("Geçersiz düğme.");
+  if (oneri === "repete" && !rec.deneme) { // 11 Kasım KURAL 43: açık repete varken (mal gelmeden) aynı modele yeni repete verilmez
+    const acik = await acikRepete(env, rec.kod).catch(() => null);
+    if (acik) return cevapla(engelMetni(acik), true);
+  }
   const st = rec.deneme ? null : await magazaStoklari(env, rec.kod);
   let not = "";
   if (oneri === "sil" && st && st.var) { oneri = "bekle"; not = `Mağazada stok var (${st.yazi}) — kural gereği silinmez; stok bitince yeniden sorulur.`; }
@@ -2710,6 +2716,7 @@ export async function fabrikaDenemesi(env, m, tg, simdi) {
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: `🧪 Deneme başladı: Hemra'ya onay kartı gitti. Bütün adımlar "🧪 DENEME" ile işaretli; kanalda paylaşım ve silme yapılmaz. Bitince size özet gelecek.` });
 }
 export const _test = { siparisAc, hemraKarti, siparisYaz, fabrikayaGonder, gonderimParcasi }; // testler için
+export const _rk = { sitedenFoto, siteListesi, magazaAdi, koordinatorId, kisiAd }; // repete-kart.js için
 
 // ---------- 10 Kasım (Patron): SERBEST YAZIM ÇÖZÜCÜ (yapay zekâ yok) ----------
 // Kelime sırası serbest (pudra büyük / büyük pudra), Türkçe harfsiz (buyuk, kucuk), "adet" yazılsın/yazılmasın, bitişik (4adet, 12ad),

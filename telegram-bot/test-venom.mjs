@@ -901,35 +901,107 @@ test("11 Kasım MESAJ DÜZENİ: botun <b> etiketli yazısı temiz gider; 'kontro
   assert.ok(ozetEski);
 });
 
-test("11 Kasım VERİ AKIŞI: köprü sinyal veriyor ama bugün hiç Vegawin verisi yok (13:00 sonrası) → Aziz+Hemra'ya düğmeli soru (Sami üzerinden); 'Evet girildi' → Patron'a TEK sonuç; 'giriş yok' → 'satış 0 doğru'", async () => {
+test("11 Kasım (B7): köprü SİNYAL VERİYORSA Venom soru sormaz — Vegawin'e giriş olmaması normal (veri gelmese de ne ekibe ne Patron'a mesaj)", async () => {
   const v = await import("./venom-bot.js");
-  const { cozumAdimi } = await import("./venom-gorev.js");
   const o = ortam();
   Object.assign(o.env, { BR_SORUMLU: "222", HEMRA_ID: "333", AZIZ_ID: "444" });
   await o.env.STOK.get().fetch("https://stok/ozet", { method: "POST", body: "{}" });
   const simdi = ist(11, 14, 0);
   o.stok.depo.sql.exec("INSERT INTO kopru (magaza, son, adet, degisim, kalp) VALUES ('VOLONTE', ?, 0, ?, ?)", simdi - 60, ist(10, 18, 7), simdi - 60);
-  await v.kopruIzle(o.env, ist(11, 12, 0)); // 13:00'ten önce sorulmaz
-  assert.equal((await kuyruguAl(o.env, "giden")).length, 0);
   await v.kopruIzle(o.env, simdi);
-  const g = await kuyruguAl(o.env, "giden");
-  assert.deepEqual(g.map((x) => x.kime), ["aziz", "hemra"]);
-  assert.match(g[0].metin, /^📊 VOLONTE: Mağaza bilgisayarı açık, ama Vegawin'den 10\.11\.2026 18:07'den beri yeni bilgi gelmiyor\./);
-  assert.ok(!/sat[ıi][sş]/i.test(g[0].metin)); // ekip süzgeci: satış kelimesi yok
-  assert.deepEqual(g[0].klavye.inline_keyboard[0].map((b) => b.callback_data), ["vd:vs-VOLONTE:e", "vd:vs-VOLONTE:h"]);
+  o.stok.depo.sql.exec("UPDATE kopru SET son = ?, kalp = ? WHERE magaza = 'VOLONTE'", simdi + 3500, simdi + 3500); // sinyal sürüyor, veri yine yok
+  await v.kopruIzle(o.env, simdi + 3600);
+  assert.equal((await kuyruguAl(o.env, "giden")).length, 0);
   assert.equal(patronaGiden(o).length, 0);
-  // Aziz "Evet, girildi"
-  await kuyrugaEkle(o.env, "venomDugme", { id: "vs-VOLONTE:e", cid: "vs-VOLONTE", rid: "e", kim: "Aziz", text: "✅ Evet, girildi", zaman: simdi + 300 });
-  const f = { veriCevap: (d) => v.veriCevap(o.env, d, simdi + 300), botaDugme: async () => null, biriktir: async () => null, defter: async () => null };
-  await cozumAdimi(o.env, simdi + 300, f);
-  const p = patronaGiden(o);
-  assert.equal(p.length, 1);
-  assert.match(p[0].govde.text, /^🔴 Köprü sustu: VOLONTE satış sayısı gerçek değil — Aziz "bugün Vegawin'e giriş yapıldı" dedi/);
-  const y = await kuyruguAl(o.env, "giden");
-  assert.deepEqual(y.map((x) => x.kime), ["aziz", "hemra"]);
-  assert.match(y[0].metin, /Sami köprüsünü kapatıp yeniden açın/);
-  await v.kopruIzle(o.env, simdi + 2400); // cevap verildi → 30 dk Patron satırı YOK
-  assert.equal(patronaGiden(o).length, 1);
+});
+
+test("11 Kasım REPETE KARTI (Venom): Sami'nin önerisi → sade Patron kartı (dağılım + [✅ Onaylıyorum] [❌ Reddediyorum], eski Repete/Sil/Bekle YOK) → karar Sami'ye; Fuat cevabı TEK satır; kural 43 kapıları", async () => {
+  const v = await import("./venom-bot.js");
+  const o = ortam();
+  const ekle = (ad, kayit) => kuyrugaEkle(o.env, ad, kayit);
+  await ekle("rkOneri", { id: "DTEST-001-a:o", rid: "DTEST-001-a", kod: "TEST-001", magaza: "VOLONTE", deneme: true, dagilim: "beyaz · büyük 20, küçük 20", adet: 40, kalan: 4, satis7: 18, bitisGun: 2, hemra: "Hemra", foto: null, zaman: ist(11, 15) });
+  await venomCron(o.env, ist(11, 15, 2));
+  const k = sonKart(o);
+  assert.equal(k.govde.text, "🧪 DENEME – üretim yapmayın\n🔁 REPETE — 🟦 VOLONTE · TEST-001\nDağılım: beyaz · büyük 20, küçük 20 (toplam 40 adet)\nMağazada kalan 4 adet · son 7 günde 18 satıldı · ~2 günde biter\nHemra önerdi. Onaylarsanız Fuat'a gider.");
+  assert.deepEqual(k.govde.reply_markup.inline_keyboard.map((s) => s.map((b) => b.text)), [["✅ Onaylıyorum", "❌ Reddediyorum"]]);
+  o.g.length = 0;
+  await bas(o, k.govde.reply_markup.inline_keyboard[0][0].callback_data);
+  const kr = await kuyruguAl(o.env, "rkKarar");
+  assert.deepEqual(kr.map((x) => [x.rid, x.karar, x.dugme]), [["DTEST-001-a", "onay", "✅ Onaylıyorum"]]);
+  const duz = o.g.find((x) => x.metod === "editMessageText");
+  assert.match(duz.govde.text, /Hemra önerdi\.\n\n✅ Kararınız: Onaylıyorum — Fuat'a gidiyor\.$/);
+  assert.deepEqual(duz.govde.reply_markup.inline_keyboard, []);
+  await bas(o, "vrk:x:DTEST-001-a"); // ikinci basış işlemez
+  assert.equal((await kuyruguAl(o.env, "rkKarar")).length, 0);
+  // Fuat onayladı → Patron'a TEK satır; "mal geldi" bilgisi birikir (anında gitmez)
+  o.g.length = 0;
+  await ekle("rkSonuc", { id: "DTEST-001-a:s", rid: "DTEST-001-a", metin: "🧪 DENEME — TEST-001 · 40 adet · Fuat onayladı · teslim: 21.11.2026" });
+  await ekle("rkSonuc", { id: "3419-x:g", rid: "3419-x", metin: "📦 3419 repete geldi (Vegawin stoğu 4 → 44). Repete kaydı kapandı.", biriktir: true });
+  await venomCron(o.env, ist(11, 15, 7));
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🧪 DENEME — TEST-001 · 40 adet · Fuat onayladı · teslim: 21.11.2026"]);
+  const kanit = JSON.parse(o.depo.get("venom:rkKanit:DTEST-001-a"));
+  assert.deepEqual(kanit.map((x) => x.ne), ["Patron kartı", "Patron bastı: ✅ Onaylıyorum", "Patron'a sonuç (tek satır)"]);
+  // KURAL 43: 3419'un açık repetesi varken yeni repete taslağı hazırlanmaz (repete raporu düğmesi, model kartı, yazıyla istek)
+  const ayarYaz = (k2, v2) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: k2, v: JSON.stringify(v2) }) });
+  await ayarYaz("rk:3419-x", { id: "3419-x", kod: "3419", magaza: "VOLONTE", deneme: false, adet: 40, durum: "acik", teslim: "2026-11-21", zaman: ist(11, 15) });
+  await ayarYaz("rk:acik", ["3419-x"]);
+  o.g.length = 0;
+  o.depo.set("venom:repeteTaslak", JSON.stringify([{ kod: "3419", metin: "Fuat Bey merhaba, 3419 modelinden repete rica ediyoruz: sarı 20. Toplam yaklaşık 40 adet. Ne zaman hazır olur?", zaman: 1 }]));
+  await venomCron(o.env, ist(11, 15, 12));
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["⛔ 3419 için açık repete var (Fuat onayladı, teslim 21.11.2026). Mal gelmeden yeni repete verilmez."]);
+  assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek mesaj/.test(x.govde.text)));
+  assert.match(await v.aracCalistir(o.env, "mesaj_taslagi", { kime: "fuat", metin: "3419 için repete rica ediyoruz, 40 adet" }, ist(11, 15, 13)), /^AÇIK REPETE VAR — taslak HAZIRLANMADI/);
+  o.g.length = 0;
+  await bas(o, "vmk:r:3419");
+  assert.ok(patronaGiden(o).some((x) => /^⛔ 3419 için açık repete var/.test(x.govde.text)));
+  // temizlik: deneme kayıtları silinince Venom'daki kart ve kanıt da silinir
+  await ekle("rkSonuc", { id: "temizle:1", temizle: ["DTEST-001-a"] });
+  await venomCron(o.env, ist(11, 15, 17));
+  assert.ok(!o.depo.has("venom:rkKart:DTEST-001-a") && !o.depo.has("venom:rkKanit:DTEST-001-a"));
+});
+
+test("11 Kasım VENOM LİSTELERİ (B1–B5): Bekleyenler = sadece Patron kararı, her biri kendi düğmesiyle; bilgi satırı yok; 3 günden eski ve tekrar düşer; satır kesilmez; kod adı görünmez; biten Kemal işi kanıtla kapanır", async () => {
+  const v = await import("./venom-bot.js");
+  const { bitmeyenIsler, isBasligi } = await import("./venom-yonetim.js");
+  const o = ortam();
+  const simdi = ist(11, 15, 0);
+  const kart = (id, tur, gunOnce, ek = {}) => o.depo.set(`venom:bot:is:${id}`, JSON.stringify({ id, tur, durum: "bekliyor", zaman: simdi - gunOnce * 86400, metin: "📋 Fuat'a gidecek mutabakat (birebir; altında ✅ Mutabıkım / ❌ Uyuşmuyor / ⏳ Sonra düğmeleri):\n\n…", ...ek }));
+  kart("m1", "mutabakat", 5); // eski → düşer
+  kart("m2", "mutabakat", 2); // aynı iş, eski kopya → düşer
+  kart("m3", "mutabakat", 1);
+  kart("s1", "selinTaslak", 5, { metin: "📝 Selin — 3627 için site taslağı hazırlansın mı? (başlık + EN/FR/PT açıklama; Selin'in yapay zekâ maliyeti ~0,05 $). Taslak hazır olunca onay kartı buraya gelir." }); // 5 günlük → düşer
+  kart("f1", "mesaj", 0.1, { kime: "fuat", govde: "Fuat Bey merhaba, 3490 modelinden repete rica ediyoruz: siyah 8. Toplam yaklaşık 40 adet. Ne zaman hazır olur?", metin: "✉️ Fuat'a gidecek mesaj (Sami adına, birebir):\n\n…" });
+  o.depo.set(`venom:rapor:selin:2026-11-11`, JSON.stringify({ ozet: "Sitede 165 model; dün 3 eklendi; onay bekleyen 0; gönderilemeyen 2." }));
+  await yazi(o, PATRON, "📋 Bekleyenler");
+  const m = patronaGiden(o);
+  assert.deepEqual(m.map((x) => x.govde.text), [
+    "⏳ 1/2 — Fuat'a gidecek mesaj: \"Fuat Bey merhaba, 3490 modelinden repete rica ediyoruz: siyah 8.\" (11.11)",
+    "⏳ 2/2 — Fuat mutabakatı: Fuat'a gidecek haftalık stok ve bakiye dökümü (siz onaylamadan gitmez) (10.11)",
+  ]);
+  assert.deepEqual(m[1].govde.reply_markup.inline_keyboard[0].map((b) => b.callback_data), ["vb:o:m3", "vb:d:m3", "vb:x:m3"]); // her işin altında kendi düğmesi
+  assert.ok(!m.some((x) => /Sitede 165 model|Sonr$|3627/.test(x.govde.text)));
+  assert.deepEqual(["m1", "m2", "s1"].map((id) => JSON.parse(o.depo.get(`venom:bot:is:${id}`)).durum), ["eskidi", "tekrar", "eskidi"]);
+  // hiçbiri yoksa tek satır
+  for (const id of ["m3", "f1"]) o.depo.delete(`venom:bot:is:${id}`);
+  o.g.length = 0;
+  await yazi(o, PATRON, "📋 Bekleyenler");
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["✅ Kararınızı bekleyen iş yok."]);
+  // Bitmeyen işler: kod adı yok, yarım kelime yok; kanal taraması temizse iş kanıtla kapanır; 3 günden eski düşer
+  assert.equal(isBasligi("3512 ve 3629: yazısında fiyat olan eski kanal paylaşımlarını (3512 video/albüm 14:35, 3629 video 14:40) kanal_paylasim_d"), "3512 ve 3629: yazısında fiyat olan eski kanal paylaşımlarını (3512 video/albüm 14:35, 3629 video 14:40)");
+  o.depo.set("venom:bot:isler", JSON.stringify([
+    { id: "a", bot: "kemal", ne: "3512 ve 3629: yazısında fiyat olan eski kanal paylaşımlarını (3512 video/albüm 14:35, 3629 video 14:40) kanal_paylasim_d", zaman: simdi - 5 * 3600, durum: "bekliyor" },
+    { id: "b", bot: "selin", ne: "3627 taslağını hazırla", zaman: simdi - 4 * 86400, durum: "bekliyor" },
+    { id: "c", bot: "kemal", ne: "3700 paylaşımının yazısını düzelt", zaman: simdi - 3600, durum: "bekliyor" },
+  ]));
+  o.depo.set("venom:kanal:son", JSON.stringify([{ id: 15005, zaman: simdi - 30 * 3600, kod: "3512", sorunlar: ["yazıda FİYAT var"] }, { id: 15010, zaman: simdi - 30 * 3600, kod: "3629", sorunlar: ["yazıda FİYAT var"] }, { id: 15050, zaman: simdi - 600, kod: "3700", sorunlar: ["yazıda FİYAT var"] }]));
+  o.depo.set("kemal:kanalTaraSonuc", JSON.stringify({ zaman: simdi - 26 * 3600, eski: [], toplam: 114 }));
+  const b = await bitmeyenIsler(o.env, simdi);
+  assert.equal(b, "📌 Bitmeyen işler (1):\n• Kemal: 3700 paylaşımının yazısını düzelt (11.11 14:00)"); // 3700: sorun taramadan SONRA → kanıt yok, listede kalır
+  const l = JSON.parse(o.depo.get("venom:bot:isler"));
+  assert.deepEqual(l.map((x) => x.durum), ["bitti", "eskidi", "bekliyor"]);
+  assert.match(l[0].kanit, /^kanal taraması 11-10 13:00: 3512, 3629 için sorunlu paylaşım yok$/);
+  // Patron'a giden hiçbir mesajda kod adı yok (yarım kesilmişi dahil); kullanıcı adı bozulmaz
+  assert.equal(v.kodAdiTemizle("Kemal: eski paylaşımları kanal_paylasim_d (bota_yaz ile) düzelt — @ali_veli"), "Kemal: eski paylaşımları ( ile) düzelt — @ali_veli");
 });
 
 test("9 Kasım REPETE: Kemal'den gelen 'Repete al' taslağı Patron'a HEMEN onay kartı (Fuat'a gidecek, ✏️ Düzelt ile adet/renk); onaysız Fuat'a gitmez", async () => {
