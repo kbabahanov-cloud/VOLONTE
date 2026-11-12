@@ -96,7 +96,14 @@ export function repeteSatiri(r) {
     kanit: r.durum === "acik" ? `${onay || "Fuat onayladı"}, teslim ${String(r.teslim || "").split("-").reverse().join(".")}` : `${yazi} (repete kaydı ${zamanYaz(r.zaman || 0)})`, ek: { adet: r.adet, teslim: r.teslim || null, rdurum: r.durum } };
 }
 export function fabrikaSatiri(f, adlar = {}) {
-  const [durum, sabitKim, yazi] = FS_DURUM[f.durum] || ["acik", null, f.durum];
+  let [durum, sabitKim, yazi] = FS_DURUM[f.durum] || ["acik", null, f.durum];
+  // 12 Kasım (C10): "fabrikada bitti" için karar VERİLDİYSE iş cevap beklemiyor — "stok bitene kadar bekle" → beklemede (yeniden sorulmaz);
+  // Hemra önerdi, Patron'un kararı bekleniyorsa iş Patron'dadır (Hemra'da cevapsız görünmez).
+  if (f.durum === "bitti") {
+    const kz = f.kararZaman ? ` ${zamanYaz(f.kararZaman)}` : "";
+    if (["stokBitene", "beklesin"].includes(f.karar)) [durum, sabitKim, yazi] = ["beklemede", "Hemra", `fabrikada bitti; karar: stok bitene kadar bekle (${f.kararVeren || "Hemra"}${kz})`];
+    else if (f.oneri && f.oneri !== "bekle") [durum, sabitKim, yazi] = ["acik", "Patron", `fabrikada bitti; Hemra önerdi: ${{ repete: "repete", sil: "sil", sor: "Patron karar versin" }[f.oneri] || f.oneri}${f.oneriZaman ? ` (${zamanYaz(f.oneriZaman)})` : ""}; Patron kararı bekleniyor`];
+  }
   const kisiler = [...new Set((f.chats || []).map((c) => adlar[String(c)]).filter(Boolean))];
   const kim = sabitKim || (kisiler.length ? kisiler.join(", ") : "Sinem, Fuat, Nuri");
   const sure = ["repete", "gelecek"].includes(f.durum) && (f.hazirGun || f.teslimSure) ? `${f.teslimSure ? `, ${f.teslimSure}` : ""}${f.hazirGun ? ` (hazır: ${String(f.hazirGun).split("-").reverse().join(".")})` : ""}` : "";

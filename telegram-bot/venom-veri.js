@@ -79,7 +79,7 @@ export async function modelDurumu(env, kod, simdi, { kuru = false } = {}) {
   if (!kod) return "Model kodu yok.";
   const [m, stok, sil, rk, satirlar] = await Promise.all([markaKesin(env, kod).catch(() => ({})), magazaStoklari(env, kod), silmeKaniti(env, kod), repeteKayitlari(env, kod).catch(() => []), defterSatirlari(env, simdi, { kuru })]);
   const stokYazi = Object.keys(stok.magazalar).length ? Object.entries(stok.magazalar).map(([g, n]) => `${MARKA_AD[g] || g} ${Math.max(0, n)} adet`).join(" · ") : "Vegawin'de kart yok";
-  const acikRk = rk.filter((r) => !["red", "iptal", "geldi", "kapandi"].includes(r.durum));
+  const acikRk = rk.filter((r) => String(r.kod) === kod && !["red", "iptal", "geldi", "kapandi"].includes(r.durum)); // SADECE bu modelin repetesi (başka modelin açık repetesi karışmaz)
   const acik = satirlar.filter((x) => String(x.kod) === kod && x.durum !== "bitti");
   const karar = await stokIste(env, "/ayar-oku", { k: `karar:son:${kod}` }).then((r) => (r.v ? JSON.parse(r.v) : null)).catch(() => null);
   const celiski = [];

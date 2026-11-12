@@ -406,7 +406,7 @@ export class StokDeposu {
   // Kişiye giden, cevap bekleyen açık siparişler (toplu cevap "hepsi 5 gün")
   fsKisi({ chat, durum = "bekliyor" }) { return this.fsAcikler().filter((r) => r.durum === durum && (r.mesajlar || []).some((m) => String(m[0]) === String(chat))).map((r) => r.id).slice(0, 60); }
   // Sinem'e günlük özet: açık siparişlerin kısa hali (fiyat/stok yok)
-  fsOzet() { return this.fsAcikler().map((r) => ({ id: r.id, kod: r.kod, magaza: r.magaza || null, grup: r.grup || "fabrika", durum: r.durum, gonderim: r.gonderim, hazirGun: r.hazirGun || null, teslimSure: r.teslimSure || null, deneme: Boolean(r.deneme), chats: [...new Set((r.mesajlar || []).map((m) => String(m[0])))] })); }
+  fsOzet() { return this.fsAcikler().map((r) => ({ id: r.id, kod: r.kod, magaza: r.magaza || null, grup: r.grup || "fabrika", durum: r.durum, gonderim: r.gonderim, hazirGun: r.hazirGun || null, teslimSure: r.teslimSure || null, karar: r.karar || null, kararZaman: r.kararZaman || (r.patronKarar && r.patronKarar.zaman) || (r.hemraOneri && r.hemraOneri.zaman) || null, kararVeren: r.patronKarar ? "Patron" : r.kararVeren || (r.hemraOneri && r.hemraOneri.kim) || null, oneri: r.hemraOneri ? r.hemraOneri.oneri : null, oneriZaman: r.hemraOneri ? r.hemraOneri.zaman : null, deneme: Boolean(r.deneme), chats: [...new Set((r.mesajlar || []).map((m) => String(m[0])))] })); }
   // 10 Kasım KANIT DEFTERİ: bir kodun fabrika kayıtları (mühürlü arşivden; silinemez)
   arsivKod(tur, mt) { return this.hepsi("SELECT sira, zaman, icerik FROM arsiv WHERE tur = ? AND mt = ? ORDER BY sira LIMIT 300", String(tur), String(mt)); }
 

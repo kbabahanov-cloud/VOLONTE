@@ -2027,3 +2027,30 @@ test("YENİDEN YAPILANMA B6: zorunlu alanı boş satır deftere YAZILAMAZ (kişi
   const l = await (await o.env.STOK.get().fetch("https://stok/is-liste", { method: "POST", body: "{}" })).json();
   assert.deepEqual((l.liste || l).map((x) => x.id), ["k:1"]);
 });
+
+test("YENİDEN YAPILANMA (kabul testinde yakalandı): başka modelin açık repetesi bu modele YAZILMAZ; Hemra 'bekle' dediği fabrika işi cevapsız görünmez, Hemra'nın önerdiği iş Patron'dadır", async () => {
+  const o = ortam();
+  const { fabrikaSatiri } = await import("./defter-mantik.js");
+  const simdi = ist(12, 12);
+  const gercek = Date.now; Date.now = () => simdi * 1000;
+  try {
+    await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", urunler: [{ kod: "3534", adet: 44 }], simdi: 1 }) });
+    await o.ayar("rk:3419-toc8", { id: "3419-toc8", kod: "3419", magaza: "VOLONTE", deneme: false, durum: "acik", adet: 40, zaman: simdi - 4 * 3600, teslim: "2026-11-21", fuat: { kim: "Fuat", zaman: simdi - 4 * 3600 } });
+    await o.ayar("rk:acik", ["3419-toc8"]); await o.ayar("rk:hepsi", ["3419-toc8"]);
+    const c = await aracla(o, "3534 durumu?", "model_durumu", { kod: "3534" });
+    assert.match(c, /^3534: marka Black Rose/);
+    assert.match(c, /\nRepete: açık repete yok\.\n/); // 3419'un repetesi 3534'e yazılmaz
+    assert.ok(!/40 adet|hem repete açık/.test(c));
+    assert.match(await aracla(o, "3419 durumu?", "model_durumu", { kod: "3419" }), /\nRepete: 40 adet — /);
+    // fabrika "bitti" + Hemra "bitene kadar bekle" → BEKLEMEDE (cevap bekleyen iş değil); karar tarihi kanıtta
+    const b = fabrikaSatiri({ id: "3377-a", kod: "3377", magaza: "BLACKROSE", durum: "bitti", gonderim: ist(2, 21, 22), karar: "stokBitene", kararVeren: "Hemra", kararZaman: ist(11, 19, 56) }, {});
+    assert.deepEqual([b.durum, b.kim, b.kanit], ["beklemede", "Hemra", "fabrikada bitti; karar: stok bitene kadar bekle (Hemra 11.11 19:56); fabrikaya gitti 02.11 21:22"]);
+    // Hemra "repete öner" dedi → iş Patron'da (Hemra'da cevapsız görünmez)
+    const p = fabrikaSatiri({ id: "3500-a", kod: "3500", magaza: "VOLONTE", durum: "bitti", gonderim: ist(10, 20), oneri: "repete", oneriZaman: ist(11, 9) }, {});
+    assert.deepEqual([p.durum, p.kim], ["acik", "Patron"]);
+    assert.match(p.kanit, /^fabrikada bitti; Hemra önerdi: repete \(11\.11 09:00\); Patron kararı bekleniyor/);
+    // karar yok, öneri yok → Hemra'da açık (karar bekleniyor)
+    const h = fabrikaSatiri({ id: "3600-a", kod: "3600", magaza: "VOLONTE", durum: "bitti", gonderim: ist(10, 20) }, {});
+    assert.deepEqual([h.durum, h.kim], ["acik", "Hemra"]);
+  } finally { Date.now = gercek; }
+});
