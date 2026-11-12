@@ -426,6 +426,9 @@ async function islemler(env, simdi, tg) {
         const r = await oneriAc(env, tg, { kod, magaza: is.magaza || "VOLONTE", dagilim: is.dagilim, deneme: true, test: true, kalan: is.kalan, satis7: is.satis7, ikinciDene: is.ikinciDene !== false, donSn: is.donSn || null }, simdi);
         Object.assign(s, { id: r.rec ? r.rec.id : null, hata: r.hata || null, kanit: r.rec ? r.rec.kanit : null });
         if (r.rec) { r.rec.fuatHaber = s.fuatHaber; await rkYaz(env, r.rec); }
+      } else if (is.tur === "oneriAc") { // 12 Kasım: Patron'un verdiği repete kararı (gerçek) — Hemra'ya dağılım kartı {kod, magaza}; üretici (Fuat / Celal) kendiliğinden
+        const r = await oneriAc(env, tg, { kod: String(is.kod), magaza: is.magaza || "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[String(is.kod)]), kaynak: "patron" }, simdi);
+        Object.assign(s, { kod: is.kod, rid: r.rec ? r.rec.id : null, uretici: r.rec ? r.rec.uretici : null, engel: r.engel ? r.metin : null, hata: r.hata || null, kanit: r.rec ? r.rec.kanit : null });
       } else if (is.tur === "kayitAc") { // Patron'un bildirdiği, Fuat'ın zaten onayladığı gerçek repete
         const kod = String(is.kod);
         const engel = await acikRepete(env, kod, { deneme: false });
