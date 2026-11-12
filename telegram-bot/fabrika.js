@@ -2557,6 +2557,8 @@ async function tekIslem(env, simdi, tg) {
       await siparisYaz(env, rec);
       await bitenCikar(env, rec.kod);
       const yeni = await siparisAc(env, { kod: rec.kod, beden: rec.beden, renkler: rec.renkler, liste: rec.liste, deneme: false, fotoKod: rec.fotoKod || rec.kod, tur: rec.tur, grup: rec.grup, sorumlu: rec.sorumlu, magaza: rec.magaza }, simdi);
+      for (const k of ["yeni", "test", "acil", "yerine", "rkVeri", "testVeri"]) if (rec[k] != null) yeni[k] = rec[k]; // aynı akıştan devam (yeni akış: Hemra'nın repete kartı)
+      await siparisYaz(env, yeni);
       const r = await fabrikayaGonder(env, yeni, tg);
       sonuc.l.push({ eski: id, yeni: yeni.id, kod: rec.kod, giden: r.giden });
     }

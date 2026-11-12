@@ -2085,3 +2085,20 @@ test("YENİDEN YAPILANMA (kabul testinde yakalandı): 'fotoğrafı yok' görevin
   assert.deepEqual(s.map((x) => [x.kod, x.kim, x.durum]), [["3189", "Merdan", "bitti"], ["3047", "Merdan", "acik"], ["3569", "Aziz", "acik"]]); // fotoğraf işi olmayan görev siteye bakmaz
   assert.equal(s[0].kanit, "model siteye eklendi (site defteri); fotoğraf işi bitti");
 });
+
+test("12 Kasım CELAL: eski 'fabrikada bitti' kartında Patron 'Repete' derse Celal'in modeli için Fuat'a taslak GİTMEZ — repete kartı akışı başlar (Hemra dağılımı → Patron → Celal)", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const simdi = ist(12, 15);
+  await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", urunler: [{ kod: "5074", adet: 8, fiyat: 20, celal: true }, { kod: "3394", adet: 4, fiyat: 30 }], simdi: 1 }) });
+  for (const [sip, kod] of [["5074-a", "5074"], ["3394-a", "3394"]]) o.depo.set(`venom:bittiKart:${sip}`, JSON.stringify({ id: `${sip}:${simdi}`, sip, kod, magaza: "VOLONTE", oneri: "repete", hemra: "Hemra", zaman: simdi }));
+  o.g.length = 0;
+  await bas(o, "vbo:r:5074-a");
+  assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["5074"]]);
+  assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek/.test(x.govde.text || "")));
+  assert.ok(o.g.some((x) => /onaylarsanız Celal'e gider/.test(x.govde.text || x.govde.caption || "")));
+  o.g.length = 0;
+  await bas(o, "vbo:r:3394-a"); // diğer modelde eski yol aynen (taslak Fuat'a, Patron onayıyla)
+  assert.deepEqual(await kuyruguAl(o.env, "rkBaslat"), []);
+  assert.ok(patronaGiden(o).some((x) => /Fuat'a gidecek/.test(x.govde.text || "")));
+});
