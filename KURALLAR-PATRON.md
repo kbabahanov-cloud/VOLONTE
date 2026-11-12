@@ -94,3 +94,6 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 62. **Günlük satış:** Venom günlük satışı marka marka adet ve dolar ciro olarak Vegawin'den okur; gider kaydı varsa toplam gider ve net de yazılır. Akşam raporuna da girer.
 63. **Kanal alarmı:** fiyat ancak gerçek bir tutar olduğunda sayılır ("$" işareti tek başına fiyat değildir). Aynı uyarı iki kez gitmez. Venom sormadan düzeltir, Patron'a sadece sonucu yazar.
 64. **Araç çalışmadan "hazır" ya da "yapıldı" denmez.**
+65. **"X'e söyle" işinde son saat:** Patron saat söylerse Venom AYNEN o saati kullanır ("12:00'ye kadar" → 12:00); saat söylenmezse mesai sonu (18:00) yazılır.
+66. **Gider ve net:** Vegawin'de gider kasa defterinden ("gider" sütunu) okunur. Akşam raporunda marka marka toplam gider ve net (ciro eksi gider) yazılır; başka para birimindeki gider ayrı yazılır, çevrilmez. Okunamıyorsa sebebi tek satırla yazılır.
+67. **Tek defter kaynağında tutulur:** defter ortak depodadır; her bot kartını, cevabını ve bitirdiği işi oraya yazar, düğmesi kalkan kartı oraya bildirir. Aynı modelin iki ayrı kaydı (ör. büyük / küçük beden) ayrı iştir; aynı kart yeniden gönderilirse eskisi kapanır.
