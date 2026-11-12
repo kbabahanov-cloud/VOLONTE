@@ -401,7 +401,8 @@ export async function sozAdimi(env, simdi) {
       if (bitti) {
         await patronaYaz(`✅ ${s.kod} silindi. Site: listede yok. Kanal: ${k.kanal ? `${k.kanal.mesajlar.length} mesaj kaldırıldı ${zamanKisa(k.kanal.zaman)} (mesaj no ${k.kanal.mesajlar.join(", ")})${k.kanal.gizlenen.length ? ` — ${k.kanal.gizlenen.length} eski mesajı Telegram sildirmedi, SOLD OUT görseliyle gizlendi: ${k.kanal.linkler.slice(0, 3).join(" ")}` : ""}` : "paylaşımı yoktu"}.`);
         s.bitti = simdi; await kararVerildi(env, s.kod, "silindi", simdi).catch(() => null);
-        if (s.isId) { const is = await oku(env, `venom:bot:is:${s.isId}`, null); if (is) { is.durum = "bitti"; is.bitis = simdi; await kaydet(env, `venom:bot:is:${s.isId}`, is, 7 * 86400); } }
+        // silme kanıtlandı: o modelin BÜTÜN silme kartları kapanır (yarıda "yapılıyor" kalan eski kartlar dahil)
+        try { for (const k of ((await env.KAYIT.list({ prefix: "venom:bot:is:" })).keys || []).slice(0, 200)) { const is = await oku(env, k.name, null); if (is && is.tur === "sil" && String(is.kod) === String(s.kod) && ["yapiliyor", "bekliyor", "emin"].includes(is.durum)) { is.durum = "bitti"; is.bitis = simdi; await kaydet(env, k.name, is, 7 * 86400); } } } catch { /* */ }
       } else if (gec && !s.arastirildi) {
         const engel = ((await oku(env, "venom:silEngel", [])) || []).filter((e) => String(e.kod) === String(s.kod) && e.zaman >= s.zaman).pop();
         const d = await durDurumu(env).catch(() => ({}));
