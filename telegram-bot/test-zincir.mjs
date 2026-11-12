@@ -83,7 +83,7 @@ test("UÇTAN UCA: Sinem 'Bitti' → Hemra → Patron → Fuat [2 gün sonra dön
   assert.ok(!y.some((x) => ["Fuat", "Nuri", "Aziz", "Merdan", "Patron"].includes(x.kime) && x.metod === "sendMessage" && x.bot === "Sami" && x.kime !== "Sinem"));
   const hk = y.find((x) => x.kime === "Hemra" && x.data.length);
   assert.match(hk.yazi, /TEST-002\n❌ Fabrikada bitti \(Sinem\)\.\nMağazada kalan: 4 adet\nSatış: son 7 günde 18[\s\S]*💡 Sami: Hızlı satıyor[\s\S]*Repete dağılımı: beyaz · büyük 20, küçük 20 \(toplam 40 adet\)\nNe yapalım\?$/);
-  assert.deepEqual(hk.dugmeler, [["🔁 Repete"], ["⏳ Bitene kadar bekle"], ["🗑 Sil"]]);
+  assert.deepEqual(hk.dugmeler, [["🔁 Repete"], ["⏳ Bitene kadar bekle"]]); // 13 Kasım (kural 41): "Sil" yok
 
   // 2) Hemra [Repete] → [Patron'a gönder]
   await samiBas(HEMRA, dugme(y, "Hemra", /Repete/));

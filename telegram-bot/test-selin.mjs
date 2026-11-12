@@ -292,7 +292,7 @@ test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülü
   assert.ok(o.github.commitler.length > commitSayisi);
 });
 
-test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazdırır. Siteden kaldırma onay sorar", async () => {
+test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazdırır. 13 Kasım: ekipte siteden kaldırma düğmesi yok", async () => {
   const o = ortam();
   o.depo.set("selin:rehberOnay", "1");
   o.depo.set("selin:modeller", JSON.stringify({ "3100": { durum: "onayda", zaman: 1, taslak: { baslik: "X", kategori: "sets", aciklama: { en: "a", fr: "b", pt: "c", tr: "d" }, bedenler: null, fotolar: [{ id: 400, buyuk: { file_id: "b400", width: 1280, height: 1700 }, net: true }], videolar: [], yazilar: [] } } }));
@@ -308,13 +308,19 @@ test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazd
   await bas(o.env, 111, "so:3100");
   assert.ok(o.github.dosyalar.get("veri/urunler.json"));
   o.g.length = 0;
-  await bas(o.env, 222, "sk:3100");
-  assert.equal(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).length, 1); // henüz kalkmadı
-  assert.equal(cagri(o.g, "editMessageReplyMarkup")[0].govde.reply_markup.inline_keyboard[0][0].callback_data, "se:3100");
-  await bas(o.env, 222, "se:3100");
-  assert.equal(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).length, 0);
-  assert.ok(o.github.dosyalar.get("galeri/3100/1.jpg")); // 2 Kasım: fotoğraflar depoda kalır (/geri için)
-  assert.equal(JSON.parse(o.depo.get("selin:silinen:3100")).urun.kod, "3100"); // kayıt saklandı
+  // 13 Kasım (Patron, kural 41 ve 61): ekipte "siteden kaldır" yok — eski karttaki düğmeler hiçbir şey kaldırmaz
+  for (const d of ["sk:3100", "se:3100"]) {
+    o.g.length = 0;
+    await bas(o.env, 222, d);
+    assert.equal(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, "Siteden kaldırma sadece Patron ve Venom'dadır.");
+    assert.equal(cagri(o.g, "editMessageReplyMarkup").length, 0);
+    assert.equal(JSON.parse(o.github.dosyalar.get("veri/urunler.json")).length, 1);
+  }
+  o.g.length = 0;
+  await guncelleme({ message: { message_id: 12, chat: { id: 111, type: "private" }, from: { id: 111 }, text: "/site" } }, o.env);
+  const liste = cagri(o.g, "sendMessage").at(-1).govde;
+  assert.match(liste.text, /Sitedeki modeller \(1\)[\s\S]*Siteden kaldırma sadece Patron ve Venom'dadır\./);
+  assert.equal(liste.reply_markup, undefined); // kaldırma düğmesi yok
 });
 
 test("Selin izinsiz kişiye cevap vermez; düğmeleri çalışmaz", async () => {
@@ -1014,25 +1020,47 @@ test("VİDEO DENETİMİ (5 Kasım): sitedeki her video Selin yoluyla denenir; 20
   assert.ok(o.depo.has("venom:videoDenetim"));
 });
 
-test("TEKRAR GÖNDERİM (5 Kasım): sitedeki modele sadece video gelirse yeni taslak açılmaz, video doğrudan siteye eklenir; 20 MB üstü video gelince hemen uyarı", async () => {
+test("TEKRAR GÖNDERİM (13 Kasım, kural 62): sitedeki modele sonradan gelen video ONAYSIZ siteye girmez — Merdan + Hemra'ya kart; ✅ Ekle → eklenir, ❌ Ekleme → girmez; aynı videoya ikinci kart yok; 20 MB üstü video gelince hemen uyarı", async () => {
   const o = ortam();
-  const { guncelleme: gun, pelinSiteAdimi, siteVideoEkleAdimi } = await import("./selin.js");
+  Object.assign(o.env, { BR_SORUMLU: "222", HEMRA_ID: "333", EKIP_IDS: "333" });
+  const { guncelleme: gun, siteVideoEkleAdimi, gecVideoOnayKarti } = await import("./selin.js");
   o.github.dosyalar.set("veri/urunler.json", JSON.stringify([{ kod: "3612", fotolar: ["galeri/3612/1.jpg"], videolar: [] }]));
   o.depo.set("selin:modeller", JSON.stringify({ "3612": { kaynak: "ozel", durum: "sitede", gonderen: 222, medya: [{ tur: "foto", file_id: "F", uid: "uf" }, { tur: "video", file_id: "B", boyut: 34 * 1048576, uid: "ub" }], taslak: { videolar: [{ id: 0, file_id: "B", boyut: 34 * 1048576 }] } } }));
   // büyük video → hemen uyarı
   await gun({ message: { message_id: 7, chat: { id: 222, type: "private" }, from: { id: 222, first_name: "Merdan" }, caption: "3612", video: { file_id: "B2", file_unique_id: "ub2", file_size: 30 * 1048576, width: 1080 } } }, o.env);
   assert.ok(o.g.some((x) => /30\.0 MB — Telegram botları 20 MB üstünü indiremez/.test(x.govde.text || "")));
-  // küçük video → siteye eklenir
+  // küçük video → taslağa girer ama SİTEYE GİRMEZ: Merdan ve Hemra'ya onay kartı (Patron onaylı yazı)
+  o.g.length = 0;
   await gun({ message: { message_id: 8, chat: { id: 222, type: "private" }, from: { id: 222, first_name: "Merdan" }, caption: "3612", video: { file_id: "K", file_unique_id: "uk", file_size: 8 * 1048576, width: 1080 } } }, o.env);
   const m = JSON.parse(o.depo.get("selin:modeller"))["3612"];
   assert.equal(m.durum, "sitede"); // yeni taslak açılmadı
   assert.equal(m.taslak.videolar.length, 3);
+  const kartlar = o.g.filter((x) => x.metod === "sendMessage" && x.govde.reply_markup);
+  assert.deepEqual(kartlar.map((x) => [String(x.govde.chat_id), x.govde.text]), [["222", "🎬 3612 için yeni video geldi. Siteye ekleyeyim mi?"], ["333", "🎬 3612 için yeni video geldi. Siteye ekleyeyim mi?"]]);
+  assert.deepEqual(kartlar[0].govde.reply_markup.inline_keyboard, [[{ text: "✅ Ekle", callback_data: "sn:3612:2" }, { text: "❌ Ekleme", callback_data: "sm:3612:2" }]]);
+  await siteVideoEkleAdimi(o.env, ist(11));
+  assert.deepEqual(JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0].videolar, []); // onay yok → sitede yok
+  // aynı video için ikinci kart açılmaz (kural 39)
+  o.g.length = 0;
+  await gecVideoOnayKarti(o.env, { kod: "3612", id: 2, kim: 222, zaman: ist(11) }, ist(11));
+  assert.equal(o.g.filter((x) => x.metod === "sendMessage").length, 0);
+  // ✅ Ekle (Hemra) → siteye girer; iki kart da kapanır; ikinci basış işlemez
+  await bas(o.env, 333, "sn:3612:2");
+  assert.equal(o.g.filter((x) => x.metod === "editMessageText" && /✅ .*: ekle — video siteye ekleniyor\./.test(x.govde.text)).length, 2);
   await siteVideoEkleAdimi(o.env, ist(11));
   const u = JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0];
   assert.deepEqual(u.videolar, ["selin/3612/2"]); // 30 MB'lık (1) eklenmez
   assert.deepEqual(u.fotolar, ["galeri/3612/1.jpg"]);
   assert.ok(o.g.some((x) => /🎬 3612: yeni video siteye eklendi/.test(x.govde.text || "")));
-  void pelinSiteAdimi;
+  o.g.length = 0;
+  await bas(o.env, 222, "sm:3612:2");
+  assert.equal(o.g.find((x) => x.metod === "answerCallbackQuery").govde.text, "Bu karta zaten cevap verildi.");
+  // ❌ Ekleme → siteye girmez
+  await gun({ message: { message_id: 9, chat: { id: 222, type: "private" }, from: { id: 222, first_name: "Merdan" }, caption: "3612", video: { file_id: "K2", file_unique_id: "uk2", file_size: 5 * 1048576, width: 1080 } } }, o.env);
+  await bas(o.env, 222, "sm:3612:3");
+  await siteVideoEkleAdimi(o.env, ist(12));
+  assert.deepEqual(JSON.parse(o.github.dosyalar.get("veri/urunler.json"))[0].videolar, ["selin/3612/2"]);
+  assert.ok(o.g.some((x) => x.metod === "editMessageText" && /❌ .*: ekleme — video siteye girmedi\./.test(x.govde.text)));
 });
 
 test("KANAL → SİTE VİDEO (5 Kasım): Kemal'in kanala koyduğu video siteye eklenir; aynı video (uid) iki kez eklenmez; video olmayan mesaj atlanır", async () => {

@@ -32,7 +32,7 @@ import { markaBas, katmanPng } from "./marka.js";
 import { KESIM, BUL, DETAY_YERLERI, DETAY_ETIKET, KOLAJ, ASKI_DETAY_FIYAT, kutuSec, kumasKutusu, arkaKutusu, yakaKutusu, islemeKutusu, askiGorseli, elbiseKirp, kolaj } from "./aski-detay.js";
 import { gorselBase64, gecici } from "./duzen.js";
 
-export const AYLIK_SINIR_USD = 150;
+export const AYLIK_SINIR_USD = 100; // 13 Kasım (Patron, kural 74): Pelin 10 $/gün ve 100 $/ay (kitaptaki tabloyla aynı; test doğrular)
 export const GUNLUK_SINIR_USD = 10; // 4 Kasım (Patron): Pelin günde en fazla 10 $; aşılacaksa durur ve sorar
 export const UYARI_ORANI = 0.8;
 const SAAT_FARKI = 3 * 3600;
@@ -1199,6 +1199,8 @@ export default {
   },
   async scheduled(olay, env) {
     if (!env.BOT_TOKEN) return;
+    try { await kitapOku(env, "pelin"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
+    try { await kitapOku(env, "nora"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Pelin", tg); } catch { /* */ }
     if (await durdurulduMu(env, "pelin")) return; // 6 Kasım: durduruldu → üretim adımları bekler (açılınca kaldığı yerden)
     if (env.PELIN) await nesne(env).fetch("https://pelin/cron", { method: "POST" });
@@ -2233,6 +2235,13 @@ async function falIsle(env, is, uc, girdi, fiyat, simdi, hf = false) {
   await harcamaYaz(env, fiyat, simdi, is.falTur);
 }
 // Higgsfield aracı çalışmazsa aynı kareyle fal.ai yedeği (bir kez; deneme sayılmaz)
+// 13 Kasım (Patron, kural 67): araç hatasında otomatik yeniden gönderim / araç değiştirme YOK
+export const TEKRAR_YOK = "kendiliğinden yeniden gönderilmedi, karar sizde";
+async function hataVenoma(env, is, asama, simdi) {
+  await defterIs(env, "pelin", `${asama} hatası: ${falHataTr(is.hamHata)} — kendiliğinden yeniden gönderilmedi (Patron kararı bekliyor)`, { kod: is.kod }).catch(() => null);
+  try { const l = (await env.KAYIT.get("venom:pelinHata", "json")) || []; await env.KAYIT.put("venom:pelinHata", JSON.stringify([...l, { kod: is.kod, id: is.id || null, asama, hata: String(falHataTr(is.hamHata)).slice(0, 200), zaman: simdi }].slice(-20)), { expirationTtl: 7 * 86400 }); } catch { /* bildirim yazılamazsa iş yine durur */ }
+}
+// eslint-disable-next-line no-unused-vars
 function hfYedegeGec(is, arac, neden, simdi) {
   const y = ARACLAR[arac] && ARACLAR[arac].yedek;
   if (!y || !ARACLAR[y] || is.hfYedek || is.hfYedekYok) return false;
@@ -2257,7 +2266,7 @@ async function uretimAdimi(env, is, simdi) {
   }
   if (is.durum === "foto_bekle") {
     const s = await bekle(); if (!s) return;
-    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = is.fotoDeneme < denemeSiniri(is) ? "foto_gonder" : "uyari"; is.sorunlar = [`fotoğraf üretilemedi: ${falHataTr(s.hata)}`]; return; }
+    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = "uyari"; is.sorunlar = [`fotoğraf üretilemedi: ${falHataTr(s.hata)} — ${TEKRAR_YOK}`]; await hataVenoma(env, is, "fotoğraf", simdi); return; }
     is.foto = s.resimler[0];
     const k = await kaliteKontrol(env, is.urunler, [is.foto], simdi, { renk: is.renk, boy: is.boy, yuz: Boolean(is.sahneAyar), astar: is.modelKaydi && is.modelKaydi.astarTr, kural: is.modelKaydi && is.modelKaydi.kuralTr });
     notEkle(is, k);
@@ -2275,7 +2284,7 @@ async function uretimAdimi(env, is, simdi) {
   }
   if (is.durum === "sahne_bekle") {
     const s = await bekle(); if (!s) return;
-    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = is.sahneDeneme < denemeSiniri(is) ? "sahne_gonder" : "uyari"; is.sorunlar = [`video karesi üretilemedi: ${falHataTr(s.hata)}`]; return; }
+    if (s.hata) { is.hamHata = String(s.hata).slice(0, 400); is.durum = "uyari"; is.sorunlar = [`video karesi üretilemedi: ${falHataTr(s.hata)} — ${TEKRAR_YOK}`]; await hataVenoma(env, is, "video karesi", simdi); return; }
     is.sahne = s.resimler[0];
     const k = await kaliteKontrol(env, is.urunler, [is.sahne], simdi, { renk: is.renk, boy: is.boy, yuz: true, astar: is.modelKaydi && is.modelKaydi.astarTr, kural: is.modelKaydi && is.modelKaydi.kuralTr });
     notEkle(is, k);
@@ -2354,14 +2363,8 @@ async function uretimAdimi(env, is, simdi) {
       is.hamHata = String(s.hata).slice(0, 400);
       // 9 Kasım (Patron): "Pelin videoyu kendiliğinden yeniden üretmesin" — zaman aşımında para iade edilmez; yeniden gönderilmez, Patron karar verir
       if (/3 saatte bitmedi/.test(s.hata)) { is.durum = "uyari"; is.sorunlar = ["video 3 saatte bitmedi — kendiliğinden yeniden üretilmedi (ücret iade edilmemiş olabilir); karar sizde"]; return; }
-      const aracSimdi = is.arac || aracSec(secim);
-      if (ARACLAR[aracSimdi] && ARACLAR[aracSimdi].hf && !/nsfw/i.test(s.hata) && hfYedegeGec(is, aracSimdi, falHataTr(s.hata), simdi)) return;
-      if (/^veo/.test(aracSimdi) && !is.aracYedek) { // Veo bu istemi işleyemedi → aynı kareyle Kling 4.0 (deneme sayılmaz)
-        is.gecmis.push([simdi, `${ARACLAR[aracSimdi].ad} işleyemedi (${falHataTr(s.hata)}) → aynı kareyle Kling 4.0`]);
-        Object.assign(is, { arac: "kling4", aracYedek: true, videoDeneme: Math.max(0, is.videoDeneme - 1), durum: "video_gonder" });
-        return;
-      }
-      is.durum = is.videoDeneme < denemeSiniri(is) ? "video_gonder" : "uyari"; is.sorunlar = [`video üretilemedi: ${falHataTr(s.hata)}`]; return;
+      // 13 Kasım (Patron, kural 67): hata olursa Pelin kendiliğinden tekrar GÖNDERMEZ, başka araca da GEÇMEZ; Venom'a bildirir, karar Patron'da
+      is.durum = "uyari"; is.sorunlar = [`video üretilemedi: ${falHataTr(s.hata)} — ${TEKRAR_YOK}`]; await hataVenoma(env, is, "video", simdi); return;
     }
     is.video = s.video; is.kareler = []; is.kareFal = [];
     for (const f of ["first", "middle", "last"]) { is.kareFal.push(await falGonder(env, KARE.uc, { video_url: is.video, frame_type: f })); }

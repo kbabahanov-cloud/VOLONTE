@@ -210,7 +210,7 @@ test("Pelin işi: maliyet kartı (aylık sınır), kurulum yoksa kart açılmaz;
   await aracCalistir(o.env, "pelin_uret", { kodlar: ["3557", "3592", "abc"], test: true }, ist(3, 12));
   const kart = sonKart(o);
   assert.match(kart.govde.text, /Boy: 3557 bilek \(ayakkabı görünür, etek yere değmez\), 3592 bilek/);
-  assert.match(kart.govde.text, /MALİYET TESTİ — 2 model: 3557, 3592\n[\s\S]*Model başı ~[\d,]+ \$ · toplam ~[\d,]+ \$[\s\S]*Bu ay Pelin: 0,00 \$ \/ 150 \$/);
+  assert.match(kart.govde.text, /MALİYET TESTİ — 2 model: 3557, 3592\n[\s\S]*Model başı ~[\d,]+ \$ · toplam ~[\d,]+ \$[\s\S]*Bu ay Pelin: 0,00 \$ \/ 100 \$/);
   assert.match(kart.govde.text, /Boy: 3557 bilek \(ayakkabı görünür, etek yere değmez\), 3592 bilek/);
   const id = kart.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   await bas(o, `vb:o:${id}`); await bas(o, `vb:E:${id}`);
@@ -278,26 +278,28 @@ test("webhook: gizli anahtar yanlışsa 401; aynı güncelleme iki kez gelirse b
   assert.equal(o.claude.length, 1);
 });
 
-test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; tavan dolunca sohbet durur (Claude çağrılmaz); varsayılan tavan 30 $", async () => {
+test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; tavan dolunca sohbet durur (Claude çağrılmaz); 13 Kasım (kural 74): tavan kitaptaki tablodan (50 $)", async () => {
   const o = ortam();
   const { venomHarcanan, venomSinir, VENOM_SINIR_VARSAYILAN } = await import("./venom-bot.js");
-  assert.equal(VENOM_SINIR_VARSAYILAN, 30);
-  assert.equal(await venomSinir(o.env), 30);
+  assert.equal(VENOM_SINIR_VARSAYILAN, 50);
+  assert.equal(await venomSinir(o.env), 50);
+  o.depo.set("venom:bot:sinir", "30"); // eski kayıt artık kullanılmaz: tek tablo kitap
+  assert.equal(await venomSinir(o.env), 50);
   await yazi(o, PATRON, "merhaba");
   const h1 = await venomHarcanan(o.env, Math.floor(Date.now() / 1000));
   assert.ok(h1 > 0 && h1 < 0.01, String(h1)); // 10 giriş + 5 çıkış token
   const ay = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7);
-  o.depo.set(`venom-harcama:${ay}`, "24.5");
+  o.depo.set(`venom-harcama:${ay}`, "40.5");
   await yazi(o, PATRON, "devam");
-  assert.ok(patronaGiden(o).some((x) => /Venom bu ay 24,50 \$ yapay zekâ harcadı \(aylık sınır 30 \$, %80\)/.test(x.govde.text)));
+  assert.ok(patronaGiden(o).some((x) => /Venom bu ay 40,50 \$ yapay zekâ harcadı \(aylık sınır 50 \$, %80\)/.test(x.govde.text)));
   await yazi(o, PATRON, "bir daha");
   assert.equal(patronaGiden(o).filter((x) => /%80/.test(x.govde.text)).length, 1); // bir kez
-  o.depo.set(`venom-harcama:${ay}`, "30");
+  o.depo.set(`venom-harcama:${ay}`, "50");
   const n = o.claude.length;
   await yazi(o, PATRON, "3557 için yorum yap"); // (9 Kasım: "stok 3557" ücretsiz model kartıdır, sınırdan etkilenmez)
   assert.equal(o.claude.length, n);
-  assert.match(patronaGiden(o).at(-1).govde.text, /Venom yapay zekâ sınırı \(30 \$\) doldu/);
-  o.depo.set("venom:bot:sinir", "50");
+  assert.match(patronaGiden(o).at(-1).govde.text, /Venom yapay zekâ sınırı \(50 \$\) doldu/);
+  o.depo.set(`venom-harcama:${ay}`, "49");
   await yazi(o, PATRON, "3557 için yorum yap");
   assert.equal(o.claude.length, n + 1);
 });
@@ -1477,37 +1479,54 @@ test("/rol Janet fiyat: Sami listelerinde rol değişir (fabrikadan çıkar, sad
   assert.match(await v.rolDegistir(o.env, "Yok", "fiyat", 100), /listelerinde yok/);
 });
 
-test("para: günlük sayaç (bot başına) + model sayımı; Kemal 2 $ tavanında durur, deneme bot bütçesine yazılmaz; Venom %80 ve 3 kat alarmı; özet bugünü doğru yazar", async () => {
+test("para (13 Kasım, kural 74): sınırlar kitaptaki TEK tablodan — bot başına günlük + aylık sayaç, model sayımı; Kemal 20 $/ay, Selin 10 $/ay dolunca o botun yapay zekâsı durur; deneme bütçeye yazılmaz; %80'de Venom Patron'a TEK satır (ayda bir, gece yazmaz); 3 kat alarmı", async () => {
   const o = ortam();
   const H = await import("./harcama.js");
   const v = await import("./venom-bot.js");
   const e = { ...o.env, BOT_ADI: "kemal" };
-  const t = Math.floor(Date.UTC(2026, 10, 10, 9) / 1000);
+  const t = Math.floor(Date.UTC(2026, 10, 10, 9) / 1000); // 10 Kasım 12:00 İstanbul
   await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t); // 0,40 + 0,40 = 0,80 $
   assert.equal(await H.gunlukHarcanan(e, "kemal", t), 0.8);
+  assert.equal(await H.botAyHarcanan(e, "kemal", t), 0.8);
   const d = JSON.parse(o.depo.get("harcama-detay:kemal:2026-11-10"));
   assert.deepEqual(d["claude-opus-5-5"], { n: 1, usd: 0.8 });
   o.depo.set("harcama:denemeBitis", String(t + 3600));
   await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t + 60);
   assert.equal(await H.gunlukHarcanan(e, "kemal", t), 0.8); // deneme ayrı
+  assert.equal(await H.botAyHarcanan(e, "kemal", t), 0.8);
   o.depo.delete("harcama:denemeBitis");
   await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t + 120);
-  assert.equal(await H.sinirAsildiMi(e, t + 130), false); // 1,60 $
-  // Venom %80 uyarısı (para izni)
+  assert.equal(await H.sinirAsildiMi(e, t + 130), false); // 1,60 $ — günlük 2 $ tavanı artık yok
+  // 3 kat alarmı (günlük)
   o.depo.set("venom:paraGun:2026-11-09", JSON.stringify({ kemal: 0.3, selin: 0.2, pelin: 0, sami: 0, venom: 0.1 }));
   o.depo.set("venom:paraGun:2026-11-08", JSON.stringify({ kemal: 0.3, selin: 0.2, pelin: 0, sami: 0, venom: 0.1 }));
   o.depo.set("venom:paraGun:2026-11-07", JSON.stringify({ kemal: 0.4, selin: 0.2, pelin: 0, sami: 0, venom: 0.1 }));
   await v.paraAlarmi(o.env, t + 200);
-  const m = patronaGiden(o).map((x) => x.govde.text);
-  assert.ok(m.some((x) => /Kemal bugün 1,60 \$ harcadı \(günlük tavan 2 \$, %80\)/.test(x)));
+  let m = patronaGiden(o).map((x) => x.govde.text);
   assert.ok(m.some((x) => /Kemal bugün olağanın 3 katından fazla harcadı: 1,60 \$/.test(x)));
-  await H.harcamaEkle(e, "claude-opus-5-5", { input_tokens: 100000, output_tokens: 20000 }, t + 300);
-  assert.equal(await H.sinirAsildiMi(e, t + 310), true); // 2,40 $ → yapay zekâ durur
+  assert.ok(!m.some((x) => /%80|tavan/.test(x))); // 1,60 / 20 $ — uyarı yok
+  // aylık %80: Kemal 16 $ → Patron'a tek satır, ayda bir kez
+  o.depo.set("harcama-ay:kemal:2026-11", String(16_100_000));
+  await v.paraAlarmi(o.env, t + 300);
+  m = patronaGiden(o).map((x) => x.govde.text);
+  assert.equal(m.filter((x) => x === "⚠️ Kemal bu ay sınırının %80'ine geldi: 16,10 $ / 20 $.").length, 1);
   await v.paraAlarmi(o.env, t + 400);
-  assert.ok(patronaGiden(o).some((x) => /Kemal bugünkü yapay zekâ tavanına ulaştı: 2,40 \$/.test(x.govde.text)));
-  const n = patronaGiden(o).length;
-  await v.paraAlarmi(o.env, t + 500);
-  assert.equal(patronaGiden(o).length, n); // günde bir kez
+  assert.equal(patronaGiden(o).filter((x) => /sınırının %80/.test(x.govde.text)).length, 1); // bir kez
+  assert.equal(await H.sinirAsildiMi(e, t + 410), false);
+  // sınır doldu → o botun yapay zekâsı durur; Selin'in kendi sınırı (10 $) ayrı
+  o.depo.set("harcama-ay:kemal:2026-11", String(20_000_000));
+  assert.equal(await H.sinirAsildiMi(e, t + 500), true);
+  const es = { ...o.env, BOT_ADI: "selin" };
+  o.depo.set("harcama-ay:selin:2026-11", String(8_500_000));
+  assert.equal(await H.sinirAsildiMi(es, t + 500), false);
+  // gece (23:00) uyarı yazılmaz; sabah yazılır
+  const gece = Math.floor(Date.UTC(2026, 10, 10, 20) / 1000), n0 = patronaGiden(o).length;
+  await v.paraAlarmi(o.env, gece);
+  assert.equal(patronaGiden(o).filter((x) => /Selin bu ay/.test(x.govde.text)).length, 0);
+  await v.paraAlarmi(o.env, Math.floor(Date.UTC(2026, 10, 11, 7) / 1000));
+  assert.ok(patronaGiden(o).length > n0 && patronaGiden(o).some((x) => x.govde.text === "⚠️ Selin bu ay sınırının %80'ine geldi: 8,50 $ / 10 $."));
+  o.depo.set("harcama-ay:selin:2026-11", String(10_000_000));
+  assert.equal(await H.sinirAsildiMi(es, t + 86400), true);
 });
 
 // 10 Kasım (Patron): fabrika zinciri — Hemra önerisi → Patron kartı → karar Sami'ye; "3394 fabrika kaydı"; cuma hata sayacı
@@ -2124,4 +2143,52 @@ test("12 Kasım: 'fabrikada bitti' kartında Patron 'Repete' derse düz yazı ta
   assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["3394"]]);
   assert.ok(o.g.some((x) => /Hemra dağılımı yazınca repete kartı doğrudan Fuat'a gider$/.test(x.govde.text || x.govde.caption || "")));
   assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek/.test(x.govde.text || "")));
+});
+
+test("13 Kasım (kural 6): 'Emin misiniz?' SADECE para (Pelin), silme (sil, kanal temizliği) ve fabrika (Fuat / Nuri / Sinem / Celal'e mesaj, mutabakat); iç mesaj, imza, renk, site taslağı sorulmadan yapılır", async () => {
+  const { eminGerek } = await import("./venom-bot.js");
+  for (const is of [{ tur: "pelin" }, { tur: "sil" }, { tur: "temizlik" }, { tur: "mutabakat" }, { tur: "mesaj", kime: "fuat" }, { tur: "mesaj", kime: "Nuri" }, { tur: "mesaj", kime: "sinem" }, { tur: "mesaj", kime: "celal" }]) assert.equal(eminGerek(is), true, JSON.stringify(is));
+  for (const is of [{ tur: "imzaDuzelt" }, { tur: "siteDuzelt" }, { tur: "selinTaslak" }, { tur: "geriAl" }, { tur: "mesaj", kime: "hemra" }, { tur: "mesaj", kime: "merdan" }, { tur: "mesaj", kime: "aziz" }, { tur: "mesaj" }, null]) assert.equal(eminGerek(is), false, JSON.stringify(is));
+  // canlı düğme: imza düzeltme kartında ✅ Onayla → "Emin misiniz?" SORULMAZ, iş hemen çalışır
+  const o = ortam();
+  const simdi = Math.floor(Date.now() / 1000);
+  o.depo.set("venom:bot:is:imz1", JSON.stringify({ id: "imz1", tur: "imzaDuzelt", liste: [], metin: "imza düzelt", durum: "bekliyor", zaman: simdi }));
+  await bas(o, "vb:o:imz1");
+  assert.equal(patronaGiden(o).filter((x) => /Emin misiniz/.test(x.govde.text)).length, 0);
+  assert.notEqual(JSON.parse(o.depo.get("venom:bot:is:imz1")).durum, "bekliyor");
+  assert.notEqual(JSON.parse(o.depo.get("venom:bot:is:imz1")).durum, "emin");
+  // silme kartında ✅ Onayla → "Emin misiniz?" bir kez sorulur, Evet'e basılmadan çalışmaz
+  o.depo.set("venom:bot:is:sil1", JSON.stringify({ id: "sil1", tur: "sil", kod: "3999", metin: "3999 sil", durum: "bekliyor", zaman: simdi }));
+  await bas(o, "vb:o:sil1");
+  assert.equal(patronaGiden(o).filter((x) => x.govde.text === "⚠️ Emin misiniz?").length, 1);
+  assert.equal(JSON.parse(o.depo.get("venom:bot:is:sil1")).durum, "emin");
+});
+
+test("13 Kasım (kural 7 ve 66): model kartındaki 'Pelin video' düğmesi, Patron'un son mesajında 'Pelin' yazmıyorsa Pelin'e HİÇBİR ŞEY göndermez; yazıyorsa maliyet kartı yoluna gider", async () => {
+  const o = ortam();
+  const giden = [];
+  o.env.PELIN_W = { mesaj: async (m) => { giden.push(m); return true; } };
+  const simdi = Math.floor(Date.now() / 1000);
+  // 1) son mesaj kaydı yok
+  await bas(o, "vmk:v:3627");
+  assert.equal(giden.length, 0);
+  assert.equal(patronaGiden(o).at(-1).govde.text, "🎬 3627: Pelin sadece mesajda \"Pelin\" yazınca çalışır. Yazın: Pelin 3627 video");
+  // 2) son mesajda "Pelin" yok ("video" kelimesi Pelin demek değildir) — 5 farklı yazılış
+  for (const metin of ["3627 video", "3627 için yeni fotoğraf çek", "3627 stok", "bu modelin videosu lazım", "/3627 foto video"]) {
+    o.depo.set("venom:sonPatronMetni", JSON.stringify({ metin, zaman: simdi }));
+    await bas(o, "vmk:v:3627");
+    assert.equal(giden.length, 0, metin);
+  }
+  // 3) "Pelin" yazıyor ama 1 saatten eski → çalışmaz
+  o.depo.set("venom:sonPatronMetni", JSON.stringify({ metin: "Pelin 3627 video", zaman: simdi - 2 * 3600 }));
+  await bas(o, "vmk:v:3627");
+  assert.equal(giden.length, 0);
+  // 4) son mesajda "Pelin" var → Pelin'e üretim isteği (önce maliyet kartı; para onaysız harcanmaz)
+  for (const metin of ["Pelin 3627 video", "pelin bu modele video yapsın", "3627 PELİN", "PELIN 3627", "/pelin 3627 video"]) {
+    giden.length = 0;
+    o.depo.set("venom:sonPatronMetni", JSON.stringify({ metin, zaman: simdi - 60 }));
+    await bas(o, "vmk:v:3627");
+    assert.deepEqual(giden, ["/uret 3627"], metin);
+  }
+  assert.match(patronaGiden(o).at(-1).govde.text, /🎬 3627 → Pelin\. Önce maliyet kartı gelecek; onaylamadan para harcanmaz\./);
 });

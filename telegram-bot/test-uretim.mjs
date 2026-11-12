@@ -51,7 +51,7 @@ test("üretim: anahtar yoksa hiçbir şey yapılmaz; varsa deneme planı (2 mode
 test("üretim: kullanıcı onayladı (28 Ekim); fal.ai anahtarı ya da askı/manken fotoğrafı yokken hiçbir araca istek gitmez", async () => {
   const { URETIM_ONAYLI, PELIN_AYLIK_SINIR_USD } = await import("./uretim.js");
   assert.equal(URETIM_ONAYLI, false); // eski Selin denemesi kapalı (Pelin'e taşınıyor)
-  assert.equal(PELIN_AYLIK_SINIR_USD, 150);
+  assert.equal(PELIN_AYLIK_SINIR_USD, 100); // 13 Kasım (kural 74)
   const o = ortam();
   delete o.env.URETIM_TEST;
   await uretimAdimi({ ...o.env, FAL_KEY: undefined }, 1000, { referansAl: async () => [{ rol: "aski", url: "x" }], bildir: async () => {} });

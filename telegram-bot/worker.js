@@ -37,6 +37,7 @@
 //     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
+import { kitapOku } from "./kitap.js";
 import { defterTg, defterKarar, defterIs, defterCevap, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
@@ -66,7 +67,7 @@ import { grubaGonder, grupUyeligi, raporZamani, raporuBirak, topluRapor, aylikRa
 import { murat as muratId, muratMi, sorumlu as hemraId, denemeKaydi, denemeOzeti, DENEME } from "./fabrika.js";
 
 export { StokDO };
-import { sinirAsildiMi, buAyHarcanan, ayAnahtari, AYLIK_SINIR_USD, UYARI_ORANI, SINIR_MESAJI } from "./harcama.js";
+import { sinirAsildiMi, buAyHarcanan, AYLIK_SINIR_USD, SINIR_MESAJI } from "./harcama.js";
 
 const SAAT_FARKI = 3 * 60 * 60; // İstanbul, UTC+3
 const KANAL_ADI = "Volonteroseoffical";
@@ -82,20 +83,22 @@ const TANIMA_ADAY = 5;
 const GORSEL_ADAY = 8; // "Sil": fotoğrafa bakarak karşılaştırılan en fazla kodsuz paylaşım
 
 // Günlük yeniden paylaşım ayarları
-const SABAH_SAATI = 8; // paylaşım bu saatte başlar (ilk tur / hatırlatma da)
-const AKSAM_SAATI = 20; // paylaşımlar en geç bu saatte biter
-const GUNLUK_SINIR = 10;
+// 13 Kasım (Patron, kitap kural 52–53): TEK SAAT 09:00–21:00 (öneri kartları da 09:00'da), günde en fazla 12 paylaşım
+// (repete, yeni model, ertelenen dahil), en az 60 dk ara. Bu sabitlerden başka saat / sınır yok.
+const SABAH_SAATI = 9; // öneri kartları ve paylaşım bu saatte başlar
+const AKSAM_SAATI = 21; // paylaşımlar en geç bu saatte biter (kalan sabah 09:00'a kalır)
+export const GUNLUK_SINIR = 12;
 const GEC_GUN = 7; // "❌ Geç" denen model bu kadar gün önerilmez
 // 9 Kasım (Patron): sabit saat sınırı YOK — her an "21:00'e kadar kaç paylaşım sığar" hesaplanır (60–90 dk arayla, ortalama 75 dk)
-export const ORT_ARALIK_DK = 75;
+export const ORT_ARALIK_DK = 62; // 13 Kasım: günde 12 paylaşım 09–21'e sığsın (en az 60 dk)
 const TUR_ADET = 10; // bir turda toplanacak onay sayısı
 const BEKLEME_GUN = 30; // bu kadar gündür paylaşılmayan modeller önerilir
 const BEKLESIN_GUN = 7; // "Beklesin" denen model bu kadar gün sonra tekrar sorulur
 export const KALICI = 4102444800; // 2100 yılı: "Sil" denen model bir daha önerilmez
 const SILME_ADIM = 20; // bir çalışmada en fazla bu kadar mesaj silinir (Telegram çağrı sınırı 50)
-const ARALIK_DK = [60, 90]; // 9 Kasım (Patron): paylaşımlar gün içine dengeli, 60–90 dk arayla (arka arkaya yığılmaz)
+const ARALIK_DK = [60, 65]; // 13 Kasım (Patron, kural 53): en az 60 dk ara; günde 12 paylaşım 09–21'e sığar
 // 9 Kasım (Patron): kanal paylaşımları SADECE 09:00–21:00 (İstanbul). Gece onaylanan / hazırlanan paylaşım kuyrukta bekler.
-const YAYIN_BAS = 9, YAYIN_BIT = 21, YAYIN_ARA_DK = 60;
+const YAYIN_BAS = SABAH_SAATI, YAYIN_BIT = AKSAM_SAATI, YAYIN_ARA_DK = 60;
 const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim) sıradakiler
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
@@ -163,6 +166,7 @@ export default {
   // Zamanlanmış görev: BOT_TOKEN girildiyse webhook'u kendi adresine kurar.
   // Kuruluysa sadece kontrol eder, bir şey değiştirmez.
   async scheduled(event, env) {
+    try { await kitapOku(env, "kemal"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     try { if (await kagitAcik(env, "kemal", "kisiKontrol")) await kisiKontrolAdimi(env, "kemal", telegram); } catch { /* 9 Kasım: kişi /start kontrolü */ }
@@ -218,13 +222,7 @@ async function durumKontrol(env) {
     if (!ayniDurum || kayit.zaman - (onceki.zaman || 0) > 3600) {
       await env.KAYIT.put("durum:webhook", JSON.stringify(kayit));
     }
-    // Aylık yapay zekâ harcaması %80'i geçince bir kez haber ver.
-    const harcanan = await buAyHarcanan(env, kayit.zaman);
-    const uyariAnahtari = `${ayAnahtari(kayit.zaman)}:uyari`;
-    if (env.BOT_TOKEN && harcanan >= AYLIK_SINIR_USD * UYARI_ORANI && !(await env.KAYIT.get(uyariAnahtari)) && (await kagitAcik(env, "kemal", "yzUyari"))) {
-      await env.KAYIT.put(uyariAnahtari, "1", { expirationTtl: 70 * 86400 });
-      for (const kisi of yoneticilerden(env)) await telegram(env, "sendMessage", { chat_id: kisi, text: `⚠️ Bu ay yapay zekâya yaklaşık ${harcanan.toFixed(2)} $ harcandı (sınır ${AYLIK_SINIR_USD} $). Sınıra gelince yapay zekâ cevapları ve fotoğraf tanıma ay sonuna kadar durur; turlar ve komutlar çalışır.` });
-    }
+    // 13 Kasım (Patron, kural 74): %80 uyarısını Venom verir (kitaptaki tek tablodan); Kemal ayrıca yazmaz.
 }
 
 export async function webhookKontrol(env) {
@@ -577,7 +575,7 @@ const YARDIM = [
   "/yardim — bu liste",
   "",
   "",
-  "Komut yazmadan da konuşabilirsiniz: \"bu turda kaç onay var\", \"3357 beklesin\", \"3357'yi sil\", \"bu hafta kaç paylaşım yaptık\". Paylaşma ve silme için yine düğmeyle onay isterim.",
+  "Komut yazmadan da konuşabilirsiniz: \"bu turda kaç onay var\", \"3357 beklesin\", \"bu hafta kaç paylaşım yaptık\". Paylaşma için yine düğmeyle onay isterim; silme sadece Patron ve Venom'dadır.",
   "",
   "Kanala yapılan her paylaşımı otomatik kaydediyorum.",
   `Tur: her sabah ${SABAH_SAATI}:00'de uzun süredir paylaşılmayan ${TUR_ADET} modeli bütün paylaşım tarihleriyle gönderirim; onayladığınız aynı gün ${SABAH_SAATI}:00–${AKSAM_SAATI}:00 arasında ${ARALIK_DK[0]}–${ARALIK_DK[1]} dk arayla paylaşılır (günde en fazla ${GUNLUK_SINIR}). Günlük hedef ${GUNLUK_SINIR} onay: ❌ Geç denen kadar yeni model toplu kartta gelir (21:00'e kaç paylaşım sığıyorsa o kadar); geç denen ${GEC_GUN} gün önerilmez. ${AKSAM_SAATI}:00'de paylaşılamayanlar sıradan çıkar, ileride yeniden sorulur.`,
@@ -816,8 +814,11 @@ async function markaOnizle(msg, env) {
   });
 }
 
+const turSayac = async (env, simdi) => Number((await env.KAYIT.get(`sayac:${gunAnahtari(simdi)}`)) || 0); // sadece tur paylaşımları (eski sayaç)
+// 13 Kasım (Patron, kural 53): bugün kanala çıkan paylaşım = HER yoldan çıkan model (tur, repete, yeni, ertelenen); günde en fazla 12
 async function bugunSayac(env, simdi) {
-  return Number((await env.KAYIT.get(`sayac:${gunAnahtari(simdi)}`)) || 0);
+  const sp = Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).map(Number).filter((t) => t && gunAnahtari(t) === gunAnahtari(simdi)).length;
+  return Math.max(sp, await turSayac(env, simdi));
 }
 
 // ---------- Günlük yeniden paylaşım ----------
@@ -849,8 +850,7 @@ export async function rotasyon(env, simdi) {
   const gun = gunAnahtari(simdi);
 
   const s = saat(simdi);
-  // Gün sonu (20:00): bugün paylaşılamayan onaylılar sıradan çıkar, ileride yeniden sorulur;
-  // bugünün turu kapanır (eski düğmeler "geçerli değil" der).
+  // Gün sonu (21:00): bugün paylaşılamayan onaylılar sırada kalır (sabah 09:00); eski düzen turu kapanır (eski düğmeler "geçerli değil" der).
   let gunSonuNotu = null;
   if (s >= AKSAM_SAATI && !(await env.KAYIT.get(`gunsonu:${gun}`))) {
     await env.KAYIT.put(`gunsonu:${gun}`, "1", { expirationTtl: 3 * 86400 });
@@ -893,9 +893,9 @@ export async function rotasyon(env, simdi) {
 const turGunu = (tur) => tur.gun || gunAnahtari(tur.basla);
 
 async function gunSonu(env, tur, simdi) {
-  // Yeni düzende onaylananlar ertesi güne kalır (paylaşım anında stok yeniden kontrol edilir); tur da sabaha kadar açık.
-  const kuyruk = (await kuyrukListesi(env)).filter((o) => !o.yeni);
-  for (const o of kuyruk) await env.KAYIT.delete(`kuyruk:${o.kod}`);
+  // 13 Kasım (Patron, kural 52): 21:00'de paylaşılamayan onaylılar SİLİNMEZ — sırada kalır, sabah 09:00'dan itibaren gider
+  // (paylaşım anında stok yeniden kontrol edilir).
+  const kuyruk = [];
   if (tur && tur.durum === "toplaniyor" && !tur.yeni) {
     tur.durum = "bitti";
     tur.bitis = simdi;
@@ -1149,6 +1149,7 @@ async function turDugmesi(cq, env) {
       return telegram(env, "editMessageText", { ...benim, text: `↩️ ${kodGoster(kod)}: vazgeçildi, hiçbir şey silinmedi.` });
     }
     if (islem !== "ty") return cevapla("Geçersiz düğme.");
+    if (!String(env.MURAT_ID || "").split(",").map((x) => x.trim()).includes(String(cq.from.id))) return cevapla("Silme sadece Patron ve Venom'dadır."); // 13 Kasım (kural 41): eski karttaki düğme
     if ((await env.KAYIT.get(`silinecek:${kod}`)) || ((await env.KAYIT.get("hicgelmeyecek", "json")) || {})[kod]) {
       await cevapla("Zaten silindi / siliniyor.");
       return telegram(env, "editMessageText", { ...benim, text: `${kodGoster(kod)} zaten silindi ya da siliniyor.` });
@@ -1589,8 +1590,9 @@ async function siradakiniPaylas(env, simdi) {
   const sonraki = Number((await env.KAYIT.get("sonraki")) || 0);
   if (simdi < sonraki) return;
   const liste = await kuyrukListesi(env);
-  const oncelik = liste.find((x) => x.sinirsiz); // 9 Kasım: gece onaylanan / ertelenen önce (günlük 10'a sayılmaz)
-  const oge = oncelik || ((await bugunSayac(env, simdi)) >= GUNLUK_SINIR ? null : liste[0]);
+  if (!liste.length || !(await kesinKapi(env, simdi)).acik) return; // 13 Kasım: saat / günde 12 / 60 dk — sıradaki bekler (silinmez)
+  const oncelik = liste.find((x) => x.sinirsiz); // gece onaylanan / ertelenen önce çıkar (günlük 12'ye sayılır)
+  const oge = oncelik || liste[0];
   if (!oge) return;
 
   // Önce sıradan çıkar: görev üst üste çalışırsa aynı model iki kez paylaşılmasın.
@@ -1829,7 +1831,18 @@ export async function yayinKapisi(env, simdi) {
   if (saat(t) >= YAYIN_BIT || saat(t) < YAYIN_BAS) t = sabahBaslangici(t, saat(t) >= YAYIN_BAS);
   return { acik, sonraki: t };
 }
-// Kapı kapalıyken onaylanan paylaşım sıraya girer (öncelikli; günlük 10 sınırına sayılmaz); 09:00'dan itibaren aralıklı gider
+// 13 Kasım (Patron, kural 52–53): KESİN KAPI — kanala giden HER paylaşımın (tur, repete, yeni model, ertelenen, Pelin videosu;
+// sıradan gelen dahil) son kontrolü: saat 09:00–21:00, bugün kanala çıkan model < 12, son paylaşımdan ≥ 60 dk. Hiçbir yol atlayamaz.
+export async function kesinKapi(env, simdi) {
+  if ((await bugunSayac(env, simdi)) >= GUNLUK_SINIR) return { acik: false, neden: "sinir" };
+  if (env.YAYIN_KAPISI === "0") return { acik: true, neden: null }; // sadece testler: saat ve ara gerçek saatten bağımsız
+  const s = saat(simdi);
+  if (s < YAYIN_BAS || s >= YAYIN_BIT) return { acik: false, neden: "saat" };
+  const sp = Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).map(Number).filter(Boolean);
+  if (simdi - Math.max(0, ...sp) < YAYIN_ARA_DK * 60) return { acik: false, neden: "ara" };
+  return { acik: true, neden: null };
+}
+// Kapı kapalıyken onaylanan paylaşım sıraya girer (öncelikli); 09:00'dan itibaren aralıklı gider (günlük 12 sınırına sayılır)
 async function yayiniErtele(env, oge, simdi) {
   await env.KAYIT.put(`kuyruk:${oge.kod}`, JSON.stringify({ ...oge, tur: true, zaman: simdi, ertelendi: true, sinirsiz: true }));
   const k = await yayinKapisi(env, simdi);
@@ -2482,7 +2495,7 @@ async function siteyeVideoBildir(env, kod, mesajlar, simdi, ek = {}) {
 export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null, zamanli = false, kim = null } = {}) {
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
   if (((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {})[String(paket.kod)]) return { ok: false, hata: `${paket.kod} için silme onaylandı; kanala paylaşılmaz` }; // 12 Kasım
-  if (!zamanli && !(await yayinKapisi(env, simdi)).acik) return yayiniErtele(env, { kod: String(paket.kod), yeni: true, paket, kim: kim || "onaylı", secenek: { sayma: false, stokKontrol, siteVideo, renk, onayliSorunlar } }, simdi);
+  if ((!zamanli && !(await yayinKapisi(env, simdi)).acik) || !(await kesinKapi(env, simdi)).acik) return yayiniErtele(env, { kod: String(paket.kod), yeni: true, paket, kim: kim || "onaylı", secenek: { sayma: false, stokKontrol, siteVideo, renk, onayliSorunlar } }, simdi);
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ — yanlışsa yayına çıkmaz. Patron (ya da onaylayan) ⚠️'li kartı gördüyse o sorunlar geçer; yeni çıkan sorun durdurur.
@@ -2509,7 +2522,7 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   await defterSatir(env, "kemal", { id: `kemal:kanal:${paket.kod}`, tur: "kanal", kod: String(paket.kod), ne: "Kanal paylaşımı", kim: "Kemal", durum: "bitti", bot: "kemal", guncel: simdi, kanit: `kanala paylaşıldı${(g.ids || []).filter((id) => id > 0).length ? ` (mesaj ${(g.ids || []).filter((id) => id > 0)[0]})` : ""}` }); // 12 Kasım: TEK DEFTER — kanıtla kapanır
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
-  if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
+  if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await turSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
   await gecmisKaydet(env, String(paket.kod), (paket.renkler || []).join(","), simdi);
   await kanalRenkKaydet(env, paket.kod, paket.renkler);
   if (siteVideo && !g.not) {
@@ -4008,16 +4021,8 @@ function asistanYardimcilari(env) {
       return `${kodGoster(kod)} ${BEKLESIN_GUN} gün önerilmeyecek (${kim}).`;
     },
 
-    async hicOnayIste(sohbet, kod) {
-      if (!(await kayitliMi(kod))) return `${kod} kayıtlı değil; onay istenmedi.`;
-      if (((await env.KAYIT.get("hicgelmeyecek", "json")) || {})[kod]) return `${kod} zaten silindi olarak işaretli.`;
-      const sayi = modelMesajlari(kod, (await env.KAYIT.get("kodlar", "json")) || {}, (await env.KAYIT.get("kodsuz", "json")) || {}).length;
-      await telegram(env, "sendMessage", {
-        chat_id: sohbet,
-        text: `🗑️ ${kodGoster(kod)} (${kod}) silinsin mi?\nEvet derseniz kanaldaki ${sayi} mesajı silinir ve bir daha önerilmez. Paylaşım tarihleri botun kaydında kalır.`,
-        reply_markup: eminMisin("-", kod),
-      });
-      return `Onay düğmeleri gönderildi (${sayi} mesaj). Kullanıcı "Evet"e basmadan hiçbir şey silinmez.`;
+    async hicOnayIste() { // 13 Kasım (Patron, kural 41): ekibe "Sil" düğmesi gitmez — silme sadece Patron ve Venom'da
+      return "Silme bende değil: silme sadece Patron ve Venom'dadır. Patron Venom'a yazarsa Venom stoğa bakıp yapar.";
     },
 
     async paylasimOnizle(msg, kod) {

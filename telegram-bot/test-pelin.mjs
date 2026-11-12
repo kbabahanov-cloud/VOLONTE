@@ -764,7 +764,7 @@ test("boy güçlendirme: istemin başında LENGTH RULE + FORBIDDEN; system_promp
 });
 
 // ---------- 3627 video hatası + müzik denemesi (3 Kasım gece) ----------
-test("Veo reddederse aynı kareyle Kling 4.0; katalog fotoğrafından video kartı; müzik denemesi; DENEME yayına gitmez; dekor temizlenir; hata Türkçe", async () => {
+test("13 Kasım (kural 67): Veo reddederse Pelin kendiliğinden başka araca GEÇMEZ ve yeniden GÖNDERMEZ — iş durur, Venom'a bildirilir, karar Patron'da; katalog fotoğrafından video kartı; dekor temizlenir; hata Türkçe", async () => {
   const { temizOrtam, falHataTr } = await import("./pelin.js");
   assert.ok(!/envelope\b.*Atmosphere|velvet bow/.test(temizOrtam("Minimal studio with a plain muted green backdrop and no props beyond a small paper envelope. Atmosphere is whimsical, with ornate floral embroidery, velvet bow and long gloves as styling cues.").split("No props")[0]));
   assert.equal(falHataTr('[{"loc":["body"],"msg":"The model did not generate the expected output for this prompt."}]'), "araç bu istemi işleyemedi (istem uzun ya da içerik filtresine takıldı)");
@@ -793,23 +793,18 @@ test("Veo reddederse aynı kareyle Kling 4.0; katalog fotoğrafından video kart
   assert.ok(veo[0].govde.prompt.length <= 1900);
   assert.match(veo[0].govde.prompt, /Setting and atmosphere: black gold studio/);
   assert.ok(!/envelope|green backdrop/.test(veo[0].govde.prompt.replace(/props or accessories such as hats, gloves or envelopes/, "")));
-  const kl = o.falIstek.filter((x) => x.uc === "kling/v4/image-to-video");
-  assert.equal(kl.length, 1);
-  assert.equal(kl[0].govde.start_image_url, "https://img/katalog.jpg");
-  const mz = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video");
-  assert.equal(mz.govde.audio_url, "https://pelin.test/dosya/" + "m".repeat(32));
-  const on = o.g.find((x) => /ÖNİZLEME — 3627/.test(x.govde.text || ""));
-  assert.match(on.govde.text, /🎵 Müzik: romantik örnek videonun müziği[\s\S]*↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4\.0 kullanıldı\.[\s\S]*🧪 DENEME — kanala ve siteye HİÇ GİTMEZ/);
-  assert.ok(!/did not generate/.test(on.govde.text));
-  const yayin = on.govde.reply_markup.inline_keyboard[0][0];
-  assert.equal(yayin.text, "💾 Beğendim (yayına gitmez)");
-  await bas(o, MURAT, yayin.callback_data);
-  await bas(o, MURAT, `${yayin.callback_data}:evet`);
-  assert.equal((await teslim(o)).length, 0); // DENEME hiç yayına gitmez
-  assert.match(o.g.filter((x) => x.metod === "editMessageText").at(-1).govde.text, /denemesi beğenildi ve saklandı — DENEME olduğu için kanala\/siteye gönderilmez/);
+  // hata → Kling'e geçmez, Veo'ya ikinci kez göndermez; iş "uyari"da bekler
+  assert.equal(o.falIstek.filter((x) => x.uc === "kling/v4/image-to-video").length, 0);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video").length, 0);
+  await cronlar(o, 6);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/veo3.1/image-to-video").length, 1);
   const is = JSON.parse([...o.depo.entries()].filter(([k]) => k.startsWith("pelin:is:3627-") && k !== "pelin:is:3627-onayli").at(-1)[1]);
-  assert.ok(is.videoSessiz && is.video !== is.videoSessiz); // sessiz hali saklı (müzik değiştirilebilir)
-  assert.ok(is.gecmis.some(([, t]) => /Veo 3\.1 \(1080p\) işleyemedi \(araç bu istemi işleyemedi/.test(t)));
+  assert.equal(is.durum, "uyari");
+  assert.deepEqual(is.sorunlar, ["video üretilemedi: araç bu istemi işleyemedi (istem uzun ya da içerik filtresine takıldı) — kendiliğinden yeniden gönderilmedi, karar sizde"]);
+  assert.ok(!is.aracYedek && !is.hfYedek);
+  const bildirim = JSON.parse(o.depo.get("venom:pelinHata"));
+  assert.deepEqual(bildirim.map((x) => [x.kod, x.asama]), [["3627", "video"]]);
+  assert.ok(!o.g.some((x) => /did not generate/.test((x.govde && (x.govde.text || x.govde.caption)) || "")));
 });
 
 

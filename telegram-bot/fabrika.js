@@ -1352,14 +1352,14 @@ export function fiyatSorusu(metin) {
 }
 export async function fiyatCevabi(env, m, tg) {
   const kodlar = fiyatSorusu(m.text);
-  if (!kodlar) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Sadece model kodunu yazın (ör. 3394 ya da 3394 fiyat); satış fiyatını söylerim." });
+  if (!kodlar) return tg(env, "sendMessage", { chat_id: m.chat.id, text: "Ben sadece kodla satış fiyatı söylerim. Model kodunu yazın." }); // 13 Kasım (Patron onaylı yazı, kural 48)
   const satir = [];
   for (const kod of kodlar) {
     const b = await stokIste(env, "/bilgi", { kod }).catch(() => null);
     const l = ((b && b.satirlar) || []).filter((r) => r.fiyat != null && Number(r.fiyat) > 0);
     if (!l.length) { satir.push(`${kod}: bu kod yok`); continue; }
     const fiyatlar = [...new Set(l.map((r) => Number(r.fiyat)))];
-    satir.push(fiyatlar.length === 1 ? `${kod}: ${fiyatYaz(fiyatlar[0])}` : `${kod}: ${l.map((r) => `${String(r.magaza).toUpperCase() === "BLACKROSE" ? "BLACK ROSE" : r.magaza} ${fiyatYaz(r.fiyat)}`).join(" · ")}`);
+    satir.push(fiyatlar.length === 1 ? `${kod} · satış fiyatı: ${fiyatYaz(fiyatlar[0])}` : `${kod} · satış fiyatı: ${l.map((r) => `${String(r.magaza).toUpperCase() === "BLACKROSE" ? "BLACK ROSE" : r.magaza} ${fiyatYaz(r.fiyat)}`).join(" · ")}`);
   }
   return tg(env, "sendMessage", { chat_id: m.chat.id, text: satir.join("\n") });
 }
@@ -1639,7 +1639,9 @@ async function bildir(env, rec, metin, tg, ekstra = {}) {
   }
   return sonuc;
 }
-const kararKlavye = (id) => ({ inline_keyboard: [[{ text: "🔁 Repete ver", callback_data: `fk:r:${id}` }, { text: "🗑️ Sil", callback_data: `fk:s:${id}` }, { text: "⏳ Beklesin", callback_data: `fk:b:${id}` }]] });
+// 13 Kasım (Patron, kural 41): ekibe giden kartta "Sil" düğmesi yok — silme sadece Patron ve Venom'da
+export const SILME_YOK = "Silme sadece Patron ve Venom'dadır.";
+const kararKlavye = (id) => ({ inline_keyboard: [[{ text: "🔁 Repete ver", callback_data: `fk:r:${id}` }, { text: "⏳ Beklesin", callback_data: `fk:b:${id}` }]] });
 
 async function repeteGeldi(env, rec, kim, renkler, tg, simdi) {
   const repeteydi = rec.tur === "repete" || ["repete", "sureSoruluyor"].includes(rec.durum);
@@ -1903,7 +1905,7 @@ async function azKaldi(env, tg, rec, { kim }, simdi, aynen) {
   await siparisYaz(env, rec);
   if (rec.deneme) await denemeKaydi(env, rec.liste, `Az kaldı (${kim})`);
 }
-// Hemra'ya: "Bu mal fabrikada bitti. Mağaza stoğu: X. Ne yapalım?" [🔁 Repete öner] [🗑 Sil öner] [⏳ Stok bitene kadar bekle]
+// Hemra'ya: "Bu mal fabrikada bitti. Mağaza stoğu: X. Ne yapalım?" [🔁 Repete] [⏳ Bitene kadar bekle] (13 Kasım: "Sil" yok — kural 41)
 // 11 Kasım (yeni akış): Sami'nin önerisi — hızlı satıyor ve az kaldıysa repete; satış yoksa bekle
 export function samiOnerisi(kalan, s7) {
   const bitis = s7 > 0 ? Math.max(1, Math.ceil(kalan / (s7 / 7))) : null;
@@ -1912,7 +1914,7 @@ export function samiOnerisi(kalan, s7) {
   if (s7 >= 7 || (bitis != null && bitis <= 7)) return `Hızlı satıyor (7 günde ${s7}), ${kalan} adet kaldı, ~${bitis} günde biter; repete öneriyorum.`;
   return `Yavaş satıyor (7 günde ${s7}), ${kalan} adet kaldı, ~${bitis} günde biter; bitene kadar beklenebilir.`;
 }
-// Önerilen repete dağılımı: son istekteki renk/beden oranı, en az 40 adede ölçeklenir, 4'ün katlarına yuvarlanır (seri = 4)
+// Önerilen repete dağılımı (SADECE ÖNERİ — 13 Kasım: alt sınır yok, adedi Hemra / Patron belirler): son istekteki renk/beden oranı, 40 adede ölçeklenir, 4'ün katlarına yuvarlanır (seri = 4)
 export function dagilimOner(onceki, rec = null) {
   const m = new Map();
   const ekle = (renk, g, adet) => { const r = String(renk || "").trim(); if (!r || !(Number(adet) > 0)) return; const x = m.get(r) || { renk: r, buyuk: 0, kucuk: 0 }; x[g === "b" ? "buyuk" : "kucuk"] += Number(adet); m.set(r, x); };
@@ -1953,7 +1955,7 @@ async function hemraKartiYeni(env, tg, rec, tur, kim, simdi) {
     `💡 Sami: ${samiOnerisi(kalan, s7)}`,
     dagilim ? `Repete dağılımı: ${dagilimYazi(dagilim)} (toplam ${dagilimAdet(dagilim)} adet)` : null,
     "Ne yapalım?"].filter(Boolean).join("\n");
-  const kl = { inline_keyboard: [[{ text: "🔁 Repete", callback_data: `fh:r:${rec.id}` }], [{ text: "⏳ Bitene kadar bekle", callback_data: `fh:w:${rec.id}` }], [{ text: "🗑 Sil", callback_data: `fh:s:${rec.id}` }]] };
+  const kl = { inline_keyboard: [[{ text: "🔁 Repete", callback_data: `fh:r:${rec.id}` }], [{ text: "⏳ Bitene kadar bekle", callback_data: `fh:w:${rec.id}` }]] }; // 13 Kasım (kural 41): "Sil" yok
   rec.hemraMesaj = await kartGonderKopya(env, tg, rec, await koordinatorId(env, simdi), metin, kl);
   if (rec.hemraMesaj) rec.hemraMesaj.push(metin);
   rec.hemraTur = tur;
@@ -2124,6 +2126,7 @@ export async function zincirDugmesi(env, cq, tg, simdi) {
   const yetkili = [sorumlu(env), String(env.BR_SORUMLU || "").split(",")[0].trim()].includes(String(cq.from.id)) || muratMi(env, cq.from.id);
   if (!yetkili) return cevapla("Bu karar Hemra'da.");
   if (!rec || !["bitti", "gelecek", "repete", "bekliyor"].includes(rec.durum) || rec.hemraOneri) return cevapla(rec && rec.hemraOneri ? `${rec.hemraOneri.kim} zaten seçti.` : "Bu karar artık geçerli değil.");
+  if (islem === "s" && !muratMi(env, cq.from.id)) return cevapla(SILME_YOK, true); // 13 Kasım (kural 41): eski karttaki "Sil" düğmesi
   let oneri = { r: "repete", s: "sil", w: "bekle", q: "sor" }[islem];
   if (!oneri) return cevapla("Geçersiz düğme.");
   // 12 Kasım (Patron): Hemra "Repete" derse (hangi karttan olursa olsun, ör. "az kaldı") dağılım AYNI kartta belirlenir → Patron BİR KEZ onaylar → fabrika; iş Hemra'ya geri dönmez
@@ -2201,7 +2204,7 @@ export async function bittiKararAdimi(env, simdi, tg) {
     if (k.karar === "repete") {
       await bitenCikar(env, rec.kod);
       Object.assign(rec, { karar: "repete", durum: rec.durum === "bitti" ? "kapandi" : rec.durum });
-      await tg(env, "sendMessage", { chat_id: hemra, text: `${bas}: ✅ Patron "repete" dedi. Repete taslağı Venom'da (Patron onayıyla fabrikaya gider, en az 40 adet).` });
+      await tg(env, "sendMessage", { chat_id: hemra, text: `${bas}: ✅ Patron "repete" dedi. Repete taslağı Venom'da (Patron onayıyla fabrikaya gider).` });
     } else if (k.karar === "sil") {
       const st = rec.deneme ? null : await magazaStogu(env, rec.kod);
       if (rec.deneme) { rec.karar = "sil"; rec.durum = "kapandi"; await tg(env, "sendMessage", { chat_id: hemra, text: `${bas}: Patron "sil" dedi — DENEME olduğu için hiçbir şey silinmedi.` }); }
@@ -2335,6 +2338,7 @@ export async function kararDugmesi(env, cq, tg, simdi) {
   const hepsiniYaz = async (metin) => { for (const [chat, mesaj] of rec.kararMesajlari || []) await tg(env, "editMessageText", { chat_id: chat, message_id: mesaj, text: `${rec.deneme ? DENEME : ""}${metin}` }); };
   if (islem === "v") { await cevapla("Vazgeçildi"); return tg(env, "editMessageText", { ...benim, text: `${rec.deneme ? DENEME : ""}${rec.kod} – fabrika bitti dedi. Ne yapalım?`, reply_markup: kararKlavye(rec.id) }); }
   if (islem === "s" && patronMu(env, cq.from.id)) return kararDugmesi(env, { ...cq, data: `fk:S:${id}` }, tg, simdi); // Patron: tek onay (2 Kasım)
+  if ((islem === "s" || islem === "S") && !patronMu(env, cq.from.id)) return cevapla(SILME_YOK, true); // 13 Kasım (kural 41): eski karttaki "Sil" düğmesi
   if (islem === "s") {
     const ids = [...new Set((((await env.KAYIT.get("kodlar", "json")) || {})[rec.kod] || []).flatMap((g) => g.ids))].filter((x) => x > 0);
     await cevapla("Emin misiniz?");

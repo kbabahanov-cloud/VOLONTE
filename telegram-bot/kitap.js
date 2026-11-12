@@ -47,6 +47,15 @@ export function paraSinirlari(metin) {
   return s;
 }
 
+// Kitap okunamaz / tablo bozulursa kullanılan değerler (testte kitaptaki tabloyla AYNI olduğu doğrulanır)
+export const SINIR_VARSAYILAN = { venom: { ay: 50 }, kemal: { ay: 20 }, selin: { ay: 10 }, sami: { ay: 5 }, pelin: { gun: 10, ay: 100 } };
+// Bir botun para sınırı (kural 74): kitaptaki tablodan; { ay, gun? }
+export async function botSiniri(env, bot, simdi = Math.floor(Date.now() / 1000)) {
+  let s = null;
+  try { s = paraSinirlari(await kitapMetni(env, simdi))[bot]; } catch { s = null; }
+  return s && s.ay ? s : SINIR_VARSAYILAN[bot] || { ay: 0 };
+}
+
 export async function kitapMetni(env, simdi = Math.floor(Date.now() / 1000)) {
   if (bellek.metin && simdi - bellek.zaman < BELLEK_SN) return bellek.metin;
   let metin = null;

@@ -16,7 +16,7 @@ import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
 // denemesi gelecek (Veo 3.1 Lite / Kling 3.0 Pro / Seedance 2.0, kullanıcının seçtiği 2 model). Anahtar girilse bile çalışmaz.
 export const URETIM_ONAYLI = false;
 // Pelin bütçesi (kullanıcı kararı 30 Ekim): ekibin 80 $ Claude sınırından AYRI, aylık 150 $; %80'de uyarı.
-export const PELIN_AYLIK_SINIR_USD = 150;
+export const PELIN_AYLIK_SINIR_USD = 100; // 13 Kasım (kural 74)
 export const PELIN_UYARI_ORANI = 0.8;
 export const ayAnahtari = (simdi) => `uretim-harcama:${new Date((simdi + 3 * 3600) * 1000).toISOString().slice(0, 7)}`;
 export const DENEME_SINIR_USD = 15;

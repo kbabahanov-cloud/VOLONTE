@@ -813,21 +813,21 @@ test("Sami beyni: Hemra serbest yazı ('siyahtan 5', 'bu sefer isteme') listeye 
   assert.equal(o.claude.length, n);
 });
 
-test("Sami beyni: aylık 30 $ sınır — 24 $'da Murat'a uyarı, dolunca beyin durur (komutlar çalışır); Aziz araçla listeye işleyemez", async () => {
+test("Sami beyni (13 Kasım, kural 74): aylık sınır kitaptan (5 $) — %80 uyarısını Sami değil Venom verir; dolunca beyin durur (komutlar çalışır); Aziz araçla listeye işleyemez", async () => {
   const { guncelleme: g2 } = await import("./sami.js");
   const o = beyinOrtami([metinCevap("Merhaba"), aracCevap("eksik_listesine_isle", { kararlar: [], hepsini_onceki_gibi: true }), metinCevap("Bunu Hemra yapabilir.")]);
   o.env.EKIP_IDS = "333,444";
   const ayK = `beyin:harcama:${new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7)}`;
-  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "23.9999" }) });
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "3.9999" }) });
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "selam" } }, o.env);
-  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "111" && /%80/.test(x.govde.text)));
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => /%80/.test(x.govde.text))); // uyarı Venom'dan gelir (tek tablo)
   await g2({ message: { chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Aziz" }, text: "hepsini önceki gibi iste" } }, o.env);
   assert.match(o.claude.at(-1).messages.at(-1).content[0].content, /Kontrol kartınızdaki model için/); // 10 Kasım: "sadece Hemra ve Murat" yok
-  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "30" }) });
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: ayK, v: "5" }) });
   const n = o.claude.length;
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "bugün ne sattı?" } }, o.env);
   assert.equal(o.claude.length, n);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /bütçesi \(30 \$\) doldu/);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /bütçesi \(5 \$\) doldu/);
   await g2({ message: { chat: { id: 111, type: "private" }, from: { id: 111, first_name: "Murat" }, text: "/stok" } }, o.env);
   assert.ok(cagri(o.g, "sendMessage").length > 0);
 });
@@ -1678,9 +1678,9 @@ test("Janet: Patron 'sadece fiyat' der → kod yazınca satış fiyatı (tek sat
   assert.ok(await f.fiyatKisisiMi(o.env, 777));
   o.g.length = 0;
   await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Janet" }, text: "3394 3627 price" } }, o.env);
-  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "3394: 33,94 $\n3627: bu kod yok");
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "3394 · satış fiyatı: 33,94 $\n3627: bu kod yok"); // 13 Kasım: Patron onaylı yazı
   await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Janet" }, text: "/stok 3394" } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /^Sadece model kodunu yazın/);
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, "Ben sadece kodla satış fiyatı söylerim. Model kodunu yazın.");
   assert.ok(!cagri(o.g, "sendMessage").some((x) => /adet|stok:|kâr|alış|kasa|müşteri/i.test(x.govde.text) && String(x.govde.chat_id) === "777"));
 });
 
@@ -2473,8 +2473,7 @@ test("REPETE KARTI: Fuat'a ön haber → Hemra kartı → Patron kararı → Fua
   const giden = (chat) => o.g.filter((x) => String(x.govde.chat_id) === String(chat)).map((x) => x.govde.text || x.govde.caption || "");
   const tr = (t) => gunAnahtari(t).split("-").reverse().join(".");
   const simdi = Date.UTC(2026, 10, 11, 12, 0) / 1000; // çarşamba 15:00
-  // 40'tan az → başlamaz
-  assert.match((await rk.oneriAc(o.env, tg2, { kod: "TEST-009", dagilim: [{ renk: "beyaz", buyuk: 15, kucuk: 15 }], deneme: true, test: true, kalan: 4, satis7: 18 }, simdi)).hata, /en az 40 adet/);
+  // 13 Kasım (Patron, kural 29): 40 adet alt sınırı YOK (adedi Hemra / Patron belirler)
   o.depo.set("sami:repeteIslem", JSON.stringify([{ tur: "deneme", kod: "TEST-001", magaza: "VOLONTE", kalan: 4, satis7: 18, donSn: 180, dagilim: [{ renk: "beyaz", buyuk: 20, kucuk: 20 }] }]));
   await rk.repeteKartAdimi(o.env, simdi, tg2);
   assert.equal(String(o.g[0].govde.chat_id), "557");
@@ -2707,7 +2706,7 @@ test("YENİ AKIŞ DENEMESİ: ön haberler → Aziz kartı (satış + [Depoda var
   const hk = o.g.find((x) => String(x.govde.chat_id) === "333" && x.govde.reply_markup);
   const KART = `🧪 DENEME – üretim yapmayın\n🟦 VOLONTE · TEST-002\n❌ Fabrikada bitti (Sinem).\nMağazada kalan: 4 adet\n${SATIS}\n💡 Sami: Hızlı satıyor (7 günde 18), 4 adet kaldı, ~2 günde biter; repete öneriyorum.\nRepete dağılımı: beyaz · büyük 20, küçük 20 (toplam 40 adet)`;
   assert.equal(hk.govde.caption, `${KART}\nNe yapalım?`);
-  assert.deepEqual(hk.govde.reply_markup.inline_keyboard.map((s) => s.map((b) => b.text)), [["🔁 Repete"], ["⏳ Bitene kadar bekle"], ["🗑 Sil"]]);
+  assert.deepEqual(hk.govde.reply_markup.inline_keyboard.map((s) => s.map((b) => b.text)), [["🔁 Repete"], ["⏳ Bitene kadar bekle"]]); // 13 Kasım (kural 41): ekip kartında "Sil" yok
   const sip = hk.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":").slice(2).join(":");
   // 6) Hemra [Repete] → aynı kart dağılım onayına döner
   o.g.length = 0;
@@ -2719,11 +2718,17 @@ test("YENİ AKIŞ DENEMESİ: ön haberler → Aziz kartı (satış + [Depoda var
   assert.equal((await kuyruk("bittiOneri")).length, 0); // eski Patron kartı yolu kullanılmaz
   await bas(333, `fh:w:${sip}`, "Hemra"); // ikinci seçim işlemez
   assert.match(o.g.at(-1).govde.text, /zaten seçti/);
-  // dağılımı değiştir (yazıyla): 40'ın altı kabul edilmez
+  // dağılımı değiştir (yazıyla): 13 Kasım — alt sınır yok; 10'dan az yazılırsa BİR kez "N adet yazdınız. Doğru mu?"
   await bas(333, `rk:hd:${rid}`, "Hemra");
-  assert.match(yazilar(333).at(-1), /✏️ TEST-002 repete dağılımını yazın \(en az 40 adet\)\. Örnek: beyaz büyük 20 küçük 20$/);
-  await yazdi(333, "Hemra", "beyaz büyük 10");
-  assert.match(yazilar(333).at(-1), /Repete en az 40 adet olmalı \(yazdığınız toplam 10\)/);
+  assert.match(yazilar(333).at(-1), /✏️ TEST-002 repete dağılımını yazın\. Örnek: beyaz büyük 20 küçük 20$/);
+  o.g.length = 0;
+  await yazdi(333, "Hemra", "beyaz büyük 8");
+  const adetSoru = o.g.find((x) => x.metod === "sendMessage" && x.govde.reply_markup);
+  assert.match(adetSoru.govde.text, /❓ TEST-002 için 8 adet yazdınız\. Doğru mu\?$/);
+  assert.deepEqual(adetSoru.govde.reply_markup.inline_keyboard.map((s) => s.map((b) => b.text)), [["✅ Doğru", "✏️ Düzelt"]]);
+  o.g.length = 0;
+  await bas(333, `rk:az:${rid}`, "Hemra"); // ✏️ Düzelt → yeniden yazar
+  assert.match(o.g.find((x) => x.metod === "editMessageText").govde.text, /✏️ TEST-002: 8 adet düzeltilecek — dağılımı yeniden yazın\.$/);
   o.g.length = 0;
   await yazdi(333, "Hemra", "beyaz büyük 24 küçük 16");
   assert.match(o.g.find((x) => /^editMessage/.test(x.metod)).govde.caption, /🔁 Hemra: Repete\.\nDağılım: beyaz · büyük 24, küçük 16 \(toplam 40 adet\)$/);
@@ -2745,8 +2750,10 @@ test("YENİ AKIŞ DENEMESİ: ön haberler → Aziz kartı (satış + [Depoda var
   assert.equal((await kuyruk("bittiOneri")).length, 0);
   assert.ok((await kuyruk("rkSonuc")).some((x) => x.biriktir && /TEST-004: fabrikada bitti; Hemra "bitene kadar bekle" dedi/.test(x.metin)));
   const r3 = await yeniRec("TEST-005");
-  await bas(333, `fh:s:${r3.id}`, "Hemra");
-  assert.deepEqual((await kuyruk("bittiOneri")).map((x) => [x.kod, x.oneri, x.deneme]), [["TEST-005", "sil", true]]);
+  o.g.length = 0;
+  await bas(333, `fh:s:${r3.id}`, "Hemra"); // 13 Kasım (kural 41): eski karttaki "Sil" düğmesi — eleman basarsa hiçbir şey olmaz
+  assert.match(o.g.find((x) => x.metod === "answerCallbackQuery").govde.text, /Silme sadece Patron ve Venom/);
+  assert.equal((await kuyruk("bittiOneri")).length, 0);
   // temizlik
   o.depo.set("sami:islemler", JSON.stringify([{ tur: "akisTemizle" }]));
   await f.fabrikaZincirAdimi(o.env, simdi + 600, tg2);
@@ -3156,7 +3163,7 @@ test("12 Kasım (Patron) DÖNGÜ YOK: yeni akış açıkken Hemra'nın 'bitti' k
   await bas(600, `fc:b:${c.id}`, "Celal", 77);
   const hk = o.g.find((x) => String(x.govde.chat_id) === "333" && x.govde.reply_markup);
   assert.equal(yazi(hk), "🟦 VOLONTE · 5074\n❌ Fabrikada bitti (Celal).\nMağazada kalan: VOLONTE 8 adet\nSatış: son 7 günde 0 · toplam 0 (28.10'dan beri; yıllık veri henüz yok)\n💡 Sami: Satış yok, repete önerilmez; 8 adet var, bitene kadar beklemeyi öneriyorum.\nNe yapalım?");
-  assert.deepEqual(hk.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["🔁 Repete", "⏳ Bitene kadar bekle", "🗑 Sil"]);
+  assert.deepEqual(hk.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["🔁 Repete", "⏳ Bitene kadar bekle"]); // 13 Kasım (kural 41)
   assert.ok(!o.g.some((x) => String(x.govde.chat_id) === "557")); // Celal'in modeli: Fuat'a "bitti onayı" gitmez
   // Hemra "Repete" → AYNI kart dağılım ister (öneri yok: yazıyla) → [Patron'a gönder] → Patron'a TEK kart (rkOneri); eski "bittiOneri" kartı YOK
   o.g.length = 0;
@@ -3215,9 +3222,13 @@ test("12 Kasım (Patron, KALICI KURAL): repete dağılımı HER yazılışta anl
     assert.deepEqual(o.g.filter((x) => x.metod === "sendMessage").map((x) => x.govde.text), [cevap], yazi);
     assert.ok(!/Örnek|örnek/.test(son()));
   }
-  // Hemra 1: başta "/" — dağılım sayılır (20 adet → en az 40 uyarısı; yardım menüsü değil)
-  o.g.length = 0; await yaz("/5074 büyük siyah 20 adet");
-  assert.deepEqual(o.g.filter((x) => x.metod === "sendMessage").map((x) => x.govde.text), ["Repete en az 40 adet olmalı (yazdığınız toplam 20). Yeniden yazın."]);
+  // Hemra 1: başta "/" — dağılım sayılır (yardım menüsü değil). 13 Kasım: alt sınır yok; 10'dan az → BİR kez "Doğru mu?"
+  o.g.length = 0; await yaz("/5074 büyük siyah 8 adet");
+  assert.deepEqual(o.g.filter((x) => x.metod === "sendMessage").map((x) => x.govde.text), ["❓ 5074 için 8 adet yazdınız. Doğru mu?"]);
+  assert.deepEqual(o.g.find((x) => x.metod === "sendMessage").govde.reply_markup.inline_keyboard.flat().map((b) => b.callback_data), [`rk:ad:${rec.id}`, `rk:az:${rec.id}`]);
+  o.g.length = 0;
+  await rk.rkDugme(o.env, { id: "c1", from: { id: 333, first_name: "Hemra" }, data: `rk:az:${rec.id}`, message: { chat: { id: 333 }, message_id: 9001 } }, tg2, simdi);
+  assert.equal(o.g.find((x) => x.metod === "editMessageText").govde.text, "✏️ 5074: 8 adet düzeltilecek — dağılımı yeniden yazın.");
   // Hemra 3: "5074. Siyah 44-50. 40 adet" → kabul; kart güncellenir, [Patron'a gönder] gelir
   o.g.length = 0; await yaz("5074. Siyah 44-50. 40 adet");
   const kart = o.g.find((x) => /^editMessage/.test(x.metod) && x.govde.message_id === 2259);
@@ -3234,4 +3245,61 @@ test("12 Kasım (Patron, KALICI KURAL): repete dağılımı HER yazılışta anl
   assert.deepEqual((await rk.rkOku(o.env, rec2.id)).dagilim, S40);
   // bekleyen kart yokken "/" ile başlayan gerçek komut karta gitmez
   assert.equal(await rk.rkHemraYazi(o.env, { chat: { id: 333 }, from: { id: 333, first_name: "Hemra" }, text: "/start" }, tg2, simdi), false);
+});
+
+test("13 Kasım (Patron, kural 29): repete alt sınırı YOK; 10'dan az ya da 200'den fazla yazılırsa Hemra'ya BİR kez 'N adet yazdınız. Doğru mu?' (5 farklı yazılış); ✅ Doğru → dağılım karta işlenir; ikinci kez sorulmaz", async () => {
+  const rk = await import("./repete-kart.js");
+  assert.deepEqual([rk.ADET_SOR_ALT, rk.ADET_SOR_UST], [10, 200]);
+  const kur = async (kod) => {
+    const o = ortam();
+    Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557" });
+    o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 600, ad: "Celal Kayran", grup: "celal" }]));
+    o.depo.set("kodlar", JSON.stringify({}));
+    const tg2 = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 900 + o.g.length } }; };
+    const simdi = Math.floor(Date.now() / 1000);
+    const rec = await rk.rkHemradan(o.env, tg2, { id: `${kod}-x`, kod, grup: "celal", magaza: "VOLONTE", rkVeri: { kalan: 8, s7: 0, yil: 0, dagilim: null }, hemraMesaj: ["333", 2259, "yazi"] }, `🟦 VOLONTE · ${kod}\n❌ Fabrikada bitti (Celal Kayran).`, "Hemra", simdi);
+    const yaz = (text) => rk.rkHemraYazi(o.env, { chat: { id: 333 }, from: { id: 333, first_name: "Hemra" }, text }, tg2, simdi);
+    const bas = (data, kim = 333) => rk.rkDugme(o.env, { id: "c", from: { id: kim, first_name: kim === 333 ? "Hemra" : "Aziz" }, data, message: { chat: { id: kim }, message_id: 9001 } }, tg2, simdi);
+    return { o, rec, yaz, bas };
+  };
+  // 5 farklı yazılış: aralık dışı adet → tek soru (örnek kalıp yok), düğmeler ✅ Doğru / ✏️ Düzelt
+  for (const [yazi, n] of [["siyah büyük 8", 8], ["/5074 büyük siyah 8 adet", 8], ["5074. Siyah 44-50. 250 adet", 250], ["4 tane siyah büyük, 4 küçük", 8], ["SIYAH BUYUK 300", 300]]) {
+    const { o, rec, yaz } = await kur("5074");
+    o.g.length = 0;
+    assert.equal(await yaz(yazi), true, yazi);
+    const m = o.g.filter((x) => x.metod === "sendMessage");
+    assert.deepEqual(m.map((x) => x.govde.text), [`❓ 5074 için ${n} adet yazdınız. Doğru mu?`], yazi);
+    assert.deepEqual(m[0].govde.reply_markup.inline_keyboard, [[{ text: "✅ Doğru", callback_data: `rk:ad:${rec.id}` }, { text: "✏️ Düzelt", callback_data: `rk:az:${rec.id}` }]]);
+    assert.equal((await rk.rkOku(o.env, rec.id)).dagilim, null); // teyit gelmeden karta işlenmez
+  }
+  // aralık içi (10 ve 200 dahil) sorulmaz, doğrudan işlenir
+  for (const [yazi, n] of [["siyah büyük 10", 10], ["siyah büyük 100 küçük 100", 200], ["siyah büyük 20", 20]]) {
+    const { o, rec, yaz } = await kur("5074");
+    o.g.length = 0; await yaz(yazi);
+    assert.equal((await rk.rkOku(o.env, rec.id)).adet, n, yazi);
+    assert.ok(!o.g.some((x) => /Doğru mu/.test(x.govde.text || "")), yazi);
+  }
+  // ✅ Doğru → dağılım karta işlenir; başkası basamaz; soru bir kez
+  const { o, rec, yaz, bas } = await kur("5074");
+  await yaz("siyah büyük 8");
+  o.g.length = 0;
+  await bas(`rk:ad:${rec.id}`, 444); // Aziz basamaz
+  assert.equal(o.g.at(-1).govde.text, "Bu karar Hemra'da.");
+  o.g.length = 0;
+  await bas(`rk:ad:${rec.id}`);
+  assert.equal(o.g.find((x) => x.metod === "editMessageText" && x.govde.message_id === 9001).govde.text, "✅ 5074: 8 adet — Hemra \"doğru\" dedi.");
+  const r1 = await rk.rkOku(o.env, rec.id);
+  assert.deepEqual([r1.dagilim, r1.adet], [[{ renk: "siyah", buyuk: 8, kucuk: 0 }], 8]);
+  assert.match(o.g.filter((x) => x.metod === "sendMessage").at(-1).govde.text, /^✅ 5074 dağılımı: siyah · büyük 8 \(toplam 8 adet\)\. Karttaki "✅ Patron'a gönder"e basın\.$/);
+  o.g.length = 0;
+  await bas(`rk:ad:${rec.id}`); // aynı düğme ikinci kez → geçersiz
+  assert.equal(o.g.at(-1).govde.text, "Bu soru artık geçerli değil.");
+  // ✏️ Düzelt → yeniden yazar; ikinci kez aralık dışı yazsa da ARTIK sorulmaz (bir kez)
+  const k2 = await kur("5068");
+  await k2.yaz("siyah büyük 8");
+  await k2.bas(`rk:az:${k2.rec.id}`);
+  k2.o.g.length = 0;
+  await k2.yaz("siyah büyük 6");
+  assert.equal((await rk.rkOku(k2.o.env, k2.rec.id)).adet, 6);
+  assert.ok(!k2.o.g.some((x) => /Doğru mu/.test(x.govde.text || "")));
 });

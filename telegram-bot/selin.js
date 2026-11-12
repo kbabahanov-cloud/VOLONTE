@@ -12,7 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
-import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
@@ -180,6 +180,7 @@ export default {
   },
   async scheduled(olay, env) {
     if (!env.BOT_TOKEN) return;
+    try { await kitapOku(env, "selin"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Selin", tg); } catch { /* */ }
     try { await birikimAdimi(env, "selin", Math.floor(Date.now() / 1000), tg); } catch { /* bir sonraki çalışmada */ }
     try { await kartIletAdimi(env, "selin", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
@@ -1639,18 +1640,18 @@ async function dosyalariBagla(env, uid, kod, grup, dosyalar, simdi, { album = nu
   const gelen = [...bekleyen, ...dosyalar];
   if (ozelMi(eski) && eski.durum === "sitede" && eski.taslak && gelen.length && gelen.every((d) => d.tur === "video")) {
     const x = { ...eski, medya: [...(eski.medya || [])], taslak: { ...eski.taslak, videolar: [...(eski.taslak.videolar || [])] } };
-    const ekle = await oku(env, "selin:videoEkle", []);
+    const onayBekleyen = [];
     for (const md of gelen) {
       if (x.medya.some((y) => y.uid === md.uid)) continue;
       // taslak video sırası = medyadaki video sırası (sitenin "selin/<kod>/<n>" adresi)
       const n = x.medya.filter((y) => y.tur === "video").length;
       x.medya.push({ file_id: md.file_id, tur: "video", belge: md.belge || false, boyut: md.boyut || 0, w: md.w || 0, h: md.h || 0, uid: md.uid, yeniden: true, zaman: simdi });
       x.taslak.videolar[n] = { id: n, file_id: md.file_id, boyut: md.boyut || 0, w: md.w || 0, belge: Boolean(md.belge) };
-      if (!((md.boyut || 0) > VIDEO_SINIR)) ekle.push({ kod, id: n, kim: uid, zaman: simdi });
+      if (!((md.boyut || 0) > VIDEO_SINIR)) onayBekleyen.push({ kod, id: n, kim: uid, zaman: simdi }); // 13 Kasım (kural 62): onaysız siteye girmez
     }
     modeller[kod] = x;
     await yazKV(env, "selin:modeller", modeller);
-    await yazKV(env, "selin:videoEkle", ekle.slice(-50));
+    for (const y of onayBekleyen) await gecVideoOnayKarti(env, y, simdi);
     if (bekleyen.length) await env.KAYIT.delete(bekleyenAnahtar(uid));
     if (album) await env.KAYIT.put(`selin:album:${album}`, kod, { expirationTtl: 3600 });
     return { ...x, videoEklendi: true };
@@ -2226,7 +2227,35 @@ export async function videoDenetimAdimi(env, simdi, { zorla = false } = {}) {
   await env.KAYIT.put("venom:videoDenetim", JSON.stringify(sonuc), { expirationTtl: 30 * 86400 });
   return sonuc;
 }
-// Sitedeki modele SONRADAN gelen video (tekrar gönderim): taslağa eklenir, sitenin listesine doğrudan girer (yeniden onay yok)
+// 13 Kasım (Patron, kural 62): sitedeki modele SONRADAN gelen video Merdan ya da Hemra onayı olmadan siteye girmez.
+// Kart (Patron onaylı yazı): "🎬 <kod> için yeni video geldi. Siteye ekleyeyim mi?" [✅ Ekle] [❌ Ekleme] → Merdan + Hemra; ilk basan geçerli.
+const gecVideoAlicilar = async (env) => { const l = [...new Set([...kimlikler(env.BR_SORUMLU).slice(0, 1), ...kimlikler(env.HEMRA_ID).slice(0, 1)])]; return l.length ? l : sahipler(env); };
+export async function gecVideoOnayKarti(env, y, simdi) {
+  const bekleyen = await oku(env, "selin:videoOnay", {});
+  const a = `${y.kod}:${y.id}`;
+  if (bekleyen[a]) return; // aynı video için ikinci kart açılmaz (kural 39)
+  const kartlar = [];
+  for (const k of await gecVideoAlicilar(env)) {
+    const r = await tg(env, "sendMessage", { chat_id: k, text: `🎬 ${y.kod} için yeni video geldi. Siteye ekleyeyim mi?`, reply_markup: { inline_keyboard: [[{ text: "✅ Ekle", callback_data: `sn:${y.kod}:${y.id}` }, { text: "❌ Ekleme", callback_data: `sm:${y.kod}:${y.id}` }]] } }).catch(() => null);
+    if (r && r.ok && r.result) kartlar.push([String(k), r.result.message_id]);
+  }
+  bekleyen[a] = { ...y, kartlar, acildi: simdi };
+  await yazKV(env, "selin:videoOnay", bekleyen);
+  await defterSatir(env, "selin", { id: `selin:gecvideo:${a}`, tur: "onay", kod: String(y.kod), ne: "Sonradan gelen video: siteye eklensin mi?", kim: "Merdan / Hemra", durum: "acik", bot: "selin", acildi: simdi, guncel: simdi }).catch(() => null);
+}
+async function gecVideoKarari(env, cq, kod, id, ekle, kim, simdi, cevapla) {
+  const bekleyen = await oku(env, "selin:videoOnay", {});
+  const a = `${kod}:${id}`, y = bekleyen[a];
+  if (!y) return cevapla("Bu karta zaten cevap verildi.");
+  delete bekleyen[a];
+  await yazKV(env, "selin:videoOnay", bekleyen);
+  if (ekle) await yazKV(env, "selin:videoEkle", [...(await oku(env, "selin:videoEkle", [])), { kod: y.kod, id: y.id, kim: y.kim, zaman: simdi, onaylayan: kim }].slice(-50));
+  const sonuc = ekle ? `✅ ${kim}: ekle — video siteye ekleniyor.` : `❌ ${kim}: ekleme — video siteye girmedi.`;
+  for (const [chat, mesaj] of y.kartlar || []) await tg(env, "editMessageText", { chat_id: chat, message_id: mesaj, text: `🎬 ${kod} için yeni video geldi.\n${sonuc}` }).catch(() => null);
+  await defterSatir(env, "selin", { id: `selin:gecvideo:${a}`, tur: "onay", kod: String(kod), ne: "Sonradan gelen video: siteye eklensin mi?", kim, durum: "bitti", bot: "selin", acildi: y.acildi || simdi, guncel: simdi, kanit: ekle ? `${kim} onayladı` : `${kim} istemedi` }).catch(() => null);
+  return cevapla(ekle ? "Ekleniyor" : "Eklenmedi");
+}
+// Onaylanan geç video: taslağa eklenmişti; sitenin listesine girer
 export async function siteVideoEkleAdimi(env, simdi) {
   const l = await oku(env, "selin:videoEkle", []);
   if (!l.length) return;
@@ -2854,9 +2883,8 @@ async function siteListesi(env, sohbet, sayfa) {
   const parca = liste.slice((sayfa - 1) * boy, sayfa * boy);
   return tg(env, "sendMessage", {
     chat_id: sohbet,
-    text: `Sitedeki modeller (${liste.length}) — sayfa ${sayfa}:\n${parca.map((u) => `• ${u.kod} — ${u.baslik} · ${env.SITE_URL}/#model/${encodeURIComponent(u.kod)}`).join("\n")}\n\nKaldırmak için düğmeye basın (onay sorulur). Sonraki sayfa: /site ${sayfa + 1}`,
+    text: `Sitedeki modeller (${liste.length}) — sayfa ${sayfa}:\n${parca.map((u) => `• ${u.kod} — ${u.baslik} · ${env.SITE_URL}/#model/${encodeURIComponent(u.kod)}`).join("\n")}\n\nSiteden kaldırma sadece Patron ve Venom'dadır. Sonraki sayfa: /site ${sayfa + 1}`,
     disable_web_page_preview: true,
-    reply_markup: { inline_keyboard: parca.map((u) => [{ text: `🗑 ${u.kod} siteden kaldır`, callback_data: `sk:${u.kod}` }]) },
   });
 }
 
@@ -2931,6 +2959,9 @@ async function dugme(cq, env) {
     }
     return;
   }
+  // 13 Kasım (Patron, kural 41 ve 61): siteden kaldırma sadece Venom'dan (stok kontrolüyle) gelir — eski karttaki düğme çalışmaz
+  if (islem === "sk" || islem === "se") return cevapla("Siteden kaldırma sadece Patron ve Venom'dadır.");
+  if (islem === "sn" || islem === "sm") return gecVideoKarari(env, cq, kod, Number(ek), islem === "sn", kim, simdi, cevapla);
   if (islem === "sk") {
     await cevapla("Emin misiniz?");
     return tg(env, "editMessageReplyMarkup", { ...benim, reply_markup: { inline_keyboard: [[{ text: `🗑 Evet, ${kod} siteden kalksın`, callback_data: `se:${kod}` }, { text: "↩️ Vazgeç", callback_data: "sv0:" }]] } });

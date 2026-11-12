@@ -5,7 +5,7 @@
 // sadece okur; bu bot da sadece Sami'nin deposunu okur ve raporlar.
 //
 // Görevleri:
-//  - Stok bitince ekibe soru (🔁 Repete / 🗑 Sil / ⏳ Beklesin) — Kemal'den devraldı ("sami:aktif").
+//  - Stok bitince ekibe soru (🔁 Repete / ⏳ Beklesin; 13 Kasım: "Sil" yok) — Kemal'den devraldı ("sami:aktif").
 //  - /stok, /stok 3194
 //  - Kanalı izler: her paylaşımı, o andaki stok ve fiyatla kaydeder (kontrol için).
 //  - Her sabah 09:05 "Venom Ekip" grubuna rapor: köprü, biten/gelen/fiyatı değişen modeller, kontroller
@@ -14,6 +14,7 @@
 // Ayarlar: BOT_TOKEN, WEBHOOK_SECRET (secret) · ALLOWED_IDS, EKIP_IDS, SELF_URL, GITHUB_REPO (düz metin) ·
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
+import { kitapOku } from "./kitap.js";
 import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
 import { acikSessizlik } from "./magaza-saat.js";
 import { durdurulduMu } from "./durdurma.js";
@@ -117,6 +118,7 @@ export default {
   async scheduled(olay, env) {
     if (!env.STOK) return;
     const simdi = Math.floor(Date.now() / 1000);
+    try { await kitapOku(env, "sami"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     if (env.BOT_TOKEN) try { await patronDenemesi(env, "Sami", tg); } catch { /* */ }
     if (env.BOT_TOKEN) try { await birikimAdimi(env, "sami", simdi, tg); } catch { /* bir sonraki çalışmada */ }
     try { if (await kagitAcik(env, "sami", "kisiKontrol")) await kisiKontrolAdimi(env, "sami", tg); } catch { /* 9 Kasım: kişi /start kontrolü */ }
@@ -256,7 +258,7 @@ export async function guncelleme(u, env) {
     "📦 Ben Sayım Sami. Vegawin stoklarını okurum (hiçbir şeyi değiştirmem).",
     "/stok — köprünün durumu",
     "/stok 3194 — o modelin adedi, fiyatı ve durumu",
-    "Stok bitince 🔁 Repete / 🗑 Sil / ⏳ Beklesin sorusunu ben sorarım. Her sabah 09:05'te Venom Ekip grubuna rapor veririm.",
+    "Stok bitince 🔁 Repete / ⏳ Beklesin sorusunu ben sorarım (silme sadece Patron ve Venom'dadır). Her sabah 09:05'te Venom Ekip grubuna rapor veririm.",
     "Stok tablosunu (Google Sheets) 5 dakikada bir güncellerim. /tablo — tablo durumu (yönetici).",
     "Bana normal cümleyle de yazabilirsiniz: \"3596'dan kaç tane kaldı?\", \"bugün en çok ne sattı?\", \"Hemra listeyi onayladı mı?\"",
   ].join("\n") });

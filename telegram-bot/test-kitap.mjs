@@ -85,3 +85,34 @@ test("TEK KİTAP: kodda eski kural kitabı ve bilinen çelişkili cümleler kalm
   assert.match(k.ORTAK, /1 saat sonra hatırlatma, 1 saat sonra son hatırlatma/);
   assert.match(kitapBolumu(kitapDosya, "selin"), /Black Rose modeline "VOLONTE modeli" yazmaz/);
 });
+
+test("PARA SINIRLARI: kodda kalan sabitler kitaptaki tabloyla AYNI (Pelin 10 $/gün, 100 $/ay; Sami 5; Venom 50); kitap okunamazsa kullanılan değerler de aynı", async () => {
+  const { SINIR_VARSAYILAN, botSiniri } = await import("./kitap.js");
+  const tablo = paraSinirlari(kitapDosya);
+  assert.deepEqual(SINIR_VARSAYILAN, tablo);
+  const P = await import("./pelin.js");
+  assert.deepEqual([P.GUNLUK_SINIR_USD, P.AYLIK_SINIR_USD], [tablo.pelin.gun, tablo.pelin.ay]);
+  assert.equal((await import("./uretim.js")).PELIN_AYLIK_SINIR_USD, tablo.pelin.ay);
+  assert.equal((await import("./sami-beyin.js")).AYLIK_SINIR_USD, tablo.sami.ay);
+  assert.equal((await import("./venom-bot.js")).VENOM_SINIR_VARSAYILAN, tablo.venom.ay);
+  kitapBellegiSil();
+  // kitapta rakam değişince botun sınırı kod değişmeden değişir
+  const env = kvEnv({ "kitap:metin": kitapDosya.replace("Kemal 20 $/ay", "Kemal 35 $/ay") });
+  assert.deepEqual(await botSiniri(env, "kemal", 1), { ay: 35 });
+  assert.deepEqual(await botSiniri(env, "selin", 1), { ay: 10 });
+  kitapBellegiSil();
+  assert.deepEqual(await botSiniri(kvEnv(), "pelin", 1), { gun: 10, ay: 100 });
+  kitapBellegiSil();
+});
+
+test("PARA: botun aylık sayacı yoksa o ayın günlük kayıtlarından kurulur (13 Kasım'dan önceki günler kaybolmaz)", async () => {
+  const H = await import("./harcama.js");
+  const m = new Map([["harcama-gun:selin:2026-11-10", "1500000"], ["harcama-gun:selin:2026-11-12", "2500000"], ["harcama-gun:selin:2026-10-30", "9000000"], ["harcama-gun:kemal:2026-11-12", "700000"]]);
+  const env = { BOT_ADI: "selin", KAYIT: { get: async (k) => (m.has(k) ? m.get(k) : null), put: async (k, v) => { m.set(k, v); }, list: async ({ prefix }) => ({ keys: [...m.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })) }) } };
+  const t = Date.UTC(2026, 10, 12, 9) / 1000;
+  assert.equal(await H.botAyHarcanan(env, "selin", t), 4);
+  assert.equal(m.get("harcama-ay:selin:2026-11"), "4000000");
+  await H.harcamaEkle(env, "claude-opus-5-5", { input_tokens: 250000 }, t); // 1 $
+  assert.equal(await H.botAyHarcanan(env, "selin", t), 5);
+  assert.equal(await H.gunlukHarcanan(env, "selin", t), 3.5);
+});

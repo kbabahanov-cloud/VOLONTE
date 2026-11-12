@@ -6,7 +6,7 @@
 //  - Bütçe: ekibin 80 $'ından ayrı, aylık 30 $ (11 Kasım; önce 10 $); %80'de (24 $) Murat'a uyarı; dolunca beyin durur, komutlar çalışır.
 //  - Sohbet geçmişi ve harcama Sami'nin deposunda (StokDO ayar; KV günlük yazma sınırını harcamaz).
 
-import { kitapOku } from "./kitap.js";
+import { kitapOku, botSiniri } from "./kitap.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { claudeTur } from "./ai-istemci.js";
 import { markaKarari } from "./yayin-kontrol.js";
@@ -15,7 +15,7 @@ import { indirimliMi } from "./stok.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
 
 export const BEYIN_MODEL = "claude-opus-5-5"; // 11 Kasım (Patron onayı, kalıcı): Haiku → Opus
-export const AYLIK_SINIR_USD = 30; // 11 Kasım (Patron): Opus ile aylık 30 $, %80'de uyarı
+export const AYLIK_SINIR_USD = 5; // 13 Kasım (Patron, kural 74): Sami 5 $/ay — asıl değer kitaptan okunur (botSiniri); %80 uyarısını Venom verir
 export const UYARI_ORANI = 0.8;
 const FIYAT = { giris: 0.1, cikis: 0.5, okuma: 0.01 }; // $ / milyon token (100K altı istem)
 // 10 Kasım (Patron): kalıba uymayan eksik yazısını OPUS anlar (Sami'nin beyin modeli Patron izni olmadan değiştirilmez)
@@ -38,9 +38,6 @@ async function harcamaEkle(env, u, simdi, tg, model = null) {
   const once = await buAyHarcanan(env, simdi);
   const yeni = Math.round((once + usd) * 1e6) / 1e6;
   await ayarYaz(env, `beyin:harcama:${ay(simdi)}`, yeni);
-  if (once < AYLIK_SINIR_USD * UYARI_ORANI && yeni >= AYLIK_SINIR_USD * UYARI_ORANI) {
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `⚠️ Sami'nin beyni bu ay ${yeni.toFixed(2)} $ harcadı (aylık sınır ${AYLIK_SINIR_USD} $, %80). Sınır dolunca beyin durur, komutlar çalışmaya devam eder.` });
-  }
 }
 
 // 13 Kasım (Patron, TEK KİTAP): kurallar KURALLAR-PATRON.md'den (kitapOku) gelir; burada sadece çalışma talimatı durur.
@@ -121,7 +118,7 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
 export async function beyinCevapla(env, m, tg, simdi, { cikti = false } = {}) {
   const yaz = (text) => (cikti ? text : tg(env, "sendMessage", { chat_id: m.chat.id, text, disable_web_page_preview: true }));
   if (!env.ANTHROPIC_API_KEY) return yaz("🧠 Beynim henüz bağlı değil (ANTHROPIC_API_KEY). Komutlar çalışıyor: /stok, /eksik.");
-  if ((await buAyHarcanan(env, simdi)) >= AYLIK_SINIR_USD) return yaz(`🧠 Bu ayın beyin bütçesi (${AYLIK_SINIR_USD} $) doldu; gelecek ay açılır. Komutlar çalışıyor: /stok, /eksik.`);
+  { const sinir = (await botSiniri(env, "sami", simdi)).ay; if ((await buAyHarcanan(env, simdi)) >= sinir) return yaz(`🧠 Bu ayın beyin bütçesi (${sinir} $) doldu; gelecek ay açılır. Komutlar çalışıyor: /stok, /eksik.`); }
   const sayac = `beyin:sayac:${gunAnahtari(simdi)}`;
   const n = Number(await ayarOku(env, sayac, 0));
   if (n >= GUNLUK_MESAJ) return yaz("Bugünkü mesaj sınırı doldu; komutlar çalışıyor.");
@@ -195,7 +192,7 @@ const YORUM_SEMA = {
 const YORUM_GUNLUK = 60; // 10 Kasım: Opus yorumu günde en fazla 60 (bütçe koruması)
 export async function yaziYorumla(env, metin, kartlar, simdi, tg) {
   if (!env.ANTHROPIC_API_KEY) return null;
-  if ((await buAyHarcanan(env, simdi)) >= AYLIK_SINIR_USD) return null;
+  if ((await buAyHarcanan(env, simdi)) >= (await botSiniri(env, "sami", simdi)).ay) return null;
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 30_000 });
   const sistem = `Bir kadın giyim toptancısında mağaza çalışanı, fabrikaya istenecek eksik listesindeki kendi kontrol kartına Telegram'dan yazıyor. Mesajı yapılandır.
 Kartlarındaki modeller (kod, marka, kartta seçilen beden: k=Küçük 38-44, b=Büyük 44-50, i=ikisi de, null=seçilmedi): ${JSON.stringify(kartlar)}.
