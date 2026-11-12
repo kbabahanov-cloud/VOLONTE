@@ -3117,4 +3117,8 @@ test("12 Kasım: kartYenidenGonder — listenin açık fabrika kartı kapanır (
   const oku = async (id) => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `fs:${id}` }) })).json()).v);
   assert.equal((await oku(a.id)).durum, "kapandi");
   assert.equal((await oku(b.id)).durum, "bekliyor"); // başka liste etkilenmez
+  // kayıt numarasıyla da çalışır
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "kartYenidenGonder", ids: [b.id], neden: "x" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi + 1, tgS);
+  assert.deepEqual(JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).l.map((x) => x.eski), [b.id]);
 });

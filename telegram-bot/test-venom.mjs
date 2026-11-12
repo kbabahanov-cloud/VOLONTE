@@ -957,7 +957,7 @@ test("11 Kasım VENOM LİSTELERİ (B1–B5): Bekleyenler = sadece Patron kararı
   const simdi = ist(11, 15, 0);
   const kart = (id, tur, gunOnce, ek = {}) => o.depo.set(`venom:bot:is:${id}`, JSON.stringify({ id, tur, durum: "bekliyor", zaman: simdi - gunOnce * 86400, metin: "📋 Fuat'a gidecek mutabakat (birebir; altında ✅ Mutabıkım / ❌ Uyuşmuyor / ⏳ Sonra düğmeleri):\n\n…", ...ek }));
   kart("m1", "mutabakat", 5); // eski → düşer
-  kart("m2", "mutabakat", 2); // aynı iş, eski kopya → düşer
+  kart("m2", "mutabakat", 1.5); // aynı iş, eski kopya → düşer (12 Kasım: 2 gün idi; mesaj gerçek saatle işlendiği için 12.11 15:00'ten sonra 3 günü geçip "eskidi" oluyordu)
   kart("m3", "mutabakat", 1);
   kart("s1", "selinTaslak", 5, { metin: "📝 Selin — 3627 için site taslağı hazırlansın mı? (başlık + EN/FR/PT açıklama; Selin'in yapay zekâ maliyeti ~0,05 $). Taslak hazır olunca onay kartı buraya gelir." }); // 5 günlük → düşer
   kart("f1", "mesaj", 0.1, { kime: "fuat", govde: "Fuat Bey merhaba, 3490 modelinden repete rica ediyoruz: siyah 8. Toplam yaklaşık 40 adet. Ne zaman hazır olur?", metin: "✉️ Fuat'a gidecek mesaj (Sami adına, birebir):\n\n…" });
