@@ -2841,18 +2841,26 @@ test("REPETE (gerçek akış): Patron'un Venom'dan istediği repete → Hemra'ya
   const kartlar = o.g.filter((x) => String(x.govde.chat_id) === "333");
   assert.equal(kartlar.length, 2); // "100" model değil
   assert.equal(kartlar[0].govde.text, "🔁 REPETE ÖNERİSİ — 🌹 BLACK ROSE · 3490\nPatron repete istedi · mağazada kalan: 2 adet\nSatış hızı: son 7 günde 6 adet · bu hızla ~3 günde biter\nÖnerilen repete: siyah · büyük 32, küçük 12 (toplam 44 adet)");
-  assert.deepEqual(kartlar[0].govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Patron'a gönder", "✏️ Dağılımı değiştir", "❌ Gerek yok"]);
+  assert.deepEqual(kartlar[0].govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Fuat'a gönder", "✏️ Dağılımı değiştir", "❌ Gerek yok"]); // 12 Kasım (Patron): repeteyi Patron başlattı → Hemra'dan doğrudan fabrikaya
   // 12 Kasım (Patron): satış hızı 0 → Sami repete ÖNERMEZ; kartta "satış yok, repete önerilmez"
   assert.equal(kartlar[1].govde.text, "🔁 REPETE ÖNERİSİ — 🟦 VOLONTE · 3477\nPatron repete istedi · mağazada kalan: 5 adet\nSatış hızı: son 7 günde satış yok, repete önerilmez\nÖnerilen repete: yok — lütfen yazın");
   assert.deepEqual(kartlar[1].govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✏️ Dağılımı değiştir", "❌ Gerek yok"]);
-  // önerisi olmayan modelde Hemra dağılımı yazar → Patron'a gönderilebilir
+  // önerisi olmayan modelde Hemra dağılımı yazar → kart DOĞRUDAN Fuat'a gider; Patron'a ikinci onay kartı GİTMEZ (12 Kasım, Patron)
   const id = kartlar[1].govde.reply_markup.inline_keyboard[0][0].callback_data.split(":").slice(2).join(":");
   const bas = (data) => g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data, message: { chat: { id: 333 }, message_id: 9 } } }, o.env);
   await bas(`rk:hd:${id}`);
   await g2({ message: { chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, text: "beyaz büyük 20 küçük 20" } }, o.env);
+  assert.match(o.g.filter((x) => String(x.govde.chat_id) === "333").at(-1).govde.text, /Karttaki "✅ Fuat'a gönder"e basın\.$/);
+  o.g.length = 0;
   await bas(`rk:ho:${id}`);
-  const on = await (await stok("kuyruk-al", { ad: "rkOneri" })).json();
-  assert.deepEqual(on.map((x) => [x.kod, x.dagilim, x.adet, x.magaza]), [["3477", "beyaz · büyük 20, küçük 20", 40, "VOLONTE"]]);
+  assert.deepEqual(await (await stok("kuyruk-al", { ad: "rkOneri" })).json(), []); // Patron'a ikinci onay yok
+  const fk = o.g.find((x) => String(x.govde.chat_id) === "557" && x.govde.reply_markup);
+  assert.equal(fk.govde.text, "🟦 VOLONTE\n🔁 REPETE · 3477 · beyaz · büyük 20, küçük 20\nToplam 40 adet. Dağılım sabittir, değiştirilmez.");
+  assert.deepEqual(fk.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ 4-8 gün", "✅ 10-15 gün", "⏳ 2 gün sonra dön", "❌ Yapamam"]);
+  const hs = o.g.filter((x) => /^editMessage/.test(x.metod) && String(x.govde.chat_id) === "333").at(-1);
+  assert.match(hs.govde.text, /Önerilen repete: beyaz · büyük 20, küçük 20 \(toplam 40 adet\)\n\n✅ Hemra dağılımı onayladı — repete kartı Fuat'a gitti\.$/);
+  assert.deepEqual(hs.govde.reply_markup.inline_keyboard, []);
+  assert.equal((await rk.rkOku(o.env, id)).durum, "fuat");
 });
 
 // 11 Kasım (Patron, deneme bulgusu): Aziz iki modelde de "Depoda var"a bastı → liste 0 modelle Hemra'ya ONAY KARTI olarak gitmişti

@@ -139,7 +139,9 @@ export function hemraMetni(rec) {
 }
 // Hemra'nın kartının (dağılım onayı aşamasındaki) tam yazısı: "bitti" kartından geldiyse o kartın yazısı korunur
 const hemraTaban = (rec, kim = null) => (rec.hemraKart ? `${rec.hemraKart}\n\n🔁 ${kim || (rec.hemraSecen || "Hemra")}: Repete.\nDağılım: ${dagilimSatiri(rec)}` : hemraMetni(rec));
-const hemraKlavye = (rec) => ({ inline_keyboard: [...(rec.dagilim ? [[{ text: "✅ Patron'a gönder", callback_data: `rk:ho:${rec.id}` }]] : []), [{ text: "✏️ Dağılımı değiştir", callback_data: `rk:hd:${rec.id}` }], ...(rec.hemraKart ? [] : [[{ text: "❌ Gerek yok", callback_data: `rk:hx:${rec.id}` }]])] });
+// 12 Kasım (Patron): repeteyi PATRON başlattıysa Hemra dağılımı yazar ve kart doğrudan fabrikaya gider (Patron'a ikinci onay gelmez) → düğme gerçek hedefi gösterir
+const gonderDugme = (rec) => (rec.kaynak === "patron" ? `✅ ${ureticiAd(rec) === "Celal" ? "Celal'e" : "Fuat'a"} gönder` : "✅ Patron'a gönder");
+const hemraKlavye = (rec) => ({ inline_keyboard: [...(rec.dagilim ? [[{ text: gonderDugme(rec), callback_data: `rk:ho:${rec.id}` }]] : []), [{ text: "✏️ Dağılımı değiştir", callback_data: `rk:hd:${rec.id}` }], ...(rec.hemraKart ? [] : [[{ text: "❌ Gerek yok", callback_data: `rk:hx:${rec.id}` }]])] });
 // Fabrikaya stok / satış / fiyat bilgisi GİTMEZ: sadece kod + dağılım
 export function fuatMetni(rec) {
   return [rec.uretici === "celal" ? (rec.deneme ? DENEME.trim() : null) : `${D(rec)}${_rk.magazaAdi(rec.magaza)}`, `🔁 REPETE · ${rec.kod} · ${dagilimYazi(rec.dagilim)}`, `Toplam ${rec.adet} adet. Dağılım sabittir, değiştirilmez.`].filter(Boolean).join("\n"); // Celal'e mağaza adı gitmez
@@ -212,6 +214,20 @@ export async function rkDugme(env, cq, tg, simdi) {
       return rkYaz(env, rec);
     }
     if (!rec.dagilim || rec.adet < REPETE_EN_AZ) { rec.hemra = null; return cevapla(`Önce dağılımı yazın (en az ${REPETE_EN_AZ} adet).`, true); }
+    if (rec.kaynak === "patron") { // Patron zaten "repete" dedi: ikinci onay YOK — kart doğrudan fabrikaya (Celal / Fuat)
+      rec.patron = { karar: "onay", kim: "Patron", dugme: "repeteyi Patron başlattı", zaman: rec.zaman };
+      const ura = ureticiAd(rec) === "Celal" ? "Celal'e" : "Fuat'a";
+      if (!(await fuataGonder(env, tg, rec, simdi))) {
+        Object.assign(rec, { durum: "iptal", kapandi: simdi });
+        await cevapla("Gönderilemedi", true);
+        await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n⚠️ Repete kartı ${ura} gönderilemedi (${rec.hata || "?"}). Repete açılmadı.`, null, simdi);
+        await kuyruk(env, "rkSonuc", { id: `${rec.id}:h`, rid: rec.id, metin: `${DK(rec)}⚠️ ${rec.kod} repete kartı ${ura} gönderilemedi (${rec.hata || "?"}). Repete açılmadı.` });
+        return rkYaz(env, rec);
+      }
+      await cevapla(`${ura} gidiyor`);
+      await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n✅ ${kim} dağılımı onayladı — repete kartı ${ura} gitti.`, null, simdi);
+      return rkYaz(env, rec);
+    }
     rec.durum = "patron";
     await cevapla("Patron'a gidiyor");
     await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n✅ ${kim} onayladı — Patron'un onayına gitti.`, null, simdi);
@@ -387,7 +403,7 @@ export async function rkHemraYazi(env, m, tg, simdi) {
   await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null);
   await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, hemraTaban(rec), hemraKlavye(rec), simdi);
   await rkYaz(env, rec);
-  await yaz(`${D(rec)}✅ ${rec.kod} dağılımı: ${dagilimSatiri(rec)}. Karttaki "✅ Patron'a gönder"e basın.`);
+  await yaz(`${D(rec)}✅ ${rec.kod} dağılımı: ${dagilimSatiri(rec)}. Karttaki "${gonderDugme(rec)}"e basın.`);
   return true;
 }
 

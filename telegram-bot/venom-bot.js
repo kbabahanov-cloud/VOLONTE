@@ -521,7 +521,7 @@ export async function aracCalistir(env, ad, g, simdi) {
         const tedR = await stokIste(env, "/tedarikci", { kodlar }).catch(() => ({}));
         const celalR = kodlar.filter((k) => (tedR[k] || {}).tedarikci === "CELAL" || celalKoduMu(k));
         const kimeR = !celalR.length ? "Fuat'a" : celalR.length === kodlar.length ? "Celal'e" : `Celal'e (${celalR.join(", ")}) ve Fuat'a (${kodlar.filter((k) => !celalR.includes(k)).join(", ")})`; // 12 Kasım: modelin gerçek fabrikası
-        const bilgi = `🔁 ${kodlar.join(", ")} repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra ${kimeR} kart gider.`;
+        const bilgi = `🔁 ${kodlar.join(", ")} repete: Hemra'ya dağılım kartı gitti. Hemra dağılımı yazınca kart doğrudan ${kimeR} gider.`; // 12 Kasım (Patron): ikinci onay yok
         if (!env.__llmArac) await yaz(env, bilgi, { posta: { izin: "cevap" } });
         return `Repete artık KARTLA isteniyor (Fuat'a düz yazı gitmez). Yapılan: ${bilgi} Patron'a sadece bunu söyle.`;
       }
@@ -1430,6 +1430,11 @@ async function kanalIzle(env, post, duzenlendi, simdi) {
     if (await env.KAYIT.get(uk).catch(() => null)) return;
     await env.KAYIT.put(uk, String(simdi), { expirationTtl: 30 * 86400 }).catch(() => null);
     const link = kanal && kanal.kullanici ? `https://t.me/${kanal.kullanici}/${post.message_id}` : `#${post.message_id}`;
+    if (!kod && sorunlar.some((s) => /F[İI]YAT/i.test(s))) { // 12 Kasım (Patron): elle yazılmış fiyatlı mesajı Venom KENDİSİ sildirir (tam o mesaj; komşu paylaşımlara dokunulmaz) — Patron'a sadece "silindi: mesaj no"
+      const sl = await oku(env, "venom:kanalMesajSil", []);
+      await kaydet(env, "venom:kanalMesajSil", [...sl, { kod: `Elle yazılmış fiyatlı mesaj (mesaj no ${post.message_id})`, ids: [post.message_id] }]);
+      return;
+    }
     const r = kod ? await botaSor(env, "kemal", "paylasimDuzelt", { kod, ids: [post.message_id], yerinde: true, kim: "Venom (kanal kontrolü)" }) : null;
     if (r && r.ok) { await cozdumYaz(env, `${kod} kanal yazısı`, simdi); await yaz(env, `🧹 Kanal: ${kod} paylaşımında sorun vardı (${sorunlar.join("; ")}) → Kemal yazıyı düzeltti.\nKanıt: ${link}`, { posta: { tur: "cevap", izin: "cevap" } }); }
     else await yaz(env, kod ? `⚠️ Kanalda sorun — ${kod}: ${sorunlar.join("; ")}\n${link}\nDüzeltilemedi, sebep: ${r ? r.hata || "Kemal düzeltemedi" : "Kemal'e ulaşılamadı"}. Kanalda duruyor.`
@@ -1971,9 +1976,10 @@ async function bittiKararDugmesi(env, cq, simdi, cevap) {
   await cevap(karar === "repete" ? "Repete taslağı hazırlanıyor" : karar === "sil" ? "Sil — stok kuralıyla" : "Bekle");
   const foto = Boolean(cq.message && cq.message.photo);
   const celalMi = ((await stokIste(env, "/tedarikci", { kodlar: [String(x.kod)] }).catch(() => ({})))[String(x.kod)] || {}).tedarikci === "CELAL" || celalKoduMu(x.kod);
-  const ek = `\n\n✅ Kararınız: ${ONERI_AD[karar]}${karar === "sil" ? " (mağaza stoğu varsa stok bitince kaldırılır)" : karar === "repete" ? (x.deneme ? " (DENEME: taslak hazırlanmadı)" : celalMi ? " — Hemra dağılımı yazacak, sonra repete kartı onayınıza gelir; onaylarsanız Celal'e gider" : " — taslak aşağıda, onayınızla Fuat'a gider") : ""}`;
+  const yeniRk = celalMi || (await yeniAkisAcik(env)); // yeni akış: repete KARTLA (Hemra dağılımı → doğrudan fabrika); eski düz yazı taslağı sadece akış kapalıyken
+  const ek = `\n\n✅ Kararınız: ${ONERI_AD[karar]}${karar === "sil" ? " (mağaza stoğu varsa stok bitince kaldırılır)" : karar === "repete" ? (x.deneme ? " (DENEME: taslak hazırlanmadı)" : yeniRk ? ` — Hemra dağılımı yazınca repete kartı doğrudan ${celalMi ? "Celal'e" : "Fuat'a"} gider` : " — taslak aşağıda, onayınızla Fuat'a gider") : ""}`;
   await tg(env, foto ? "editMessageCaption" : "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, [foto ? "caption" : "text"]: `${bittiKartMetni(x).replace("\nOnaylıyor musun?", "")}${ek}`.slice(0, foto ? 1024 : 4000), reply_markup: { inline_keyboard: [] } }).catch(() => null);
-  if (karar === "repete" && !x.deneme && celalMi) { // 12 Kasım (Patron): Celal'in modeli → repete kartı akışı (Hemra dağılımı → Patron onayı → Celal); Fuat'a taslak GİTMEZ
+  if (karar === "repete" && !x.deneme && yeniRk) { // 12 Kasım (Patron): Celal'in modeli → repete kartı akışı (Hemra dağılımı → Patron onayı → Celal); Fuat'a taslak GİTMEZ
     await kuyrugaEkle(env, "rkBaslat", { id: `rb:${x.kod}:${simdi}`, kodlar: [String(x.kod)], kim: "Patron", zaman: simdi });
     await botaSor(env, "sami", "repeteAdim").catch(() => null);
   } else if (karar === "repete" && !x.deneme) { // ASLA doğrudan sipariş: Fuat'a gidecek TASLAK Patron onayına (en az 40 adet, ✏️ Düzelt)

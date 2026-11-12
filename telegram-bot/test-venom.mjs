@@ -1610,13 +1610,13 @@ test("11 Kasım REPETE SON HAL (Venom): Patron 'TEST-002 repete tekrar aç' → 
   const cevap = await v.aracCalistir({ ...o.env, __izin: "cevap" }, "mesaj_taslagi", { kime: "fuat", metin: "Fuat Bey merhaba, 3490 modelinden repete rica ediyoruz: siyah 8. Toplam yaklaşık 40 adet. Ne zaman hazır olur?" }, ist(11, 16, 5));
   assert.match(cevap, /^Repete artık KARTLA isteniyor/);
   assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["3490"]]);
-  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 3490 repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Fuat'a kart gider."]);
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 3490 repete: Hemra'ya dağılım kartı gitti. Hemra dağılımı yazınca kart doğrudan Fuat'a gider."]);
   assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek mesaj/.test(x.govde.text)));
   // 12 Kasım (Patron): Venom'un yazısı modelin GERÇEK fabrikasını gösterir — Celal'in modelinde "Celal'e kart gider"
   await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", urunler: [{ kod: "5074", adet: 8, fiyat: 20, celal: true }], simdi: 1 }) });
   o.g.length = 0;
   await v.aracCalistir({ ...o.env, __izin: "cevap" }, "mesaj_taslagi", { kime: "fuat", metin: "5074 modelinden repete rica ediyoruz: siyah 40." }, ist(11, 16, 10));
-  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 5074 repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Celal'e kart gider."]);
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 5074 repete: Hemra'ya dağılım kartı gitti. Hemra dağılımı yazınca kart doğrudan Celal'e gider."]);
 });
 
 // ---------- 11 Kasım (Patron): VENOM VE SİSTEM — KÖKTEN DÜZELTME ----------
@@ -1814,9 +1814,12 @@ test("VENOM GENEL KURALLAR (11 Kasım): '$' tek başına fiyat değil; '…yapay
   // 12 Kasım (Patron): elle yazılmış, kodsuz fiyatlı mesaj — "Şu an çözülüyor" YAZILMAZ; gerçek durum yazılır (Kemal düzeltemez, mesaj kanalda duruyor)
   o3.g.length = 0;
   await guncelleme({ update_id: uid++, channel_post: { message_id: 15168, date: ist(12, 14, 21), chat: { id: -100, type: "channel" }, text: "44-46-48-50 size have Price 46$" } }, o3.env);
-  assert.equal(duzelt.length, 1); // kodsuz mesaj Kemal'e gönderilmez
-  assert.deepEqual(patronaGiden(o3).map((x) => x.govde.text), ["⚠️ Kanalda elle yazılmış mesajda sorun (yazıda FİYAT var): \"44-46-48-50 size have Price 46$\"\nhttps://t.me/kanaladi/15168\nKemal düzeltemez: bu onun paylaşımı değil ve model kodu yok. Mesaj kanalda duruyor."]);
-  assert.ok(!patronaGiden(o3).some((x) => /çözülüyor/.test(x.govde.text)));
+  assert.equal(duzelt.length, 1); // kodsuz mesaj Kemal'in yazı düzeltmesine gönderilmez
+  // Patron kararı: Venom KENDİSİ sildirir (tam o mesaj) — Patron'a o anda mesaj gitmez; sonuç Kemal'in kanıtlı satırıyla gelir ("… (mesaj no 15168): 1/1 mesaj silindi")
+  assert.deepEqual(JSON.parse(o3.depo.get("venom:kanalMesajSil")), [{ kod: "Elle yazılmış fiyatlı mesaj (mesaj no 15168)", ids: [15168] }]);
+  assert.deepEqual(patronaGiden(o3), []);
+  await guncelleme({ update_id: uid++, channel_post: { message_id: 15168, date: ist(12, 14, 21), chat: { id: -100, type: "channel" }, text: "44-46-48-50 size have Price 46$" } }, o3.env);
+  assert.equal(JSON.parse(o3.depo.get("venom:kanalMesajSil")).length, 1); // aynı mesaj ikinci kez sıraya girmez
 });
 
 test("TEK DEFTER KAYNAĞINDA (12 Kasım): depo tek listeyi kendisi kurar; bütün botlar düğmesi kalkan kartı bildirir; aynı modelin iki AYRI kaydı ayrı iş kalır; Venom / Pelin / Kemal işleri tek satır; biten iş kanıtla kapanır", async () => {
@@ -2097,7 +2100,7 @@ test("YENİDEN YAPILANMA (kabul testinde yakalandı): 'fotoğrafı yok' görevin
   assert.equal(s[0].kanit, "model siteye eklendi (site defteri); fotoğraf işi bitti");
 });
 
-test("12 Kasım CELAL: eski 'fabrikada bitti' kartında Patron 'Repete' derse Celal'in modeli için Fuat'a taslak GİTMEZ — repete kartı akışı başlar (Hemra dağılımı → Patron → Celal)", async () => {
+test("12 Kasım: 'fabrikada bitti' kartında Patron 'Repete' derse düz yazı taslağı GİTMEZ — Hemra dağılımı yazar, kart doğrudan modelin gerçek fabrikasına (Celal / Fuat) gider; Patron'a ikinci onay yok", async () => {
   const o = ortam();
   const v = await import("./venom-bot.js");
   const simdi = ist(12, 15);
@@ -2107,9 +2110,17 @@ test("12 Kasım CELAL: eski 'fabrikada bitti' kartında Patron 'Repete' derse Ce
   await bas(o, "vbo:r:5074-a");
   assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["5074"]]);
   assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek/.test(x.govde.text || "")));
-  assert.ok(o.g.some((x) => /onaylarsanız Celal'e gider/.test(x.govde.text || x.govde.caption || "")));
+  assert.ok(o.g.some((x) => /Hemra dağılımı yazınca repete kartı doğrudan Celal'e gider$/.test(x.govde.text || x.govde.caption || "")));
   o.g.length = 0;
-  await bas(o, "vbo:r:3394-a"); // diğer modelde eski yol aynen (taslak Fuat'a, Patron onayıyla)
+  await bas(o, "vbo:r:3394-a"); // yeni akış kapalıyken diğer modelde eski yol (taslak Fuat'a, Patron onayıyla)
   assert.deepEqual(await kuyruguAl(o.env, "rkBaslat"), []);
   assert.ok(patronaGiden(o).some((x) => /Fuat'a gidecek/.test(x.govde.text || "")));
+  // yeni akış AÇIK (canlıdaki durum): Fuat'ın modelinde de kart yolu — "doğrudan Fuat'a gider"
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: "akis:yeni", v: "1" }) });
+  o.depo.set("venom:bittiKart:3394-b", JSON.stringify({ id: `3394-b:${simdi}`, sip: "3394-b", kod: "3394", magaza: "VOLONTE", oneri: "sor", hemra: "Hemra", zaman: simdi }));
+  o.g.length = 0;
+  await bas(o, "vbo:r:3394-b");
+  assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["3394"]]);
+  assert.ok(o.g.some((x) => /Hemra dağılımı yazınca repete kartı doğrudan Fuat'a gider$/.test(x.govde.text || x.govde.caption || "")));
+  assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek/.test(x.govde.text || "")));
 });
