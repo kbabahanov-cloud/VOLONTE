@@ -3456,3 +3456,30 @@ test("13 Kasım: 'kartTakipEski' — yeni hatırlatma merdiveninden ÖNCE açıl
   await kt.kartTakipAdimi(o.env, sabah + 3700, tgS);
   assert.deepEqual(o.g.filter((x) => x.metod === "sendMessage").map((x) => [String(x.govde.chat_id), x.govde.text]), [["557", "🔔 Hatırlatma: cevap bekleyen kartınız var — 3500 · fabrika siparişi. En alttaki karta bakın, düğmeye basın."]]);
 });
+
+test("13 Kasım: 'kartTakipAc' — Patron listeyi onaylayınca eski kartlar yeni merdivene girer (süre o an başlar); 'kapat' denenler takipten çıkar; hiçbir mesaj gitmez", async () => {
+  const f = await import("./fabrika.js");
+  const kt = await import("./kart-takip.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", FUAT_ID: "557" });
+  const kart = (chat, yazi, cb) => ({ chat_id: chat, text: yazi, reply_markup: { inline_keyboard: [[{ text: "✅ Gelecek", callback_data: cb }]] } });
+  const gercek = Date.now;
+  const eskiZaman = Date.UTC(2026, 10, 9, 8, 0) / 1000;
+  try {
+    Date.now = () => eskiZaman * 1000;
+    await kt.kartIzle(o.env, "sendMessage", kart(557, "3394 · Büyük (44-50) · siyah 12", "fc:g:a"), { ok: true, result: { message_id: 10 } });
+    await kt.kartIzle(o.env, "sendMessage", kart(557, "3500 · Büyük (44-50) · bej 6", "fc:g:b"), { ok: true, result: { message_id: 11 } });
+  } finally { Date.now = gercek; }
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 900 + o.g.length } }; };
+  const sabah = Date.UTC(2026, 10, 13, 7, 0) / 1000; // cuma 10:00
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "kartTakipEski" }]));
+  await f.fabrikaZincirAdimi(o.env, sabah - 3600, tgS);
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "kartTakipAc", kapat: [11] }]));
+  await f.fabrikaZincirAdimi(o.env, sabah, tgS);
+  assert.deepEqual([JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).acilan, JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).kapanan], [1, 1]);
+  assert.equal(o.g.length, 0);
+  await kt.kartTakipAdimi(o.env, sabah + 1800, tgS);
+  assert.equal(o.g.length, 0); // süre açıldığı andan başlar
+  await kt.kartTakipAdimi(o.env, sabah + 3700, tgS);
+  assert.deepEqual(o.g.map((x) => x.govde.text), ["🔔 Hatırlatma: cevap bekleyen kartınız var — 3394 · fabrika siparişi. En alttaki karta bakın, düğmeye basın."]);
+});

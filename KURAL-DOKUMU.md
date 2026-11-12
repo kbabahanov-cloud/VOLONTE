@@ -2207,3 +2207,24 @@ Bu liste git geçmişinden (12 Kasım sabahı, 67 kurallı son hal) alındı. Ta
   > **Gider ve net:** Vegawin'de gider kasa defterinden ("gider" sütunu) okunur. Akşam raporunda marka marka toplam gider ve net (ciro eksi gider) yazılır; başka para birimindeki gider ayrı yazılır, çevrilmez. Okunamıyorsa sebebi tek satırla yazılır.
 - Eski 67 · 2026-11-12 · yeni karşılığı: 18 · ayrıntı: aynı modelin iki ayrı kaydı ayrı iş kalır
   > **Tek defter kaynağında tutulur:** defter ortak depodadır; her bot kartını, cevabını ve bitirdiği işi oraya yazar, düğmesi kalkan kartı oraya bildirir. Aynı modelin iki ayrı kaydı (ör. büyük / küçük beden) ayrı iştir; aynı kart yeniden gönderilirse eskisi kapanır.
+
+---
+
+# D) 12 TELEFON TESTİ (12 Kasım denetim raporundan; her büyük değişiklikten sonra sessiz denemeyle çalıştırılır)
+
+Venom'a Patron'un mesajı gibi sorulur (cevap Patron'a gitmez); beklenen sonuç yanında.
+
+1. "3394 hangi marka, stokta kaç var?" → marka Vegawin'den, stok mağaza mağaza.
+2. "Bugün karar vermem gereken işler?" → sadece gerçek kararlar; deneme ve kapanmış iş yok.
+3. "Şu an kimin cevap vermediği kart var?" → kişi kişi, tarihli; deneme kartı yok.
+4. "Bugün Black Rose kaç adet sattı?" → sadece Black Rose; VOLONTE ile toplanmaz.
+5. "Bugün fabrikaya hangi modeller gitti?" → mağaza mağaza; deneme kayıtları yok.
+6. "Bugün kanala kaç paylaşım yapıldı, hangi modeller?" → albüm + kod mesajı tek paylaşım sayılır.
+7. "3534'ü kanaldan sil." → stok varsa kart açılmaz, "stok var" denir.
+8. "Sitede kaç model var, dün ne eklendi, ne kaldırıldı?" → ekleme / kaldırma ayrı.
+9. "Selin'in bugünkü fotoğraf listesinde Celal'in modeli var mı?" → yok.
+10. "Pelin bu ay ne kadar harcadı, Higgsfield'da ne kaldı?" → harcama kayıttan; bakiye gerçek değilse "bilinmiyor / tahmini".
+11. "3627 için yeni fotoğraf çek." ("Pelin" yazmadan) → Pelin'e gitmez.
+12. "Nora son 24 saatte ne yazdı?" → kayıtta yoksa uydurmaz.
+
+Ek testler (13 Kasım): tekrar soru (aynı kart ikinci kez gitmez), 21:00 sonrası paylaşım engeli (kesin kapı), deneme modu — üçü de otomatik test paketinde (`npm test`).

@@ -308,3 +308,71 @@ test("TEKRAR SORU YASAĞI (13 Kasım, kural 39): aynı kişiye AYNI kart (aynı 
   await kt.kartBasildi(o.samiEnv, FUAT, 100);
   assert.equal(await kt.acikAyniKart(o.samiEnv, "sendMessage", kart(FUAT, "5068 · Büyük (44-50) · siyah 12")), null);
 });
+
+test("13 Kasım (kural 51): Aziz'in fotoğraf görevi de aynı hatırlatma merdiveninde — konu 'fotoğraf görevi'; kart konuları ilk düğmeden okunur", async () => {
+  const kt = await import("./kart-takip.js");
+  assert.equal(kt.kartKonusu("vg:abc:0:y", "📷 3627, 3394: fotoğrafı yok — çekip Selin'e gönderin"), "fotoğraf görevi");
+  assert.equal(kt.kartKonusu("vg:abc:0:y", "Merdan'a: 3512 etiketini kontrol et"), "görev");
+  for (const [cb, konu] of [["fe:o:2026-11-13:3394", "eksik listesi kontrolü"], ["fb:o:2026-11-13-T1", "fabrika listesi onayı"], ["fc:g:3394-x", "fabrika siparişi"], ["fh:r:3394-x", "fabrikada bitti, karar bekliyor"], ["rk:ho:5074-x", "repete dağılımı"], ["rk:f8:5074-x", "repete siparişi"], ["rk:ad:5074-x", "repete adedi teyidi"], ["xx:1", "kart"]]) assert.equal(kt.kartKonusu(cb, ""), konu, cb);
+  for (const [yazi, kod] of [["5068 · Büyük (44-50) · siyah 12", "5068"], ["🟦 VOLONTE · 3394\n❌ Fabrikada bitti (Sinem).", "3394"], ["🧪 DENEME – üretim yapmayın\n🔁 REPETE · TEST-002 · beyaz", "TEST-002"], ["📋 Gidecek liste (12.11) — Aziz ✓:\n3627 siyah 10", "3627"], ["Merhaba", null]]) assert.equal(kt.kartKodu(yazi), kod, yazi);
+  const o = ortam();
+  const tg = (e, m, g) => globalThis.fetch(`https://api.telegram.org/botsami-token/${m}`, { method: "POST", body: JSON.stringify(g) }).then((r) => r.json());
+  const bas = Date.UTC(2026, 10, 11, 7, 0) / 1000; // çarşamba 10:00
+  const gercek = Date.now;
+  try { Date.now = () => bas * 1000; await kt.kartIzle(o.samiEnv, "sendMessage", { chat_id: AZIZ, text: "📷 Fotoğrafı olmayan VOLONTE modelleri: 3627, 3394 — fotoğraf çekip gönderin", reply_markup: { inline_keyboard: [[{ text: "✅ Yaptım", callback_data: "vg:g1:0:y" }]] } }, { ok: true, result: { message_id: 61 } }); } finally { Date.now = gercek; }
+  await kt.kartTakipAdimi(o.samiEnv, bas + 3660, tg);
+  assert.deepEqual(o.giden.map((x) => [x.kime, x.yazi]), [["Aziz", "🔔 Hatırlatma: cevap bekleyen kartınız var — 3627 · fotoğraf görevi. En alttaki karta bakın, düğmeye basın."]]);
+  await kt.kartTakipAdimi(o.samiEnv, bas + 7260, tg);
+  assert.equal(o.giden.at(-1).yazi, "⏰ Son hatırlatma: 3627 · fotoğraf görevi hâlâ cevap bekliyor.");
+});
+
+test("13 Kasım: fabrika listesi (her model ayrı kart, Sinem + Nuri + Fuat'a) → kişi başına TEK hatırlatma (kodlar yan yana), Hemra'ya TEK mesaj (üç kişi birlikte), Patron'a TEK satır; 'LİSTESİ – SONU' toplu cevap kartı takip edilmez", async () => {
+  const o = ortam();
+  const kt = await import("./kart-takip.js");
+  const venom = await import("./venom-bot.js");
+  const { venomGidenAdimi } = await import("./venom-kopru.js");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: FUAT, ad: "Fuat" }, { id: SINEM, ad: "Sinem" }, { id: NURI, ad: "Nuri" }]));
+  o.depo.set("venom:bot:klavye:v1", "1");
+  const tg = (e, m, g) => globalThis.fetch(`https://api.telegram.org/botsami-token/${m}`, { method: "POST", body: JSON.stringify(g) }).then((r) => r.json());
+  const bas = Date.UTC(2026, 10, 11, 7, 0) / 1000; // çarşamba 10:00
+  const dk = (n) => bas + n * 60;
+  const gercek = Date.now;
+  let mid = 100;
+  try {
+    Date.now = () => bas * 1000;
+    for (const chat of [SINEM, NURI, FUAT]) {
+      for (const [kod, yazi] of [["3567", "🟦 VOLONTE · 3567 · Küçük (38-44) · siyah 8"], ["3596", "🟦 VOLONTE · 3596 · Büyük (44-50) · kiremit 12"], ["3607", "🟦 VOLONTE · 3607 · Küçük (38-44) · kahve 4"]]) await kt.kartIzle(o.samiEnv, "sendPhoto", { chat_id: chat, caption: yazi, reply_markup: { inline_keyboard: [[{ text: "✅ Gelecek", callback_data: `fc:g:${kod}-x` }]] } }, { ok: true, result: { message_id: mid++ } });
+      await kt.kartIzle(o.samiEnv, "sendMessage", { chat_id: chat, text: "🟦 VOLONTE LİSTESİ – SONU (3 model)\nHepsi aynı sürede gelecekse aşağıdan seçin.", reply_markup: { inline_keyboard: [[{ text: "✅ Hepsi gelecek", callback_data: "fc:H:liste" }]] } }, { ok: true, result: { message_id: mid++ } });
+    }
+  } finally { Date.now = gercek; }
+  // 1. saat: her kişiye TEK mesaj (3 kart tek satırda)
+  await kt.kartTakipAdimi(o.samiEnv, dk(61), tg);
+  assert.deepEqual(o.giden.map((x) => [x.kime, x.yazi]).sort(), ["Fuat", "Nuri", "Sinem"].map((k) => [k, "🔔 Hatırlatma: cevap bekleyen kartınız var — 3567, 3596, 3607 · fabrika siparişi. En alttaki karta bakın, düğmeye basın."]));
+  // Nuri bir karta bastı → o kart düşer; 2. saatte Nuri'ye kalan 2 kart, diğerlerine 3 kart
+  await kt.kartBasildi(o.samiEnv, NURI, 105);
+  o.giden.length = 0;
+  await kt.kartTakipAdimi(o.samiEnv, dk(121), tg);
+  assert.deepEqual(o.giden.map((x) => [x.kime, x.yazi]).sort(), [["Fuat", "⏰ Son hatırlatma: 3567, 3596, 3607 · fabrika siparişi hâlâ cevap bekliyor."], ["Nuri", "⏰ Son hatırlatma: 3567, 3607 · fabrika siparişi hâlâ cevap bekliyor."], ["Sinem", "⏰ Son hatırlatma: 3567, 3596, 3607 · fabrika siparişi hâlâ cevap bekliyor."]]);
+  // 3. saat: Venom → Hemra'ya aynı kartlar için TEK mesaj (Sinem + Fuat birlikte; Nuri'nin listesi farklı → ayrı)
+  o.giden.length = 0;
+  await kt.kartTakipAdimi(o.samiEnv, dk(181), tg);
+  await venom.venomCron(o.venomEnv, dk(182));
+  await venomGidenAdimi(o.samiEnv, dk(183), tg);
+  const hemraya = o.giden.filter((x) => x.kime === "Hemra").map((x) => x.yazi);
+  assert.equal(hemraya.length, 2);
+  assert.ok(hemraya.some((y) => /^⏩ (Sinem, Fuat|Fuat, Sinem) 3 saattir cevap vermedi — karar sizde\.\n🟦 VOLONTE · 3567 · Küçük \(38-44\) · siyah 8\n\n🟦 VOLONTE · 3596 · Büyük \(44-50\) · kiremit 12\n\n🟦 VOLONTE · 3607 · Küçük \(38-44\) · kahve 4$/.test(y)), JSON.stringify(hemraya));
+  assert.ok(hemraya.some((y) => /^⏩ Nuri 3 saattir cevap vermedi — karar sizde\.\n🟦 VOLONTE · 3567[^\n]*\n\n🟦 VOLONTE · 3607[^\n]*$/.test(y)));
+  assert.equal(o.giden.filter((x) => x.kime === "Patron").length, 0);
+  // 4. saat: Patron'a aynı kartlar için TEK satır
+  o.giden.length = 0;
+  await kt.kartTakipAdimi(o.samiEnv, dk(241), tg);
+  await venom.venomCron(o.venomEnv, dk(242));
+  const patrona = o.giden.filter((x) => x.kime === "Patron").map((x) => x.yazi);
+  assert.equal(patrona.length, 2);
+  assert.ok(patrona.some((y) => /^📌 (Sinem, Fuat|Fuat, Sinem) 4 saattir cevap vermedi, Hemra da çözemedi: 3567, 3596, 3607 · fabrika siparişi\.$/.test(y)), JSON.stringify(patrona));
+  assert.ok(patrona.includes("📌 Nuri 4 saattir cevap vermedi, Hemra da çözemedi: 3567, 3607 · fabrika siparişi."));
+  // sonra hiçbir tekrar yok
+  o.giden.length = 0;
+  for (const n of [300, 360, 420]) { await kt.kartTakipAdimi(o.samiEnv, dk(n), tg); await venom.venomCron(o.venomEnv, dk(n + 1)); }
+  assert.equal(o.giden.length, 0);
+});

@@ -1979,18 +1979,22 @@ async function rkAdimi(env, simdi) {
 // Venom çözer: Hemra'ya kartın yazısı, başında "⏩ <kişi> N saattir cevap vermedi — karar sizde." (Sami üzerinden). Bir saat sonra
 // hâlâ açıksa (ya da cevapsız kalan Hemra'nın kendi işleriyse) Patron'a TEK satır. Hesap sorunu (engel / kayıtsız hesap) Patron'a hemen.
 async function kartCevapsizAdimi(env, simdi) {
-  for (const k of await kuyruguAl(env, "kartCevapsiz")) {
+  const l = await kuyruguAl(env, "kartCevapsiz");
+  if (!l.length) return;
+  const adlar = (kisiler) => kisiler.join(", ");
+  // aynı kartlara cevap vermeyen kişiler (fabrika listesi Sinem + Nuri + Fuat'a gider) TEK mesajda / TEK satırda birleşir
+  const birlestir = (kayitlar) => { const g = {}; for (const k of kayitlar) { const a = `${k.baslik || ""}|${k.saat}`; (g[a] = g[a] || { ...k, kisiler: [] }).kisiler.push(k.kim || `kayıtlı olmayan hesap (${k.chat})`); } return Object.values(g); };
+  for (const k of l.filter((x) => x.patron && x.hemra)) await bildir(env, `📌 Hemra ${k.saat} saattir cevap vermedi: ${k.n || 1} iş bekliyor (${k.baslik || "kart"}).`, { simdi, kaynak: "venom", tur: "kritik" });
+  for (const k of birlestir(l.filter((x) => x.patron && !x.hemra))) await bildir(env, `📌 ${adlar(k.kisiler)} ${k.saat} saattir cevap vermedi, Hemra da çözemedi: ${k.baslik || "kart"}.`, { simdi, kaynak: "venom", tur: "kritik" });
+  const hemraya = l.filter((x) => !x.patron);
+  for (const k of birlestir(hemraya.filter((x) => x.kim !== "Hemra"))) {
+    const yazilar = (k.kartlar || []).map((x) => x.yazi).filter(Boolean);
+    await kuyrugaEkle(env, "giden", { id: `kc-h:${k.chat}:${k.mesaj}`, kime: "hemra", tur: "mesaj", metin: `⏩ ${adlar(k.kisiler)} ${k.saat} saattir cevap vermedi — karar sizde.\n${(yazilar.length ? yazilar : [k.ozet || "kart"]).join("\n\n").slice(0, 3000)}` }).catch(() => null);
+    await biriktir(env, { kaynak: "sami", metin: `📌 ${adlar(k.kisiler)} ${k.saat} saattir cevap vermedi (${k.baslik || "kart"}); Hemra'ya soruldu.`, tur: "bilgi" }, simdi);
+  }
+  for (const k of hemraya.filter((x) => x.engel || x.kayitsiz)) {
     const kim = k.kim || `kayıtlı olmayan hesap (${k.chat})`;
-    const konu = `${k.kod ? `${k.kod} · ` : ""}${k.konu || "kart"}`;
-    if (k.patron) {
-      const isler = (k.isler || []).map((x) => `${x.kod ? `${x.kod} · ` : ""}${x.konu || "kart"}`);
-      await bildir(env, k.hemra ? `📌 Hemra ${k.saat} saattir cevap vermedi: ${isler.length} iş bekliyor (${isler.join(", ")}).` : `📌 ${kim} ${k.saat} saattir cevap vermedi, Hemra da çözemedi: ${konu}.`, { simdi, kaynak: "venom", tur: "kritik" });
-      continue;
-    }
-    const saatS = tarihSaat(k.zaman).slice(11, 16);
-    if (k.kim !== "Hemra") await kuyrugaEkle(env, "giden", { id: `kc-h:${k.chat}:${k.mesaj}`, kime: "hemra", tur: "mesaj", metin: `⏩ ${kim} ${k.saat} saattir cevap vermedi — karar sizde.\n${k.yazi || k.ozet || "kart"}${k.engel ? `\n(Sebep: ${k.engel})` : ""}` }).catch(() => null);
-    if (k.engel || k.kayitsiz) await bildir(env, `⚠️ Kart ${kim} hesabına ulaşmıyor: ${k.kayitsiz ? "kart kayıtlı bir hesaba gitmemiş" : `Telegram: ${k.engel}`} (${saatS}, "${(k.ozet || "").slice(0, 60)}"). Hemra'ya bildirildi; hesabın düzeltilmesi gerekiyor.`, { simdi, kaynak: "venom", tur: "kritik" });
-    else await biriktir(env, { kaynak: "sami", metin: `📌 ${kim} ${k.saat} saattir cevap vermedi (${konu}); Hemra'ya soruldu.`, tur: "bilgi" }, simdi);
+    await bildir(env, `⚠️ Kart ${kim} hesabına ulaşmıyor: ${k.kayitsiz ? "kart kayıtlı bir hesaba gitmemiş" : `Telegram: ${k.engel}`} (${tarihSaat(k.zaman).slice(11, 16)}, "${(k.ozet || "").slice(0, 60)}"). Hemra'ya bildirildi; hesabın düzeltilmesi gerekiyor.`, { simdi, kaynak: "venom", tur: "kritik" });
   }
 }
 async function rkKararDugmesi(env, cq, simdi, cevap) {

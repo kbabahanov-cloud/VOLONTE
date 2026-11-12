@@ -20,12 +20,16 @@ const kml = (x) => String(x || "").split(",").map((y) => y.trim()).filter(Boolea
 export const HATIRLAT_SN = 3600, SON_SN = 2 * 3600, BILDIR_SN = 3 * 3600, PATRON_SN = 4 * 3600;
 // Kartın konusu: ilk düğmenin verisinden (aynı konu adı hatırlatmada, Hemra'nın listesinde ve Venom'un satırında kullanılır)
 const KONULAR = [[/^fe:/, "eksik listesi kontrolü"], [/^fb:/, "fabrika listesi onayı"], [/^fo:/, "fabrika \"bitti\" onayı"], [/^fc:/, "fabrika siparişi"], [/^f[hk]:/, "fabrikada bitti, karar bekliyor"], [/^ft:/, "yazı teyidi"],
-  [/^rk:h/, "repete dağılımı"], [/^rk:a/, "repete adedi teyidi"], [/^rk:f/, "repete siparişi"], [/^rk:t/, "repete teslim sorusu"], [/^(gv|vg|kg|ki):/, "görev"]];
-export const kartKonusu = (cb, yazi = "") => { const k = KONULAR.find(([re]) => re.test(String(cb || ""))); return k ? k[1] : /fotoğraf/i.test(yazi) ? "fotoğraf görevi" : "kart"; };
+  [/^rk:h/, "repete dağılımı"], [/^rk:a/, "repete adedi teyidi"], [/^rk:f/, "repete siparişi"], [/^rk:t/, "repete teslim sorusu"], [/^(vgk?|vd|gv|hl):/, "görev"]];
+export const kartKonusu = (cb, yazi = "") => { const k = KONULAR.find(([re]) => re.test(String(cb || ""))); const foto = /fotoğraf/i.test(yazi); return k ? (k[1] === "görev" && foto ? "fotoğraf görevi" : k[1]) : foto ? "fotoğraf görevi" : "kart"; }; // Aziz'in fotoğraf görevleri de aynı merdivende (kural 51)
 export const kartKodu = (yazi) => { const m = String(yazi || "").split("\n").filter((x) => !/DENEME|LİSTESİ –/.test(x)).join(" ").match(/(?<![\d.,:/-])(TEST-\d+|\d{3,6})(?![\d.,:/]\d|\d)/); return m ? m[1] : null; };
-const baslik = (x) => `${x.kod ? `${x.kod} · ` : ""}${x.konu || "kart"}`;
-export const hatirlatmaYazisi = (x) => `🔔 Hatırlatma: cevap bekleyen kartınız var — ${baslik(x)}. En alttaki karta bakın, düğmeye basın.`;
-export const sonHatirlatmaYazisi = (x) => `⏰ Son hatırlatma: ${baslik(x)} hâlâ cevap bekliyor.`;
+// Bir kişinin birden çok kartı TEK mesajda: aynı konudaki kodlar yan yana ("3567, 3596 · fabrika siparişi"); kart tek ise "3394 · fabrika siparişi"
+export function kartBasligi(kartlar) {
+  const l = [].concat(kartlar), konular = [...new Set(l.map((x) => x.konu || "kart"))];
+  return konular.map((k) => { const kodlar = [...new Set(l.filter((x) => (x.konu || "kart") === k && x.kod).map((x) => x.kod))]; return `${kodlar.length ? `${kodlar.join(", ")} · ` : ""}${k}`; }).join("; ");
+}
+export const hatirlatmaYazisi = (kartlar) => `🔔 Hatırlatma: cevap bekleyen kartınız var — ${kartBasligi(kartlar)}. En alttaki karta bakın, düğmeye basın.`;
+export const sonHatirlatmaYazisi = (kartlar) => `⏰ Son hatırlatma: ${kartBasligi(kartlar)} hâlâ cevap bekliyor.`;
 const saatYazi = (sn) => { const h = Math.floor(sn / 3600); return h >= 1 ? `${h} saat` : "yeni"; };
 export const hemraListesi = (l, simdi) => [`📋 Hemra, cevap bekleyen işleriniz (${l.length}):`, ...l.map((x, i) => `${i + 1}) ${x.kod ? `${x.kod} — ` : ""}${x.konu || "kart"} (${saatYazi(mesaiSuresi(x.zaman, simdi))})`), "Kartları yukarıda, sırayla basabilirsiniz."].join("\n");
 const kartYazisi = (g) => String((g && (g.caption || g.text)) || "");
@@ -52,6 +56,7 @@ export async function kartIzle(env, metod, govde, r) {
       if (!mesaj) return;
       const yazi = kartYazisi(govde);
       if (yazi.startsWith(MOD_SATIR.trim())) return; // deneme modu kartı hatırlatmaya girmez (kural 40)
+      if (/LİSTESİ – (SONU|BİTTİ)/.test(yazi.split("\n")[0])) return; // liste sonundaki toplu cevap kartı yardımcıdır; asıl kartlar ayrıca takip edilir
       const cb = govde.reply_markup.inline_keyboard.flat().map((b) => b && b.callback_data).find(Boolean) || "";
       const l = await oku(env);
       l.push({ chat, mesaj, zaman: Math.floor(Date.now() / 1000), ozet: yazi.split("\n").filter((x) => !/DENEME – üretim/.test(x)).slice(0, 2).join(" · ").slice(0, 120), kod: kartKodu(yazi), konu: kartKonusu(cb, yazi), yazi: yazi.slice(0, 700), iz: kartIzi(govde).slice(0, 1500) });
@@ -94,7 +99,7 @@ export async function kartTakipAdimi(env, simdi, tg) {
   let defter = null;
   if (l.some((x) => !x.bitti && mesaiSuresi(x.zaman, simdi) >= HATIRLAT_SN)) { const ds = await stok(env, "/isd-oku", { basla: simdi - 4 * 86400, bitis: simdi + 60, bot: "sami", denemeDahil: true }).catch(() => null); if (Array.isArray(ds)) defter = ds.filter((r) => r.tur === "kart"); }
   const mesaide = mesaiMi(simdi); // mesai dışında (ve pazar) hiçbir hatırlatma gitmez; sabah 09:00'a kalır
-  const hemra = [];
+  const hemra = [], gruplar = {};
   for (const x of l) {
     if (x.bitti) continue;
     const dk = defter && defter.find((r) => String(r.chat) === x.chat && Number(r.mesaj) === Number(x.mesaj));
@@ -105,23 +110,27 @@ export async function kartTakipAdimi(env, simdi, tg) {
     if (kim === "Hemra") { hemra.push(x); continue; }
     if (!mesaide) continue;
     const gecen = mesaiSuresi(x.zaman, simdi);
-    if (!x.hat && gecen >= HATIRLAT_SN) {
-      const r = await tg(env, "sendMessage", { chat_id: x.chat, text: hatirlatmaYazisi(x), reply_to_message_id: x.mesaj, allow_sending_without_reply: true });
-      x.hat = { zaman: simdi, ok: Boolean(r && r.ok), hata: r && !r.ok ? String(r.description || "").slice(0, 120) : null };
-      d = true;
-    } else if (x.hat && !x.son && gecen >= SON_SN) {
-      const r = await tg(env, "sendMessage", { chat_id: x.chat, text: sonHatirlatmaYazisi(x), reply_to_message_id: x.mesaj, allow_sending_without_reply: true });
-      x.son = { zaman: simdi, ok: Boolean(r && r.ok), hata: r && !r.ok ? String(r.description || "").slice(0, 120) : null };
-      d = true;
-    } else if (x.son && !x.bildirildi && gecen >= BILDIR_SN) {
+    const asama = !x.hat && gecen >= HATIRLAT_SN ? "hat" : x.hat && !x.son && gecen >= SON_SN ? "son" : x.son && !x.bildirildi && gecen >= BILDIR_SN ? "bildir" : x.bildirildi && !x.patron && gecen >= PATRON_SN ? "patron" : null;
+    if (asama) { const k = `${asama}|${x.chat}`; (gruplar[k] = gruplar[k] || { asama, chat: x.chat, kim, kartlar: [] }).kartlar.push(x); }
+  }
+  // Kişi başına TEK mesaj: bir kişinin aynı anda süresi dolan bütün kartları tek hatırlatmada (fabrika listesinde her model ayrı karttır)
+  for (const g of Object.values(gruplar)) {
+    const eski = [...g.kartlar].sort((a, b) => a.zaman - b.zaman)[0];
+    const gecen = Math.max(...g.kartlar.map((x) => mesaiSuresi(x.zaman, simdi)));
+    d = true;
+    if (g.asama === "hat" || g.asama === "son") {
+      const r = await tg(env, "sendMessage", { chat_id: g.chat, text: (g.asama === "hat" ? hatirlatmaYazisi : sonHatirlatmaYazisi)(g.kartlar), reply_to_message_id: eski.mesaj, allow_sending_without_reply: true });
+      const iz = { zaman: simdi, ok: Boolean(r && r.ok), hata: r && !r.ok ? String(r.description || "").slice(0, 120) : null };
+      for (const x of g.kartlar) x[g.asama] = iz;
+    } else if (g.asama === "bildir") {
       // Venom'a: araştır (bot engellendi mi? hesap kayıtlı mı?) → Venom Hemra'ya sorar
-      const ca = await tg(env, "sendChatAction", { chat_id: x.chat, action: "typing" });
-      const engel = ca && !ca.ok ? String(ca.description || "gönderilemiyor") : (x.son && x.son.hata) || (x.hat && x.hat.hata) || null;
-      x.bildirildi = simdi; d = true;
-      await stok(env, "/kuyruk-ekle", { ad: "kartCevapsiz", kayit: { id: `kc:${x.chat}:${x.mesaj}`, chat: x.chat, kim, mesaj: x.mesaj, ozet: x.ozet, kod: x.kod || null, konu: x.konu || "kart", yazi: x.yazi || x.ozet || "", saat: Math.floor(gecen / 3600), zaman: x.zaman, engel, kayitsiz: !kim } }).catch(() => null);
-    } else if (x.bildirildi && !x.patron && gecen >= PATRON_SN) {
-      x.patron = simdi; d = true;
-      await stok(env, "/kuyruk-ekle", { ad: "kartCevapsiz", kayit: { id: `kp:${x.chat}:${x.mesaj}`, patron: true, chat: x.chat, kim, mesaj: x.mesaj, kod: x.kod || null, konu: x.konu || "kart", saat: Math.floor(gecen / 3600), zaman: x.zaman } }).catch(() => null);
+      const ca = await tg(env, "sendChatAction", { chat_id: g.chat, action: "typing" });
+      const engel = ca && !ca.ok ? String(ca.description || "gönderilemiyor") : g.kartlar.map((x) => (x.son && x.son.hata) || (x.hat && x.hat.hata)).find(Boolean) || null;
+      for (const x of g.kartlar) x.bildirildi = simdi;
+      await stok(env, "/kuyruk-ekle", { ad: "kartCevapsiz", kayit: { id: `kc:${g.chat}:${eski.mesaj}`, chat: g.chat, kim: g.kim, mesaj: eski.mesaj, ozet: eski.ozet, baslik: kartBasligi(g.kartlar), kartlar: g.kartlar.slice(0, 12).map((x) => ({ kod: x.kod || null, konu: x.konu || "kart", yazi: String(x.yazi || x.ozet || "").slice(0, 300) })), saat: Math.floor(gecen / 3600), zaman: eski.zaman, engel, kayitsiz: !g.kim } }).catch(() => null);
+    } else {
+      for (const x of g.kartlar) x.patron = simdi;
+      await stok(env, "/kuyruk-ekle", { ad: "kartCevapsiz", kayit: { id: `kp:${g.chat}:${eski.mesaj}`, patron: true, chat: g.chat, kim: g.kim, baslik: kartBasligi(g.kartlar), saat: Math.floor(gecen / 3600), zaman: eski.zaman } }).catch(() => null);
     }
   }
   // Hemra: tek tek hatırlatma yok — açık işlerinin TOPLU listesi (bir kart 1. ya da 2. saatini doldurunca tek mesaj)
@@ -142,7 +151,7 @@ export async function kartTakipAdimi(env, simdi, tg) {
     if (gec.length) {
       for (const x of gec) x.patron = simdi;
       d = true;
-      await stok(env, "/kuyruk-ekle", { ad: "kartCevapsiz", kayit: { id: `kh:${simdi}`, patron: true, hemra: true, kim: "Hemra", saat: Math.floor(Math.max(...gec.map(g)) / 3600), isler: gec.map((x) => ({ kod: x.kod || null, konu: x.konu || "kart" })) } }).catch(() => null);
+      await stok(env, "/kuyruk-ekle", { ad: "kartCevapsiz", kayit: { id: `kh:${simdi}`, patron: true, hemra: true, kim: "Hemra", saat: Math.floor(Math.max(...gec.map(g)) / 3600), n: gec.length, baslik: kartBasligi(gec) } }).catch(() => null);
     }
   }
   if (d) await yaz(env, l);

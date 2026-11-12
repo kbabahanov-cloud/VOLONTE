@@ -2631,6 +2631,15 @@ async function tekIslem(env, simdi, tg) {
     sonuc.l = [];
     for (const x of l) { if (x.bitti || x.eski || (is.once && x.zaman >= is.once)) continue; x.eski = simdi; sonuc.l.push({ kim: adlar[x.chat] || "kayıtsız hesap", mesaj: x.mesaj, zaman: x.zaman, ozet: x.ozet, kod: x.kod || kartKodu(x.ozet), hat: Boolean(x.hat), bildirildi: Boolean(x.bildirildi) }); }
     await stokIste(env, "/ayar-yaz", { k: "kartTakip", v: JSON.stringify(l.slice(-300)) });
+  } else if (is.tur === "kartTakipAc") { // Patron listeyi onayladı: "eski" kartlar yeni merdivene girer (süre ŞİMDİ başlar: 1 saat sonra hatırlatma); kapat: [mesaj no] → takipten çıkar
+    const l = JSON.parse((await stokIste(env, "/ayar-oku", { k: "kartTakip" })).v || "[]");
+    const kapat = new Set((is.kapat || []).map(Number)), ac = is.ac ? new Set(is.ac.map(Number)) : null;
+    sonuc.acilan = 0; sonuc.kapanan = 0;
+    for (const x of l) {
+      if (x.bitti || !x.eski) continue;
+      if (kapat.has(Number(x.mesaj))) { x.bitti = simdi; x.neden = "Patron: eskidi"; sonuc.kapanan++; } else if (!ac || ac.has(Number(x.mesaj))) { delete x.eski; x.zaman = simdi; delete x.hat; delete x.son; delete x.bildirildi; delete x.patron; x.kod = x.kod || kartKodu(x.ozet); sonuc.acilan++; }
+    }
+    await stokIste(env, "/ayar-yaz", { k: "kartTakip", v: JSON.stringify(l.slice(-300)) });
   } else if (is.tur === "denemeBitir" || is.tur === "denemeKapat") {
     // 13 Kasım (Patron, kural 40): deneme kayıtları tek seferde SESSİZCE kapanır — kimseye mesaj gitmez, kartlara dokunulmaz.
     // denemeBitir: "mod" işaretli bütün açık kayıtlar (Patron "deneme bitti" dedi). denemeKapat: { fs: [id], rk: [id], gun, kodlar,
