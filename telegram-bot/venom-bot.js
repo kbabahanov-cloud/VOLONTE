@@ -1819,7 +1819,8 @@ export async function raporSatirlari(env, simdi, tur) {
   let bekleyenListe = 0;
   for (const k of birlesik) { const b = await ayar(`fabrika:${k}`, null); if (b && !b.deneme && b.asama === "onayda" && (b.liste || []).length) bekleyenListe++; }
   const gvn = gv ? gv.fabrika.VOLONTE.length : 0, gbr = gv ? gv.fabrika.BLACKROSE.length : 0;
-  const fabrika = gvn || gbr ? `🏭 Fabrika: eksik listesi gitti — VOLONTE ${gvn}, Black Rose ${gbr} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : bekleyenListe ? `🏭 Fabrika: eksik listesi henüz gitmedi (${bekleyenListe} liste Hemra onayında)` : `🏭 Fabrika: ${ne} eksik listesi gitmedi`;
+  const gcl = gv ? (gv.fabrika.celal || []).length : 0; // 12 Kasım: Celal ayrı
+  const fabrika = gcl ? `🏭 Fabrika: Celal'e ${gcl} model, Sinem'e ${gvn + gbr - gcl} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : gvn || gbr ? `🏭 Fabrika: eksik listesi gitti — VOLONTE ${gvn}, Black Rose ${gbr} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : bekleyenListe ? `🏭 Fabrika: eksik listesi henüz gitmedi (${bekleyenListe} liste Hemra onayında)` : `🏭 Fabrika: ${ne} eksik listesi gitmedi`;
   // 7) Venom'un kendi çözdükleri
   const duz = (await oku(env, "venom:kontrol:duzeltme", [])).filter((x) => gunAnahtari(x.zaman) === g).length;
   const coz = (await oku(env, `venom:cozdum:${g}`, [])) || [];
@@ -1879,7 +1880,7 @@ export function rkKartMetni(x) {
   return [`${x.deneme ? "🧪 DENEME – üretim yapmayın\n" : ""}🔁 REPETE — ${MAGAZA_BASLIK[x.magaza] || "mağaza yazılmamış"} · ${x.kod}`,
     `Dağılım: ${x.dagilim} (toplam ${x.adet} adet)`,
     `Mağazada kalan ${x.kalan} adet · son 7 günde ${x.satis7} satıldı${x.bitisGun ? ` · ~${x.bitisGun} günde biter` : ""}`,
-    `${x.hemra || "Hemra"} önerdi. Onaylarsanız Fuat'a gider.`].join("\n");
+    `${x.hemra || "Hemra"} önerdi. Onaylarsanız ${x.uretici === "Celal" ? "Celal'e" : "Fuat'a"} gider.`].join("\n");
 }
 const rkKlavye = (rid) => ({ inline_keyboard: [[{ text: "✅ Onaylıyorum", callback_data: `vrk:o:${rid}` }, { text: "❌ Reddediyorum", callback_data: `vrk:x:${rid}` }]] });
 // Telefona giden hali (Telegram'ın döndürdüğü) → "venom:rkKanit:<id>"
@@ -1926,9 +1927,11 @@ async function rkKararDugmesi(env, cq, simdi, cevap) {
   await kaydet(env, `venom:rkKart:${rid}`, x, 14 * 86400);
   await kuyrugaEkle(env, "rkKarar", { id: `${rid}:${simdi}`, rid, karar: x.karar, kim: x.kararKim, dugme: x.kararDugme, zaman: simdi });
   await botaSor(env, "sami", "repeteAdim"); // 11 Kasım (ACİL): Sami 5 dk beklemez — Fuat'ın kartı HEMEN gider
-  await cevap(x.karar === "onay" ? "Fuat'a gidiyor" : "Reddedildi");
+  const ur = x.uretici === "Celal" ? "Celal" : "Fuat";
+  await cevap(x.karar === "onay" ? `${ur}'${ur === "Celal" ? "e" : "a"} gidiyor` : "Reddedildi");
   const foto = Boolean(cq.message && cq.message.photo);
-  const yeni = `${rkKartMetni(x).replace(" Onaylarsanız Fuat'a gider.", "")}\n\n${x.karar === "onay" ? "✅ Kararınız: Onaylıyorum — Fuat'a gidiyor." : "❌ Kararınız: Reddediyorum — Fuat'a gitmedi."}`;
+  const ura = ur === "Celal" ? "Celal'e" : "Fuat'a";
+  const yeni = `${rkKartMetni(x).replace(` Onaylarsanız ${ura} gider.`, "")}\n\n${x.karar === "onay" ? `✅ Kararınız: Onaylıyorum — ${ura} gidiyor.` : `❌ Kararınız: Reddediyorum — ${ura} gitmedi.`}`;
   const r = await tg(env, foto ? "editMessageCaption" : "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, [foto ? "caption" : "text"]: yeni.slice(0, foto ? 1024 : 4000), reply_markup: { inline_keyboard: [] } }).catch(() => null);
   await rkKanit(env, rid, `Patron bastı: ${x.kararDugme}`, r && r.ok && typeof r.result === "object" ? r : { ok: Boolean(r && r.ok), result: { message_id: cq.message.message_id } }, yeni, null, simdi);
 }

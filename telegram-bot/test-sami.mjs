@@ -2938,3 +2938,106 @@ test("12 Kasım: Venom 'model silindi' der (fsSilindi) → Sami o modelin fabrik
   assert.deepEqual([(await ayar(`fs:${b.id}`)).durum, (await ayar(`fs:${b.id}`)).karar], ["bitti", "stokBitene"]);
   assert.equal(o.g.length, 0); // kimseye mesaj gitmedi
 });
+
+test("12 Kasım CELAL — UÇTAN UCA (sahte Telegram, kimseye mesaj gitmez): Aziz'e Celal'in 2 modeli → Aynısı / Adeti değiştir → Eminim → Hemra onayı → kartlar SADECE Celal'e (Sinem/Fuat/Nuri'ye GİTMEZ) → Celal Gelecek+süre / Bitti → Hemra Repete → Patron onayı → repete kartı Celal'e → 4-8 gün → Patron'a tek satır", async () => {
+  const f = await import("./fabrika.js");
+  const rk = await import("./repete-kart.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557", NURI_ID: "555", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }, { id: 555, ad: "Nuri" }, { id: 557, ad: "Fuat" }, { id: 600, ad: "Celal Kayran", grup: "celal" }]));
+  o.depo.set("kodlar", JSON.stringify({ 5068: [{ ids: [901], tarih: 1 }], 5076: [{ ids: [902], tarih: 1 }], 3000: [{ ids: [903], tarih: 1 }], 3394: [{ ids: [904], tarih: 1 }] }));
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const kuyruk = async (ad) => (await (await stokYaz("kuyruk-al", { ad })).json());
+  // Vegawin: "5068CELAL" / "5076CELAL" (köprü celal=true işaretler) + "3000" (Celal İndirim) + normal 3394
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "5068", adet: 3, fiyat: 20, celal: true }, { kod: "5076", adet: 2, fiyat: 20, celal: true }, { kod: "3000", adet: 5, fiyat: 10 }, { kod: "3394", adet: 4, fiyat: 30 }], simdi: 1 });
+  await stokYaz("ayar-yaz", { k: "akis:yeni", v: "1" });
+  // kural: sonunda CELAL yazan kod ve 3000 / 3002 → Celal; diğerleri → fabrika
+  const ted = await (await stokYaz("tedarikci", { kodlar: ["5068", "3000", "3002", "3394"] })).json();
+  assert.deepEqual(Object.fromEntries(Object.entries(ted).map(([k, v]) => [k, v.tedarikci])), { 5068: "CELAL", 3000: "CELAL", 3002: "CELAL", 3394: null });
+  const kim = (id) => o.g.filter((x) => String(x.govde.chat_id) === String(id));
+  const yazi = (x) => x.govde.text || x.govde.caption || "";
+  const bas = (id, data, ad, mid = 9) => g2({ callback_query: { id: "c", from: { id, first_name: ad }, data, message: { chat: { id }, message_id: mid } } }, o.env);
+  const yazdi = (id, ad, text) => g2({ message: { chat: { id, type: "private" }, from: { id, first_name: ad }, text } }, o.env);
+  const simdi = Math.floor(Date.now() / 1000);
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  // Patron'un istediği gerçek akış: sadece Celal'in 2 modeli + 1 normal model (ayrılmayı görmek için)
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "ozelListe", kodlar: ["5068", "5076", "3394"], magaza: "VOLONTE", baslik: "CELAL DENEMESİ" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tgS);
+  const sn = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.deepEqual(sn.modeller, ["5068 (celal)", "5076 (celal)", "3394 (fabrika)"]);
+  const ek = sn.anahtar;
+  // 1) Aziz'e kartlar (her model ayrı; "👤 Celal'in modeli" yazar)
+  const ak = kim(444).filter((x) => x.govde.reply_markup);
+  assert.match(yazi(ak.find((x) => /5068/.test(yazi(x)))), /5068 · satılan 0 · stok 3[\s\S]*👤 Celal'in modeli/);
+  assert.ok(!/Celal'in modeli/.test(yazi(ak.find((x) => /3394/.test(yazi(x))))));
+  // 5068: Büyük + "✅ Aynısı" yoksa önceki istek gerekir → önceki istek kaydı (Aziz'in daha önceki seçimi)
+  await stokYaz("ayar-yaz", { k: "fabrika:sonIstek", v: JSON.stringify({ 5068: { beden: "b", gruplar: { b: [{ renk: "siyah", adet: 12 }] } } }) });
+  await bas(444, `fe:o:${ek}:5068`, "Aziz"); // Aynısı
+  await bas(444, `fe:b:${ek}:5076`, "Aziz"); await yazdi(444, "Aziz", "5076 büyük bordo 10 siyah 6"); // Adeti değiştir (yazıyla)
+  const tey = kim(444).filter((x) => /Doğru mu\?/.test(yazi(x))).at(-1);
+  if (tey) await bas(444, tey.govde.reply_markup.inline_keyboard[0][0].callback_data, "Aziz");
+  await bas(444, `fe:x:${ek}:3394`, "Aziz"); // normal model: isteme (bu denemede sadece Celal'in modelleri gitsin)
+  await eminim(o, g2, 444, "Aziz");
+  // 2) Hemra'ya liste: Celal ayrı başlık
+  const hl = kim(333).find((x) => /Gidecek liste/.test(yazi(x)));
+  assert.match(yazi(hl), /👤 Celal:[\s\S]*5068[\s\S]*5076/);
+  o.g.length = 0;
+  await bas(333, hl.govde.reply_markup.inline_keyboard[0][0].callback_data, "Hemra");
+  // 3) kartlar SADECE Celal'e; Sinem/Fuat/Nuri'ye HİÇBİR şey gitmez; Celal'e "VOLONTE" yazmaz
+  for (const id of [555, 556, 557]) assert.equal(kim(id).length, 0, `fabrika kişisine mesaj gitti: ${id}`);
+  const ck = kim(600).filter((x) => x.govde.reply_markup);
+  assert.equal(ck.length, 2);
+  assert.ok(ck.every((x) => !/VOLONTE|stok|satış/i.test(yazi(x))));
+  const kart5068 = ck.find((x) => /5068/.test(yazi(x))), kart5076 = ck.find((x) => /5076/.test(yazi(x)));
+  const mid68 = 51 + o.g.indexOf(kart5068), mid76 = 51 + o.g.indexOf(kart5076); // sahte Telegram: message_id = 50 + sıra
+  assert.equal(yazi(kart5068), "5068 · Büyük (44-50) · siyah 12");
+  // 4) Celal: 5068 "Gelecek" + süre; 5076 "Bitti"
+  const dug = (x, re) => x.govde.reply_markup.inline_keyboard.flat().find((b) => re.test(b.text)).callback_data;
+  o.g.length = 0;
+  await bas(600, dug(kart5068, /Gelecek/), "Celal", mid68);
+  const sure = o.g.find((x) => String(x.govde.chat_id) === "600" && x.govde.reply_markup && /Kaç günde/.test(yazi(x)));
+  assert.ok(sure, "Celal'e süre sorusu gelmedi");
+  await bas(600, sure.govde.reply_markup.inline_keyboard.flat()[0].callback_data, "Celal", mid68);
+  o.g.length = 0;
+  await bas(600, dug(kart5076, /Bitti/), "Celal", mid76);
+  for (const id of [555, 556, 557]) assert.equal(kim(id).length, 0); // Fuat'a "bitti onayı" GİTMEZ (Celal kendisi)
+  const hk = kim(333).find((x) => x.govde.reply_markup && /5076/.test(yazi(x)));
+  assert.match(yazi(hk), /5076[\s\S]*Fabrikada bitti \(Celal\)[\s\S]*Ne yapalım\?$/);
+  const sip = dug(hk, /Repete/).split(":").slice(2).join(":");
+  // 5) Hemra "Repete" → dağılım → Patron'a
+  o.g.length = 0;
+  await bas(333, `fh:r:${sip}`, "Hemra");
+  const dk = o.g.find((x) => /^editMessage/.test(x.metod) && String(x.govde.chat_id) === "333");
+  const rid = (dk.govde.reply_markup.inline_keyboard.flat().find((b) => /Dağılımı değiştir/.test(b.text)).callback_data).split(":").slice(2).join(":");
+  if (!dk.govde.reply_markup.inline_keyboard.flat().some((b) => /Patron'a gönder/.test(b.text))) { await bas(333, `rk:hd:${rid}`, "Hemra"); await yazdi(333, "Hemra", "bordo büyük 24 siyah büyük 16"); }
+  await bas(333, `rk:ho:${rid}`, "Hemra");
+  const on = await kuyruk("rkOneri");
+  assert.deepEqual([on[0].kod, on[0].uretici, on[0].adet], ["5076", "Celal", 40]);
+  // Venom (Patron kartı): "Onaylarsanız Celal'e gider." — Patron onaylar
+  const { rkKartMetni } = await import("./venom-bot.js");
+  assert.match(rkKartMetni({ ...on[0], magaza: "VOLONTE" }), /Onaylarsanız Celal'e gider\.$/);
+  await stokYaz("kuyruk-ekle", { ad: "rkKarar", kayit: { id: `${rid}:k`, rid, karar: "onay", kim: "Patron", dugme: "✅ Onaylıyorum", zaman: simdi } });
+  o.g.length = 0;
+  await rk.repeteKartAdimi(o.env, simdi, tgS);
+  // 6) repete kartı SADECE Celal'e (mağaza adı yok); Fuat'a GİTMEZ
+  assert.equal(kim(557).length, 0);
+  const rkc = kim(600).find((x) => x.govde.reply_markup);
+  assert.match(yazi(rkc), /^🔁 REPETE · 5076 · .*\nToplam 40 adet\. Dağılım sabittir, değiştirilmez\.$/);
+  assert.deepEqual(rkc.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ 4-8 gün", "✅ 10-15 gün", "⏳ 2 gün sonra dön", "❌ Yapamam"]);
+  assert.match(yazi(kim(333).at(-1)), /Patron onayladı\. Repete kartı Celal'e gitti\.$/);
+  // Fuat Celal'in kartına basamaz
+  o.g.length = 0;
+  await bas(557, `rk:f8:${rid}`, "Fuat");
+  assert.match(o.g.at(-1).govde.text, /Bu kart Celal Bey'in\./);
+  // 7) Celal "4-8 gün" → Patron'a TEK satır
+  await bas(600, `rk:f8:${rid}`, "Celal");
+  const sonuc = await kuyruk("rkSonuc");
+  assert.equal(sonuc.length, 1);
+  assert.match(sonuc[0].metin, /^5076 · 40 adet · Celal onayladı · teslim: \d\d\.\d\d\.\d{4}$/);
+  // TEK DEFTER: Celal kişi olarak görünür; "Fuat" yazmaz
+  const df = await (await stokYaz("defter", { kuru: true, adlar: { 600: "Celal" } })).json();
+  const s = (df.satirlar || []).filter((x) => ["5068", "5076"].includes(String(x.kod)) && ["fabrika", "repete", "kart"].includes(x.tur)); // botun kendi iş satırları (Sami) hariç
+  assert.ok(s.length >= 2);
+  assert.ok(s.every((x) => /Celal/.test(x.kim) && !/Fuat|Sinem|Nuri/.test(`${x.kim} ${x.kanit}`)), JSON.stringify(s.map((x) => [x.kod, x.kim, x.kanit])));
+});

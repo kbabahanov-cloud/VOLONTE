@@ -118,7 +118,11 @@ export async function gunVerisi(env, gun) {
   for (const x of kanal) { const o = tek.find((y) => y.kod === x.kod && Math.abs(x.zaman - y.zaman) <= 1800); if (o) { o.ekMesaj = [...(o.ekMesaj || []), x.mesaj]; } else tek.push(x); }
   kanal.length = 0; kanal.push(...tek);
   const fab = await fabrikayaGidenler(env, gun).catch(() => ({ giden: {}, bekleyen: [] }));
-  return { gun, site, kanal, fabrika: { VOLONTE: [...(fab.giden.VOLONTE || [])].sort(), BLACKROSE: [...(fab.giden.BLACKROSE || [])].sort(), bekleyen: fab.bekleyen || [] } };
+  // 12 Kasım (Patron): CELAL — Celal'in modelleri ayrı sayılır ("Fabrika: Celal'e 2 model, Sinem'e 5 model")
+  const tumGiden = [...new Set([...(fab.giden.VOLONTE || []), ...(fab.giden.BLACKROSE || [])])];
+  const ted = tumGiden.length ? await stokIste(env, "/tedarikci", { kodlar: tumGiden }).catch(() => ({})) : {};
+  const celal = tumGiden.filter((k) => (ted[k] || {}).tedarikci === "CELAL").sort();
+  return { gun, site, kanal, fabrika: { VOLONTE: [...(fab.giden.VOLONTE || [])].sort(), BLACKROSE: [...(fab.giden.BLACKROSE || [])].sort(), celal, bekleyen: fab.bekleyen || [] } };
 }
 export function gunVerisiMetni(v, simdi) {
   const ne = v.gun === gunA(simdi) ? "Bugün" : v.gun === gunA(simdi - 86400) ? "Dün" : gunYaz(v.gun);
@@ -129,7 +133,7 @@ export function gunVerisiMetni(v, simdi) {
     `Siteden KALDIRILAN ${v.site.kaldirilan.length} model: ${kl(v.site.kaldirilan)}`,
     `Site GÜNCELLEMESİ ${v.site.guncellenen.length} kez${v.site.guncellenen.length ? `: ${v.site.guncellenen.map((x) => `${x.ne} (${zamanYaz(x.zaman).slice(6)})`).join("; ")}` : ""}`,
     `Kanala PAYLAŞIM ${v.kanal.length}: ${v.kanal.length ? v.kanal.map((x) => `${x.kod} (${zamanYaz(x.zaman).slice(6)}, mesaj ${[x.mesaj, ...(x.ekMesaj || [])].join(" + ")})`).join(", ") : "yok"}`,
-    `Fabrikaya giden: VOLONTE ${v.fabrika.VOLONTE.length}${v.fabrika.VOLONTE.length ? ` (${v.fabrika.VOLONTE.join(", ")})` : ""} · Black Rose ${v.fabrika.BLACKROSE.length}${v.fabrika.BLACKROSE.length ? ` (${v.fabrika.BLACKROSE.join(", ")})` : ""}`,
+    `Fabrikaya giden: VOLONTE ${v.fabrika.VOLONTE.length}${v.fabrika.VOLONTE.length ? ` (${v.fabrika.VOLONTE.join(", ")})` : ""} · Black Rose ${v.fabrika.BLACKROSE.length}${v.fabrika.BLACKROSE.length ? ` (${v.fabrika.BLACKROSE.join(", ")})` : ""}${(v.fabrika.celal || []).length ? ` · bunlardan Celal'e ${v.fabrika.celal.length} model (${v.fabrika.celal.join(", ")}), Sinem'e ${v.fabrika.VOLONTE.length + v.fabrika.BLACKROSE.length - v.fabrika.celal.length} model` : ""}`,
   ].join("\n");
 }
 

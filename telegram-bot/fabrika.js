@@ -15,7 +15,7 @@ import { defterIs, defterCevap } from "./is-defteri.js";
 import { mesaiMi, isGunuSuresi, GUNCEL } from "./kart-tekrar.js";
 import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
-import { indirimliMi, INDIRIMLI } from "./stok.js";
+import { indirimliMi, INDIRIMLI, celalKoduMu } from "./stok.js";
 import { patronMu, silKuyrugu, geriKuyrugu, magazaStoklari, magazaStogu, STOK_KURALI } from "./sil.js";
 import { fuatSuzgec } from "./mutabakat.js";
 import { REPETE_EN_AZ } from "./repete-rapor.js";
@@ -132,7 +132,8 @@ export const fabrikaKisileri = async (env, grup = "fabrika") => (await tumKisile
 export const kisiKaydi = async (env, id) => (await tumKisiler(env)).find((k) => String(k.id) === String(id)) || null;
 export const fabrikaKisisiMi = async (env, id) => Boolean(await kisiKaydi(env, id));
 export const GRUP_AD = { fabrika: "🏭 Fabrika (Nuri/Sinem/Fuat)", celal: "👤 Celal" };
-const grupOf = (t) => (t && t.tedarikci === "CELAL" ? "celal" : "fabrika");
+// 12 Kasım (Patron): sonunda "CELAL" yazan kod (köprü işaretler) ya da 3000 / 3002 ("Celal İndirim") → Celal; diğer bütün modeller → Sinem/Fuat/Nuri
+const grupOf = (t, kod = null) => ((t && t.tedarikci === "CELAL") || celalKoduMu((t && t.kod) || kod || "") ? "celal" : "fabrika");
 // Liste satırlarını gruba göre başlıklar altında yazar
 function grupluYaz(liste, gruplar, satirYaz) {
   const sonuc = [];
@@ -791,7 +792,7 @@ async function kendiKartlari(env, simdi, cfg, kisi) {
   for (let i = 0; i < 3; i++) {
     const gun = gunAnahtari(simdi - i * 86400), ak = `${gun}${cfg.ek}`;
     const ana = await ayarOku(env, `fabrika:${ak}`, null);
-    for (const k of [ak, ...((ana && ana.ekler) || []), `${ak}-DK`, `${gun}-D${cfg.ek}`, `${ak}-D`]) {
+    for (const k of [ak, ...((ana && ana.ekler) || []), `${ak}-DK`, `${gun}-D${cfg.ek}`, `${ak}-D`, `${ak}-ozel1`, `${ak}-ozel2`, `${ak}-ozel3`]) { // 12 Kasım: özel liste (ana liste yokken de)
       if (gorulen.has(k)) continue; gorulen.add(k);
       const d = k === ak ? ana : await ayarOku(env, `fabrika:${k}`, null);
       if (d && String(kimeOf(env, d)) === kisi && d.mesajlar && Object.keys(d.mesajlar).length) l.push({ anahtar: k, d });
@@ -904,11 +905,11 @@ export async function acikListe(env, simdi, cfg = MAGAZALAR[0]) {
   const gun = gunAnahtari(simdi);
   const ak = `${gun}${cfg.ek}`;
   const ana = await ayarOku(env, `fabrika:${ak}`, null);
-  if (!ana) return { gun, anahtar: null, d: null, ana: null };
   let anahtar = null;
   let d = null;
-  for (const k of [ak, ...(ana.ekler || [])]) {
+  for (const k of [...new Set([ak, ...((ana && ana.ekler) || []), `${ak}-ozel1`, `${ak}-ozel2`, `${ak}-ozel3`])]) { // 12 Kasım: özel liste ana liste yokken de bulunur
     const x = k === ak ? ana : await ayarOku(env, `fabrika:${k}`, null);
+    if (!x) continue;
     if (x && ["soruldu", "duzelt", "onayda", "eminMi"].includes(x.asama) && (!d || x.zaman >= d.zaman)) { anahtar = k; d = x; }
   }
   return { gun, anahtar, d, ana };
@@ -986,7 +987,7 @@ export async function fabrikaCevabi(env, m, tg, simdi, { yorumla = null } = {}) 
   const yeniKodlar = liste.map((x) => x.kod).filter((k) => !d.modeller.some((x) => x.kod === k));
   if (yeniKodlar.length) {
     const ted = await stokIste(env, "/tedarikci", { kodlar: yeniKodlar });
-    for (const k of yeniKodlar) d.modeller.push({ kod: k, satilan: 0, kalan: null, grup: grupOf(ted[k]), ikiKart: Boolean(ted[k] && ted[k].ikiKart), ekstra: true });
+    for (const k of yeniKodlar) d.modeller.push({ kod: k, satilan: 0, kalan: null, grup: grupOf(ted[k], k), ikiKart: Boolean(ted[k] && ted[k].ikiKart), ekstra: true });
   }
   const kararlar = {};
   for (const x of liste) (kararlar[x.kod] = kararlar[x.kod] || []).push(x.renkler.length ? { beden: x.beden, renkler: x.renkler } : { beden: x.beden });
@@ -2357,7 +2358,7 @@ export async function repeteMetni(env, m, tg, simdi) {
   const kisiGrup = kisi ? kisiGrubu(kisi) : null; // ekip: hepsi; Celal sadece kendi, fabrika sadece kendi modelleri
   if (kisiGrup) {
     const ted = await stokIste(env, "/tedarikci", { kodlar: [kod] });
-    if (grupOf(ted[kod]) !== kisiGrup) { await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${kod} sizin listenizde değil.` }); return true; }
+    if (grupOf(ted[kod], kod) !== kisiGrup) { await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${kod} sizin listenizde değil.` }); return true; }
   }
   let rec = null;
   for (const id of [...acik].reverse()) {
@@ -2586,7 +2587,7 @@ async function tekIslem(env, simdi, tg) {
       if (yeni.length) {
         const ted = await stokIste(env, "/tedarikci", { kodlar: yeni }).catch(() => ({}));
         const st = await stokIste(env, "/toplu", { kodlar: yeni }).catch(() => ({}));
-        for (const k of yeni) d.modeller.push({ kod: k, satilan: 0, kalan: st[k] ? st[k].toplam : null, grup: grupOf(ted[k]), ikiKart: Boolean(ted[k] && ted[k].ikiKart), ekstra: true, acil: true });
+        for (const k of yeni) d.modeller.push({ kod: k, satilan: 0, kalan: st[k] ? st[k].toplam : null, grup: grupOf(ted[k], k), ikiKart: Boolean(ted[k] && ted[k].ikiKart), ekstra: true, acil: true });
         d.gonderilmedi = [...yeni, ...(d.gonderilmedi || [])];
         d.bilinen = [...new Set([...(d.bilinen || []), ...yeni])];
         sonuc.eklenen.push(...yeni.map((k) => `${k} (${cfg.etiket})`));
@@ -2594,6 +2595,38 @@ async function tekIslem(env, simdi, tg) {
       d.gonderilmedi = [...(d.gonderilmedi || []).filter((k) => kodlar.includes(k)), ...(d.gonderilmedi || []).filter((k) => !kodlar.includes(k))];
       await ayarYaz(env, `fabrika:${ana}`, d);
       await modelParcasi(env, ana, tg).catch(() => null);
+    }
+  } else if (is.tur === "celalOku") { // 12 Kasım (okuma): Celal'in modelleri — grup, mağaza stoğu, son istek, açık fabrika / repete kaydı, bugünkü liste durumu
+    const kodlar = (is.kodlar || []).map(String).slice(0, 20);
+    const ted = await stokIste(env, "/tedarikci", { kodlar }).catch(() => ({}));
+    const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
+    const acik = await ayarOku(env, "fs:acik", []);
+    sonuc.kisiler = (await tumKisiler(env)).map((k) => ({ ad: k.ad, grup: kisiGrubu(k) }));
+    sonuc.modeller = [];
+    for (const k of kodlar) {
+      const st = await magazaStoklari(env, k).catch(() => null);
+      const fs = []; for (const id of acik.filter((x) => String(x).startsWith(`${k}-`))) { const r = await siparisOku(env, id); if (r && !r.deneme) fs.push({ id, durum: r.durum, grup: r.grup, gonderim: r.gonderim }); }
+      sonuc.modeller.push({ kod: k, grup: grupOf(ted[k], k), tedarikci: (ted[k] || {}).tedarikci || null, stok: st ? st.magazalar : null, sonIstek: sonIstek[k] || null, acikFs: fs, foto: Boolean(await fotoBul(env, k).catch(() => null)) });
+    }
+    sonuc.bugun = {}; for (const cfg of MAGAZALAR) { const x = await ayarOku(env, `fabrika:${gunAnahtari(simdi)}${cfg.ek}`, null); sonuc.bugun[cfg.magaza] = x ? { asama: x.asama, ekler: x.ekler || [], n: (x.modeller || []).length } : null; }
+    sonuc.yeniAkis = await yeniAkisAcik(env);
+  } else if (is.tur === "ozelListe") { // 12 Kasım (Patron): GERÇEK akışla sadece verilen modeller — kontrol (Aziz) → Hemra onayı → fabrika / Celal (grubuna göre)
+    const cfg = MAGAZALAR.find((c) => c.magaza === (is.magaza || "VOLONTE")) || MAGAZALAR[0];
+    const ana = `${gunAnahtari(simdi)}${cfg.ek}`;
+    const d = await ayarOku(env, `fabrika:${ana}`, null);
+    const kodlar0 = (is.kodlar || []).map(String).filter(Boolean).slice(0, 10);
+    if (!kodlar0.length) sonuc.hata = "model yok";
+    else {
+      let ekAd = null; for (let i = 1; i <= 3 && !ekAd; i++) if (!(await ayarOku(env, `fabrika:${ana}-ozel${i}`, null))) ekAd = `${ana}-ozel${i}`;
+      if (!ekAd) { sonuc.hata = "bugün 3 özel liste açıldı; yenisi açılmaz"; } else {
+      if (d) { d.ekler = [...(d.ekler || []), ekAd]; d.bilinen = [...new Set([...(d.bilinen || []), ...kodlar0])]; await ayarYaz(env, `fabrika:${ana}`, d); }
+      const ted = await stokIste(env, "/tedarikci", { kodlar: kodlar0 }).catch(() => ({}));
+      const satis = await satislarAl(env, gunAnahtari(simdi), cfg.magaza).catch(() => []);
+      const satirlar = [];
+      for (const k of kodlar0) { const st = await magazaStoklari(env, k).catch(() => null); satirlar.push({ kod: k, satilan: (satis.find((x) => x.kod === k) || {}).satilan || 0, kalan: st && st.magazalar ? st.magazalar[cfg.magaza] || 0 : null, ...(ted[k] || {}) }); }
+      await listeyiGonder(env, gunAnahtari(simdi), satirlar, simdi, tg, null, { anahtar: ekAd, ek: true, cfg, baslik: is.baslik || "EK LİSTE" });
+      Object.assign(sonuc, { anahtar: ekAd, modeller: satirlar.map((x) => `${x.kod} (${grupOf(x)})`) });
+      }
     }
   } else if (is.tur === "dunTamamla") { // 10 Kasım (Patron): dün gitmeyen liste — bugün zaten istenen modeller çıkarılır, kalanı tamamlatılır
     const d = await ayarOku(env, `fabrika:${is.anahtar}`, null);

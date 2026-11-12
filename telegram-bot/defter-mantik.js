@@ -91,9 +91,10 @@ const RK_DURUM = {
 };
 export function repeteSatiri(r) {
   const [durum, kim, yazi] = RK_DURUM[r.durum] || ["acik", "Hemra", r.durum];
-  const onay = r.fuat && r.fuat.zaman ? `Fuat onayladı${r.fuat.kaynak ? ` (${r.fuat.kaynak})` : ` (${zamanYaz(r.fuat.zaman)})`}` : null;
-  return { id: `repete:${r.id}`, tur: "repete", kod: String(r.kod), marka: r.magaza || null, ne: `Repete ${r.adet || "?"} adet`, kim, durum, bot: "sami", acildi: r.zaman || 0, guncel: (r.fuat && r.fuat.zaman) || (r.patron && r.patron.zaman) || r.zaman || 0,
-    kanit: r.durum === "acik" ? `${onay || "Fuat onayladı"}, teslim ${String(r.teslim || "").split("-").reverse().join(".")}` : `${yazi} (repete kaydı ${zamanYaz(r.zaman || 0)})`, ek: { adet: r.adet, teslim: r.teslim || null, rdurum: r.durum } };
+  const ur = r.uretici === "celal" ? "Celal" : "Fuat"; // 12 Kasım: Celal'in repetesi Celal'de
+  const onay = r.fuat && r.fuat.zaman ? `${ur} onayladı${r.fuat.kaynak ? ` (${r.fuat.kaynak})` : ` (${zamanYaz(r.fuat.zaman)})`}` : null;
+  return { id: `repete:${r.id}`, tur: "repete", kod: String(r.kod), marka: r.magaza || null, ne: `Repete ${r.adet || "?"} adet`, kim: kim === "Fuat" ? ur : kim, durum, bot: "sami", acildi: r.zaman || 0, guncel: (r.fuat && r.fuat.zaman) || (r.patron && r.patron.zaman) || r.zaman || 0,
+    kanit: r.durum === "acik" ? `${onay || `${ur} onayladı`}, teslim ${String(r.teslim || "").split("-").reverse().join(".")}` : `${ur === "Celal" ? yazi.replace(/Fuat/g, "Celal") : yazi} (repete kaydı ${zamanYaz(r.zaman || 0)})`, ek: { adet: r.adet, teslim: r.teslim || null, rdurum: r.durum } };
 }
 export function fabrikaSatiri(f, adlar = {}) {
   let [durum, sabitKim, yazi] = FS_DURUM[f.durum] || ["acik", null, f.durum];
@@ -105,7 +106,7 @@ export function fabrikaSatiri(f, adlar = {}) {
     else if (f.oneri && f.oneri !== "bekle") [durum, sabitKim, yazi] = ["acik", "Patron", `fabrikada bitti; Hemra önerdi: ${{ repete: "repete", sil: "sil", sor: "Patron karar versin" }[f.oneri] || f.oneri}${f.oneriZaman ? ` (${zamanYaz(f.oneriZaman)})` : ""}; Patron kararı bekleniyor`];
   }
   const kisiler = [...new Set((f.chats || []).map((c) => adlar[String(c)]).filter(Boolean))];
-  const kim = sabitKim || (kisiler.length ? kisiler.join(", ") : "Sinem, Fuat, Nuri");
+  const kim = sabitKim || (kisiler.length ? kisiler.join(", ") : f.grup === "celal" ? "Celal" : "Sinem, Fuat, Nuri"); // 12 Kasım: Celal'in modeli Celal'de
   const sure = ["repete", "gelecek"].includes(f.durum) && (f.hazirGun || f.teslimSure) ? `${f.teslimSure ? `, ${f.teslimSure}` : ""}${f.hazirGun ? ` (hazır: ${String(f.hazirGun).split("-").reverse().join(".")})` : ""}` : "";
   return { id: `fabrika:${f.id}`, tur: "fabrika", kod: String(f.kod), marka: f.magaza || null, ne: "Fabrika isteği (eksik listesi)", kim, durum, bot: "sami", acildi: f.gonderim || 0, guncel: f.gonderim || 0,
     kanit: `${yazi}${sure}; fabrikaya gitti ${zamanYaz(f.gonderim || 0)}`, ek: { fdurum: f.durum } };

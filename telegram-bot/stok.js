@@ -26,6 +26,9 @@ export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
 // Satışı Murat'a ayrı tek satır gider. İleride BR/VL DISCOUNT kanalında kullanılacak (fiyatı orada elle yazılır).
 export const INDIRIMLI = ["2000"];
 export const indirimliMi = (kod) => INDIRIMLI.includes(stokKodu(kod));
+// 12 Kasım (Patron): CELAL — Vegawin kodu "CELAL" ile biten kartlar (köprü işaretler) + "Celal İndirim" carisindeki 3000 ve 3002 Celal'in malıdır.
+export const CELAL_KODLAR = ["3000", "3002"];
+export const celalKoduMu = (kod) => CELAL_KODLAR.includes(stokKodu(kod));
 
 const TABLOLAR = [
   `CREATE TABLE IF NOT EXISTS urun (magaza TEXT NOT NULL, kod TEXT NOT NULL, ad TEXT, adet REAL, fiyat REAL,
@@ -292,7 +295,7 @@ export class StokDeposu {
   stoktakiler() {
     const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
     return this.hepsi("SELECT kod, SUM(adet) AS toplam, MAX(fiyat) AS fiyat, MAX(tedarikci) AS tedarikci FROM urun GROUP BY kod HAVING SUM(adet) > 0 AND MAX(fiyat) IS NOT NULL ORDER BY kod")
-      .filter((r) => !silinen.has(r.kod) && !indirimliMi(r.kod));
+      .filter((r) => !silinen.has(r.kod) && !indirimliMi(r.kod)).map((r) => (celalKoduMu(r.kod) ? { ...r, tedarikci: "CELAL" } : r));
   }
 
   olaylar(basla, bitis) {
@@ -345,7 +348,7 @@ export class StokDeposu {
   }
   tedarikci(kod) {
     const r = this.tek("SELECT MAX(tedarikci) AS t, MAX(ikikart) AS i FROM urun WHERE kod = ?", stokKodu(kod)) || {};
-    return { tedarikci: r.t || null, ikiKart: Boolean(r.i) };
+    return { tedarikci: r.t || (celalKoduMu(kod) ? "CELAL" : null), ikiKart: Boolean(r.i) };
   }
 
   // Fabrika "Bitti" → "Sil" kararı: model gizlenir (site/Telegram turlarında görünmez). Vegawin'e dokunmaz.

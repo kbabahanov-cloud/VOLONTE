@@ -30,6 +30,15 @@ const ayarYaz = (env, k, v) => stokIste(env, "/ayar-yaz", { k, v: JSON.stringify
 const kuyruk = (env, ad, kayit) => stokIste(env, "/kuyruk-ekle", { ad, kayit }).catch(() => null);
 const ilk = (y) => String(y || "").split(",")[0].trim();
 export const fuatId = (env) => ilk(env.FUAT_ID);
+// 12 Kasım (Patron): CELAL — Celal'in modelinde repete kartı Celal'e gider (Fuat'ın bütün rolü Celal'de); Fuat'a ASLA gitmez, tersi de olmaz.
+export const ureticiAd = (rec) => (rec && rec.uretici === "celal" ? "Celal" : "Fuat");
+export async function ureticiId(env, rec) {
+  if (!(rec && rec.uretici === "celal")) return fuatId(env);
+  const l = (await env.KAYIT.get("sami:fabrikaKisiler", "json").catch(() => null)) || [];
+  const c = l.find((k) => k.grup === "celal");
+  return c ? String(c.id) : "";
+}
+const yonelt = (rec, metin) => (rec && rec.uretici === "celal" ? String(metin).replace(/Fuat Bey'in/g, "Celal Bey'in").replace(/Fuat'a/g, "Celal'e").replace(/Fuat'ın/g, "Celal'in").replace(/\bFuat\b/g, "Celal") : metin);
 const D = (rec) => (rec.deneme ? DENEME : "");
 const DK = (rec) => (rec.deneme ? "🧪 DENEME — " : "");
 const ACIK = ["hemra", "patron", "fuat", "acik"]; // kural 43: bu durumlarda aynı modele yeni repete yok ("beklemede" kilitlemez)
@@ -66,9 +75,9 @@ export function dagilimCoz(metin) {
   const l = [...m.values()].filter((x) => x.buyuk + x.kucuk > 0);
   return l.length ? l : null;
 }
-export const durumYazi = (rec) => ({ hemra: "Hemra'nın onayında", patron: "Patron'un onayında", fuat: "Fuat'ın cevabı bekleniyor", acik: `Fuat onayladı, teslim ${gunGoster(rec.teslim)}`, beklemede: "Fuat yapamam dedi, beklemede" }[rec.durum] || rec.durum);
+export const durumYazi = (rec) => yonelt(rec, { hemra: "Hemra'nın onayında", patron: "Patron'un onayında", fuat: "Fuat'ın cevabı bekleniyor", acik: `Fuat onayladı, teslim ${gunGoster(rec.teslim)}`, beklemede: "Fuat yapamam dedi, beklemede" }[rec.durum] || rec.durum);
 export const engelMetni = (rec) => `${D(rec)}⛔ ${rec.kod} için açık repete var (${durumYazi(rec)}). Mal gelmeden yeni repete verilmez.`;
-export const sonucSatiri = (rec) => `${DK(rec)}${rec.kod} · ${rec.adet} adet · Fuat onayladı · teslim: ${gunGoster(rec.teslim)}`;
+export const sonucSatiri = (rec) => `${DK(rec)}${rec.kod} · ${rec.adet} adet · ${ureticiAd(rec)} onayladı · teslim: ${gunGoster(rec.teslim)}`;
 const yeniId = (kod, deneme, simdi) => `${deneme ? "D" : ""}${kod}-${simdi.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
 
 // ---------- kayıt ----------
@@ -101,6 +110,7 @@ function kanit(rec, kime, r, metin, kl, simdi) {
   rec.kanit = [...(rec.kanit || []), { zaman: simdi, kime, ok: Boolean(r && r.ok), mesaj: m ? m.message_id : null, resim: Boolean(m && m.photo && m.photo.length), yazi: String((m && (m.caption || m.text)) || metin).slice(0, 900), dugmeler: dugmeYazi((m && m.reply_markup) || kl), hata: r && !r.ok ? String(r.description || "").slice(0, 120) : null }].slice(-60);
 }
 async function kartGonder(env, tg, rec, kime, chat, metin, kl, simdi, foto = null) {
+  kime = yonelt(rec, kime); metin = yonelt(rec, metin);
   let r = foto ? await tg(env, "sendPhoto", { chat_id: chat, photo: foto, caption: metin, ...(kl ? { reply_markup: kl } : {}) }) : null;
   if (!(r && r.ok)) r = await tg(env, "sendMessage", { chat_id: chat, text: metin, ...(kl ? { reply_markup: kl } : {}) });
   kanit(rec, kime, r, metin, kl, simdi);
@@ -108,6 +118,7 @@ async function kartGonder(env, tg, rec, kime, chat, metin, kl, simdi, foto = nul
 }
 async function kartDuzenle(env, tg, rec, kime, m, metin, kl, simdi) {
   if (!m) return null;
+  kime = yonelt(rec, kime); if (!/^(Hemra)/.test(kime)) metin = yonelt(rec, metin);
   const foto = m[2] === "foto";
   const r = await tg(env, foto ? "editMessageCaption" : "editMessageText", { chat_id: m[0], message_id: m[1], [foto ? "caption" : "text"]: metin.slice(0, foto ? 1024 : 4000), reply_markup: kl || { inline_keyboard: [] } });
   kanit(rec, `${kime} (kart güncellendi)`, r && r.ok && r.result && typeof r.result === "object" ? r : { ok: Boolean(r && r.ok), result: { message_id: m[1] }, description: r && r.description }, metin, kl, simdi);
@@ -131,7 +142,7 @@ const hemraTaban = (rec, kim = null) => (rec.hemraKart ? `${rec.hemraKart}\n\n�
 const hemraKlavye = (rec) => ({ inline_keyboard: [...(rec.dagilim ? [[{ text: "✅ Patron'a gönder", callback_data: `rk:ho:${rec.id}` }]] : []), [{ text: "✏️ Dağılımı değiştir", callback_data: `rk:hd:${rec.id}` }], ...(rec.hemraKart ? [] : [[{ text: "❌ Gerek yok", callback_data: `rk:hx:${rec.id}` }]])] });
 // Fabrikaya stok / satış / fiyat bilgisi GİTMEZ: sadece kod + dağılım
 export function fuatMetni(rec) {
-  return [`${D(rec)}${_rk.magazaAdi(rec.magaza)}`, `🔁 REPETE · ${rec.kod} · ${dagilimYazi(rec.dagilim)}`, `Toplam ${rec.adet} adet. Dağılım sabittir, değiştirilmez.`].join("\n");
+  return [rec.uretici === "celal" ? (rec.deneme ? DENEME.trim() : null) : `${D(rec)}${_rk.magazaAdi(rec.magaza)}`, `🔁 REPETE · ${rec.kod} · ${dagilimYazi(rec.dagilim)}`, `Toplam ${rec.adet} adet. Dağılım sabittir, değiştirilmez.`].filter(Boolean).join("\n"); // Celal'e mağaza adı gitmez
 }
 const fuatKlavye = (rec) => ({ inline_keyboard: [[{ text: "✅ 4-8 gün", callback_data: `rk:f8:${rec.id}` }, { text: "✅ 10-15 gün", callback_data: `rk:f15:${rec.id}` }], [{ text: "⏳ 2 gün sonra dön", callback_data: `rk:fd:${rec.id}` }], [{ text: "❌ Yapamam", callback_data: `rk:fy:${rec.id}` }]] });
 const SURE = { f8: { gun: 8, etiket: "4-8 gün" }, f15: { gun: 15, etiket: "10-15 gün" } }; // teslim = aralığın son günü
@@ -152,7 +163,8 @@ export async function oneriAc(env, tg, g, simdi) {
     kalan = st ? Math.max(0, Number(st.toplam) || 0) : 0;
     satis7 = Number((donem || {})[kod]) || 0;
   }
-  const rec = { id: yeniId(kod, deneme, simdi), kod, magaza: g.magaza || "VOLONTE", deneme, test: Boolean(g.test), ikinciDene: Boolean(g.ikinciDene), kaynak: g.kaynak || null, donSn: g.donSn || null,
+  const uretici = g.uretici || (g.test ? "fuat" : ((await stokIste(env, "/tedarikci", { kodlar: [kod] }).catch(() => ({})))[kod] || {}).tedarikci === "CELAL" ? "celal" : "fuat");
+  const rec = { id: yeniId(kod, deneme, simdi), kod, uretici, magaza: g.magaza || "VOLONTE", deneme, test: Boolean(g.test), ikinciDene: Boolean(g.ikinciDene), kaynak: g.kaynak || null, donSn: g.donSn || null,
     dagilim: g.dagilim || null, adet, kalan: Number(kalan) || 0, satis7: Number(satis7) || 0, durum: "hemra", zaman: simdi, mesajlar: {}, kanit: [] };
   rec.bitisGun = rec.satis7 > 0 ? Math.max(1, Math.ceil(rec.kalan / (rec.satis7 / 7))) : null;
   rec.mesajlar.hemra = await kartGonder(env, tg, rec, "Hemra", await _rk.koordinatorId(env, simdi), hemraMetni(rec), hemraKlavye(rec), simdi, await fotoAdresi(env, rec));
@@ -163,7 +175,7 @@ export async function oneriAc(env, tg, g, simdi) {
 // Sinem "Bitti" → Hemra [Repete] (fabrika.js): aynı kart dağılım onayına döner ([✅ Patron'a gönder] / [✏️ Dağılımı değiştir])
 export async function rkHemradan(env, tg, sip, kart, kim, simdi) {
   const v = sip.rkVeri || {};
-  const rec = { id: yeniId(sip.kod, sip.deneme, simdi), kod: sip.kod, magaza: sip.magaza || "VOLONTE", deneme: Boolean(sip.deneme), test: Boolean(sip.test), kaynak: "bitti", sip: sip.id, hemraKart: kart, hemraSecen: kim,
+  const rec = { id: yeniId(sip.kod, sip.deneme, simdi), kod: sip.kod, uretici: sip.grup === "celal" ? "celal" : "fuat", magaza: sip.magaza || "VOLONTE", deneme: Boolean(sip.deneme), test: Boolean(sip.test), kaynak: "bitti", sip: sip.id, hemraKart: kart, hemraSecen: kim,
     donSn: (sip.testVeri && sip.testVeri.donSn) || null, dagilim: v.dagilim || null, adet: dagilimAdet(v.dagilim), kalan: Number(v.kalan) || 0, satis7: Number(v.s7) || 0, yil: v.yil ?? null, durum: "hemra", zaman: simdi,
     mesajlar: { hemra: sip.hemraMesaj ? [String(sip.hemraMesaj[0]), sip.hemraMesaj[1], sip.hemraMesaj[2] === "foto" ? "foto" : "yazi"] : null }, kanit: [] };
   rec.bitisGun = rec.satis7 > 0 ? Math.max(1, Math.ceil(rec.kalan / (rec.satis7 / 7))) : null;
@@ -202,11 +214,11 @@ export async function rkDugme(env, cq, tg, simdi) {
     rec.durum = "patron";
     await cevapla("Patron'a gidiyor");
     await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n✅ ${kim} onayladı — Patron'un onayına gitti.`, null, simdi);
-    await kuyruk(env, "rkOneri", { id: `${rec.id}:o`, rid: rec.id, kod: rec.kod, magaza: rec.magaza, deneme: rec.deneme, dagilim: dagilimYazi(rec.dagilim), adet: rec.adet, kalan: rec.kalan, satis7: rec.satis7, bitisGun: rec.bitisGun, hemra: kim, foto: await fotoAdresi(env, rec), zaman: simdi });
+    await kuyruk(env, "rkOneri", { id: `${rec.id}:o`, rid: rec.id, kod: rec.kod, uretici: ureticiAd(rec), magaza: rec.magaza, deneme: rec.deneme, dagilim: dagilimYazi(rec.dagilim), adet: rec.adet, kalan: rec.kalan, satis7: rec.satis7, bitisGun: rec.bitisGun, hemra: kim, foto: await fotoAdresi(env, rec), zaman: simdi });
     return rkYaz(env, rec);
   }
   if (["f8", "f15", "fd", "fy"].includes(islem)) {
-    if (String(cq.from.id) !== fuatId(env) && !patronMu) return cevapla("Bu kart Fuat Bey'in.");
+    if (String(cq.from.id) !== (await ureticiId(env, rec)) && !patronMu) return cevapla(yonelt(rec, "Bu kart Fuat Bey'in."));
     if (rec.durum !== "fuat" || rec.donZaman) return cevapla(rec.durum === "acik" ? `Zaten onaylandı: teslim ${gunGoster(rec.teslim)}.` : "Bu kart artık geçerli değil.");
     if (islem === "fy") { await cevapla("Tamam"); return fuatYapamam(env, tg, rec, { kim, dugme: "❌ Yapamam" }, simdi); }
     if (islem === "fd") { // 2 gün sonra dön: kart o zaman yeniden gelir; Hemra'ya sorulmaz
@@ -220,13 +232,13 @@ export async function rkDugme(env, cq, tg, simdi) {
     return fuatOnay(env, tg, rec, { kim, gun: SURE[islem].gun, etiket: SURE[islem].etiket, dugme: `✅ ${SURE[islem].etiket}` }, simdi);
   }
   if (islem === "tg" || islem === "t5") { // teslim günü geçti sorusunun cevabı
-    if (String(cq.from.id) !== fuatId(env) && !patronMu) return cevapla("Bu kart Fuat Bey'in.");
+    if (String(cq.from.id) !== (await ureticiId(env, rec)) && !patronMu) return cevapla(yonelt(rec, "Bu kart Fuat Bey'in."));
     if (rec.durum !== "acik") return cevapla("Bu kayıt kapandı.");
     const yeni = gunA(simdi + (islem === "t5" ? 5 : 1) * GUN);
     Object.assign(rec, { teslim: yeni, teslimSoruldu: null, teslimCevap: { kim, ne: islem === "t5" ? "5 gün daha" : "bugün / yarın geliyor", zaman: simdi } });
     await cevapla("Kaydedildi ✅");
     await kartDuzenle(env, tg, rec, "Fuat", rec.mesajlar.teslim, `${D(rec)}📦 ${rec.kod} repete: ${rec.teslimCevap.ne} — yeni teslim ${gunGoster(yeni)}. Teşekkürler.`, null, simdi);
-    const bilgi = `${D(rec)}📦 ${rec.kod} repete: Fuat "${rec.teslimCevap.ne}" dedi → yeni teslim ${gunGoster(yeni)}.`;
+    const bilgi = yonelt(rec, `${D(rec)}📦 ${rec.kod} repete: Fuat "${rec.teslimCevap.ne}" dedi → yeni teslim ${gunGoster(yeni)}.`);
     await kartGonder(env, tg, rec, "Hemra", await _rk.koordinatorId(env, simdi), bilgi, null, simdi);
     await kuyruk(env, "rkSonuc", { id: `${rec.id}:t${simdi}`, rid: rec.id, metin: bilgi, biriktir: true });
     return rkYaz(env, rec);
@@ -236,8 +248,8 @@ export async function rkDugme(env, cq, tg, simdi) {
 
 // ---------- 3) Fuat'a kart (Patron onayından sonra; "2 gün sonra dön" ve "tekrar aç" ile yeniden) ----------
 async function fuataGonder(env, tg, rec, simdi, ne = "Fuat") {
-  const metin = fuatMetni(rec), fuat = fuatId(env);
-  rec.hata = !fuat ? "Fuat'ın kimliği kayıtlı değil" : fuatSuzgec(metin) ? "güvenlik süzgeci durdurdu" : null;
+  const metin = fuatMetni(rec), fuat = await ureticiId(env, rec);
+  rec.hata = !fuat ? `${ureticiAd(rec)}'${rec.uretici === "celal" ? "in" : "ın"} kimliği kayıtlı değil` : fuatSuzgec(metin) ? "güvenlik süzgeci durdurdu" : null;
   const m = rec.hata ? null : await kartGonder(env, tg, rec, ne, fuat, metin, fuatKlavye(rec), simdi, await fotoAdresi(env, rec));
   if (!m) return false;
   rec.mesajlar.fuat = m;
@@ -262,7 +274,7 @@ async function patronKarari(env, tg, k, simdi) {
   }
   if (!(await fuataGonder(env, tg, rec, simdi))) {
     Object.assign(rec, { durum: "iptal", kapandi: simdi });
-    await kuyruk(env, "rkSonuc", { id: `${rec.id}:h`, rid: rec.id, metin: `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "Fuat Sami'ye /start yazmamış olabilir"}). Repete açılmadı.` });
+    await kuyruk(env, "rkSonuc", { id: `${rec.id}:h`, rid: rec.id, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "Fuat Sami'ye /start yazmamış olabilir"}). Repete açılmadı.`) });
     return rkYaz(env, rec);
   }
   await kartGonder(env, tg, rec, "Hemra", hemra, `${D(rec)}${baslik(rec)}: ✅ Patron onayladı. Repete kartı Fuat'a gitti.`, null, simdi);
@@ -275,9 +287,9 @@ export async function tekrarAc(env, tg, kod, kim, simdi) {
   const engel = await acikRepete(env, rec.kod, { deneme: rec.deneme });
   if (engel) return { ok: false, metin: engelMetni(engel) };
   rec.tekrarAcan = [...(rec.tekrarAcan || []), { kim, zaman: simdi }];
-  if (!(await fuataGonder(env, tg, rec, simdi, "Fuat (tekrar açıldı)"))) { await rkYaz(env, rec); return { ok: false, rec, metin: `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "?"}).` }; }
+  if (!(await fuataGonder(env, tg, rec, simdi, "Fuat (tekrar açıldı)"))) { await rkYaz(env, rec); return { ok: false, rec, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "?"}).`) }; }
   await rkYaz(env, rec);
-  return { ok: true, rec, metin: `${DK(rec)}🔁 ${rec.kod} repete tekrar açıldı (${kim}); kart Fuat'a yeniden gitti.` };
+  return { ok: true, rec, metin: yonelt(rec, `${DK(rec)}🔁 ${rec.kod} repete tekrar açıldı (${kim}); kart Fuat'a yeniden gitti.`) };
 }
 
 // ---------- 4) Fuat'ın cevabı ----------
@@ -300,8 +312,8 @@ async function fuatOnay(env, tg, rec, { kim, gun, etiket = null, dugme = null, y
 async function fuatYapamam(env, tg, rec, { kim, dugme = null, yazi = null }, simdi) {
   Object.assign(rec, { durum: "beklemede", donZaman: null, fuat: { kim, zaman: simdi, yapamam: true, dugme, yazi }, beklemeZaman: simdi });
   await kartDuzenle(env, tg, rec, "Fuat", rec.mesajlar.fuat, `${fuatMetni(rec)}\n\n❌ Yapamam`, null, simdi);
-  const r = await tg(env, "sendMessage", { chat_id: fuatId(env), text: `${D(rec)}Tamam, teşekkürler.` });
-  kanit(rec, "Fuat", r, "Tamam, teşekkürler.", null, simdi);
+  const r = await tg(env, "sendMessage", { chat_id: await ureticiId(env, rec), text: `${D(rec)}Tamam, teşekkürler.` });
+  kanit(rec, ureticiAd(rec), r, "Tamam, teşekkürler.", null, simdi);
   await kartGonder(env, tg, rec, "Hemra", await _rk.koordinatorId(env, simdi), `${D(rec)}${baslik(rec)}: Fuat "yapamam" dedi. Kayıt beklemede; yeniden sormak için bana yazın: "${rec.kod} repete tekrar aç"`, null, simdi);
   return rkYaz(env, rec);
 }
@@ -317,7 +329,10 @@ export function fuatYaziCoz(metin) {
   return { tur: yapamam && !onay ? "yapamam" : "onay", gun: gm ? Number(gm[1]) : null, kod: km ? km[1].toLocaleUpperCase("tr") : null };
 }
 export async function rkYazi(env, m, tg, simdi) {
-  if (!m || !m.from || String(m.from.id) !== fuatId(env)) return false;
+  if (!m || !m.from) return false;
+  const celalId = await ureticiId(env, { uretici: "celal" });
+  if (String(m.from.id) !== fuatId(env) && String(m.from.id) !== celalId) return false;
+  const benim = (r) => String(m.from.id) === (r.uretici === "celal" ? celalId : fuatId(env)); // Fuat sadece kendi, Celal sadece kendi repetesine yazar
   const metin = String(m.text || "").trim();
   if (!metin || metin.startsWith("/")) return false;
   const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text });
@@ -325,10 +340,10 @@ export async function rkYazi(env, m, tg, simdi) {
   const c = fuatYaziCoz(metin);
   if (!c) return false;
   const acik = await acikKayitlar(env);
-  const bekleyen = acik.filter((r) => r.durum === "fuat");
+  const bekleyen = acik.filter((r) => r.durum === "fuat" && benim(r));
   let rec = c.kod ? bekleyen.find((r) => ayniKod(r.kod, c.kod)) : null;
   if (!rec && c.kod) {
-    const kayitli = acik.find((r) => ayniKod(r.kod, c.kod) && r.durum === "acik");
+    const kayitli = acik.find((r) => ayniKod(r.kod, c.kod) && r.durum === "acik" && benim(r));
     if (kayitli) { await yaz(`${D(kayitli)}✅ ${kayitli.kod} repetesi zaten kayıtlı: teslim ${gunGoster(kayitli.teslim)}.`); return true; }
     // kartı olmayan model: not alınır, Hemra'ya iletilir — "bu bot sadece eksik listesi gönderir" DENMEZ
     await yaz(`✅ Not alındı: ${c.kod}${c.tur === "onay" ? (c.gun ? ` — ${c.gun} gün` : " — onay") : " — yapamam"}. Bu model için bekleyen repete kartı yok; Hemra'ya iletildi.`);
@@ -502,8 +517,8 @@ export async function repeteKartAdimi(env, simdi, tg) {
     }
     if (rec.durum === "fuat" && mesai(simdi)) { // 24 saat cevap yok → önce Fuat'a, 24 saat sonra Hemra'ya
       if (!rec.hat1 && simdi - rec.fuatGonderim >= GUN) {
-        const r = await tg(env, "sendMessage", { chat_id: fuatId(env), text: `${D(rec)}🔔 Hatırlatma: ${rec.kod} repete kartı cevabınızı bekliyor.`, ...(rec.mesajlar.fuat ? { reply_to_message_id: rec.mesajlar.fuat[1], allow_sending_without_reply: true } : {}) });
-        kanit(rec, "Fuat (hatırlatma)", r, "", null, simdi); rec.hat1 = simdi; degisti = true;
+        const r = await tg(env, "sendMessage", { chat_id: await ureticiId(env, rec), text: `${D(rec)}🔔 Hatırlatma: ${rec.kod} repete kartı cevabınızı bekliyor.`, ...(rec.mesajlar.fuat ? { reply_to_message_id: rec.mesajlar.fuat[1], allow_sending_without_reply: true } : {}) });
+        kanit(rec, `${ureticiAd(rec)} (hatırlatma)`, r, "", null, simdi); rec.hat1 = simdi; degisti = true;
       } else if (rec.hat1 && !rec.hat2 && simdi - rec.hat1 >= GUN) {
         await kartGonder(env, tg, rec, "Hemra (hatırlatma)", await _rk.koordinatorId(env, simdi), `${D(rec)}🔔 Fuat, ${rec.kod} repete kartına cevap vermedi (dün kendisine hatırlatıldı). Arayıp sorar mısınız? (Venom)`, null, simdi);
         rec.hat2 = simdi; degisti = true;
@@ -511,7 +526,7 @@ export async function repeteKartAdimi(env, simdi, tg) {
     }
     if (rec.durum === "acik" && rec.teslim && bugun > rec.teslim && mesai(simdi) && saatI(simdi) >= 10 && !rec.teslimSoruldu) { // teslim günü geçti → Fuat'a sor
       const kl = { inline_keyboard: [[{ text: "🚚 Bugün / yarın geliyor", callback_data: `rk:tg:${rec.id}` }], [{ text: "⏱ 5 gün daha", callback_data: `rk:t5:${rec.id}` }]] };
-      rec.mesajlar.teslim = await kartGonder(env, tg, rec, "Fuat (teslim günü geçti)", fuatId(env), `${D(rec)}📦 ${rec.kod} repete (${rec.adet} adet) teslim günü ${gunGoster(rec.teslim)} idi. Ne durumda?`, kl, simdi);
+      rec.mesajlar.teslim = await kartGonder(env, tg, rec, "Fuat (teslim günü geçti)", await ureticiId(env, rec), `${D(rec)}📦 ${rec.kod} repete (${rec.adet} adet) teslim günü ${gunGoster(rec.teslim)} idi. Ne durumda?`, kl, simdi);
       rec.teslimSoruldu = simdi; degisti = true;
     }
     if (rec.durum === "acik" && !rec.deneme && mesai(simdi) && simdi - (rec.stokBakis || 0) >= 3600) { // mal geldi mi: Vegawin stoğu en düşük seviyeden siparişin yarısı kadar arttı
