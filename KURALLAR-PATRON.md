@@ -5,95 +5,46 @@ Her yeni işe başlamadan önce bu dosya okunur. Her raporun son satırı:
 Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dosyaya eklendi" yazılır.
 (Bu depo herkese açık: burada kişi kimliği, telefon, fiyat, anahtar YOK.)
 
+12 Kasım: eski 67 kural tekrar ve çelişkilerden arındırılıp 30 kurala indirildi; eski numaralar geçersizdir.
+
+**DONDURMA (12–19 Kasım):** Venom'a yeni özellik eklenmez; sadece bozulan düzeltilir.
+
 ## A. Doğruluk ve rapor
-1. **Kanıtsız tamam yok.** "Tamam" demeden önce kişinin telefonuna giden mesaj Telegram'dan geri okunur ve raporda aynen gösterilir (resim/yazı/düğmeler). Kanıt yoksa "doğrulanmadı".
-2. **Zincir testi.** Her değişiklikten sonra: kart → cevap → bir sonraki kişi → son durak (Hemra / Patron / fabrika). Her halkada telefona giden mesaj geri okunur. Bir halka eksikse "tamam" denmez.
-3. **Gerileme kontrolü.** Her değişiklikten sonra bütün testler; bozulan varsa raporun EN BAŞINA.
-33. **Test sadece kolay örnekle yapılmaz;** elemanların gerçek yazım şekilleriyle yapılır (Türkçe harfsiz, sıra serbest, bitişik, kısaltma, iki beden, çok renk, Türkmence/Rusça karışık, belirsiz/tuzak yazılar).
-4. **"X basmadı" denmeden önce** kartın X'e gerçekten gittiği doğrulanır.
-5. **Bot yapamazsa** "yapamadı, sebebi şu" der; "verdim / hallettim" diye yalan rapor yok.
-6. **Rapor kısa, insan dili;** Telegram'da tablo yok. Önce bozuk kalanlar, sonra tamamlananlar.
+1. Kanıtsız "tamam / hazır / yapıldı" denmez: kanıt araç sonucudur (mesaj no, link, kayıt); yoksa "doğrulanmadı" yazılır.
+2. Her değişiklikten sonra bütün testleri ve uçtan uca zinciri Claude Code kendisi çalıştırır; bozulan varsa raporun en başına yazar.
+3. Elemanlara deneme kartı gitmez; deneme 🧪 işaretlidir ve gerçek akışa, fabrikaya, karara karışmaz.
+4. Telegram'ın "gönderildi" demesi kanıt değildir: kanıt karta basılması ya da cevaptır; cevapsız kartı Sami 30 dakikada bir kez hatırlatır, 1 saatte Venom araştırır.
+5. Raporlar kısa ve insan diliyle yazılır (tablo, etiket, iç ad yok); önce bozuk kalan söylenir.
 
-## B. Düzen
-7. **Dondurma:** büyük düzen bitene kadar yeni özellik yok; sadece kâğıda uydurma ve hata düzeltme.
-8. **Günde en fazla 2 büyük değişiklik;** fazlası sıraya.
-9. **Her bot SADECE kendi görev kâğıdındaki işi yapar;** kâğıtta olmayan otomatik iş, zamanlayıcı, hatırlatma ve kart kapalı (yeniden açma Patron onayıyla).
-10. **Para harcama** Patron onayı olmadan yok. Geri alınamaz işler, asıl WhatsApp numarası, fabrikaya sipariş, kural değişikliği için onay alınır.
+## B. Onay ve para
+6. Para harcayan, silen, fabrikaya sipariş veren ya da kural değiştiren hiçbir iş Patron'un onay kartı olmadan başlamaz; "Emin misiniz?" sadece bir kez sorulur.
+7. Pelin sadece mesajda "Pelin" yazarsa ve onay kartıyla çalışır; çalışan işi varken yeniden yüklenmez.
+8. Venom izin sorusu sormaz: önce kendisi çözer, Patron'a sadece çözülmüş hali ya da gerçek karar gelir.
+9. Kalıcı kural sadece Patron açıkça söyleyince eklenir; aynı anda bu dosyaya ve main'e yazılır.
 
-## C. Tek kapı ve kişiler
-11. **Tek kapı:** hiçbir bot Patron'a doğrudan yazmaz; Patron'a sadece Venom yazar.
-12. **Venom Patron'a sadece:** para, repete/stok kararı, silme/kural değişikliği, çözemediği iş, Patron'un sorusu, kritik acil. Rapor 09:40 ve 20:00, en fazla 10 satır; günde en fazla 10 mesaj. Robot satırları ("mesaj X'e gitti") Patron'a gitmez.
-46. **Venom sadece Patron'a cevap verir;** ekiple (Hemra, Aziz, Merdan, fabrika) Sami üzerinden konuşur.
-13. **Sohbetten kalıcı kural çıkarılmaz;** kalıcı kural sadece Patron açıkça söyleyince.
-14. **Hemra koordinatör;** sorunlar önce bot/ekip ile çözülür.
-15. **Fiyat, kâr ve satış sadece Patron'a.** Janet sadece kodla satış fiyatını görür. Fabrikaya fiyat/stok gitmez.
-16. **Müşteriye yapay zekâ cevabı kapalı;** müşteri mesajı Hemra'ya iletilir.
+## C. Venom'un beyni ve tek gerçek kaynak
+10. Patron'un her mesajı beyne (Opus) gider ve soru / emir / karar / not diye sınıflanır; kodda kelime kestirmesi olmaz, hazır kart ve düğme sadece düğmeye basılınca çalışır.
+11. Venom hiçbir şeyi hafızadan söylemez: her cevap defter, Vegawin, site ya da kanal kaydından okunur; veri yoksa aracı çalıştırır, yine yoksa tek satır sebep yazar.
+12. Listeler yarıda kesilmez: araç bütün satırları verir, uzunsa sayfalar.
+13. Sabah (09:40) ve akşam (20:00) raporu en fazla 8 satırdır ve sohbetle aynı kaynaktan okunur; aynı gün için iki farklı sayı çıkamaz.
+14. Venom "sıraya aldım" dediği her işi takip eder: bitince kanıtla tek satır yazar, 1 saatte bitmezse sebebini kendisi araştırıp tek satır yazar.
+15. Patron'a sadece Venom yazar; Venom ekiple (Hemra, Aziz, Merdan, Sinem, Fuat, Nuri) Sami üzerinden konuşur.
+16. "Merdan'a / Aziz'e / Hemra'ya söyle" denince iş Sami üzerinden o kişiye gider; Patron saat söylerse o saat, söylemezse 18:00 yazılır.
+17. Günlük satış marka marka adet, dolar ciro, kasa gideri ve net olarak Vegawin'den okunur; model bazında en çok satanlar da verilir.
 
-## D. Marka ve deneme
-17. **Marka ayrımı:** VOLONTE → Aziz, BLACK ROSE → Merdan. İki marka asla karışmaz, toplanmaz, karşılaştırılmaz; marka tahmin edilmez. Kemal'in öneri kartı Merdan'a sadece Black Rose.
-18. **Deneme ayrı:** 🧪 DENEME asla gerçek akışa, deftere, kanıt defterine, fabrikaya, Hemra'ya ya da Patron'a karar olarak gitmez (Patron bir deneme zincirini açıkça isterse 🧪 işaretiyle gider, fabrikaya yine gitmez).
+## D. Defter, kartlar, kararlar
+18. Tek ortak defter vardır: her bot kartını, cevabını ve bitirdiği işi oraya yazar; her satırda tarih-saat, kişi adı ("fabrika" yazılmaz), marka, model, durum ve kanıt zorunludur.
+19. Patron ya da Hemra bir model için karar verince o modelin bütün açık kartları kapanır ve aynı karar bir daha sorulmaz.
+20. Aynı kart iki kez gitmez, zamanlı işler eski kartı yeniden göndermez ve düzenlemez; aynı modele çelişen kart (hem sil hem bekle) açılmaz.
+21. Kart tek mesajdır ve bir satırda en fazla 2 düğme olur; bir kişiye en fazla 5 kart gider, Hemra'nın kartında da en fazla 5 iş ve her işin kendi düğmesi olur.
+22. Müşteriye yapay zekâ cevap vermez; mesajı Hemra'ya iletilir.
 
-## E. Kart
-19. **Kart = tek mesaj:** resim + yazı + düğmeler. Satırda en fazla 2 düğme; yazılar kesilmez.
-20. **Bir kişiye aynı anda en fazla 5 kart;** cevap verdikçe yenisi gelir.
-21. **Eski kart yenisiyle değiştirilir;** geçersiz kart kapatılır.
-22. **Aziz/Merdan kendi kontrol kartına yazıyla renk/adet girebilir** (sadece kendilerine gelen kart); kart "✅ … – kaydedildi" diye kapanır, Geri al kalır. Beden talimatı tek mesaj. Kendi kartındaki model için "sadece Hemra ya da Murat girebilir" mesajı ASLA gitmez.
-34. **Anlaşılan yazı her zaman teyit edilir:** "Şunu anladım: … Doğru mu?" [✅ Evet] [✏️ Düzelt]. Anlaşılmazsa örnekle yeniden sorulur; tahmin yok.
-35. **Sami'nin beyin modeli Patron izni olmadan değiştirilmez.** Patron kararı (10 Kasım): kalıba uymayan yazıyı Opus anlar. (Not: Sami'nin genel sohbet beyni 29 Ekim'den beri Haiku; Opus'a geçiş Patron'un onayını bekliyor.)
-
-## F. Stok, silme, kanal, site
-23. **Silme kararı sadece Patron'un.** "Sil" düğmesi Patron dışında kimseye gitmez.
-24. **Mağaza stoğu bitmeden** hiçbir model siteden ve kanaldan kaldırılmaz.
-25. **SOLD OUT:** sadece Vegawin mağaza stoğu 0 olunca (fabrikada bitmesi sebep değil); mesaj silinmez, yazıya SOLD OUT eklenir.
-26. **Kanal ve siteye onaysız hiçbir şey gitmez.** Kanal yazısı her zaman kendi düzeninde: EN/FR, fiyatsız, marka imzalı; eski yazı asla kopyalanmaz. Yeni renk → "NEW COLOR / NOUVELLE COULEUR".
-27. **Kemal kendiliğinden toplu geri koyma / yeniden paylaşma yapmaz;** günde 10 onaylı paylaşım, 09:00–21:00, arası 60–90 dk.
-
-## G. Fabrika ve repete
-28. **Repete her zaman taslak, en az 40 adet;** Patron onayıyla fabrikaya.
-29. **Fabrika zinciri:** "Bitti" → Fuat onayı → Hemra karar kartı → Venom'dan Patron'a. "Bitti" kartı Merdan/Aziz'e gitmez. Her karar kanıt defterine (tarih/saat/kim/aynen metin; Patron kararında hangi düğme). (11 Kasım: Hemra kartının ve repete yolunun son hali kural 51, 44, 45'te.)
-30. **Fabrikaya giden listeler** mağaza mağaza ayrı, başı/sonu yazılı; liste bitmeden "emin misin?" özeti.
-43. **Açık repete varken aynı modele yeni repete verilmez:** bir modelin repetesi fabrikadayken (mal gelmeden) o modele ikinci repete açılmaz.
-44. **Fuat'ın repete kartı (Patron onayından sonra):** fotoğraf + kod + renk / beden dağılımı; dağılımı biz belirleriz, fabrika değiştirmez. Düğmeler sadece: [4-8 gün] [10-15 gün] [2 gün sonra dön] [Yapamam]. Fuat yazıyla da cevap verebilir ("3419 onaylıyorum 10 gün"); Sami anlar ve kaydeder. Patron'un kartı sade: dağılım + [Onaylıyorum] [Reddediyorum].
-45. **Repete takibi:** Fuat süre seçince repete kaydı açılır ve Patron'a tek satır gelir ("3419 · 40 adet · Fuat onayladı · teslim: tarih"; aralıkta teslim = aralığın son günü). "2 gün sonra dön": Sami 2 gün sonra kartı Fuat'a yeniden gönderir, Hemra'ya sormaz. "Yapamam": Sami Fuat'a sadece "Tamam, teşekkürler" der, soru sormaz; Hemra'ya bildirir; Patron'a mesaj gitmez; kayıt "beklemede" kalır (kapanmaz, kural 43 bu modeli kilitlemez). Patron (Venom'a) ya da Hemra (Sami'ye) "3419 repete tekrar aç" derse kart Fuat'a yeniden gider. Fuat 24 saat cevap vermezse önce Fuat'a, sonra Hemra'ya hatırlatılır; teslim günü geçerse Fuat'a sorulur; mal gelince kayıt kendiliğinden kapanır.
-49. **Akşam eksik listesi (Aziz → VOLONTE, Merdan → Black Rose):** her kartta son 7 günde satılan adet + yıllık satış yazar. [Depoda var] düğmesi: Vegawin'de 0 görünüp rafta mal varsa repete istenmez. 1 saat cevap yoksa Sami bir kez hatırlatır; yine cevap yoksa liste o haliyle Hemra'ya gider.
-50. **Hemra'nın liste onayı:** VOLONTE ve Black Rose listeleri AYRI gelir. 1 saat onay yoksa Sami hatırlatır; 1 saat daha cevap yoksa liste Patron'a gelir. Onaylanınca liste fabrikaya (Sinem, Fuat, Nuri) gider.
-51. **Sinem "Bitti" basınca** Sami hemen Hemra'ya kart gönderir: fotoğraf + kod + mağazada kalan adet + son 7 gün ve yıllık satış + Sami'nin önerisi. Düğmeler: [Repete] [Bitene kadar bekle] [Sil]. Repete → Hemra dağılımı onaylar → Patron'a kart (dağılım + [Onaylıyorum] [Reddediyorum]) → Fuat'ın repete kartı. Bitene kadar bekle → model site ve kanalda kalır, stok bitince SOLD OUT. Sil → Hemra silemez, karar Patron'a gelir. Repete Fuat'a düz yazıyla gitmez; sadece kartla.
-
-## H. Gizlilik
-31. **Depo herkese açık:** Telegram kimliği, telefon, kullanıcı adı, fiyat, şifre depoya yazılmaz; gizli kayıtta durur. Şifre asla yazdırılmaz. Kişisel bilgi dış servislere gönderilmez.
-
-## I. Pelin
-32. **Pelin sadece Patron açıkça isterse üretir;** kendiliğinden / otomatik yeniden üretim yok. Büyük beden modelde dolgun manken, onaylı yüz. 3 saatte bitmezse Patron'a sorar. Çalışan işi varken Pelin yeniden yüklenmez.
-
-## J. Dosyalar
-36. **KURALLAR-PATRON.md ve VOLONTE-BILGI.md her güncellendiğinde main dalına da AYNI ANDA yazılır** (Claude projesi bu dosyaları main'den okur). Main'de sadece bu dosyalar değişir; kod ve site dosyalarına dokunulmaz.
-
-## K. Venom rapor ve mesaj düzeni (11 Kasım)
-37. **Sabah (09:40) ve akşam (20:00) raporu EN FAZLA 8 satır, sabit sıra, her satır tek kez:** başlık · genel durum ("Her şey çalışıyor" / "N sorun var: …") · Patron kararı bekleyen (sadece para, repete, silme; yoksa satır yok) · satış (VOLONTE X, Black Rose Y) · kanal (X paylaşım) · site (X model, Y eklendi) · fabrika (eksik listesi gitti mi, kaç model) · Venom'un kendi çözdükleri (tek satır). Tekrar, yarım satır, kart sayısı, iç ayrıntı yok; ayrıntı sadece /detay.
-38. **Mesajlarda <b> gibi kod etiketi görünmez;** biçimsiz gönderimde etiketler temizlenir.
-39. **Venom Patron'a "kontrol edeyim mi?", "yazayım mı?" diye sormaz;** kontrol eder, çözer, sonucu tek mesajla bildirir.
-40. **Çelişkili mesaj yasak:** bot "yapamadım" deyip Venom "düzeltildi" diyemez. Venom önce kanıtla doğrular (kanal mesaj numarası, site linki), sonra TEK mesaj: "Tamam, kanıt: …" ya da "Yapılamadı, sebep: …, şu an çözülüyor". Sıraya alınan iş "tamam" sayılmaz.
-41. **Köprü alarmı Patron'a doğrudan gelmez:** bilgisayardan sinyal yoksa Venom önce mağazanın sorumlusuna (VOLONTE → Aziz, Black Rose → Merdan) ve Hemra'ya yazar ("Mağaza bilgisayarı açık mı, Sami köprüsü çalışıyor mu?"); 30 dakikada düzelmezse Patron'a tek satır. Cumartesi, pazar ve 09:00–10:30 açılışta alarm yok. Sinyal varsa Venom soru sormaz: Vegawin'e giriş olmaması normaldir.
-42. **Kontrol ilkesi:** Venom önce kendisi çözer; Patron'a sadece çözülmüş hali ya da gerçek karar gelir.
-47. **Venom listeleri temiz:** biten ya da 3 günden eski iş listeden kendiliğinden düşer (şüpheliyse Venom önce kanıtla kontrol eder); aynı iş iki kez yazılmaz; satır yarım kesilmez; iç kod adı Patron'a gösterilmez.
-48. **"Bekleyenler"de sadece Patron kararı bekleyen işler olur,** her birinin altında kendi düğmesi; bilgi satırı (ör. "Sitede 165 model") olmaz. Ne olduğu belli olmayan iş tek cümleyle açıklanır.
-
-## L. Deneme (11 Kasım)
-52. **Elemanlara deneme kartı gitmez.** Claude Code zinciri önce kendisi baştan sona çalıştırır: Sami ve Venom'un gerçek kodu, sahte Telegram ile; düğmelere sahte basılır, her adımda giden mesaj okunur (Sinem → Hemra → Patron → Fuat [2 gün sonra dön] → Fuat [Yapamam] → "tekrar aç" → Fuat [4-8 gün] → Patron'a sonuç satırı; dosya telegram-bot/test-zincir.mjs). Uçtan uca hatasız geçmeden Patron'a "hazır" denmez. Sadece hatasız geçerse elemanlarla TEK bir son deneme yapılır (Patron onayıyla).
-53. **Aynı mesaj tekrar gitmez:** aynı kişiye aynı mesaj için ikinci onay kartı açılmaz; onaylanmış mesaj 24 saat içinde ikinci kez gönderilmez. Fabrikaya (Fuat, Nuri) "test" / "deneme" içerikli mesaj "🧪 DENEME" başlığı olmadan asla gitmez.
-54. **Patron "geldi mi?" diye hiç sormaz.** Telegram'ın "gönderildi" demesi kanıt sayılmaz; asıl kanıt kişinin karta basması ya da cevap vermesidir. Elemana giden her kartı Sami takip eder: 30 dakika (mesai) içinde basılmazsa kişiye bir kez "Size kart geldi, en alttaki karta bakın" diye hatırlatır. 1 saat sonra hâlâ basılmamışsa Venom Hemra'ya bildirir ve sebebini kendisi araştırır (kart yanlış hesaba mı gitti, kişi botu engelledi mi?). Patron'a sadece Venom'un çözemediği durum gelir.
-
-## M. Tek defter ve Venom — kökten düzeltme (11 Kasım)
-55. **Tek ortak defter:** bütün botlar (Venom, Sami, Kemal, Selin, Pelin) işleri, soruları, cevapları, onayları, fabrika listelerini ve repete kayıtlarını SADECE tek ortak defterden okur ve oraya yazar. Her işin tek satırı olur: ne, kim, marka, durum (açık / beklemede / bitti), kanıt. Ayrı defter tutulmaz.
-56. **Biten iş kanıtla kapanır ve listelerden düşer.** Cevaplanan soru (düğmeyle ya da yazıyla) bir daha sorulmaz; cevaplanan kart kapanır; aynı iş iki kez yazılmaz.
-57. **"Merdan'a / Aziz'e / Hemra'ya söyle" denince** iş Sami üzerinden o kişiye gider, Patron'a tek satır yazılır, sonuç takip edilir. Pelin sadece Patron açıkça "Pelin" derse çalışır; "fotoğraf" kelimesi Pelin'e yönlendirme sebebi değildir. Para harcayan hiçbir iş yanlış anlamayla başlamaz.
-58. **Venom Patron'a "…yapayım mı?", "not edeyim mi?", "kontrol edeyim mi?" diye sormaz;** yapar, sonucu yazar. Sadece para, silme ve gerçek kararlar sorulur.
-59. **Venom bilmediği şeyi "bende yok" deyip bırakmaz:** önce Sami'den ya da tek defterden bulur. Gerçekten yoksa tek satırla sebebini yazar ve çözüm başlatır.
-60. **Venom'un cevapları kısa:** en fazla 5 satır, markalar ayrı, iç kod adı yok. Patron'un sözünü tekrar eden ya da işi Patron'a yükleyen satır yazılmaz. "Fabrikaya ne gitti" cevabı tek defterden, VOLONTE ve Black Rose ayrı, en fazla 4 satır.
-61. **Hemra'nın kartı** en fazla 5 iş içerir; her işin altında kendi düğmesi olur; tekrar ve bilgi satırı olmaz.
-62. **Günlük satış:** Venom günlük satışı marka marka adet ve dolar ciro olarak Vegawin'den okur; gider kaydı varsa toplam gider ve net de yazılır. Akşam raporuna da girer.
-63. **Kanal alarmı:** fiyat ancak gerçek bir tutar olduğunda sayılır ("$" işareti tek başına fiyat değildir). Aynı uyarı iki kez gitmez. Venom sormadan düzeltir, Patron'a sadece sonucu yazar.
-64. **Araç çalışmadan "hazır" ya da "yapıldı" denmez.**
-65. **"X'e söyle" işinde son saat:** Patron saat söylerse Venom AYNEN o saati kullanır ("12:00'ye kadar" → 12:00); saat söylenmezse mesai sonu (18:00) yazılır.
-66. **Gider ve net:** Vegawin'de gider kasa defterinden ("gider" sütunu) okunur. Akşam raporunda marka marka toplam gider ve net (ciro eksi gider) yazılır; başka para birimindeki gider ayrı yazılır, çevrilmez. Okunamıyorsa sebebi tek satırla yazılır.
-67. **Tek defter kaynağında tutulur:** defter ortak depodadır; her bot kartını, cevabını ve bitirdiği işi oraya yazar, düğmesi kalkan kartı oraya bildirir. Aynı modelin iki ayrı kaydı (ör. büyük / küçük beden) ayrı iştir; aynı kart yeniden gönderilirse eskisi kapanır.
+## E. Markalar, silme, kanal, site, fabrika
+23. VOLONTE (Aziz) ve Black Rose (Merdan) ayrıdır: karıştırılmaz, toplanmaz, karşılaştırılmaz, marka tahmin edilmez.
+24. Fiyat, kâr, ciro ve satış bilgisi sadece Patron'a gider.
+25. Mağaza stoğu bitmeden hiçbir model silinmez ve silme kartı hiç açılmaz; silme kararı sadece Patron'undur.
+26. Silinmesi onaylanan model Selin'in fotoğraf listesine ve Kemal'in paylaşım sırasına asla girmez.
+27. Kanala ve siteye onaysız hiçbir şey gitmez; kanal yazısı EN/FR, fiyatsız ve marka imzalıdır, stok bitince SOLD OUT olur.
+28. Selin'in kaydında ekleme, güncelleme ve kaldırma ayrı sayılır; Kemal'in her paylaşım kaydında model kodu bulunur.
+29. Eksik listesi mağaza mağaza gider (Aziz / Merdan kontrol eder, Hemra onaylar); repete en az 40 adettir, sadece kartla ve Patron onayıyla Fuat'a gider, açık repetesi olan modele ikincisi açılmaz.
+30. Depo herkese açıktır: kimlik, telefon, fiyat ve şifre depoya yazılmaz.
