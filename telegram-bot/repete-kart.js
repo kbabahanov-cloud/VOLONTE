@@ -51,30 +51,50 @@ export const dagilimAdet = (d) => (d || []).reduce((t, x) => t + (Number(x.buyuk
 // "beyaz · büyük 20, küçük 20" (birden çok renk " / " ile)
 export const dagilimYazi = (d) => (d || []).map((x) => `${x.renk} · ${[x.buyuk ? `büyük ${x.buyuk}` : null, x.kucuk ? `küçük ${x.kucuk}` : null].filter(Boolean).join(", ")}`).join(" / ");
 // Hemra'nın yazdığı dağılım: "beyaz büyük 20 küçük 20, siyah büyük 8" · "büyük beyaz 20 küçük beyaz 20" (sıra serbest) → [{renk, buyuk, kucuk}] | null
-export function dagilimCoz(metin) {
-  const kel = String(metin || "").toLocaleLowerCase("tr").replace(/[,;:·/]+/g, " ").split(/\s+/).filter(Boolean);
+// 12 Kasım (Patron, KALICI KURAL): insan yazısı HER biçimde anlaşılır — sıra serbest ("büyük 40 adet siyah"), başta model kodu, "adet / tane",
+// nokta / virgül, "44-50" = büyük, "38-44" = küçük, başta "/" olabilir. Sonuç: { d: [{renk, buyuk, kucuk}] | null, eksik: ["renk" | "beden" | "adet"] }
+// Türkçe harfsiz yazılan bilinen renkler doğru adına çevrilir ("kirmizi" → "kırmızı"); bilinmeyen kelime yazıldığı gibi renk sayılır
+const duzle = (w) => String(w).replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+const RENK_AD = Object.fromEntries(["siyah", "beyaz", "kırmızı", "bordo", "lacivert", "mavi", "yeşil", "sarı", "pembe", "mor", "gri", "bej", "kahve", "kahverengi", "krem", "ekru", "turuncu", "haki", "vizon", "füme", "pudra", "lila", "mint", "taba", "antrasit", "açık", "koyu", "gül", "kurusu", "hardal", "fuşya", "kiremit", "petrol", "indigo", "saks", "çağla", "mürdüm", "şampanya", "gümüş", "altın"].map((x) => [duzle(x), x]));
+const GURULTU = /^(adet|adetten|tane|ad|seri|toplam|ve|ile|renk|rengi|beden|bedeni|model|kod|kodu|repete|da[gğ][ıi]l[ıi]m|olsun|olacak|l[üu]tfen|i[çc]in|tamam[ıi]|hepsi|x)$/;
+export function dagilimAnaliz(metin, kod = null) {
+  let t = String(metin || "").replace(/^\s*\/+/, " ");
+  t = /[İıŞşĞğÜüÖöÇç]/.test(t) ? t.toLocaleLowerCase("tr") : t.toLowerCase(); // "SIYAH" → "siyah" (Türkçe harfsiz büyük yazı)
+  t = t.replace(/(?<!\d)44\s*[-–\/]\s*(?:46\s*[-–\/]\s*48\s*[-–\/]\s*)?50(?!\d)/g, " büyük ").replace(/(?<!\d)38\s*[-–\/]\s*(?:40\s*[-–\/]\s*42\s*[-–\/]\s*)?44(?!\d)/g, " küçük ");
+  const kel = t.replace(/test-\d+/g, " ").replace(/[.,;:·\/()\[\]"'’!?=+*_-]+/g, " ").split(/\s+/).filter(Boolean);
   const m = new Map();
-  let renk = [], beden = null, renkTamam = false;
-  for (const w of kel) {
-    if (new RegExp(`^${KOD_KALIP}$`, "i").test(w) && !/^\d{1,2}$/.test(w) && !m.size && !renk.length && beden == null) continue; // baştaki model kodu
-    if (/^(adet|tane|ad|seri|toplam)$/.test(w)) continue;
-    const b = /^(b[üu]y[üu]k(ten)?|buyuk|uly|b)$/.test(w) ? "buyuk" : /^(k[üu][çc][üu]k(ten)?|kucuk|ki[çc]i|k)$/.test(w) ? "kucuk" : null;
-    if (b) { beden = b; continue; }
-    if (/^\d{1,3}$/.test(w)) {
-      if (!renk.length || !beden) return null;
-      const r = renk.join(" ");
-      const x = m.get(r) || { renk: r, buyuk: 0, kucuk: 0 };
-      x[beden] += Number(w); m.set(r, x);
-      renkTamam = true; beden = null;
+  let renk = [], renkYumusak = false, beden = null, adet = null, sonTur = null, gorulen = 0;
+  const tamam = () => {
+    if (!(renk.length && beden && adet != null)) return;
+    const r = renk.join(" ");
+    const x = m.get(r) || { renk: r, buyuk: 0, kucuk: 0 };
+    x[beden] += adet; m.set(r, x);
+    beden = null; adet = null; renkYumusak = true; // renk bir sonraki beden / adet için geçerli kalır ("beyaz büyük 20 küçük 20")
+  };
+  for (const [i, w] of kel.entries()) {
+    if (/^\d+$/.test(w)) {
+      if ((kod && w === String(kod)) || w.length > 3 || (!kod && i === 0 && w.length === 3 && kel.some((y, k) => k > 0 && /^\d{1,3}$/.test(y)))) continue; // model kodu
+      if (adet != null) return { d: null, eksik: [renk.length && !renkYumusak ? null : "renk", beden ? null : "beden"].filter(Boolean), belirsiz: true };
+      adet = Number(w); gorulen++; sonTur = "adet"; tamam();
       continue;
     }
-    if (!/^\p{L}+$/u.test(w)) return null;
-    if (renkTamam) { renk = []; renkTamam = false; }
-    renk.push(w);
+    if (GURULTU.test(w)) continue;
+    const b = /^(b[üu]y[üu]k(ten|ler|den)?|buyuk|uly|b)$/.test(w) ? "buyuk" : /^(k[üu][çc][üu]k(ten|ler|den)?|kucuk|ki[çc]i|k)$/.test(w) ? "kucuk" : null;
+    if (b) { beden = b; gorulen++; sonTur = "beden"; tamam(); continue; }
+    if (!/^\p{L}+$/u.test(w)) continue;
+    if (renkYumusak || sonTur !== "renk") { if (renkYumusak || !renk.length || adet == null) renk = []; renkYumusak = false; }
+    renk.push(RENK_AD[duzle(w)] || w); sonTur = "renk"; tamam();
   }
   const l = [...m.values()].filter((x) => x.buyuk + x.kucuk > 0);
-  return l.length ? l : null;
+  const yarim = beden != null || adet != null || (renk.length && !renkYumusak);
+  if (yarim || !l.length) {
+    const eksik = [renk.length ? null : "renk", beden ? null : "beden", adet != null ? null : "adet"].filter(Boolean);
+    return { d: null, eksik: eksik.length ? eksik : ["renk", "beden", "adet"], gorulen };
+  }
+  return { d: l, eksik: [], gorulen };
 }
+export const dagilimCoz = (metin, kod = null) => dagilimAnaliz(metin, kod).d;
+const eksikCumlesi = (e) => { const ad = { renk: "Renk", beden: "Beden (büyük ya da küçük)", adet: "Adet" }; const l = e.map((x) => ad[x]); return `${l.length > 1 ? `${l.slice(0, -1).join(", ")} ve ${l.at(-1).toLocaleLowerCase("tr")}` : l[0]} eksik.`; };
 export const durumYazi = (rec) => yonelt(rec, { hemra: "Hemra'nın onayında", patron: "Patron'un onayında", fuat: "Fuat'ın cevabı bekleniyor", acik: `Fuat onayladı, teslim ${gunGoster(rec.teslim)}`, beklemede: "Fuat yapamam dedi, beklemede" }[rec.durum] || rec.durum);
 export const engelMetni = (rec) => `${D(rec)}⛔ ${rec.kod} için açık repete var (${durumYazi(rec)}). Mal gelmeden yeni repete verilmez.`;
 export const sonucSatiri = (rec) => `${DK(rec)}${rec.kod} · ${rec.adet} adet · ${ureticiAd(rec)} onayladı · teslim: ${gunGoster(rec.teslim)}`;
@@ -382,22 +402,31 @@ export async function rkYazi(env, m, tg, simdi) {
 export async function rkHemraYazi(env, m, tg, simdi) {
   if (!m || !m.from) return false;
   const metin = String(m.text || "").trim();
-  if (!metin || metin.startsWith("/")) return false;
+  if (!metin) return false;
   const yetkili = [sorumlu(env), ilk(env.BR_SORUMLU), ilk(env.HEMRA_ID)].filter(Boolean).includes(String(m.from.id)) || muratMi(env, m.from.id);
   if (!yetkili) return false;
   const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text });
   const ta = metin.match(new RegExp(`^\\s*${KOD_KALIP}\\s+repete(?:yi|sini)?\\s+tekrar\\s+a[çc]`, "i"));
   if (ta) { const r = await tekrarAc(env, tg, ta[1], _rk.kisiAd(m.from), simdi); await yaz(r.metin); return true; }
+  // 12 Kasım (Patron): Sami dağılım BEKLERKEN o kişinin yazdığı her mesaj o karta gider (düğmeye basmadan yazsa da; başka işe / sohbet beynine gitmez).
+  // Bekleme: "✏️ Dağılımı değiştir"e basıldı YA DA bu kişide dağılımı henüz yazılmamış açık repete kartı var.
   const st = await env.KAYIT.get(`rkDagilim:${m.from.id}`, "json").catch(() => null);
-  if (!st) return false;
-  const rec = await rkOku(env, st.id);
-  if (!rec || rec.durum !== "hemra") { await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null); return false; }
-  const d = dagilimCoz(metin);
-  if (!d) {
-    if (!/b[üu]y[üu]k|buyuk|k[üu][çc][üu]k|kucuk|\buly\b|ki[çc]i/i.test(metin)) return false; // dağılıma benzemeyen yazı başka işe aittir (ör. eksik listesi) — yutulmaz
-    await yaz(`${D(rec)}Dağılımı anlayamadım. Renk, beden ve adedi yazın; örnek: beyaz büyük 20 küçük 20`);
+  let rec = st ? await rkOku(env, st.id) : null;
+  if (rec && rec.durum !== "hemra") { rec = null; await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null); }
+  if (!rec) {
+    const bekleyen = (await acikKayitlar(env)).filter((x) => x.durum === "hemra" && !x.dagilim && x.mesajlar && x.mesajlar.hemra && String(x.mesajlar.hemra[0]) === String(m.chat.id));
+    if (!bekleyen.length) return false;
+    const yazilan = bekleyen.filter((x) => new RegExp(`(?<![\\p{L}\\d])${String(x.kod).replace(/[^\p{L}\d-]/gu, "")}(?![\\d])`, "iu").test(metin));
+    if (bekleyen.length > 1 && yazilan.length !== 1) { await yaz(`Hangi model için: ${bekleyen.map((x) => x.kod).join(", ")}?`); return true; }
+    rec = yazilan[0] || bekleyen[0];
+  }
+  const a = dagilimAnaliz(metin, rec.kod);
+  if (!a.d) {
+    if (metin.startsWith("/") && !a.gorulen) return false; // gerçek komut (/start, /yardim …) — dağılım değil
+    await yaz(`${D(rec)}${rec.kod}: ${eksikCumlesi(a.eksik)}`); // neyin eksik olduğu, tek cümle (örnek kalıp yok)
     return true;
   }
+  const d = a.d;
   if (dagilimAdet(d) < REPETE_EN_AZ) { await yaz(`${D(rec)}Repete en az ${REPETE_EN_AZ} adet olmalı (yazdığınız toplam ${dagilimAdet(d)}). Yeniden yazın.`); return true; }
   Object.assign(rec, { dagilim: d, adet: dagilimAdet(d) });
   await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null);
