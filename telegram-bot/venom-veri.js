@@ -45,9 +45,11 @@ export async function cevapsizKartlar(env, simdi, { sayfa = 1, kuru = false } = 
   for (const x of l) for (const ad of String(x.kim).split(",").map((y) => y.trim()).filter(Boolean)) { if (!kisi.has(ad)) kisi.set(ad, []); kisi.get(ad).push(x); }
   const sirali = [...kisi.entries()].map(([ad, isler]) => [ad, isler.sort((a, b) => (a.acildi || 0) - (b.acildi || 0))]).sort((a, b) => (a[1][0].acildi || 0) - (b[1][0].acildi || 0));
   const satirlar = [];
-  for (const [ad, isler] of sirali) { satirlar.push(`${ad} — ${isler.length} kart (en eskisi ${zamanYaz(isler[0].acildi)}):`); for (const x of isler) satirlar.push(`  ${zamanYaz(x.acildi)} · ${x.kod || "genel"} · ${MARKA_AD[x.marka] || x.marka || "marka kayıtsız"} · ${x.ne}`); }
+  for (const [ad, isler] of sirali) { satirlar.push(`${ad} — ${isler.length} kart (en eskisi ${zamanYaz(isler[0].acildi)}):`); for (const x of isler) satirlar.push(`  ${zamanYaz(x.acildi)} · ${x.kod || "genel"} · ${MARKA_AD[x.marka] || x.marka || "marka kayıtsız"} · ${x.ne}${["fabrika", "repete"].includes(x.tur) && x.kanit ? ` — ${String(x.kanit).split(";")[0]}` : ""}`); }
   const s = sayfala(satirlar, sayfa, 60);
-  return [`Cevap bekleyen ${l.length} iş, ${kisi.size} kişide (en eskiden yeniye):`, ...s.dilim, s.not].join("\n");
+  const kartSatiri = satirlar.filter((x) => x.startsWith("  ")).length;
+  const not = s.toplam > 1 ? s.not : `Toplam ${kartSatiri} kart satırı, hepsi yukarıda${kartSatiri > l.length ? ` (${l.length} iş; ortak kart her kişide ayrı yazılır)` : ""}.`;
+  return [`Cevap bekleyen ${l.length} iş, ${kisi.size} kişide (en eskiden yeniye):`, ...s.dilim, not].join("\n");
 }
 
 // ---------- SİLME KANITI ----------

@@ -375,6 +375,7 @@ export async function kararVerildi(env, kod, karar, simdi, { aciklama = "", uygu
     is.durum = "kapandi"; is.kapanis = { zaman: simdi, neden: `karar verildi: ${karar}` };
     await kaydet(env, k.name, is, 3 * 86400); n++;
   }
+  if (/^sil/.test(String(karar))) await kuyrugaEkle(env, "fsSilindi", { id: `fss:${kod}:${simdi}`, kod, zaman: simdi }).catch(() => null); // silinen modelin fabrika "bitti" kaydı kapanır (Sami)
   if (uygula && karar === "repete" && !n) { await kuyrugaEkle(env, "rkBaslat", { id: `rb:${kod}:${simdi}`, kodlar: [kod], kim: "Patron", zaman: simdi }); await botaSor(env, "sami", "repeteAdim"); }
   return { kapanan: n };
 }
@@ -664,7 +665,9 @@ export async function aracCalistir(env, ad, g, simdi) {
     const f = l.filter((x) => x.zaman >= sinir && (!kod || x.kod === kod)).slice(-25);
     if (!f.length) return kod ? `${kod}: bu sürede kanalda paylaşım görmedim (Venom kanalı yönetici olduktan sonra izliyor).` : "Bu sürede kanalda paylaşım görmedim.";
     const guncel = (x) => (x.sorunlar || []).filter((s) => !/F[İI]YAT/i.test(s) || fiyatVar(x.yazi, x.kod)); // 11 Kasım: "$" işareti tek başına fiyat değil
-    return f.map((x) => `• ${tarihSaat(x.zaman)} — ${x.kod || "kodsuz"} · ${x.medya || "yazı"}${x.imza ? ` · ${x.imza}` : ""}${guncel(x).length ? ` · ⚠️ ${guncel(x).join("; ")}` : " · sorun yok"}`).join("\n");
+    // 12 Kasım: silinen modelin eski mesajı Telegram'da duruyor görünebilir (SOLD OUT görseliyle gizli) — "sorun yok" diye yazılmaz, silme kaydı yazılır
+    const sil = {}; for (const k of [...new Set(f.map((x) => x.kod).filter(Boolean))].slice(0, 12)) sil[k] = await oku(env, `silinen:${k}`, null);
+    return f.map((x) => `• ${tarihSaat(x.zaman)} — ${x.kod || "kodsuz"} · ${x.medya || "yazı"}${x.imza ? ` · ${x.imza}` : ""}${sil[x.kod] ? ` · 🗑 KALDIRILDI (${zamanKisa(sil[x.kod].zaman)}; eski mesaj SOLD OUT görseliyle gizli — silme tamam)` : guncel(x).length ? ` · ⚠️ ${guncel(x).join("; ")}` : " · sorun yok"}`).join("\n");
   }
   if (ad === "site_kontrol") return siteKontrolMetni(env, String(g.kod || "").replace(/\D/g, ""), simdi);
   if (ad === "site_duzelt") {
@@ -2541,6 +2544,8 @@ export async function kanalKontrolCevabi(env, kodlar, simdi) {
   const l = await oku(env, "venom:kanal:son", []), kanal = await oku(env, "kanal", null), satir = [];
   for (const kod of kodlar) {
     const p = l.filter((x) => String(x.kod) === String(kod)).sort((a, b) => a.zaman - b.zaman);
+    const silK = await oku(env, `silinen:${kod}`, null);
+    if (silK) { satir.push(`${kod}: kanaldan kaldırıldı ${zamanKisa(silK.zaman)} (${(silK.kopya || []).length} mesaj; eski mesajlar SOLD OUT görseliyle gizli). Kontrol edilecek paylaşım yok.`); continue; }
     if (!p.length) { satir.push(`${kod}: kanalda paylaşım görmedim.`); continue; }
     const sorunlu = [];
     for (const x of p) { const s = await kanalSorunlari(env, x.yazi || "", x.kod); if (s.length) sorunlu.push({ x, s }); }

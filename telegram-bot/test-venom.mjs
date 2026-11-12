@@ -2054,3 +2054,22 @@ test("YENİDEN YAPILANMA (kabul testinde yakalandı): başka modelin açık repe
     assert.deepEqual([h.durum, h.kim], ["acik", "Hemra"]);
   } finally { Date.now = gercek; }
 });
+
+test("YENİDEN YAPILANMA (kabul testinde yakalandı): silinen modelin eski kanal mesajı 'sorun yok' diye yazılmaz — silme kaydı yazılır; silme kararı Sami'ye fabrika kaydını kapattırır", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const simdi = ist(12, 13);
+  const gercek = Date.now; Date.now = () => simdi * 1000;
+  try {
+    o.depo.set("venom:kanal:son", JSON.stringify([{ id: 14327, zaman: ist(3, 14, 41), kod: "3377", medya: "albüm", yazi: "CODE. 3377", sorunlar: [] }, { id: 15101, zaman: ist(11, 10), kod: "3578", medya: "foto", yazi: "CODE. 3578", sorunlar: [] }]));
+    o.depo.set("silinen:3377", JSON.stringify({ kod: "3377", kim: "Patron (Venom)", zaman: ist(12, 9, 56), kopya: [{ kanal: 14327, arsiv: 1, gizlendi: true }, { kanal: 14328, arsiv: 2, gizlendi: true }] }));
+    const c = await aracla(o, "kanalda son 30 gün", "kanal_paylasimlari", { gun: 30 });
+    assert.match(c, /3377 · albüm · 🗑 KALDIRILDI \(12\.11 09:56; eski mesaj SOLD OUT görseliyle gizli — silme tamam\)/);
+    assert.match(c, /3578 · foto · sorun yok/);
+    assert.equal(await v.kanalKontrolCevabi({ ...o.env, __kuru: true }, ["3377"], simdi), "3377: kanaldan kaldırıldı 12.11 09:56 (2 mesaj; eski mesajlar SOLD OUT görseliyle gizli). Kontrol edilecek paylaşım yok.");
+    await v.kararVerildi(o.env, "3377", "silindi", simdi);
+    assert.deepEqual((await kuyruguAl(o.env, "fsSilindi")).map((x) => x.kod), ["3377"]);
+    await v.kararVerildi(o.env, "3500", "bekle", simdi);
+    assert.deepEqual(await kuyruguAl(o.env, "fsSilindi"), []); // "bekle" kararı fabrika kaydını kapatmaz
+  } finally { Date.now = gercek; }
+});

@@ -2841,6 +2841,15 @@ export async function siparisTakip(env, simdi, tg) {
     for (const id of (await ayarOku(env, "fs:acik", [])).slice(0, 120)) { const r = await siparisOku(env, id); if (r) await siparisYaz(env, r); }
     await ayarYaz(env, "fs:merdivenGoc", 1);
   }
+  // 12 Kasım (C10): Patron bir modeli sildi / silinmesini onayladı (Venom → "fsSilindi") → o modelin fabrika "bitti" kayıtları kapanır, yeniden sorulmaz
+  for (const k of (await stokIste(env, "/kuyruk-al", { ad: "fsSilindi" }).catch(() => [])) || []) {
+    for (const id of (await ayarOku(env, "fs:acik", [])).filter((x) => String(x).startsWith(`${k.kod}-`)).slice(0, 10)) {
+      const r = await siparisOku(env, id);
+      if (!r || r.deneme || String(r.kod) !== String(k.kod) || r.durum !== "bitti") continue;
+      Object.assign(r, { karar: "sil", durum: "kapandi", stokKontrol: null }); r.log.push("model silindi (Patron) → kayıt kapandı");
+      await siparisYaz(env, r);
+    }
+  }
   const zamani = Object.entries(takip).filter(([, t]) => t <= simdi).sort((a, b) => a[1] - b[1]).slice(0, 12).map(([id]) => id);
   const fuataTekrar = [], ekibe = [];
   const hat = await kagitAcik(env, "sami", "fabrikaHatirlatma"); // 10 Kasım görev kâğıdı: hatırlatmalar kapalı (karar zinciri açık)
