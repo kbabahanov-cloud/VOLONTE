@@ -2556,9 +2556,9 @@ async function tekIslem(env, simdi, tg) {
     }
   } else if (is.tur === "kartYenidenGonder") { // 12 Kasım (Patron): bir listenin açık fabrika kartları kapatılır (düğmesiz "kapandı" yazısı), aynı sipariş YENİ kartla aynı kişiye gider {liste, kodlar, neden}
     sonuc.l = [];
-    for (const id of (await ayarOku(env, "fs:acik", [])).slice(0, 200)) {
+    for (const id of (is.ids ? is.ids.map(String) : await ayarOku(env, "fs:acik", [])).slice(0, 200)) {
       const rec = await siparisOku(env, id);
-      if (!rec || rec.deneme || ["kapandi", "geldi"].includes(rec.durum)) continue;
+      if (!rec || rec.deneme || (!is.ids && ["kapandi", "geldi"].includes(rec.durum))) continue; // kayıt numarası verilirse kapanmış kayıt da yeniden gönderilir
       if (is.ids ? !is.ids.map(String).includes(String(id)) : rec.liste !== is.liste || !(is.kodlar || []).map(String).includes(String(rec.kod))) continue; // kayıt numarasıyla ya da liste + kodla
       for (const [chat, mesaj, tur] of rec.mesajlar || []) await tg(env, tur === "foto" ? "editMessageCaption" : "editMessageText", { chat_id: chat, message_id: mesaj, [tur === "foto" ? "caption" : "text"]: `${siparisMetni(rec)}\n\n⏩ Bu kart kapandı (${is.neden || "yenilendi"}) — yeni kart aşağıda.`, reply_markup: { inline_keyboard: [] } }).catch(() => null);
       Object.assign(rec, { durum: "kapandi", iptal: { neden: is.neden || "yenilendi", zaman: simdi }, kararMesajlari: [] });
