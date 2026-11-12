@@ -2073,3 +2073,15 @@ test("YENİDEN YAPILANMA (kabul testinde yakalandı): silinen modelin eski kanal
     assert.deepEqual(await kuyruguAl(o.env, "fsSilindi"), []); // "bekle" kararı fabrika kaydını kapatmaz
   } finally { Date.now = gercek; }
 });
+
+test("YENİDEN YAPILANMA (kabul testinde yakalandı): 'fotoğrafı yok' görevindeki model siteye eklendiyse o kalem BİTMİŞ sayılır; eklenmeyenler açık kalır", async () => {
+  const o = ortam();
+  const { venomSatirlari } = await import("./tek-defter.js");
+  const simdi = ist(12, 13);
+  o.depo.set("venom:gorevler", JSON.stringify([{ id: "g1", zaman: ist(9, 16), durum: "acik", kimler: ["merdan"], metin: "16 Black Rose modelinin fotoğrafı yok", son: ist(9, 18), kalemler: [{ kod: "3189", secim: null }, { kod: "3047", secim: null }] },
+    { id: "g2", zaman: ist(11, 16), durum: "acik", kimler: ["aziz"], metin: "3569 sayımını yap", son: ist(11, 18), kalemler: [{ kod: "3569", secim: null }] }]));
+  o.depo.set("venom:siteDefteri", JSON.stringify({ zaman: 1, modeller: { 3189: { kod: "3189" }, 3569: { kod: "3569" } } }));
+  const s = await venomSatirlari(o.env, simdi);
+  assert.deepEqual(s.map((x) => [x.kod, x.kim, x.durum]), [["3189", "Merdan", "bitti"], ["3047", "Merdan", "acik"], ["3569", "Aziz", "acik"]]); // fotoğraf işi olmayan görev siteye bakmaz
+  assert.equal(s[0].kanit, "model siteye eklendi (site defteri); fotoğraf işi bitti");
+});

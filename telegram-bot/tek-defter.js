@@ -41,10 +41,14 @@ export async function venomSatirlari(env, simdi) {
       kanit: x.kanit || (bitti ? `bot cevap verdi ${zamanYaz(x.bitis || x.zaman)}` : `Venom işi ${zamanYaz(x.zaman)} verdi; cevap bekleniyor`) });
   }
   const gorevler = (await env.KAYIT.get("venom:gorevler", "json").catch(() => null)) || [];
+  let sitede = null; // "fotoğraf yok" görevi: model siteye eklendiyse iş bitmiştir (kart basılmamış olsa da cevapsız görünmez)
   for (const g of gorevler) {
     if (g.durum === "kapandi" || simdi - (g.zaman || 0) > 3 * 86400) continue; // 3 günden eski görev listeden düşer
     const kimler = (g.kimler || []).map(buyukIlk).join(", ");
+    const fotoIsi = /foto[gğ]raf/i.test(String(g.metin || g.baslik || ""));
+    if (fotoIsi && sitede === null) sitede = ((await env.KAYIT.get("venom:siteDefteri", "json").catch(() => null)) || {}).modeller || {};
     for (const k of g.kalemler || []) {
+      if (fotoIsi && !k.secim && sitede && sitede[String(k.kod)]) { s.push({ id: `gorev:${g.id}:${k.kod}`, tur: "gorev", kod: String(k.kod), marka: null, ne: kisalt(String(g.metin || g.baslik).replace(/^Patron'dan:\s*/, ""), 90), kim: kimler, durum: "bitti", bot: "venom", acildi: g.zaman, guncel: simdi, kanit: "model siteye eklendi (site defteri); fotoğraf işi bitti" }); continue; }
       s.push({ id: `gorev:${g.id}:${k.kod}`, tur: "gorev", kod: /^\d{3,6}$/.test(String(k.kod)) ? String(k.kod) : null, marka: null, ne: kisalt(String(g.metin || g.baslik).replace(/^Patron'dan:\s*/, ""), 90), kim: k.secim ? k.kim || kimler : kimler, durum: k.secim || g.durum === "bitti" ? "bitti" : "acik", bot: "venom", acildi: g.zaman, guncel: k.zaman || g.bitis || g.zaman,
         kanit: k.secim ? `${k.kim || "?"}: ${SECIM_AD[k.secim] || k.secim}${k.aciklama ? ` — ${String(k.aciklama).slice(0, 60)}` : ""} (${zamanYaz(k.zaman || g.zaman)})` : `görev kartı ${zamanYaz(g.zaman)} gitti, son saat ${zamanYaz(g.son || g.zaman)}${g.durum === "yapilmadi" ? "; süre doldu" : ""}` });
     }
