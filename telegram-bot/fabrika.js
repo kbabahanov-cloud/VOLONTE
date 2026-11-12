@@ -81,7 +81,9 @@ export const listeSonu = (m, n) => `${magazaAdi(m)} LİSTESİ – SONU${n != nul
 export const GERI_AL = (data) => ({ text: "↩️ Geri al", callback_data: data, style: "danger" });
 // Hemra'ya model mesajı: önce sitedeki fotoğraf; sitede yoksa kanaldaki en yeni paylaşım (yazısı değiştirilerek, yani
 // kanal yazısı/fiyat GİTMEZ); ikisi de yoksa yazı. Dönüş: { r, tur: "foto"|"metin", kaynak: "site"|"kanal"|null }
-async function hemraModelGonder(env, tg, kod, site, yazi, kl, kime = null) {
+// 12 Kasım (Patron): Celal'in modellerinin fotoğrafı yok (1-2 ay sonra eklenecek) — kart FOTOĞRAFSIZ gider, "📷 fotoğraf yok" yazmaz
+const fotoNotu = (grup) => (grup === "celal" ? "" : "\n📷 fotoğraf yok");
+async function hemraModelGonder(env, tg, kod, site, yazi, kl, kime = null, grup = null) {
   kime = kime || sorumlu(env);
   const url = sitedenFoto(env, site, kod);
   if (url) {
@@ -100,8 +102,8 @@ async function hemraModelGonder(env, tg, kod, site, yazi, kl, kime = null) {
       if (r && r.ok) return { r, tur: "foto", kaynak: "kanal" };
     }
   }
-  let r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}\n📷 fotoğraf yok`, reply_markup: kl });
-  if (!(r && r.ok)) r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}\n📷 fotoğraf yok`.slice(0, 3500), reply_markup: kl }); // 10 Kasım: bir kez daha
+  let r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}${fotoNotu(grup)}`, reply_markup: kl });
+  if (!(r && r.ok)) r = await tg(env, "sendMessage", { chat_id: kime, text: `${yazi}${fotoNotu(grup)}`.slice(0, 3500), reply_markup: kl }); // 10 Kasım: bir kez daha
   return { r, tur: "metin", kaynak: null };
 }
 
@@ -310,8 +312,8 @@ async function modelParcasi(env, anahtar, tg) {
     const x = d.modeller.find((m) => m.kod === kod);
     const yazi = `${d.deneme ? DENEME : ""}${modelYazisi(x, sonIstek[kod], eskiRenkler[kod], d.magaza || MAGAZA, bitenler[kod], d.deneme ? null : acil[kod])}`;
     const kl = modelKlavye(anahtar, kod, Boolean(sonIstek[kod]), null, false, Boolean(d.yeni));
-    const { r, tur, kaynak } = await hemraModelGonder(env, tg, kod, site, yazi, kl, kimeOf(env, d));
-    if (r && r.ok) d.mesajlar[kod] = [r.result.message_id, tur, tur === "metin" ? `${yazi}\n📷 fotoğraf yok` : yazi, kaynak];
+    const { r, tur, kaynak } = await hemraModelGonder(env, tg, kod, site, yazi, kl, kimeOf(env, d), x && x.grup);
+    if (r && r.ok) d.mesajlar[kod] = [r.result.message_id, tur, tur === "metin" ? `${yazi}${fotoNotu(x && x.grup)}` : yazi, kaynak];
     else d.denemeSay[kod] = (d.denemeSay[kod] || 0) + 1;
   }
   // Gönderirken Hemra düğmeye basmış olabilir: güncel kaydı okuyup sadece mesajları ve kalanı yaz.
@@ -572,8 +574,8 @@ async function tekMesaj(env, gun, simdi, tg) {
     for (const x of d.modeller) {
       const sc = secimNorm(d.secim[x.kod]);
       const yazi = modelYazisi(x, sonIstek[x.kod], eskiRenkler[x.kod]);
-      const { r, tur, kaynak } = await hemraModelGonder(env, tg, x.kod, site, sc ? `${yazi}\n\n${secimYazi(sc)}` : yazi, modelKlavye(anahtar, x.kod, Boolean(sonIstek[x.kod]), sc && sc.beden ? sc.beden : null));
-      if (r && r.ok) d.mesajlar[x.kod] = [r.result.message_id, tur, tur === "metin" ? `${yazi}\n📷 fotoğraf yok` : yazi, kaynak];
+      const { r, tur, kaynak } = await hemraModelGonder(env, tg, x.kod, site, sc ? `${yazi}\n\n${secimYazi(sc)}` : yazi, modelKlavye(anahtar, x.kod, Boolean(sonIstek[x.kod]), sc && sc.beden ? sc.beden : null), null, x.grup);
+      if (r && r.ok) d.mesajlar[x.kod] = [r.result.message_id, tur, tur === "metin" ? `${yazi}${fotoNotu(x.grup)}` : yazi, kaynak];
       sonuc.hemra[x.kod] = kaynak || "fotoğraf yok";
     }
     const guncel = (await ayarOku(env, `fabrika:${anahtar}`, null)) || d;
@@ -583,7 +585,7 @@ async function tekMesaj(env, gun, simdi, tg) {
   // Bugün fabrikaya fotoğrafsız gitmiş siparişler: fotoğrafı arkasından.
   for (const ozet of Object.entries(await ayarOku(env, `fs:hafta:${pazartesi(simdi)}`, {})).filter(([, x]) => gunAnahtari(x.gonderim) === gun).slice(0, 10)) {
     const rec = await siparisOku(env, ozet[0]);
-    if (!rec || rec.deneme) continue;
+    if (!rec || rec.deneme || rec.grup === "celal") continue; // Celal'in modelinin fotoğrafı yok: uyarı yok
     const metinler = rec.mesajlar.filter(([, , t]) => t === "metin");
     if (!metinler.length) continue;
     const foto = await fotoBul(env, rec.kod, site);
@@ -1530,7 +1532,7 @@ async function fabrikayaGonder(env, rec, tg, site = null) {
         if (r && r.ok) { calisan = id; break; }
       }
     }
-    if ((!r || !r.ok) && rec.deneme) { tur = "metin"; r = await tg(env, "sendMessage", { chat_id: k.id, text: metin, reply_markup: klavye(rec) }); }
+    if ((!r || !r.ok) && (rec.deneme || rec.grup === "celal")) { tur = "metin"; r = await tg(env, "sendMessage", { chat_id: k.id, text: metin, reply_markup: klavye(rec) }); } // 12 Kasım: Celal'e fotoğrafsız
     if (r && r.ok) { giden++; rec.mesajlar.push([k.id, r.result.message_id, tur]); }
   }
   if (!rec.deneme && !giden && kisiler.length) {

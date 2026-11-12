@@ -39,7 +39,12 @@ export function paylasimDurumu({ tum, site, son, simdi }) {
 async function durum(env, simdi) {
   const [tum, site, tg] = await Promise.all([stokIste(env, "/tum"), siteVerisi(env), stokIste(env, "/tg-hepsi").catch(() => ({}))]);
   const son = sonPaylasimlar((await env.KAYIT.get("kodlar", "json")) || {}, tg, (await env.KAYIT.get("sonpaylasim", "json")) || {});
-  return paylasimDurumu({ tum, site, son, simdi });
+  const d = paylasimDurumu({ tum, site, son, simdi });
+  // 12 Kasım (Patron): Celal'in modellerinin fotoğrafı yok (1-2 ay sonra) — "fotoğraf yok" / "hiç paylaşılmadı" uyarısına girmez
+  const aday = [...new Set([...d.hic, ...d.fotoYok])];
+  const ted = aday.length ? await stokIste(env, "/tedarikci", { kodlar: aday }).catch(() => ({})) : {};
+  const celal = (k) => (ted[k] || {}).tedarikci === "CELAL";
+  return { ...d, hic: d.hic.filter((k) => !celal(k)), fotoYok: d.fotoYok.filter((k) => !celal(k)) };
 }
 
 export function fotoYokMetni(l, yeniler) {

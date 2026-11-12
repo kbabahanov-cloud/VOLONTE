@@ -1077,14 +1077,14 @@ test("paylaşılmamış stok: Hemra'ya fotoğrafı olmayanlar (sadece yeni girin
   const { paylasimTakip, paylasimDurumu, sonPaylasimlar } = await import("./paylasim-takip.js");
   const o = ortam();
   Object.assign(o.env, { MURAT_ID: "999,111", FABRIKA_SORUMLU: "333" });
-  // 3000: hiç paylaşılmamış, sitede yok → fotoğrafı yok · 3622: hiç paylaşılmamış ama sitede var · 3194: 20 gün önce · 3100: dün · 2000 indirimli
-  await o.yaz("VOLONTE", [{ kod: "3000", adet: 5, fiyat: 20 }, { kod: "3622", adet: 4, fiyat: 30 }, { kod: "3194", adet: 3, fiyat: 69 }, { kod: "3100", adet: 2, fiyat: 30 }, { kod: "2000", adet: 50, fiyat: 5 }], 1);
+  // 3003: hiç paylaşılmamış, sitede yok → fotoğrafı yok · 3622: hiç paylaşılmamış ama sitede var · 3194: 20 gün önce · 3100: dün · 2000 indirimli
+  await o.yaz("VOLONTE", [{ kod: "3003", adet: 5, fiyat: 20 }, { kod: "3622", adet: 4, fiyat: 30 }, { kod: "3194", adet: 3, fiyat: 69 }, { kod: "3100", adet: 2, fiyat: 30 }, { kod: "2000", adet: 50, fiyat: 5 }], 1);
   const pzt = Date.UTC(2026, 10, 2, 6, 31) / 1000; // 2 Kasım 2026 pazartesi 09:31
   o.depo.set("kodlar", JSON.stringify({ 3194: [{ ids: [1], tarih: pzt - 20 * 86400 }], 3100: [{ ids: [2], tarih: pzt - 86400 }] }));
   globalThis.fetch = ((eski) => async (url, istek) => (String(url).includes("veri/urunler.json") ? Response.json([{ kod: "3622", fotolar: ["galeri/3622/2.jpg"] }, { kod: "3194", fotolar: ["galeri/3194/1.jpg"] }]) : eski(url, istek)))(globalThis.fetch);
   const d = paylasimDurumu({ tum: await (await o.env.STOK.get().fetch("https://stok/tum", { method: "POST", body: "{}" })).json(), site: [{ kod: "3622", fotolar: ["x"] }], son: sonPaylasimlar(JSON.parse(o.depo.get("kodlar"))), simdi: pzt });
-  assert.deepEqual(d.hic, ["3000", "3622"]);
-  assert.deepEqual(d.fotoYok, ["3000"]);
+  assert.deepEqual(d.hic, ["3003", "3622"]);
+  assert.deepEqual(d.fotoYok, ["3003"]);
   assert.deepEqual(d.eski, [["3194", 20]]);
   const g = [];
   const tg = async (env, metod, govde) => { g.push(govde); return { ok: true }; };
@@ -1093,12 +1093,13 @@ test("paylaşılmamış stok: Hemra'ya fotoğrafı olmayanlar (sadece yeni girin
   await paylasimTakip(o.env, pzt, tg); // pazartesi 09:31: Patron'a (MURAT_ID'nin ilki)
   assert.equal(g.length, 1);
   assert.equal(g[0].chat_id, "999");
-  assert.match(g[0].text, /14\+ gündür paylaşılmayan modeller: 3\nHiç paylaşılmamış \(2\): 3000, 3622\n14\+ gün \(1\): 3194 \(20 g\)/);
+  assert.match(g[0].text, /14\+ gündür paylaşılmayan modeller: 3\nHiç paylaşılmamış \(2\): 3003, 3622\n14\+ gün \(1\): 3194 \(20 g\)/);
   assert.ok(!/2000/.test(g[0].text));
   await paylasimTakip(o.env, pzt + 3600, tg); // 10:31: Hemra'ya fotoğrafı yok listesi
   assert.equal(g.length, 2);
   assert.equal(g[1].chat_id, "333");
-  assert.match(g[1].text, /Fotoğrafı yok, çekilmeli[\s\S]*1 model:\n🆕 3000/);
+  assert.ok(!/3000/.test(g[1].text)); // 12 Kasım: Celal'in modeli (3000) fotoğraf uyarısına girmez
+  assert.match(g[1].text, /Fotoğrafı yok, çekilmeli[\s\S]*1 model:\n🆕 3003/);
   await paylasimTakip(o.env, pzt + 86400 + 3600, tg); // ertesi gün aynı liste: tekrar gitmez
   assert.equal(g.length, 2);
 });
@@ -3040,4 +3041,46 @@ test("12 Kasım CELAL — UÇTAN UCA (sahte Telegram, kimseye mesaj gitmez): Azi
   const s = (df.satirlar || []).filter((x) => ["5068", "5076"].includes(String(x.kod)) && ["fabrika", "repete", "kart"].includes(x.tur)); // botun kendi iş satırları (Sami) hariç
   assert.ok(s.length >= 2);
   assert.ok(s.every((x) => /Celal/.test(x.kim) && !/Fuat|Sinem|Nuri/.test(`${x.kim} ${x.kanit}`)), JSON.stringify(s.map((x) => [x.kod, x.kim, x.kanit])));
+});
+
+test("12 Kasım CELAL — fotoğrafsız: Celal'in modeli (CELAL işaretli ya da Patron'un listesindeki 5078 / 3000) fotoğraf isteme listesine (stoktakiler) girmez; Aziz'in kartında ve Celal'in kartında '📷 fotoğraf yok' yazmaz, Patron'a 'fotoğraf bulunamadı' gitmez; diğer modellerde fotoğraf kuralı aynı", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }, { id: 557, ad: "Fuat" }, { id: 600, ad: "Celal Kayran", grup: "celal" }]));
+  o.depo.set("kodlar", JSON.stringify({})); // hiçbirinin fotoğrafı yok
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "5068", adet: 4, fiyat: 20, celal: true }, { kod: "5078", adet: 8, fiyat: 20 }, { kod: "3000", adet: 68, fiyat: 10 }, { kod: "3394", adet: 4, fiyat: 30 }], simdi: 1 });
+  await stokYaz("ayar-yaz", { k: "akis:yeni", v: "1" });
+  const st = await (await stokYaz("stoktakiler", {})).json();
+  assert.deepEqual(st.map((x) => x.kod), ["3394"]); // Celal'in modelleri fotoğraf listesine girmez
+  const simdi = Math.floor(Date.now() / 1000);
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "ozelListe", kodlar: ["5068", "5078", "3394"], magaza: "VOLONTE" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tgS);
+  const ek = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).anahtar;
+  const yazi = (x) => x.govde.text || x.govde.caption || "";
+  const az = (kod) => o.g.find((x) => String(x.govde.chat_id) === "444" && x.govde.reply_markup && new RegExp(`${kod} · satılan`).test(yazi(x)));
+  assert.match(yazi(az("5068")), /^🟦 VOLONTE\n5068 · satılan 0 · stok 4\nSatış: .*\n👤 Celal'in modeli$/); // kod, stok, satış — fotoğrafsız, uyarısız
+  assert.ok(!/fotoğraf yok/.test(yazi(az("5078"))) && /Celal'in modeli/.test(yazi(az("5078"))));
+  assert.match(yazi(az("3394")), /📷 fotoğraf yok$/); // diğer modelde kural aynı
+  const bas = (id, data, ad) => g2({ callback_query: { id: "c", from: { id, first_name: ad }, data, message: { chat: { id }, message_id: 9 } } }, o.env);
+  const yazdi = (id, ad, text) => g2({ message: { chat: { id, type: "private" }, from: { id, first_name: ad }, text } }, o.env);
+  for (const [kod, t] of [["5068", "5068 büyük siyah 10"], ["5078", "5078 büyük bordo 12"], ["3394", "3394 büyük siyah 8"]]) {
+    await bas(444, `fe:b:${ek}:${kod}`, "Aziz"); await yazdi(444, "Aziz", t);
+    const tey = o.g.filter((x) => String(x.govde.chat_id) === "444" && /Doğru mu\?/.test(yazi(x))).at(-1);
+    if (tey) await bas(444, tey.govde.reply_markup.inline_keyboard[0][0].callback_data, "Aziz");
+  }
+  await eminim(o, g2, 444, "Aziz");
+  const hl = o.g.find((x) => String(x.govde.chat_id) === "333" && /Gidecek liste/.test(yazi(x)));
+  o.g.length = 0;
+  await bas(333, hl.govde.reply_markup.inline_keyboard[0][0].callback_data, "Hemra");
+  const celal = o.g.filter((x) => String(x.govde.chat_id) === "600");
+  assert.deepEqual(celal.map((x) => [x.metod, yazi(x)]), [["sendMessage", "5068 · Büyük (44-50) · siyah 10"], ["sendMessage", "5078 · Büyük (44-50) · bordo 12"]]); // yazıyla, düğmeli
+  assert.ok(celal.every((x) => x.govde.reply_markup.inline_keyboard.flat().some((b) => /Gelecek/.test(b.text))));
+  assert.ok(!o.g.some((x) => ["556", "557"].includes(String(x.govde.chat_id)) && /5068|5078/.test(yazi(x)))); // Celal'in modeli fabrikaya gitmez
+  const patron = o.g.filter((x) => String(x.govde.chat_id) === "111").map(yazi);
+  assert.ok(!patron.some((t) => /5068|5078/.test(t)), patron.join(" | ")); // Celal için "fotoğraf bulunamadı" yok
+  assert.ok(patron.some((t) => /📷 3394 fotoğraf bulunamadı/.test(t))); // diğer modelde kural aynı
 });

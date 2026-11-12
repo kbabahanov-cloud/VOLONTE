@@ -27,7 +27,10 @@ export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
 export const INDIRIMLI = ["2000"];
 export const indirimliMi = (kod) => INDIRIMLI.includes(stokKodu(kod));
 // 12 Kasım (Patron): CELAL — Vegawin kodu "CELAL" ile biten kartlar (köprü işaretler) + "Celal İndirim" carisindeki 3000 ve 3002 Celal'in malıdır.
-export const CELAL_KODLAR = ["3000", "3002"];
+// Patron'un verdiği liste ("Celal Kayran": 5068, 5067, 9334, 5074, 5076, 5078 · "Celal İndirim": 3000, 3002). 5078'in Vegawin kartında "CELAL" yazmıyor.
+export const CELAL_KODLAR = ["3000", "3002", "5068", "5067", "9334", "5074", "5076", "5078"];
+// 12 Kasım (Patron): Celal'in modellerinin fotoğrafı yok, 1-2 ay sonra eklenecek — o zamana kadar fotoğraf isteme listesine ve "fotoğraf yok" uyarılarına girmez (false yapınca girer)
+export const CELAL_FOTO_BEKLE = true;
 export const celalKoduMu = (kod) => CELAL_KODLAR.includes(stokKodu(kod));
 
 const TABLOLAR = [
@@ -295,7 +298,8 @@ export class StokDeposu {
   stoktakiler() {
     const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
     return this.hepsi("SELECT kod, SUM(adet) AS toplam, MAX(fiyat) AS fiyat, MAX(tedarikci) AS tedarikci FROM urun GROUP BY kod HAVING SUM(adet) > 0 AND MAX(fiyat) IS NOT NULL ORDER BY kod")
-      .filter((r) => !silinen.has(r.kod) && !indirimliMi(r.kod)).map((r) => (celalKoduMu(r.kod) ? { ...r, tedarikci: "CELAL" } : r));
+      .filter((r) => !silinen.has(r.kod) && !indirimliMi(r.kod)).map((r) => (celalKoduMu(r.kod) ? { ...r, tedarikci: "CELAL" } : r))
+      .filter((r) => !(CELAL_FOTO_BEKLE && r.tedarikci === "CELAL")); // Selin'in fotoğraf listesi, fotoğrafsız uyarıları ve paylaşılmayanlar bu listeden okur
   }
 
   olaylar(basla, bitis) {

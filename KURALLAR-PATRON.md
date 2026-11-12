@@ -48,4 +48,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir ve raporda "dos
 28. Selin'in kaydında ekleme, güncelleme ve kaldırma ayrı sayılır; Kemal'in her paylaşım kaydında model kodu bulunur.
 29. Eksik listesi mağaza mağaza gider (Aziz / Merdan kontrol eder, Hemra onaylar); repete en az 40 adettir, sadece kartla ve Patron onayıyla Fuat'a gider, açık repetesi olan modele ikincisi açılmaz.
 30. Depo herkese açıktır: kimlik, telefon, fiyat ve şifre depoya yazılmaz.
-31. Celal ikinci fabrikadır: kodu "CELAL" ile biten modeller ile 3000 ve 3002 Celal'in modelidir; bu modellerin eksik listesi kartı, "bitti" onayı ve repete kartı sadece Celal'e, diğer modellerinki sadece Sinem / Fuat / Nuri'ye gider ve Fuat ile Sinem için geçerli her kural Celal için de geçerlidir.
+31. Celal ikinci fabrikadır: 5068, 5067, 9334, 5074, 5076, 5078, 3000, 3002 ve bundan sonra kodu "CELAL" ile biten her model Celal'in modelidir; bu modellerin eksik listesi kartı, "bitti" onayı ve repete kartı sadece Celal'e, diğer modellerinki sadece Sinem / Fuat / Nuri'ye gider ve Fuat ile Sinem için geçerli her kural Celal için de geçerlidir.
+32. Celal'in modellerinin fotoğrafı yoktur (1-2 ay sonra eklenecek): kartları kod, stok, satış ve adetle fotoğrafsız gider, "fotoğraf yok" uyarısı açılmaz ve Selin'in fotoğraf listesine girmez; diğer modellerde fotoğraf kuralı aynıdır.
