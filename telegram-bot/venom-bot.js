@@ -2043,7 +2043,7 @@ async function claudeIslemAdimi(env, simdi) {
       const df = await defterOku(env, simdi, { kuru: is.kuru !== false, kapat: is.kuru === false, venom: true });
       const hl = is.kuru === false ? await listeyiTemizle(env, simdi, df) : null;
       const say = {}; for (const x of df.kapanan) say[x.neden] = (say[x.neden] || 0) + 1;
-      const filtre = (x) => (!is.kod || String(x.kod) === String(is.kod)) && (is.bitenler || x.durum !== "bitti") && (!is.tur || x.tur === is.tur);
+      const filtre = (x) => (!is.kod || String(x.kod) === String(is.kod)) && (is.bitenler || x.durum !== "bitti") && (!is.satirTur || x.tur === is.satirTur);
       sonuc.push({ tur: is.tur, kuru: is.kuru !== false, ozet: df.ozet, kapanan: say, satirSayisi: df.satirlar.length, satirlar: df.satirlar.filter(filtre).slice(0, is.enFazla || 60).map(defterSatirYazi), hemra: hl ? { kapanan: hl.kapanan, kalan: hl.kalan.map((x) => x.ozet) } : null });
     } else if (is.tur === "soruDene") { // 12 Kasım: KABUL TESTİ — Patron'un mesajı gibi beyne (Opus) gider; cevap Patron'a GİTMEZ, yazan araçlar çalışmaz, sohbet kaydına girmez
       const e2 = { ...env, __kuru: true, __kuruYazi: [] };
