@@ -605,15 +605,7 @@ export async function repeteKartAdimi(env, simdi, tg) {
       if (simdi >= rec.donZaman) { await fuataGonder(env, tg, rec, simdi, "Fuat (2 gün sonra yeniden)"); await rkYaz(env, rec); }
       continue;
     }
-    if (rec.durum === "fuat" && mesai(simdi)) { // 24 saat cevap yok → önce Fuat'a, 24 saat sonra Hemra'ya
-      if (!rec.hat1 && simdi - rec.fuatGonderim >= GUN) {
-        const r = await tg(env, "sendMessage", { chat_id: await ureticiId(env, rec), text: `${D(rec)}🔔 Hatırlatma: ${rec.kod} repete kartı cevabınızı bekliyor.`, ...(rec.mesajlar.fuat ? { reply_to_message_id: rec.mesajlar.fuat[1], allow_sending_without_reply: true } : {}) });
-        kanit(rec, `${ureticiAd(rec)} (hatırlatma)`, r, "", null, simdi); rec.hat1 = simdi; degisti = true;
-      } else if (rec.hat1 && !rec.hat2 && simdi - rec.hat1 >= GUN) {
-        await kartGonder(env, tg, rec, "Hemra (hatırlatma)", await _rk.koordinatorId(env, simdi), `${D(rec)}🔔 Fuat, ${rec.kod} repete kartına cevap vermedi (dün kendisine hatırlatıldı). Arayıp sorar mısınız? (Venom)`, null, simdi);
-        rec.hat2 = simdi; degisti = true;
-      }
-    }
+    // 13 Kasım (Patron, kural 4): repete kartının ayrı 24 saat hatırlatması YOK — her kart gibi tek merdivende (kart-takip.js: 1 saat + 1 saat + Venom)
     if (rec.durum === "acik" && rec.teslim && bugun > rec.teslim && mesai(simdi) && saatI(simdi) >= 10 && !rec.teslimSoruldu) { // teslim günü geçti → Fuat'a sor
       const kl = { inline_keyboard: [[{ text: "🚚 Bugün / yarın geliyor", callback_data: `rk:tg:${rec.id}` }], [{ text: "⏱ 5 gün daha", callback_data: `rk:t5:${rec.id}` }]] };
       rec.mesajlar.teslim = await kartGonder(env, tg, rec, "Fuat (teslim günü geçti)", await ureticiId(env, rec), `${D(rec)}📦 ${rec.kod} repete (${rec.adet} adet) teslim günü ${gunGoster(rec.teslim)} idi. Ne durumda?`, kl, simdi);

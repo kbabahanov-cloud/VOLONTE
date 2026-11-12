@@ -14,13 +14,14 @@ export const KART_TEKRAR_SN = 3 * 3600;
 export const GUNCEL = "kt:-"; // "⏩ Güncel kart aşağıda" (işlevsiz düğme; botlar "Güncel kart aşağıda" der)
 const gun = (t) => new Date((t + SAAT_FARKI) * 1000).getUTCDay();
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
-export const mesaiMi = (t) => gun(t) >= 1 && gun(t) <= 5 && saat(t) >= 9 && saat(t) < 20;
-// İki an arasında geçen MESAİ süresi (hafta içi 09–20), saniye
+// 13 Kasım (Patron, kitap kural 4): mesai = pazartesi–cumartesi 09:00–20:00; pazar yok
+export const mesaiMi = (t) => gun(t) >= 1 && gun(t) <= 6 && saat(t) >= 9 && saat(t) < 20;
+// İki an arasında geçen MESAİ süresi (pazartesi–cumartesi 09–20), saniye
 export function mesaiSuresi(bas, son) {
   let s = 0;
   const gunBasi = (t) => t - ((t + SAAT_FARKI) % 86400);
   for (let g = gunBasi(bas); g < son && s < 30 * 86400; g += 86400) {
-    if (gun(g + 43200) < 1 || gun(g + 43200) > 5) continue;
+    if (gun(g + 43200) < 1 || gun(g + 43200) > 6) continue;
     const a = Math.max(bas, g + 9 * 3600), b = Math.min(son, g + 20 * 3600);
     if (b > a) s += b - a;
   }

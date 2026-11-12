@@ -2618,22 +2618,12 @@ test("REPETE KARTI: Fuat yazıyla ('TEST-002 onaylıyorum 15 gün', 'yapamam'); 
   await yazdi("3555 onaylıyorum 12 gün");
   assert.equal(fuataGiden().at(-1), "✅ Not alındı: 3555 — 12 gün. Bu model için bekleyen repete kartı yok; Hemra'ya iletildi.");
   assert.match(o.g.find((x) => String(x.govde.chat_id) === "333").govde.text, /^✍️ Fuat yazdı: "3555 onaylıyorum 12 gün"\n3555 için bekleyen repete kartı yok/);
-  // 24 saat cevapsız → önce Fuat, 24 saat sonra Hemra
+  // 13 Kasım (Patron, kural 4): repete kartının AYRI 24 saat hatırlatması yok — her kart gibi tek merdivende (kart takibi: 1 saat + 1 saat + Venom)
   const c = await ac("TEST-004");
   await rk.repeteKartAdimi(o.env, simdi + 900, tg2);
   o.g.length = 0;
-  await rk.repeteKartAdimi(o.env, simdi + 900 + 23 * 3600, tg2);
-  assert.equal(o.g.length, 0);
-  await rk.repeteKartAdimi(o.env, simdi + 900 + 24 * 3600 + 60, tg2);
-  assert.deepEqual(o.g.map((x) => [String(x.govde.chat_id), x.govde.text]), [["557", "🧪 DENEME – üretim yapmayın\n🔔 Hatırlatma: TEST-004 repete kartı cevabınızı bekliyor."]]);
-  o.g.length = 0;
-  await rk.repeteKartAdimi(o.env, simdi + 900 + 48 * 3600 + 120, tg2);
-  const hemraHat = () => o.g.filter((x) => String(x.govde.chat_id) === "333" && /cevap vermedi/.test(x.govde.text || ""));
-  assert.equal(hemraHat().length, 1);
-  assert.match(hemraHat()[0].govde.text, /🔔 Fuat, TEST-004 repete kartına cevap vermedi \(dün kendisine hatırlatıldı\)\. Arayıp sorar mısınız\? \(Venom\)$/);
-  assert.ok(!o.g.some((x) => /Hatırlatma: TEST-004/.test(x.govde.text || ""))); // Fuat'a ikinci hatırlatma yok
-  await rk.repeteKartAdimi(o.env, simdi + 900 + 49 * 3600, tg2);
-  assert.equal(hemraHat().length, 1); // tekrar yok
+  for (const s2 of [23 * 3600, 24 * 3600 + 60, 48 * 3600 + 120, 49 * 3600]) await rk.repeteKartAdimi(o.env, simdi + 900 + s2, tg2);
+  assert.ok(!o.g.some((x) => /Hatırlatma|cevap vermedi/.test(x.govde.text || "")));
   assert.ok(c);
   // teslim günü geçti (3419: teslim +10 gün) → Fuat'a soru; "5 gün daha" → yeni teslim
   const gec = Date.UTC(2026, 10, 23, 8, 0) / 1000; // 23 Kasım pazartesi 11:00
@@ -3438,4 +3428,31 @@ test("13 Kasım DENEME KAPAT (geriye dönük): işaretsiz açılmış deneme kay
   assert.deepEqual(Object.keys(await ayar("fabrika:renkler")), ["3394"]);
   assert.equal(await ayar("karar:son:5074"), null);
   assert.equal((await stokOku("kuyruk-al", { ad: "rkSonuc" })).length, 0); // bildir: false → Patron'a da satır gitmez
+});
+
+test("13 Kasım: 'kartTakipEski' — yeni hatırlatma merdiveninden ÖNCE açılmış cevapsız kartlar 'eski' işaretlenir ve kendiliğinden HATIRLATILMAZ (Patron listeyi onaylamadan kimseye gitmez); yeni açılan kart normal merdivende", async () => {
+  const f = await import("./fabrika.js");
+  const kt = await import("./kart-takip.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", FUAT_ID: "557" });
+  const kart = (chat, yazi) => ({ chat_id: chat, text: yazi, reply_markup: { inline_keyboard: [[{ text: "✅ Gelecek", callback_data: "fc:g:1" }]] } });
+  const bas = Date.UTC(2026, 10, 9, 8, 0) / 1000; // 9 Kasım pazartesi 11:00
+  const gercek = Date.now;
+  try {
+    Date.now = () => bas * 1000;
+    await kt.kartIzle(o.env, "sendMessage", kart(557, "3394 · Büyük (44-50) · siyah 12"), { ok: true, result: { message_id: 10 } });
+    await kt.kartIzle(o.env, "sendMessage", kart(444, "📷 3627 fotoğrafı lazım"), { ok: true, result: { message_id: 11 } });
+  } finally { Date.now = gercek; }
+  const simdi = Date.UTC(2026, 10, 12, 20, 0) / 1000; // 12 Kasım 23:00 (gece)
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 900 + o.g.length } }; };
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "kartTakipEski" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tgS);
+  const s = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.deepEqual(s.l.map((x) => [x.kim, x.kod, x.mesaj]), [["Fuat", "3394", 10], ["Aziz", "3627", 11]]);
+  assert.equal(o.g.length, 0); // işaretleme sessizdir
+  // ertesi sabah mesaide: eski kartlara hatırlatma GİTMEZ; yeni açılan kart 1 saat sonra hatırlatılır
+  const sabah = Date.UTC(2026, 10, 13, 6, 0) / 1000; // 13 Kasım cuma 09:00
+  try { Date.now = () => sabah * 1000; await kt.kartIzle(o.env, "sendMessage", kart(557, "3500 · Büyük (44-50) · bej 6"), { ok: true, result: { message_id: 12 } }); } finally { Date.now = gercek; }
+  await kt.kartTakipAdimi(o.env, sabah + 3700, tgS);
+  assert.deepEqual(o.g.filter((x) => x.metod === "sendMessage").map((x) => [String(x.govde.chat_id), x.govde.text]), [["557", "🔔 Hatırlatma: cevap bekleyen kartınız var — 3500 · fabrika siparişi. En alttaki karta bakın, düğmeye basın."]]);
 });

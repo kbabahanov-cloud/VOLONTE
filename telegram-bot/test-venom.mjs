@@ -1113,7 +1113,7 @@ test("9 Kasım: 3 saattir bekleyen kart → Hemra'ya BİR kez hatırlatma (Sami 
   // akşam: hâlâ cevapsız → tek satır
   const bek = await (await o.env.STOK.get().fetch("https://stok/isd-bekleyen", { method: "POST", body: JSON.stringify({ enEski: 0 }) })).json();
   assert.equal(cevapsizSatiri(bek, { 504: "Hemra" }, ist(10, 20)), "📌 Cevapsız: Hemra — Kemal 3411");
-  assert.equal(mesaiSuresi(ist(13, 19), ist(16, 10)), 2 * 3600); // cuma 19:00 → pazartesi 10:00 = 1+1 saat (hafta sonu sayılmaz)
+  assert.equal(mesaiSuresi(ist(13, 19), ist(16, 10)), 13 * 3600); // 13 Kasım (kural 4): mesai pazartesi–cumartesi 09–20 → cuma 19:00 → pazartesi 10:00 = 1 + 11 (cumartesi) + 0 (pazar) + 1 saat
   // tekrar kart: aynı mutabakat 12 saat içinde ikinci kez → birleşir
   const { postaKarar, gonderildiKaydet } = await import("./venom-posta.js");
   await gonderildiKaydet(o.env, { kaynak: "sami", tur: "kart", metin: "📋 Mutabakat – 07.11 · Fuat'a gidecek", id: 5 }, ist(10, 10));
@@ -2216,4 +2216,23 @@ test("13 Kasım DENEME MODU (Venom, kural 40): 'deneme başlıyor' → mod açı
   assert.ok(rkKartMetni({ mod: true, kod: "5074", magaza: "VOLONTE", dagilim: "siyah · büyük 40", adet: 40, uretici: "Celal", hemra: "Hemra" }).startsWith(`${MOD}🔁 REPETE — `));
   assert.ok(bittiKartMetni({ mod: true, kod: "5074", magaza: "VOLONTE", oneri: "repete", hemra: "Hemra", stok: "8 adet" }).startsWith(`${MOD}🏭 Fabrikada bitti`));
   assert.ok(!rkKartMetni({ kod: "5074", magaza: "VOLONTE", dagilim: "siyah · büyük 40", adet: 40, uretici: "Celal", hemra: "Hemra" }).includes("🧪"));
+});
+
+test("13 Kasım (TEK DEFTER — iş bitince kayıt kapanır): onaylanıp çalıştırılan Patron kartı 'yapiliyor'da takılı kalmaz; takibi biten 'bitti', 24 saatte kapanışı gelmeyen 'eskidi'; bekleyen karta dokunulmaz", async () => {
+  const { kartKapanisAdimi } = await import("./venom-bot.js");
+  const o = ortam();
+  const t = ist(13, 12);
+  const is = (id, x) => o.depo.set(`venom:bot:is:${id}`, JSON.stringify({ id, metin: id, zaman: t - 7200, ...x }));
+  is("a1", { tur: "siteDuzelt", durum: "yapiliyor", onayZaman: t - 700 }); // takipsiz iş: bota verildi → bitti
+  is("a2", { tur: "siteDuzelt", durum: "yapiliyor", onayZaman: t - 60 }); // az önce onaylandı → bekler
+  is("b1", { tur: "mesaj", kime: "fuat", durum: "yapiliyor", onayZaman: t - 3600 }); // takipli, sözü açık → bekler
+  is("b2", { tur: "mesaj", kime: "fuat", durum: "yapiliyor", onayZaman: t - 3600 }); // sözü bitti → bitti
+  is("b3", { tur: "mutabakat", durum: "yapiliyor", onayZaman: t - 2 * 86400 }); // 24 saatte kapanış yok → eskidi
+  is("c1", { tur: "sil", kod: "3999", durum: "bekliyor" }); // Patron henüz basmadı → dokunulmaz
+  o.depo.set("venom:sozler", JSON.stringify([{ tur: "mesaj", id: "b1", zaman: t - 3600 }, { tur: "mesaj", id: "b2", zaman: t - 3600, bitti: t - 60 }]));
+  const k = await kartKapanisAdimi(o.env, t);
+  assert.deepEqual(k.sort((x, y) => x.id.localeCompare(y.id)), [{ id: "a1", tur: "siteDuzelt", durum: "bitti" }, { id: "b2", tur: "mesaj", durum: "bitti" }, { id: "b3", tur: "mutabakat", durum: "eskidi" }]);
+  const d = (id) => JSON.parse(o.depo.get(`venom:bot:is:${id}`)).durum;
+  assert.deepEqual(["a1", "a2", "b1", "b2", "b3", "c1"].map(d), ["bitti", "yapiliyor", "yapiliyor", "bitti", "eskidi", "bekliyor"]);
+  assert.equal(patronaGiden(o).length, 0); // kapanış sessizdir
 });

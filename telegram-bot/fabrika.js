@@ -10,6 +10,7 @@
 //  Fabrika kişileri /start yazınca Murat'a sorulur; eklenen kişi sadece listeyi alır, başka komut kullanamaz.
 //  Satış verisi "sami:satisAcik" = "1" olana kadar kullanılmaz (köprünün satış okuması denemeyle doğrulanınca açılır).
 
+import { kayitliKisiler, kartKodu } from "./kart-takip.js";
 import { kagitAcik } from "./gorev-kagidi.js";
 import { defterIs, defterCevap } from "./is-defteri.js";
 import { mesaiMi, isGunuSuresi, GUNCEL } from "./kart-tekrar.js";
@@ -2624,6 +2625,12 @@ async function tekIslem(env, simdi, tg) {
       const r = await fabrikayaGonder(env, yeni, tg);
       sonuc.l.push({ eski: id, yeni: yeni.id, kod: rec.kod, giden: r.giden });
     }
+  } else if (is.tur === "kartTakipEski") { // 13 Kasım: bu andan ÖNCE açılmış cevapsız kartlar "eski" işaretlenir — yeni merdiven onları kendiliğinden hatırlatmaz
+    const l = JSON.parse((await stokIste(env, "/ayar-oku", { k: "kartTakip" })).v || "[]");
+    const adlar = await kayitliKisiler(env);
+    sonuc.l = [];
+    for (const x of l) { if (x.bitti || x.eski || (is.once && x.zaman >= is.once)) continue; x.eski = simdi; sonuc.l.push({ kim: adlar[x.chat] || "kayıtsız hesap", mesaj: x.mesaj, zaman: x.zaman, ozet: x.ozet, kod: x.kod || kartKodu(x.ozet), hat: Boolean(x.hat), bildirildi: Boolean(x.bildirildi) }); }
+    await stokIste(env, "/ayar-yaz", { k: "kartTakip", v: JSON.stringify(l.slice(-300)) });
   } else if (is.tur === "denemeBitir" || is.tur === "denemeKapat") {
     // 13 Kasım (Patron, kural 40): deneme kayıtları tek seferde SESSİZCE kapanır — kimseye mesaj gitmez, kartlara dokunulmaz.
     // denemeBitir: "mod" işaretli bütün açık kayıtlar (Patron "deneme bitti" dedi). denemeKapat: { fs: [id], rk: [id], gun, kodlar,

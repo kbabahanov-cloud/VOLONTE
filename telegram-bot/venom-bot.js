@@ -438,12 +438,48 @@ export async function sozAdimi(env, simdi) {
   await kaydet(env, "venom:sozler", l, 14 * 86400);
   return acik.length;
 }
+// 13 Kasım (Patron, kural 39 — TEKRAR SORU YASAĞI): Patron'da AYNI kart (aynı tür + aynı yazı) cevap beklerken ikinci kez açılmaz;
+// açık olan kart geçerlidir (yenisi gönderilmez).
+async function acikAyniPatronKarti(env, is, metin) {
+  let keys = [];
+  try { keys = (await env.KAYIT.list({ prefix: "venom:bot:is:" })).keys || []; } catch { keys = []; }
+  for (const k of keys.slice(-120)) {
+    const x = await oku(env, k.name, null);
+    if (x && ["bekliyor", "emin"].includes(x.durum) && x.tur === is.tur && String(x.metin || "") === String(metin || "")) return x.id;
+  }
+  return null;
+}
 async function kartAc(env, is, metin, simdi) {
+  const acik = await acikAyniPatronKarti(env, is, metin);
+  if (acik) return acik;
   const id = kisaId();
   await kaydet(env, `venom:bot:is:${id}`, { id, ...is, metin, durum: "bekliyor", zaman: simdi }, 7 * 86400);
   if (is.patronIstedi || env.__sohbette) await yaz(env, metin, { reply_markup: kartKlavye(id), posta: { tur: "cevap" } }); // Patron'un kendi isteğinin kartı: hemen
   else await bildir(env, metin, { simdi, tur: "kart", ek: { reply_markup: kartKlavye(id) } });
   return id;
+}
+
+// 13 Kasım (Patron, TEK DEFTER — "iş bitince kayıt kapanır"): onaylanıp çalıştırılan Patron kartı "yapiliyor"da takılı kalmaz.
+// Takibi (söz) biten iş "bitti" olur; 24 saatte kapanışı kayda geçmeyen iş "eskidi" diye kapanır (rapor "takılı kart" saymaz).
+export async function kartKapanisAdimi(env, simdi) {
+  let keys = [];
+  try { keys = (await env.KAYIT.list({ prefix: "venom:bot:is:" })).keys || []; } catch { keys = []; }
+  const sozler = await oku(env, "venom:sozler", []);
+  const kapanan = [];
+  for (const k of keys.slice(-200)) {
+    const x = await oku(env, k.name, null);
+    if (!x || x.durum !== "yapiliyor") continue;
+    const z = x.onayZaman || x.zaman || 0;
+    const soz = sozler.find((s2) => String(s2.isId || s2.id || "") === String(x.id));
+    const takipsiz = !["sil", "mesaj", "mutabakat"].includes(x.tur);
+    if (soz && soz.bitti) Object.assign(x, { durum: "bitti", kapandi: simdi, kapanis: "takibi bitti" });
+    else if (takipsiz && simdi - z >= 600) Object.assign(x, { durum: "bitti", kapandi: simdi, kapanis: "onaylandı, ilgili bota verildi" });
+    else if (simdi - z >= 86400) Object.assign(x, { durum: "eskidi", kapandi: simdi, kapanis: "onaylandı; kapanışı 24 saatte kayda geçmedi" });
+    else continue;
+    await kaydet(env, k.name, x, 7 * 86400);
+    kapanan.push({ id: x.id, tur: x.tur, durum: x.durum });
+  }
+  return kapanan;
 }
 
 export async function aracCalistir(env, ad, g, simdi) {
@@ -1672,7 +1708,8 @@ export async function venomCron(env, simdi) {
   // 11 Kasım: Claude Code'un bir kerelik işleri — KV "venom:claudeIslem" = [{tur:"testMesaj", metin} | {tur:"kopruOku"}] → "venom:claudeIslemSonuc"
   try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
   try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); }
-  try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); } // 11 Kasım (kural 54) // 11 Kasım: repete kartı (Patron kartı + tek satır sonuç)
+  try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); }
+  if (Math.floor(simdi / 300) % 6 === 0) try { await kartKapanisAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartKapanis", e); } // 13 Kasım: yarım saatte bir — onaylanan kartın kapanışı // 11 Kasım (kural 54) // 11 Kasım: repete kartı (Patron kartı + tek satır sonuç)
   // Diğer botların sonuçları → "✅ yapıldı"
   for (const s of await kuyruguAl(env, "sonuc")) {
     { const sl = await oku(env, "venom:sozler", []); const sz = sl.find((x) => !x.bitti && x.tur === "mesaj" && String(x.id) === String(s.isId || s.id).split(":")[0]); if (sz) { sz.bitti = simdi; await kaydet(env, "venom:sozler", sl, 14 * 86400); await yaz({ ...env, __izin: "cevap" }, `${s.ok ? "✅" : "⚠️"} ${s.aciklama} (${zamanKisa(simdi)})`, { posta: { kaynak: "venom", tur: "cevap", izin: "cevap" } }); continue; } }
@@ -1938,13 +1975,22 @@ async function rkAdimi(env, simdi) {
 }
 // 11 Kasım (Patron, kural 54): 1 saat basılmayan kart — Venom Hemra'ya yazar (Sami üzerinden); sebebi Sami araştırdı
 // (bot engellendi mi, kart kayıtlı hesaba mı gitti). Patron'a SADECE çözülemeyen durum (engel / kayıtsız hesap) TEK satır.
+// 13 Kasım (Patron, kitap kural 4): TEK MERDİVEN — Sami kişiye 1. saatte hatırlatma, 2. saatte son hatırlatma gönderdi; kart hâlâ açık →
+// Venom çözer: Hemra'ya kartın yazısı, başında "⏩ <kişi> N saattir cevap vermedi — karar sizde." (Sami üzerinden). Bir saat sonra
+// hâlâ açıksa (ya da cevapsız kalan Hemra'nın kendi işleriyse) Patron'a TEK satır. Hesap sorunu (engel / kayıtsız hesap) Patron'a hemen.
 async function kartCevapsizAdimi(env, simdi) {
   for (const k of await kuyruguAl(env, "kartCevapsiz")) {
     const kim = k.kim || `kayıtlı olmayan hesap (${k.chat})`;
+    const konu = `${k.kod ? `${k.kod} · ` : ""}${k.konu || "kart"}`;
+    if (k.patron) {
+      const isler = (k.isler || []).map((x) => `${x.kod ? `${x.kod} · ` : ""}${x.konu || "kart"}`);
+      await bildir(env, k.hemra ? `📌 Hemra ${k.saat} saattir cevap vermedi: ${isler.length} iş bekliyor (${isler.join(", ")}).` : `📌 ${kim} ${k.saat} saattir cevap vermedi, Hemra da çözemedi: ${konu}.`, { simdi, kaynak: "venom", tur: "kritik" });
+      continue;
+    }
     const saatS = tarihSaat(k.zaman).slice(11, 16);
-    if (k.kim !== "Hemra") await kuyrugaEkle(env, "giden", { id: `kc-h:${k.chat}:${k.mesaj}`, kime: "hemra", tur: "mesaj", metin: `📌 ${kim} ${saatS}'te gelen karta 1 saattir basmadı (bir kez hatırlatıldı): ${k.ozet || "kart"}.${k.engel ? ` Sebep: ${k.engel}.` : ""} Arayıp sorar mısınız? (Venom)` }).catch(() => null);
+    if (k.kim !== "Hemra") await kuyrugaEkle(env, "giden", { id: `kc-h:${k.chat}:${k.mesaj}`, kime: "hemra", tur: "mesaj", metin: `⏩ ${kim} ${k.saat} saattir cevap vermedi — karar sizde.\n${k.yazi || k.ozet || "kart"}${k.engel ? `\n(Sebep: ${k.engel})` : ""}` }).catch(() => null);
     if (k.engel || k.kayitsiz) await bildir(env, `⚠️ Kart ${kim} hesabına ulaşmıyor: ${k.kayitsiz ? "kart kayıtlı bir hesaba gitmemiş" : `Telegram: ${k.engel}`} (${saatS}, "${(k.ozet || "").slice(0, 60)}"). Hemra'ya bildirildi; hesabın düzeltilmesi gerekiyor.`, { simdi, kaynak: "venom", tur: "kritik" });
-    else await biriktir(env, { kaynak: "sami", metin: `📌 ${kim} ${saatS} kartına 1 saattir basmadı; Hemra'ya bildirildi.`, tur: "bilgi" }, simdi);
+    else await biriktir(env, { kaynak: "sami", metin: `📌 ${kim} ${k.saat} saattir cevap vermedi (${konu}); Hemra'ya soruldu.`, tur: "bilgi" }, simdi);
   }
 }
 async function rkKararDugmesi(env, cq, simdi, cevap) {

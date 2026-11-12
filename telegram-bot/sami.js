@@ -40,7 +40,7 @@ import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
 import { rkDugme, rkYazi, rkHemraYazi, repeteKartAdimi, TEST_RESIM_YOLU } from "./repete-kart.js"; // 11 Kasım: repete kartı (önce deneme yolunda)
 import { testResimBayt } from "./repete-test-resim.js";
-import { kartIzle, kartBasildi, kartTakipAdimi } from "./kart-takip.js"; // 11 Kasım (kural 54): kart takibi
+import { kartIzle, kartBasildi, kartTakipAdimi, acikAyniKart } from "./kart-takip.js"; // 11 Kasım (kural 54): kart takibi
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi, teyitDugmesi } from "./fabrika.js";
@@ -57,6 +57,9 @@ const izinli = (id, env) => kisiler(env).includes(String(id));
 async function tg(env, metod, govde) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "sami", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
   if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "sami", metod, govde, r); return r; }
+  // 13 Kasım (Patron, kural 39 — TEKRAR SORU YASAĞI): bu kişide AYNI kart açıkken ikinci kez gönderilmez; açık kart geçerlidir
+  const acikMesaj = await acikAyniKart(env, metod, govde);
+  if (acikMesaj) return { ok: true, tekrar: true, result: { message_id: acikMesaj, chat: { id: govde.chat_id } } };
   const r = await tgGercek(env, metod, govde);
   await kartIzle(env, metod, govde, r); // 11 Kasım (kural 54): elemana giden her kart takip edilir (basılmazsa hatırlatma → Venom)
   await defterTg(env, "sami", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
