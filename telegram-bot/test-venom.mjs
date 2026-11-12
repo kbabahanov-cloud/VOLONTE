@@ -708,7 +708,8 @@ test("6 Kasım: düşünme imzası hatası — drop_block beta, yine de hata gel
 
 test("6 Kasım: 907 = VOLONTE (Patron kararı) — Vegawin'de iki markada olsa da kesin; KV kararları da geçerli; kural kitabında yazılı", async () => {
   const { markaKesin, markaKarari } = await import("./yayin-kontrol.js");
-  const { ORTAK_KURALLAR } = await import("./kurallar.js");
+  const { kitapOku } = await import("./kitap.js");
+  const ORTAK_KURALLAR = await kitapOku({ KAYIT: { get: async () => null, put: async () => null } }, "kemal", 1000); // 13 Kasım: botların okuduğu kitap
   const kv = new Map([["venom:markaKarar", JSON.stringify({ "3500": "BLACKROSE" })]]);
   const env = { KAYIT: { get: async (k, t) => (kv.has(k) ? (t === "json" ? JSON.parse(kv.get(k)) : kv.get(k)) : null) },
     STOK: { idFromName: () => 1, get: () => ({ fetch: async () => new Response(JSON.stringify({ satirlar: [{ magaza: "VOLONTE" }, { magaza: "BLACKROSE" }] })) }) } };
@@ -716,7 +717,7 @@ test("6 Kasım: 907 = VOLONTE (Patron kararı) — Vegawin'de iki markada olsa d
   assert.equal((await markaKesin(env, 3500)).marka, "BLACKROSE");
   assert.equal((await markaKesin(env, "3600")).marka, null); // karar yoksa yine "belirsiz" (tahmin yok)
   assert.equal(await markaKarari(env, "3600"), null);
-  assert.match(ORTAK_KURALLAR, /13\. PATRON'UN KESİN MARKA KARARLARI[^\n]*907 = VOLONTE/);
+  assert.match(ORTAK_KURALLAR, /Patron'un kesin marka kararları[^\n]*907 = VOLONTE/);
   assert.match(ORTAK_KURALLAR, /907 = VOLONTE, 3000 = VOLONTE, 3002 = VOLONTE, 3047 = BLACK ROSE, 4205 = BLACK ROSE\./);
   assert.equal((await markaKesin(env, "4205")).marka, "BLACKROSE");
   assert.equal((await markaKesin(env, "3002")).marka, "VOLONTE");

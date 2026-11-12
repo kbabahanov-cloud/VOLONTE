@@ -20,6 +20,7 @@ import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
 import { magazaStogu, STOK_KURALI } from "./sil.js";
 import { siteKontrol, engelKaydet, markaKesin } from "./yayin-kontrol.js";
+import { kitapOku } from "./kitap.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { kanalBilgisi, modelSecenekleri, tarihUzun } from "./ortak.js";
 import { sinirAsildiMi, harcamaEkle } from "./harcama.js";
@@ -528,6 +529,10 @@ export async function medyaTopla(env, bilgi, kod) {
 }
 
 async function aciklamaYaz(env, { kod, fotolar, tarif, yazilar, duzeltme, onceki }) {
+  // 13 Kasım (Patron, kural 60): marka kayıttan okunur — Black Rose modeline "VOLONTE modeli" yazılmaz; kesin değilse marka adı yazılmaz.
+  const mk = await markaKesin(env, kod).catch(() => null);
+  const markaAdi = mk && mk.kaynak !== "varsayılan" && mk.marka === "BLACKROSE" ? "BLACK ROSE" : mk && mk.kaynak !== "varsayılan" && mk.marka === "VOLONTE" ? "VOLONTE" : "Marka kaydı kesin olmayan";
+  const kitap = await kitapOku(env, "selin");
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 55_000 });
   const model = env.ANTHROPIC_MODEL || "claude-opus-5-5";
   const content = [];
@@ -536,7 +541,7 @@ async function aciklamaYaz(env, { kod, fotolar, tarif, yazilar, duzeltme, onceki
     type: "text",
     text: `${REHBER}
 
-VOLONTE modeli ${kod} için site metni hazırla.
+${markaAdi} modeli ${kod} için site metni hazırla.
 Katalog tarifi: ${tarif || "yok"}
 Kanal alt yazıları: ${yazilar.slice(0, 3).join(" | ").slice(0, 1200) || "yok"}
 ${onceki ? `Önceki taslak: ${JSON.stringify(onceki)}` : ""}
@@ -546,7 +551,7 @@ Aynı fotoğrafın tekrarı (aynı kare/aynı poz, yeniden yüklenmiş ya da bir
 kategori: katalog tarifine ve fotoğraflara bakarak tek birini seç: ${KATEGORILER.map((k) => `${k} (${KATEGORI_ADI[k]})`).join(", ")}. Gece/özel gün elbisesi evening; iki ya da üç parça uyumlu set sets; tek parça üst-alt birleşik jumpsuits.`,
   });
   const r = await client.beta.messages.create({
-    model, max_tokens: 3000, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
+    model, max_tokens: 3000, system: kitap, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
     output_config: {
       effort: "low",
       format: {

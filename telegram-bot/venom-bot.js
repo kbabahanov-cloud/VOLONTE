@@ -21,7 +21,8 @@ import { KISILER, kuyrugaEkle, kuyruguAl, hataEkle } from "./venom-kopru.js";
 import { siteVerisi } from "./depo-oku.js";
 import { renkCevir } from "./duzen.js";
 import { renkBilinir, renkDilleri } from "./site-renk.js";
-import { ORTAK_KURALLAR, BOT_YETENEKLERI, VENOM_KURALLARI, MARKA_KARARLARI, VENOM_CEKIRDEK } from "./kurallar.js";
+import { BOT_YETENEKLERI, MARKA_KARARLARI, VENOM_CEKIRDEK } from "./kurallar.js";
+import { kitapOku, kitapMetni, paraSinirlari, derslerOku } from "./kitap.js";
 import { modelDurumu, silmeKaniti, silmeMetni, cevapsizKartlar, gunVerisi, gunVerisiMetni, enCokSatan, defterMetni as tekDefterMetni, zamanYaz as zamanKisa } from "./venom-veri.js"; // 12 Kasım: tek gerçek kaynak
 import { silOnayli, silOnayliYaz, magazaStoklari } from "./sil.js";
 import { ekipSuzgec } from "./venom-yonetim.js";
@@ -1513,7 +1514,7 @@ export async function sohbet(env, metin, simdi) {
   let cevapMetni = "";
   // 5 Kasım: sistem metni konuşma boyunca SABİT (araç hafızayı değiştirse bile) — değişirse Claude'un düşünme bloğu geçersiz sayılıyordu (400)
   const sonBot = await oku(env, "venom:bot:sonBot", null);
-  const sistem = [{ type: "text", text: SISTEM }, { type: "text", text: await hafizaMetni(env), cache_control: { type: "ephemeral" } }, { type: "text", text: `Şimdi: ${tarihSaat(simdi)} (İstanbul).${sonBot && simdi - sonBot.zaman < 1800 ? `\nSON BOT MESAJI (${Math.round((simdi - sonBot.zaman) / 60)} dk önce, ${BOT_AD[sonBot.bot] || sonBot.bot}): "${sonBot.metin}". Bu mesaj Patron'dan yazı bekliyorsa (ör. "nasıl düzelteyim, yazın") ve Patron'un yeni mesajı ona cevapsa, bota_yaz ile AYNEN ${sonBot.bot} botuna ilet.` : ""}` }];
+  const sistem = [{ type: "text", text: `${await kitapOku(env, "venom", simdi)}\n\n${await derslerOku(env, simdi)}` }, { type: "text", text: SISTEM }, { type: "text", text: await hafizaMetni(env), cache_control: { type: "ephemeral" } }, { type: "text", text: `Şimdi: ${tarihSaat(simdi)} (İstanbul).${sonBot && simdi - sonBot.zaman < 1800 ? `\nSON BOT MESAJI (${Math.round((simdi - sonBot.zaman) / 60)} dk önce, ${BOT_AD[sonBot.bot] || sonBot.bot}): "${sonBot.metin}". Bu mesaj Patron'dan yazı bekliyorsa (ör. "nasıl düzelteyim, yazın") ve Patron'un yeni mesajı ona cevapsa, bota_yaz ile AYNEN ${sonBot.bot} botuna ilet.` : ""}` }];
   env.__tur = { yapamadi: [], kanit: [], sirada: [] };
   if (!env.__kuru) await env.KAYIT.put("venom:sohbetAktif", String(simdi), { expirationTtl: 120 }).catch(() => null);
   let izinNudge = false, aracNudge = false, aracSayisi = 0;
@@ -2621,7 +2622,7 @@ export async function fikirKutusu(env, simdi) {
   const veri = [await paylasilmayanlar(env, simdi), await stokBitiyor(env, simdi).catch(() => null) || "", `Videosuz modeller: ${(await siteVerisi(env)).filter((u) => !u.gizli && !(u.videolar || []).length).length}`].join("\n").slice(0, 3000);
   const client = claudeIstemci(env, { maxRetries: 1, timeout: 60_000 });
   const model = env.VENOM_MODEL || MODEL;
-  const r = await client.messages.create({ model, max_tokens: 600, system: `${ORTAK_KURALLAR}\nSen VOLONTE'nin satış danışmanısın. Kısa, uygulanabilir, sade Türkçe.`, messages: [{ role: "user", content: `Bu haftanın verisi:\n${veri}\n\nSatışı artıracak 3 somut öneri yaz (her biri tek satır, hangi model/ne yapılacak). Fiyat önerme.` }] });
+  const r = await client.messages.create({ model, max_tokens: 600, system: `${await kitapOku(env, "venom")}\nSen VOLONTE'nin satış danışmanısın. Kısa, uygulanabilir, sade Türkçe.`, messages: [{ role: "user", content: `Bu haftanın verisi:\n${veri}\n\nSatışı artıracak 3 somut öneri yaz (her biri tek satır, hangi model/ne yapılacak). Fiyat önerme.` }] });
   await venomHarcamaYaz(env, claudeUsd(model, r.usage), simdi);
   return `💡 FİKİR KUTUSU (haftalık):\n${r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim()}`;
 }

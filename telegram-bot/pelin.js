@@ -18,7 +18,7 @@
 
 import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
-import { ORTAK_KURALLAR } from "./kurallar.js";
+import { kitapOku } from "./kitap.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { claudeTur } from "./ai-istemci.js";
@@ -778,9 +778,8 @@ async function dosyaVer(env, anahtar) {
 }
 
 // ---------- Sohbet (Claude; komutsuz) ----------
-const SISTEM = `${ORTAK_KURALLAR}
-
-Sen Pelin'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyim toptancısı; ana pazar Afrika, dünya geneli) görsel ve video yapımcısı. Hollywood seviyesinde bir yapımcı gibi düşünürsün: ışık, kadraj, hareket, müzik, ilk 2 saniyede dikkat çekme, Telegram/Instagram/WhatsApp için dikey video.
+// 13 Kasım (Patron, TEK KİTAP): kurallar KURALLAR-PATRON.md'den (kitapOku) gelir; burada sadece çalışma talimatı durur.
+const TALIMAT = `Sen Pelin'sin: VOLONTE'nin (İstanbul Laleli, kaliteli kadın giyim toptancısı; ana pazar Afrika, dünya geneli) görsel ve video yapımcısı. Hollywood seviyesinde bir yapımcı gibi düşünürsün: ışık, kadraj, hareket, müzik, ilk 2 saniyede dikkat çekme, Telegram/Instagram/WhatsApp için dikey video.
 Sade, kısa, samimi Türkçe konuş (Rusça yazılırsa Rusça). Sohbet gibi konuş: soru sor, fikir ver, daha iyi bir yol görürsen söyle. Komut bekleme.
 Kesin kurallar (asla esnemez): kıyafetin rengi, deseni ve kesimi asla değişmez; manken yüzleri hep aynı; fiyat, maliyet, alış fiyatı, kâr ve stok hiçbir görsele/yazıya girmez; videoya AI notu basılmaz; videonun son karesinde modelin MARKASI (VOLONTE ya da BLACK ROSE — model kartında, Sami'nin deposundan) ve altında model kodu (fiyat ve başka yazı yok). Markayı ASLA tahmin etme; VOLONTE ve BLACK ROSE iki ayrı mağazadır, karıştırılmaz. Onaysız harcama yok: her üretimden önce maliyet önizlemesi gider, sadece Murat onaylar. Para harcayan bir işi sen başlatamazsın; sadece "kurulum_karti" (yüz + ortam kurulumu) ya da "uretim_karti" (model kodlarıyla üretim / maliyet testi) ile Patron'a ✅ Onayla / ❌ İptal düğmeli maliyet kartı gönderebilirsin. Eski deneme akışı ("fal hazır", kör test, askı/kumaş denemesi) TAMAMEN KALDIRILDI; ondan söz etme.
 Üretim akışı (2 Kasım, Patron): /uret <kod> → ürün fotoğrafı (önce Patron/Hemra'nın gönderdiği, yoksa site) → sabit yüzle fotoğraf → aynı fotoğraftan 6 sn video → kalite kontrol (sen + ikinci göz OpenAI) → renk/desen/kesim farkı varsa otomatik yeniden; 2 denemede olmazsa Patron'a ⚠️ → Patron [✅ Onayla] [🔄 Yeniden üret] [❌ İptal] → onaylanınca Selin siteye, Kemal kanala. /maliyettesti 5 kod → model başı maliyet raporu. Örnek video ("bunun gibi yap, 3557"): kamera, ışık, hız, poz ve ortam havasını tarif olarak çıkarırsın; birebir kopya yok, başkasının yüzü/logosu/müziği yok; beğenilen tarif şablon olur (/sablonlar).
@@ -857,7 +856,7 @@ async function sohbet(env, m, simdi) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
   const sonKartlar = await oku(env, "pelin:sonKartlar", []);
   const kartBolumu = sonKartlar.length ? `\nSON KARTLAR (Telegram'a giden gerçek metin, en yenisi başta):\n${sonKartlar.slice(0, 4).map((k, i) => `--- Kart ${i + 1} (${tarihSaatYaz(k.zaman)}) ---\n${k.metin}`).join("\n")}` : "\nSON KARTLAR: kayıt yok.";
-  const sistem = [{ type: "text", text: SISTEM, cache_control: { type: "ephemeral" } }, { type: "text", text: `Şu anki durum: ${await durumMetni(env, simdi)}\nKonuşan: ${m.from.first_name || ""} (${yonetici(env, m.from.id) ? "yönetici" : "ekip"}).${kartBolumu}` }];
+  const sistem = [{ type: "text", text: `${await kitapOku(env, "pelin", simdi)}\n\n${TALIMAT}`, cache_control: { type: "ephemeral" } }, { type: "text", text: `Şu anki durum: ${await durumMetni(env, simdi)}\nKonuşan: ${m.from.first_name || ""} (${yonetici(env, m.from.id) ? "yönetici" : "ekip"}).${kartBolumu}` }];
   let cevapMetni = "";
   for (let tur = 0; tur < 4; tur++) {
     const r = await claudeTur(client, { model, max_tokens: 2000, system: sistem, tools: SOHBET_ARACLARI, output_config: { effort: "low" }, messages: mesajlar });
@@ -1263,10 +1262,10 @@ export function uretimMaliyeti(arac = VARSAYILAN_ARAC, secim = null) {
 
 // 4 Kasım: Claude görseli adresinden indiremezse ("timed out while trying to download the file") 3 kez dener, sonra görselleri
 // Pelin kendisi indirip küçültür ve doğrudan gönderir (indirilemeyen görsel atlanır).
-async function claudeJson(env, content, schema, simdi, maxTokens = 1200) {
+async function claudeJson(env, content, schema, simdi, maxTokens = 1200, sistem = null) {
   const model = BEYINLER[(await env.KAYIT.get("pelin:beyin")) || "sonnet"] || BEYINLER.sonnet;
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
-  const iste = (c) => client.messages.create({ model, max_tokens: maxTokens, output_config: { effort: "low", format: { type: "json_schema", schema } }, messages: [{ role: "user", content: c }] });
+  const iste = (c) => client.messages.create({ model, max_tokens: maxTokens, ...(sistem ? { system: sistem } : {}), output_config: { effort: "low", format: { type: "json_schema", schema } }, messages: [{ role: "user", content: c }] });
   let r, son;
   for (let i = 0; i < 3 && !r; i++) { try { r = await iste(content); } catch (e) { son = e; if (!gecici(e)) throw e; if (i < 2) await new Promise((x) => setTimeout(x, 1500 * (i + 1))); } }
   if (!r) {
@@ -2808,14 +2807,14 @@ export async function noraYaz(env, is, simdi, duzeltme = "") {
   const gecmis = await oku(env, "pelin:noraGecmis", []);
   const kare = is.sahne || is.foto;
   const n = await claudeJson(env, [
-    { type: "text", text: `Sen Nora'sın: VOLONTE'nin (lüks kadın giyim) senaristi. Model ${is.kod}${is.renk ? `, renk ${is.renk}` : ""}${is.boy && BOYLAR[is.boy.boy] ? `, boy ${BOYLAR[is.boy.boy].ad}` : ""}. Videonun başlangıç karesi:` },
+    { type: "text", text: `Sen Nora'sın: VOLONTE ve BLACK ROSE mağazalarının (lüks kadın giyim; iki ayrı marka) senaristi. Model ${is.kod}${is.marka && MARKALAR[is.marka] ? ` (${MARKALAR[is.marka].ad})` : ""}${is.renk ? `, renk ${is.renk}` : ""}${is.boy && BOYLAR[is.boy.boy] ? `, boy ${BOYLAR[is.boy.boy].ad}` : ""}. Videonun başlangıç karesi:` },
     ...(kare ? [resimUrl(kare)] : []),
     { type: "text", text: `Bu kareden ${URETIM_SN} saniyelik dikey video için KISA senaryo yaz.
 KESİN KURALLAR: model DAİMA kameraya doğru İLERİ yürür; geri gitmek, kameradan uzaklaşmak, sırtını dönmek YASAK. Hızlı dönüş YOK, kendi etrafında dönme YOK, kamera etrafında dönüş YOK. Sadece yavaş, doğal hareket: kameraya doğru birkaç adım yürüme, hafif durma, omuz üstünden bakış; kumaş doğal dalgalansın; kamera sabit ya da çok yavaş yaklaşır. Elbise, renk, boy, yaka ve mekân karedeki gibi kalır; yeni eşya/dekor ekleme. Kadın: başarılı, zengin, özgüvenli, zarif.
 Videolar birbirinin aynısı olmasın; son senaryolar: ${gecmis.slice(-4).map((x) => x.tr).join(" | ") || "yok"}.${duzeltme ? `
 PATRON'UN DÜZELTMESİ (mutlaka uygula): ${duzeltme}` : ""}
 senaryo_tr: Patron'a gösterilecek en fazla 3 kısa satır Türkçe (saniye saniye). hareket_en: aynı hareketin video aracı için kısa İngilizce tarifi (en fazla 350 karakter; sadece hareket ve kamera).` },
-  ], NORA_SEMA, simdi, 500);
+  ], NORA_SEMA, simdi, 500, await kitapOku(env, "nora", simdi)); // 13 Kasım (TEK KİTAP): Nora da kitabı okur
   const sen = { tr: String(n.senaryo_tr).slice(0, 400), hareketEn: String(n.hareket_en).slice(0, 380), zaman: simdi, duzeltme: duzeltme || null };
   await kaydet(env, "pelin:noraGecmis", [...gecmis, { kod: is.kod, tr: sen.tr, zaman: simdi }].slice(-20));
   return sen;

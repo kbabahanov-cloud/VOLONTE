@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> **ZORUNLU:** Her yeni işe başlamadan önce `KURALLAR-PATRON.md` dosyasını oku. Her raporun son satırı: "KURALLAR-PATRON.md okundu, X kural kontrol edildi, ihlal yok / ihlal: …". Patron yeni kalıcı kural verince aynı anda o dosyaya ekle.
+> **ZORUNLU:** Her yeni işe başlamadan önce `KURALLAR-PATRON.md` (tek kural kitabı) ve `DERSLER.md` (ders defteri) dosyalarını oku. Her raporun son satırı: "KURALLAR-PATRON.md okundu, X kural kontrol edildi, ihlal yok / ihlal: …". Patron yeni kalıcı kural verince aynı anda o dosyaya ekle ve `python3 araclar/kitap-yukle.py` ile botlara gönder. Her hata kök sebebi ve çözümüyle `DERSLER.md`'ye yazılır.
 
 Bu dosya, bu projede benimle (kullanıcıyla) nasıl çalışacağını anlatır. Her oturumda bunu dikkate al.
 

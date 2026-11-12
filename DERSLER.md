@@ -1,0 +1,44 @@
+# DERSLER.md — DERS DEFTERİ
+
+Her hata kök sebebi ve çözümüyle buraya yazılır (kural 38). Claude Code her işe başlamadan bu dosyayı okur.
+Venom yeni kural ya da emirde kitapla (KURALLAR-PATRON.md) ve bu defterle çelişki arar; çelişki varsa uygulamaz, Patron'a tek satır sorar.
+Biçim: `N. KONU — Hata: … Kök sebep: … Çözüm: … (durum)`. Durum: ÇÖZÜLDÜ / KURULUYOR (hangi gece).
+(Bu depo herkese açık: burada kişi kimliği, telefon, fiyat, anahtar YOK.)
+
+## A. 12 Kasım kural dökümünden çıkan 27 çelişki
+
+1. MARKA TAHMİNİ — Hata: bot talimatlarında "büyük ihtimalle Black Rose", "Black Rose olabilir" yazıyordu; Selin her modele "VOLONTE modeli" diyordu. Kök sebep: marka kuralı kitapta, tahmin cümleleri bot talimatlarında ayrı duruyordu. Çözüm: marka her zaman Vegawin'den ve Patron'un kesin kararlarından okunur; tahmin cümlesi yazılmaz (kural 23, 54, 60). (ÇÖZÜLDÜ — Gece 1)
+2. KANAL PAYLAŞIM SAATİ — Hata: bir yerde 08–20, başka yerde 09–21 yazıyordu; 23:01'de paylaşım çıktı. Kök sebep: saat birden çok sabitte ve yazıda ayrı ayrı tutuluyordu; bazı yollar saate bakmıyordu. Çözüm: tek saat 09:00–21:00, gönderim kapısının kendisi saate bakar (kural 52). (ÇÖZÜLDÜ — Gece 1)
+3. TUR KARTININ SAATİ — Hata: kartlar 08:00'de gidiyordu, paylaşım 09:00'da başlıyordu. Kök sebep: iki ayrı sabit. Çözüm: öneri kartları da 09:00'da (kural 52). (ÇÖZÜLDÜ — Gece 1)
+4. PAYLAŞIM ARASI — Hata: 50–60 / 60 / 60–90 dakika yazıyordu; 2 dakikada 8 model çıktığı oldu. Kök sebep: ara süresi sıradaki işlere uygulanıyor, başka yollardan çıkan paylaşımlara uygulanmıyordu. Çözüm: bütün yollar için en az 60 dakika, kapıda kontrol (kural 53). (ÇÖZÜLDÜ — Gece 1)
+5. GÜNLÜK PAYLAŞIM SAYISI — Hata: 10 / 15 yazıyordu, gerçekte 4–17. Kök sebep: repete, yeni model, ertelenen paylaşımlar sayılmıyordu. Çözüm: günde en fazla 12, hepsi dahil (kural 53). (ÇÖZÜLDÜ — Gece 1)
+6. HAFTA SONU — Hata: hatırlatma hafta içi, paylaşım ve liste her gün; kural yoktu. Kök sebep: hafta sonu hiçbir yerde tek cümleyle yazılmamıştı. Çözüm: mesai pazartesi–cumartesi 09:00–20:00, pazar ekibe hatırlatma yok; kanal paylaşımı hafta sonu da sürer (kural 4, 53). Eksik listesinin cuma akşamı çıkması Gece 2'de. (KISMEN — Gece 1; liste günü Gece 2)
+7. HATIRLATMA SÜRESİ — Hata: 30 dk, 1 saat, 3 saat, 24 saat diye dört ayrı süre vardı. Kök sebep: her kart türü kendi süresini kodda taşıyordu. Çözüm: her kartta 1 saat + 1 saat, sonra Venom (kural 4). (ÇÖZÜLDÜ — Gece 1)
+8. HATIRLATMADA KART YENİDEN GİDER Mİ — Hata: bir kural "kart yeniden gider", öbürü "gitmez" diyordu. Kök sebep: eski ortak kitap silinmeden yeni kural yazılmıştı. Çözüm: kart yeniden gitmez, kısa hatırlatma yazısı gider (kural 20); eski kitap kaldırıldı (kural 37). (ÇÖZÜLDÜ — Gece 1)
+9. KANALA / SİTEYE ONAYI KİM VERİR — Hata: bir yerde "Patron'un onayı", bir yerde "mağazadaki kişiler" yazıyordu. Kök sebep: onay veren kişi kuralda adıyla yazmıyordu. Çözüm: günlük kanal ve site kartlarını Merdan / Hemra onaylar (kural 56, 59); para, silme, fabrika ve kural değişikliği Patron'undur (kural 6). (ÇÖZÜLDÜ — Gece 1)
+10. "EMİN MİSİNİZ?" — Hata: Venom her kartta soruyordu (iç mesaj, imza, renk dahil). Kök sebep: soru onay kartının kendisine bağlıydı, konuya değil. Çözüm: sadece para, silme, fabrika siparişi, kural değişikliği (kural 6). (ÇÖZÜLDÜ — Gece 1)
+11. PATRON "SİL" DEYİNCE — Hata: bir yol kart açıyor, bir yol kartsız siliyor, Selin'in düğmesi stoğa bakmıyordu. Kök sebep: silme üç ayrı yerde yazılmıştı. Çözüm: silme tek yoldan (Venom, stok kontrolüyle); ekip düğmeleri kalktı (kural 41, 61). Stok bitmişse kartsız SOLD OUT, stok varsa "yine de?" sorusu Gece 2'de. (KISMEN — Gece 1; SOLD OUT yolu Gece 2)
+12. EKİPTE "SİL" DÜĞMESİ — Hata: kural "gitmez" diyordu, üç kartta vardı. Kök sebep: kural yazıldı, kartlar taranmadı. Çözüm: bütün ekip kartlarından kalktı, testte kart düğmeleri taranıyor (kural 41). (ÇÖZÜLDÜ — Gece 1)
+13. STOK BİTİNCE — Hata: kanalda SOLD OUT, sitede gizli; stok dönünce SOLD OUT geri alınmıyordu. Kök sebep: kanal ve site ayrı kurallarla çalışıyordu. Çözüm: biten model iki yerde de SOLD OUT kalır, repete gelince BACK IN STOCK. (KURULUYOR — Gece 2)
+14. RAPOR UZUNLUĞU — Hata: 8 / 10 / 15 satır yazıyordu. Kök sebep: üç ayrı kaynak. Çözüm: en fazla 8 satır (kural 13); eski kaynaklar kaldırıldı. (ÇÖZÜLDÜ — Gece 1)
+15. GÜNLÜK MESAJ SINIRI — Hata: "günde en fazla 10 mesaj" yazıyordu, gerçekte 35–77 (çoğu Patron'un sorusuna cevap). Kök sebep: uygulanamayan kural. Çözüm: sınır kalktı; acil anında, gerisi raporda (kural 45). (ÇÖZÜLDÜ — Gece 1)
+16. GÜN İÇİ BİLDİRİM — Hata: düzeltme ve uyarılar gün içinde tek tek geliyordu. Kök sebep: "acil" tanımı yoktu. Çözüm: acil = para, fabrika, şikâyet; gerisi rapora (kural 45). "Bugün çözülenler" satırı Gece 3'te. (KISMEN — Gece 1; rapor satırı Gece 3)
+17. PAYLAŞIM SAYIMI — Hata: aynı gün için Kemal 5, Venom 9, ofis 14 dedi. Kök sebep: her paylaşım albüm + ayrı "CODE" mesajıydı, üç yer üç ayrı şeyi sayıyordu. Çözüm: ayrı kod mesajı kalkar, albüm + yazı = 1 paylaşım, üç yer aynı sayımı okur. (KURULUYOR — Gece 2)
+18. PARA SINIRLARI — Hata: sınırlar dört ayrı yerde, farklı rakamlarla duruyordu. Kök sebep: tek tablo yoktu. Çözüm: tek tablo kitapta, botlar oradan okur (kural 74). (ÇÖZÜLDÜ — Gece 1)
+19. FABRİKA "GELECEK" — Hata: eski kitap süre düğmesi istiyordu, yeni kural istemiyordu. Kök sebep: eski kitap silinmemişti. Çözüm: "Gelecek" süresiz onaydır (kural 33); eski kitap kaldırıldı. (ÇÖZÜLDÜ)
+20. REPETE SIRASI — Hata: iş Hemra → Patron → yeniden Hemra diye döndü, Patron'a iki kez soruldu. Kök sebep: eski ve yeni akış aynı anda açıktı. Çözüm: Hemra dağılımı yazar → Patron bir kez onaylar → fabrika (kural 29). (ÇÖZÜLDÜ)
+21. FABRİKA KİMDİR — Hata: bazı yazılarda sadece "Sinem, Fuat, Nuri" geçiyordu; Celal'in modeline "Fuat'a gider" yazıldı. Kök sebep: fabrika adı yazılarda sabitti. Çözüm: yazı ve kart her zaman modelin gerçek fabrikasından türetilir (kural 31). (ÇÖZÜLDÜ)
+22. HEMRA'NIN KARTI — Hata: hem tek tek kart hem toplu liste gidiyordu. Kök sebep: iki kural birlikte duruyordu. Çözüm: Hemra'ya hatırlatma tek tek değil, açık işlerin toplu listesi (kural 4). (ÇÖZÜLDÜ — Gece 1)
+23. VENOM KİMİNLE KONUŞUR — Hata: üç ayrı cümle vardı. Kök sebep: eski kitap. Çözüm: Patron'a sadece Venom yazar; Venom ekiple Sami üzerinden konuşur (kural 15). (ÇÖZÜLDÜ)
+24. PELİN NE ZAMAN ÇALIŞIR — Hata: "Pelin video" düğmesi "Pelin" yazmadan istek açıyordu; hata olunca video kendiliğinden yeniden gönderiliyordu. Kök sebep: düğme yolu ve hata yolu "Pelin" kuralına bağlı değildi. Çözüm: kural 7, 66, 67, 68. (ÇÖZÜLDÜ — Gece 1)
+25. DENEME — Hata: gerçek deneme kayıtları gerçek kayıt olarak açıldı, raporlara girdi. Kök sebep: deneme işareti kayda değil, tek tek kartlara bağlıydı. Çözüm: deneme modu (kural 40). (ÇÖZÜLDÜ — Gece 1)
+26. MÜŞTERİYE CEVAP — Hata: kural "yapay zekâ cevap vermez" diyor, Defne planı tersini söylüyor. Kök sebep: Defne henüz kurulmadı. Çözüm: Defne kurulurken kural 22 Patron'la birlikte yeniden yazılır; o güne kadar kural 22 geçerli. (AÇIK — Defne'de)
+27. KURAL KİTABININ KENDİSİ — Hata: botlar kitabı okumuyordu; beş ayrı kural kaynağı vardı. Kök sebep: kitap sadece Claude Code için yazılmıştı. Çözüm: tek kitap, bütün botlar aynı kaynaktan okur, sürüm ofiste görünür (kural 37). (ÇÖZÜLDÜ — Gece 1)
+
+## B. 12 Kasım'da yaşanan hatalar
+
+28. KENDİ KARARIYLA ADIM — Hata: Claude Code Patron'un istemediği bir adımı koda ekledi. Kök sebep: "gerekli" görüleni sormadan koymak. Çözüm: kural 35; yeni düğme, adım ya da onay önce Patron'a sorulur. (ÇÖZÜLDÜ)
+29. YAZIYI ANLAMAMA — Hata: Sami, Hemra'nın üç farklı yazılışla yazdığı dağılımı reddetti. Kök sebep: tek kalıba göre okuyan çözücü. Çözüm: kural 36; her yazılış anlaşılır, eksik tek cümleyle sorulur, her testte en az 5 yazılış. (ÇÖZÜLDÜ)
+30. DENEMEDEN ÖNCE LİSTE YOK — Hata: gerçek denemede ekibin telefonuna Patron'un görmediği yazılar gitti. Kök sebep: test "kart gitti mi"ye bakıyordu, yazının doğruluğuna değil. Çözüm: kural 34. (ÇÖZÜLDÜ)
+31. SONUÇSUZ "ÇÖZÜLÜYOR" — Hata: Patron'a "şu an çözülüyor" yazıldı, sonuç bildirilmedi. Kök sebep: hazır kalıp. Çözüm: kural 46. (ÇÖZÜLDÜ — Gece 1)
+32. TEKRAR SORU — Hata: karar verilmiş model için aynı soru yeniden geldi (silinen model her gün soruldu). Kök sebep: kart açan yerler deftere bakmıyordu. Çözüm: kural 39; kart açılmadan önce defterde açık kart / verilmiş karar aranır. (ÇÖZÜLDÜ — Gece 1)

@@ -160,11 +160,15 @@ async function durum(env, simdi) {
     site = { toplam: g.length, bugun: g.filter((u) => u.eklenme === bugun).length, son: g.sort((a, b) => String(b.eklenme).localeCompare(String(a.eklenme))).slice(0, 6).map((u) => ({ kod: u.kod, foto: u.fotolar && u.fotolar[0] ? SITE_FOTO + u.fotolar[0] : null, video: Boolean(u.videolar && u.videolar.length) })) };
   } catch { /* site okunamadı */ }
 
+  // 13 Kasım (Patron, TEK KİTAP — kural 37): kitabın sürümü ve her botun okuduğu sürüm
+  const KITAP_BOTLARI = ["venom", "sami", "kemal", "selin", "pelin", "nora"];
+  const [kitapSurum, ...kitapOkudu] = await Promise.all([oku(env, "kitap:surum"), ...KITAP_BOTLARI.map((b) => oku(env, `kitap:okudu:${b}`))]);
+  const kitap = { surum: kitapSurum ? kitapSurum.surum : null, kural: kitapSurum ? kitapSurum.kural : null, botlar: Object.fromEntries(KITAP_BOTLARI.map((b, i) => [b, kitapOkudu[i] ? { surum: kitapOkudu[i].surum, zaman: kitapOkudu[i].zaman } : null])) };
   const harcama = { fal: sayi(hFal), claude: sayi(hClaude), openai: sayi(hOpenai), hf: sayi(hHf) };
   harcama.toplam = Math.round((harcama.fal + harcama.claude + harcama.openai + harcama.hf) * 100) / 100;
   const hf = { bakiyeTahmini: Math.max(0, Math.round((HF_BASLANGIC_USD - harcama.hf) * 100) / 100), baslangic: HF_BASLANGIC_USD, bitis: hfAnahtar && hfAnahtar.bitis ? hfAnahtar.bitis : null, bagli: Boolean(pelinHfSonuc && pelinHfSonuc.anahtar && pelinHfSonuc.anahtar.var) };
   return {
-    zaman: simdi, gun: bugun, saat: saat(simdi), botlar, onaylar, tasima, olaylar, son5,
+    zaman: simdi, gun: bugun, saat: saat(simdi), botlar, onaylar, tasima, olaylar, son5, kitap,
     uyarilar: [...(hf.bakiyeTahmini < 3 ? [`Higgsfield bakiyesi düşük: ~${hf.bakiyeTahmini} $ (3 $ altı) — yükleme gerekebilir`] : []), ...(ayna && ayna.bugun >= (ayna.gunlukSinir || 10) * 0.8 ? [`Pelin bugün ${ayna.bugun} $ harcadı (günlük sınır ${ayna.gunlukSinir} $)`] : [])],
     panolar: {
       satis, stok: ozet ? { stokta: ozet.stokta, stoksuz: ozet.stoksuz, kopruler: (ozet.kopruler || []).map((k) => ({ magaza: k.magaza, son: k.son, adet: k.adet })), uyari: rSami ? rSami.yapilacak || [] : [] } : null,

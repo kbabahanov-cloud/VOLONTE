@@ -126,6 +126,7 @@ text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill
   <h1>VOLONTE<small>SANAL OFİS · AŞAMA 1 · İZLEME</small></h1>
   <div id="saat">--:--</div>
   <div class="canli" id="canli"><i></i><span>CANLI</span></div>
+  <div id="kitap" style="font-size:10px;letter-spacing:.12em;color:var(--sol);white-space:nowrap" title="Tek kural kitabı: botların okuduğu sürüm"></div>
   <div class="araclar">
     <button class="b gizliTel" id="bToplanti" title="09:30 toplantı sahnesi">☕ Toplantı</button>
     <button class="b gizliTel" id="bGunSonu" title="Gün sonu özeti">🌙 Gün sonu</button>
@@ -448,6 +449,14 @@ function ekranlar(v) {
   $("#kagitSayi").textContent = n ? n : "";
   $("#patronYazi").textContent = n ? `${n} ONAY BEKLİYOR` : "LIVE YOUR LIFE";
   $("#venomNot").textContent = v.botlar.venom.durum === "gri" ? "YAKINDA" : "AKTİF";
+  if (v.kitap && v.kitap.surum) { // 13 Kasım: tek kitap — sürüm ve her botun okuduğu sürüm
+    const ad = { venom: "Venom", sami: "Sami", kemal: "Kemal", selin: "Selin", pelin: "Pelin", nora: "Nora" };
+    const b = Object.entries(v.kitap.botlar || {});
+    const guncel = b.filter(([, x]) => x && x.surum === v.kitap.surum).length;
+    $("#kitap").textContent = `📖 KİTAP ${v.kitap.surum} · ${guncel}/${b.length} bot okudu`;
+    $("#kitap").title = b.map(([k, x]) => `${ad[k] || k}: ${x ? x.surum : "henüz okumadı"}`).join(" · ");
+    $("#kitap").style.color = guncel === b.length ? "" : "#f2c14e";
+  }
 }
 // --- yan panel ---
 function panel(v) {
