@@ -3409,6 +3409,11 @@ test("13 Kasım DENEME KAPAT (geriye dönük): işaretsiz açılmış deneme kay
   await stokYaz("ayar-yaz", { k: "rk:acik", v: JSON.stringify(["5074-r"]) });
   const gun = gunAnahtari(simdi);
   await stokYaz("ayar-yaz", { k: `fabrika:fabrikayaGiden:${gun}`, v: JSON.stringify({ VOLONTE: ["3567", "5068", "5074"], BLACKROSE: ["3162"] }) });
+  // o günün listeleri: deneme listesi (sadece 5068 + 5074) ve gerçek liste (3567) — ikisi de fabrikaya gitmiş
+  await stokYaz("ayar-yaz", { k: `fabrika:birlesik:${gun}`, v: JSON.stringify([`${gun}-T1`, `${gun}-T2`]) });
+  await stokYaz("ayar-yaz", { k: `fabrika:${gun}-T1`, v: JSON.stringify({ asama: "gonderildi", birlesik: true, gun, magaza: "VOLONTE", gonderilecek: [], liste: [{ kod: "5068", magaza: "VOLONTE", renkler: [] }, { kod: "5074", magaza: "VOLONTE", renkler: [] }] }) });
+  await stokYaz("ayar-yaz", { k: `fabrika:${gun}-T2`, v: JSON.stringify({ asama: "gonderildi", birlesik: true, gun, magaza: "VOLONTE", gonderilecek: [], liste: [{ kod: "3567", magaza: "VOLONTE", renkler: [] }] }) });
+  assert.deepEqual((await f.fabrikayaGidenler(o.env, gun)).giden.VOLONTE.sort(), ["3567", "5068", "5074"]);
   await stokYaz("ayar-yaz", { k: "fabrika:sonIstek", v: JSON.stringify({ 5068: [{ renk: "siyah", adet: 8 }], 5074: [{ renk: "siyah", adet: 40 }], 3394: [{ renk: "bej", adet: 6 }] }) });
   await stokYaz("ayar-yaz", { k: "fabrika:renkler", v: JSON.stringify({ 5068: ["siyah"], 5074: ["siyah"], 3394: ["bej"] }) });
   await stokYaz("ayar-yaz", { k: "karar:son:5074", v: JSON.stringify({ zaman: simdi - 900, kim: "Patron", ne: "repete" }) });
@@ -3424,6 +3429,9 @@ test("13 Kasım DENEME KAPAT (geriye dönük): işaretsiz açılmış deneme kay
   assert.deepEqual([r.durum, r.mod, r.iptal.neden], ["iptal", true, "12 Kasım Celal denemesi (Patron kararı)"]);
   assert.deepEqual(await ayar("rk:acik"), []);
   assert.deepEqual(await ayar(`fabrika:fabrikayaGiden:${gun}`), { VOLONTE: ["3567"], BLACKROSE: ["3162"] });
+  assert.deepEqual((await f.fabrikayaGidenler(o.env, gun)).giden, { VOLONTE: ["3567"], BLACKROSE: ["3162"] }); // Venom'un "bugün fabrikaya gidenler" cevabı da deneme modellerini saymaz
+  assert.equal((await ayar(`fabrika:${gun}-T1`)).mod, true);
+  assert.ok(!(await ayar(`fabrika:${gun}-T2`)).mod); // gerçek listeye dokunulmaz
   assert.deepEqual(Object.keys(await ayar("fabrika:sonIstek")), ["3394"]);
   assert.deepEqual(Object.keys(await ayar("fabrika:renkler")), ["3394"]);
   assert.equal(await ayar("karar:son:5074"), null);

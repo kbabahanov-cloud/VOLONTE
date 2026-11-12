@@ -1289,6 +1289,17 @@ export async function denemeKayitlariKapat(env, simdi, sec = {}) {
   // geriye dönük: işaretsiz açılmış denemenin "fabrikaya giden" ve renk / son istek hafızasındaki izleri
   const kodlar = new Set((sec.kodlar || []).map(String));
   if (sec.gun && kodlar.size) {
+    // o günün SADECE bu modellerden oluşan listeleri (deneme listesi) 🧪 işaretlenir: "fabrikaya giden" sayımına yeniden girmesin
+    const anahtarlar = new Set((await ayarOku(env, `fabrika:birlesik:${sec.gun}`, [])) || []);
+    for (const cfg of MAGAZALAR) for (let i = 1; i <= 3; i++) anahtarlar.add(`${sec.gun}${cfg.ek}-ozel${i}`);
+    for (const k of anahtarlar) {
+      const b = await ayarOku(env, `fabrika:${k}`, null);
+      const modeller = b ? [...(b.liste || []), ...(b.modeller || [])] : [];
+      if (!b || b.mod || b.deneme || !modeller.length || !modeller.every((x) => kodlar.has(String(x.kod)))) continue;
+      b.mod = true;
+      await ayarYaz(env, `fabrika:${k}`, b);
+      sonuc.liste.push(k);
+    }
     const giden = (await ayarOku(env, `fabrika:fabrikayaGiden:${sec.gun}`, null)) || null;
     if (giden) {
       for (const mg of Object.keys(giden)) { const once = giden[mg] || []; giden[mg] = once.filter((k) => !kodlar.has(String(k))); if (giden[mg].length !== once.length) sonuc.giden.push(mg); }
