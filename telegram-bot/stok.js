@@ -413,7 +413,7 @@ export class StokDeposu {
   // Kişiye giden, cevap bekleyen açık siparişler (toplu cevap "hepsi 5 gün")
   fsKisi({ chat, durum = "bekliyor" }) { return this.fsAcikler().filter((r) => r.durum === durum && (r.mesajlar || []).some((m) => String(m[0]) === String(chat))).map((r) => r.id).slice(0, 60); }
   // Sinem'e günlük özet: açık siparişlerin kısa hali (fiyat/stok yok)
-  fsOzet() { return this.fsAcikler().map((r) => ({ id: r.id, kod: r.kod, magaza: r.magaza || null, grup: r.grup || "fabrika", durum: r.durum, gonderim: r.gonderim, hazirGun: r.hazirGun || null, teslimSure: r.teslimSure || null, karar: r.karar || null, kararZaman: r.kararZaman || (r.patronKarar && r.patronKarar.zaman) || (r.hemraOneri && r.hemraOneri.zaman) || null, kararVeren: r.patronKarar ? "Patron" : r.kararVeren || (r.hemraOneri && r.hemraOneri.kim) || null, oneri: r.hemraOneri ? r.hemraOneri.oneri : null, oneriZaman: r.hemraOneri ? r.hemraOneri.zaman : null, deneme: Boolean(r.deneme), chats: [...new Set((r.mesajlar || []).map((m) => String(m[0])))] })); }
+  fsOzet() { return this.fsAcikler().map((r) => ({ id: r.id, kod: r.kod, ...(r.mod ? { mod: true } : {}), ...(r.deneme ? { deneme: true } : {}), magaza: r.magaza || null, grup: r.grup || "fabrika", durum: r.durum, gonderim: r.gonderim, hazirGun: r.hazirGun || null, teslimSure: r.teslimSure || null, karar: r.karar || null, kararZaman: r.kararZaman || (r.patronKarar && r.patronKarar.zaman) || (r.hemraOneri && r.hemraOneri.zaman) || null, kararVeren: r.patronKarar ? "Patron" : r.kararVeren || (r.hemraOneri && r.hemraOneri.kim) || null, oneri: r.hemraOneri ? r.hemraOneri.oneri : null, oneriZaman: r.hemraOneri ? r.hemraOneri.zaman : null, deneme: Boolean(r.deneme), chats: [...new Set((r.mesajlar || []).map((m) => String(m[0])))] })); }
   // 10 Kasım KANIT DEFTERİ: bir kodun fabrika kayıtları (mühürlü arşivden; silinemez)
   arsivKod(tur, mt) { return this.hepsi("SELECT sira, zaman, icerik FROM arsiv WHERE tur = ? AND mt = ? ORDER BY sira LIMIT 300", String(tur), String(mt)); }
 
@@ -428,7 +428,7 @@ export class StokDeposu {
     for (const id of JSON.parse(this.ayarOku("fs:acik") || "[]").slice(-80)) {
       const r = this.ayarOku(`fs:${id}`); if (!r) continue;
       const x = JSON.parse(r);
-      if (!x.deneme) fs.push({ id: x.id, kod: x.kod, durum: x.durum, gonderim: x.gonderim, hazirGun: x.hazirGun || null, cevaplayan: x.cevaplayan || null, renkler: x.renkler || [], grup: x.grup || null });
+      if (!x.deneme && !x.mod) fs.push({ id: x.id, kod: x.kod, durum: x.durum, gonderim: x.gonderim, hazirGun: x.hazirGun || null, cevaplayan: x.cevaplayan || null, renkler: x.renkler || [], grup: x.grup || null }); // 13 Kasım: deneme modu kaydı rapora girmez
     }
     return {
       urun: this.hepsi("SELECT magaza, kod, adet FROM urun"),
@@ -448,7 +448,7 @@ export class StokDeposu {
     for (const id of JSON.parse(this.ayarOku("fs:acik") || "[]").slice(-80)) {
       const r = this.ayarOku(`fs:${id}`); if (!r) continue;
       const x = JSON.parse(r);
-      if (!x.deneme && String(x.kod) === k) fs.push({ durum: x.durum, gonderim: x.gonderim, hazirGun: x.hazirGun || null, cevaplayan: x.cevaplayan || null, renkler: x.renkler || [] });
+      if (!x.deneme && !x.mod && String(x.kod) === k) fs.push({ durum: x.durum, gonderim: x.gonderim, hazirGun: x.hazirGun || null, cevaplayan: x.cevaplayan || null, renkler: x.renkler || [] });
     }
     return { kod: k, satirlar: this.hepsi("SELECT magaza, adet FROM urun WHERE kod = ?", k), s7: sat(bas7), s14: sat(bas14), ilkGun: (this.tek("SELECT MIN(gun) AS g FROM satis") || {}).g || null, fs, karar: this.tek("SELECT durum FROM karar WHERE kod = ?", k) || null };
   }
@@ -547,8 +547,8 @@ export class StokDeposu {
     else { try { adlar = JSON.parse(this.ayarOku("defter:adlar") || "{}"); } catch { adlar = {}; } }
     const isd = this.hepsi("SELECT * FROM isd WHERE zaman >= ? AND deneme = 0 ORDER BY zaman LIMIT 5000", simdi - 6 * 86400);
     const rk = [];
-    for (const id of JSON.parse(this.ayarOku("rk:acik") || "[]").slice(-40)) { try { const r = JSON.parse(this.ayarOku(`rk:${id}`) || "null"); if (r && !r.deneme) rk.push(r); } catch { /* bozuk kayıt atlanır */ } }
-    const r = defterKur({ isd, fs: this.fsOzet(), rk, ek: this.isListe(), simdi, adlar: adlar || {} });
+    for (const id of JSON.parse(this.ayarOku("rk:acik") || "[]").slice(-40)) { try { const r = JSON.parse(this.ayarOku(`rk:${id}`) || "null"); if (r && !r.deneme && !r.mod) rk.push(r); } catch { /* bozuk kayıt atlanır */ } }
+    const r = defterKur({ isd, fs: this.fsOzet().filter((x) => !x.mod), rk, ek: this.isListe(), simdi, adlar: adlar || {} });
     // marka: Vegawin kartından (model tek mağazadaysa o; ikisinde de varsa stoğu olan) — "marka kayıtsız" ancak kart hiç yoksa
     const markaOn = new Map();
     for (const x of r.satirlar) {

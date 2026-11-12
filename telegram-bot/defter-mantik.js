@@ -125,8 +125,8 @@ export function defterKur({ isd = [], fs = [], rk = [], ek = [], simdi, adlar = 
   const { acik, kapat: kapanacak } = kartlariIndir(isd, simdi, { repeteler: rk.map((r) => ({ kod: r.kod, durum: r.durum, zaman: r.zaman, onay: r.fuat && r.fuat.zaman })), fsAcik: new Set(fs.map((f) => f.id)) });
   // Fabrika istekleri: aynı model için TEK satır (en yeni kayıt); eski tekrarlar ayrı iş sayılmaz
   const fsYeni = new Map();
-  for (const f of fs.filter((x) => !x.deneme)) { const o = fsYeni.get(String(f.kod)); if (!o || (f.gonderim || 0) >= (o.gonderim || 0)) fsYeni.set(String(f.kod), f); }
-  const fsEski = fs.filter((x) => !x.deneme).length - fsYeni.size;
+  for (const f of fs.filter((x) => !x.deneme && !x.mod)) { const o = fsYeni.get(String(f.kod)); if (!o || (f.gonderim || 0) >= (o.gonderim || 0)) fsYeni.set(String(f.kod), f); }
+  const fsEski = fs.filter((x) => !x.deneme && !x.mod).length - fsYeni.size;
   // Kartlar: aynı soru (aynı bot + model + tür + yazı) birden çok kişiye gittiyse TEK iş (kim: hepsi)
   const birles = new Map();
   for (const s of acik.map((r) => kartSatiri(r, adlar))) {
@@ -183,7 +183,7 @@ export function repeteDurumMetni(kod, kayitlar, fsAcik = []) {
   const l = (kayitlar || []).filter((r) => String(r.kod) === String(kod)).sort((a, b) => (b.zaman || 0) - (a.zaman || 0));
   const r = l.find((x) => !["red", "iptal", "geldi", "kapandi"].includes(x.durum)) || l[0];
   if (!r) {
-    const f = (fsAcik || []).find((x) => String(x.kod) === String(kod) && !x.deneme);
+    const f = (fsAcik || []).find((x) => String(x.kod) === String(kod) && !x.deneme && !x.mod);
     return f ? `${kod}: repete kaydı yok. Fabrika isteği var: ${fabrikaSatiri(f).kanit}.` : `${kod}: açık repete kaydı ve fabrika isteği yok.`;
   }
   const s = repeteSatiri(r);

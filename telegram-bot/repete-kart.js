@@ -14,6 +14,7 @@
 //   teslim günü geçince Fuat'a sorulur; mal gelince (Vegawin stoğu artınca ya da "3419 geldi" yazılınca) kayıt kendiliğinden kapanır.
 // Kuyruklar (StokDO): "rkOneri" Sami → Venom (Patron kartı) · "rkKarar" Venom → Sami (onay / red / tekrarAc) · "rkBaslat" Venom → Sami
 //   (Patron'un istediği repete: Hemra'ya dağılım kartı) · "rkSonuc" Sami → Venom (Patron'a tek satır / biriken bilgi).
+import { MOD_SATIR, modAcik, denemeKaydiMi } from "./deneme-modu.js";
 import { stokIste } from "./stokbot.js";
 import { fuatSuzgec } from "./mutabakat.js";
 export const ADET_SOR_ALT = 10, ADET_SOR_UST = 200; // bu aralığın dışındaki adet bir kez teyit edilir
@@ -40,8 +41,9 @@ export async function ureticiId(env, rec) {
   return c ? String(c.id) : "";
 }
 const yonelt = (rec, metin) => (rec && rec.uretici === "celal" ? String(metin).replace(/Fuat Bey'in/g, "Celal Bey'in").replace(/Fuat'a/g, "Celal'e").replace(/Fuat'ın/g, "Celal'in").replace(/\bFuat\b/g, "Celal") : metin);
-const D = (rec) => (rec.deneme ? DENEME : "");
-const DK = (rec) => (rec.deneme ? "🧪 DENEME — " : "");
+const D = (rec) => (rec.mod ? MOD_SATIR : rec.deneme ? DENEME : ""); // 13 Kasım (kural 40): deneme modu kaydı → Patron onaylı satır
+const DK = (rec) => (rec.deneme || rec.mod ? "🧪 DENEME — " : "");
+const sinif = (r) => (r.deneme ? "d" : r.mod ? "m" : "g"); // eski iç test / deneme modu / gerçek — birbirini engellemez
 const ACIK = ["hemra", "patron", "fuat", "acik"]; // kural 43: bu durumlarda aynı modele yeni repete yok ("beklemede" kilitlemez)
 const IZLENEN = [...ACIK, "beklemede"];
 export const TEST_RESIM_YOLU = "/test-resim.jpg";
@@ -119,9 +121,9 @@ async function acikKayitlar(env) {
 }
 const ayniKod = (a, b) => String(a || "").trim().toLocaleUpperCase("tr") === String(b || "").trim().toLocaleUpperCase("tr");
 // KURAL 43 — o modelin açık repetesi (yoksa null). Deneme ve gerçek kayıtlar birbirini engellemez.
-export async function acikRepete(env, kod, { deneme = false } = {}) {
+export async function acikRepete(env, kod, { deneme = false, mod = false } = {}) {
   if (!String(kod || "").trim()) return null;
-  return (await acikKayitlar(env)).find((r) => ayniKod(r.kod, kod) && ACIK.includes(r.durum) && Boolean(r.deneme) === Boolean(deneme)) || null;
+  return (await acikKayitlar(env)).find((r) => ayniKod(r.kod, kod) && ACIK.includes(r.durum) && sinif(r) === sinif({ deneme, mod })) || null;
 }
 
 // ---------- gönderim (her mesajın Telegram'dan dönen hali kayda: rec.kanit) ----------
@@ -175,7 +177,8 @@ const SURE = { f8: { gun: 8, etiket: "4-8 gün" }, f15: { gun: 15, etiket: "10-1
 export async function oneriAc(env, tg, g, simdi) {
   const kod = String(g.kod || "").trim();
   const deneme = Boolean(g.deneme);
-  const engel = await acikRepete(env, kod, { deneme });
+  const mod = !deneme && (g.mod != null ? Boolean(g.mod) : await modAcik(env)); // deneme modu açıkken başlatılan repete 🧪
+  const engel = await acikRepete(env, kod, { deneme, mod });
   if (engel) return { engel, metin: engelMetni(engel) };
   let adet = dagilimAdet(g.dagilim);
   let kalan = g.kalan, satis7 = g.satis7;
@@ -187,7 +190,7 @@ export async function oneriAc(env, tg, g, simdi) {
   }
   if (g.samiOnerisi && !(Number(satis7) > 0)) { g = { ...g, dagilim: null }; adet = 0; } // 12 Kasım (Patron): satış yoksa Sami dağılım ÖNERMEZ (Hemra isterse kendisi yazar)
   const uretici = g.uretici || (g.test ? "fuat" : ((await stokIste(env, "/tedarikci", { kodlar: [kod] }).catch(() => ({})))[kod] || {}).tedarikci === "CELAL" ? "celal" : "fuat");
-  const rec = { id: yeniId(kod, deneme, simdi), kod, uretici, magaza: g.magaza || "VOLONTE", deneme, test: Boolean(g.test), ikinciDene: Boolean(g.ikinciDene), kaynak: g.kaynak || null, donSn: g.donSn || null,
+  const rec = { id: yeniId(kod, deneme, simdi), kod, uretici, magaza: g.magaza || "VOLONTE", deneme, ...(mod ? { mod: true } : {}), test: Boolean(g.test), ikinciDene: Boolean(g.ikinciDene), kaynak: g.kaynak || null, donSn: g.donSn || null,
     dagilim: g.dagilim || null, adet, kalan: Number(kalan) || 0, satis7: Number(satis7) || 0, durum: "hemra", zaman: simdi, mesajlar: {}, kanit: [] };
   rec.bitisGun = rec.satis7 > 0 ? Math.max(1, Math.ceil(rec.kalan / (rec.satis7 / 7))) : null;
   rec.mesajlar.hemra = await kartGonder(env, tg, rec, "Hemra", await _rk.koordinatorId(env, simdi), hemraMetni(rec), hemraKlavye(rec), simdi, await fotoAdresi(env, rec));
@@ -198,7 +201,7 @@ export async function oneriAc(env, tg, g, simdi) {
 // Sinem "Bitti" → Hemra [Repete] (fabrika.js): aynı kart dağılım onayına döner ([✅ Patron'a gönder] / [✏️ Dağılımı değiştir])
 export async function rkHemradan(env, tg, sip, kart, kim, simdi) {
   const v = sip.rkVeri || {};
-  const rec = { id: yeniId(sip.kod, sip.deneme, simdi), kod: sip.kod, uretici: sip.grup === "celal" ? "celal" : "fuat", magaza: sip.magaza || "VOLONTE", deneme: Boolean(sip.deneme), test: Boolean(sip.test), kaynak: "bitti", sip: sip.id, hemraKart: kart, hemraSecen: kim,
+  const rec = { id: yeniId(sip.kod, sip.deneme, simdi), kod: sip.kod, uretici: sip.grup === "celal" ? "celal" : "fuat", magaza: sip.magaza || "VOLONTE", deneme: Boolean(sip.deneme), ...(sip.mod ? { mod: true } : {}), test: Boolean(sip.test), kaynak: "bitti", sip: sip.id, hemraKart: kart, hemraSecen: kim,
     donSn: (sip.testVeri && sip.testVeri.donSn) || null, dagilim: v.dagilim || null, adet: dagilimAdet(v.dagilim), kalan: Number(v.kalan) || 0, satis7: Number(v.s7) || 0, yil: v.yil ?? null, durum: "hemra", zaman: simdi,
     mesajlar: { hemra: sip.hemraMesaj ? [String(sip.hemraMesaj[0]), sip.hemraMesaj[1], sip.hemraMesaj[2] === "foto" ? "foto" : "yazi"] : null }, kanit: [] };
   rec.bitisGun = rec.satis7 > 0 ? Math.max(1, Math.ceil(rec.kalan / (rec.satis7 / 7))) : null;
@@ -265,7 +268,7 @@ export async function rkDugme(env, cq, tg, simdi) {
     rec.durum = "patron";
     await cevapla("Patron'a gidiyor");
     await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n✅ ${kim} onayladı — Patron'un onayına gitti.`, null, simdi);
-    await kuyruk(env, "rkOneri", { id: `${rec.id}:o`, rid: rec.id, kod: rec.kod, uretici: ureticiAd(rec), magaza: rec.magaza, deneme: rec.deneme, dagilim: dagilimYazi(rec.dagilim), adet: rec.adet, kalan: rec.kalan, satis7: rec.satis7, bitisGun: rec.bitisGun, hemra: kim, foto: await fotoAdresi(env, rec), zaman: simdi });
+    await kuyruk(env, "rkOneri", { id: `${rec.id}:o`, rid: rec.id, kod: rec.kod, uretici: ureticiAd(rec), magaza: rec.magaza, deneme: rec.deneme, mod: Boolean(rec.mod), dagilim: dagilimYazi(rec.dagilim), adet: rec.adet, kalan: rec.kalan, satis7: rec.satis7, bitisGun: rec.bitisGun, hemra: kim, foto: await fotoAdresi(env, rec), zaman: simdi });
     return rkYaz(env, rec);
   }
   if (["f8", "f15", "fd", "fy"].includes(islem)) {
@@ -335,7 +338,7 @@ async function patronKarari(env, tg, k, simdi) {
 export async function tekrarAc(env, tg, kod, kim, simdi) {
   const rec = (await acikKayitlar(env)).find((r) => ayniKod(r.kod, kod) && r.durum === "beklemede");
   if (!rec) return { ok: false, metin: `⚠️ ${String(kod).toLocaleUpperCase("tr")} için beklemede repete kaydı yok.` };
-  const engel = await acikRepete(env, rec.kod, { deneme: rec.deneme });
+  const engel = await acikRepete(env, rec.kod, { deneme: rec.deneme, mod: Boolean(rec.mod) });
   if (engel) return { ok: false, metin: engelMetni(engel) };
   rec.tekrarAcan = [...(rec.tekrarAcan || []), { kim, zaman: simdi }];
   if (!(await fuataGonder(env, tg, rec, simdi, "Fuat (tekrar açıldı)"))) { await rkYaz(env, rec); return { ok: false, rec, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "?"}).`) }; }
@@ -346,7 +349,7 @@ export async function tekrarAc(env, tg, kod, kim, simdi) {
 // ---------- 4) Fuat'ın cevabı ----------
 async function fuatOnay(env, tg, rec, { kim, gun, etiket = null, dugme = null, yazi = null }, simdi) {
   Object.assign(rec, { durum: "acik", donZaman: null, fuat: { kim, zaman: simdi, gun, etiket, dugme, yazi }, teslim: gunA(simdi + gun * GUN) });
-  if (!rec.deneme) { const st = (await stokIste(env, "/toplu", { kodlar: [rec.kod] }).catch(() => ({})))[rec.kod]; rec.stokBas = st ? Number(st.toplam) || 0 : 0; rec.stokMin = rec.stokBas; }
+  if (!denemeKaydiMi(rec)) { const st = (await stokIste(env, "/toplu", { kodlar: [rec.kod] }).catch(() => ({})))[rec.kod]; rec.stokBas = st ? Number(st.toplam) || 0 : 0; rec.stokMin = rec.stokBas; }
   await kartDuzenle(env, tg, rec, "Fuat", rec.mesajlar.fuat, `${fuatMetni(rec)}\n\n✅ Onaylandı: ${etiket || `${gun} gün`} · teslim ${gunGoster(rec.teslim)}`, null, simdi);
   await kartGonder(env, tg, rec, "Hemra", await _rk.koordinatorId(env, simdi), sonucSatiri(rec), null, simdi);
   await kuyruk(env, "rkSonuc", { id: `${rec.id}:s${simdi}`, rid: rec.id, metin: sonucSatiri(rec) });
@@ -539,6 +542,20 @@ async function islemler(env, simdi, tg) {
   await env.KAYIT.put("sami:repeteIslemSonuc", JSON.stringify([...eski, ...sonuc].slice(-12)), { expirationTtl: 7 * GUN });
 }
 const ozet = (r) => ({ id: r.id, kod: r.kod, magaza: r.magaza, deneme: r.deneme, durum: r.durum, dagilim: r.dagilim ? dagilimYazi(r.dagilim) : null, adet: r.adet, kalan: r.kalan, satis7: r.satis7, zaman: r.zaman, hemra: r.hemra || null, patron: r.patron || null, fuat: r.fuat || null, teslim: r.teslim || null, kaynak: r.kaynak || null, not: r.not || null, stokBas: r.stokBas ?? null, donZaman: r.donZaman || null, sonraDon: r.sonraDon || null, tekrarAcan: r.tekrarAcan || null, hat1: r.hat1 || null, hat2: r.hat2 || null, hata: r.hata || null, engelDenendi: r.engelDenendi || null, kapandi: r.kapandi || null });
+// 13 Kasım (Patron, kural 40): deneme modu repete kayıtları SESSİZCE kapanır (kimseye mesaj gitmez, kartlara dokunulmaz).
+// ids verilirse o kayıtlar (geriye dönük: işaretsiz açılmış deneme) 🧪 işaretlenip kapanır; verilmezse "mod" işaretli açık kayıtlar.
+export async function modRepeteKapat(env, simdi, ids = null, neden = "deneme bitti") {
+  const hedef = ids ? ids.map(String) : await ayarOku(env, "rk:hepsi", []);
+  const kapanan = [];
+  for (const id of hedef) {
+    const r = await rkOku(env, id);
+    if (!r || r.kapandi || ["iptal", "red", "geldi"].includes(r.durum) || (!ids && !r.mod)) continue;
+    Object.assign(r, { mod: true, durum: "iptal", kapandi: simdi, iptal: { neden, zaman: simdi } });
+    await rkYaz(env, r);
+    kapanan.push({ id: r.id, kod: r.kod });
+  }
+  return kapanan;
+}
 // Deneme kayıtları silinir; cevap bekleyen deneme kartlarının düğmeleri kalkar
 export async function denemeTemizle(env, tg, simdi, sec = () => true) {
   const hepsi = await ayarOku(env, "rk:hepsi", []);
@@ -574,7 +591,7 @@ export async function repeteKartAdimi(env, simdi, tg) {
       const magazalar = new Set(((bilgi && bilgi.satirlar) || []).map((x) => x.magaza));
       if (!magazalar.size) continue; // Vegawin'de olmayan sayı (ör. adet) model sayılmaz
       bilinen++;
-      const r = await oneriAc(env, tg, { kod, magaza: magazalar.size === 1 && magazalar.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[kod]), samiOnerisi: true, kaynak: "patron" }, simdi);
+      const r = await oneriAc(env, tg, { kod, magaza: magazalar.size === 1 && magazalar.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[kod]), samiOnerisi: true, kaynak: "patron", ...(b.mod ? { mod: true } : {}) }, simdi);
       if (r.engel || r.hata) await kuyruk(env, "rkSonuc", { id: `rb:${kod}:${simdi}`, rid: `rb-${kod}`, metin: r.engel ? r.metin : `⚠️ ${kod} repete başlatılamadı: ${r.hata}` });
     }
     if (!bilinen) await kuyruk(env, "rkSonuc", { id: `rb:yok:${simdi}`, rid: "rb-yok", metin: `⚠️ Repete başlatılamadı: ${(b.kodlar || [b.kod]).join(", ")} Vegawin'de bulunamadı.` });

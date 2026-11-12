@@ -10,6 +10,7 @@
 //    Fuat/Nuri'ye giden metin güvenlik süzgecinden geçer.
 // Ayarlar: BOT_TOKEN, ANTHROPIC_API_KEY, OPENAI_API_KEY (ses), WEBHOOK_SECRET (secret); KAYIT (KV), STOK (StokDO, volonte-asistan),
 // SELIN_DEPO; MURAT_ID, FUAT_ID, NURI_ID, BR_SORUMLU (Merdan), HEMRA_ID, FABRIKA_SORUMLU (venom:kimlikler); SELF_URL.
+import { MOD_SATIR, modOku, modBasla, modBitir } from "./deneme-modu.js";
 import { kanitKaydet } from "./tg-guvenli.js";
 import { claudeIstemci, claudeVar, claudeTur, openaiFetch, openaiVar } from "./ai-istemci.js";
 import { stokIste } from "./stokbot.js";
@@ -330,6 +331,7 @@ const ARACLAR = [
   { name: "duraklatma", description: "Sağlamlaştırma haftası anahtarları: Venom üzerinden Kemal paylaşımı (kemal_paylas) ve Pelin'in yeni üretimi (pelin_uretim). SADECE Patron açıkça 'aç/kapat' derse.", input_schema: { type: "object", additionalProperties: false, required: ["is", "acik"], properties: { is: { type: "string", enum: ["kemal_paylas", "pelin_uretim"] }, acik: { type: "boolean" } } } },
   { name: "pelin_foto_kaydet", description: "Patron'un Venom'a son gönderdiği FOTOĞRAFLARI dosya olarak Pelin'e iletir ve ürün fotoğrafı olarak kaydeder: '<kod> <renk> ön/arka' (sıra: roller). sadece_bunlar=true → o rengin eski fotoğrafları (ör. site) silinir, üretimde SADECE bunlar kullanılır. yeniden_baslat=true → o kod/renk için bekleyen Pelin kartları iptal edilir ve üretim yeniden başlar (önce anlama/maliyet kartı, sonra ön fotoğraf onayı; onaysız para harcanmaz). Sonuç 'İLETİLDİ' ya da 'İLETİLMEDİ' diye döner; Patron'a aynen söyle.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Türkçe renk (beyaz, siyah, bordo…); bilinmiyorsa boş" }, roller: { type: "array", items: { type: "string", enum: ["on", "arka", "detay"] }, description: "Fotoğrafların gönderiliş sırasıyla rolleri; boşsa 1. ön, 2. arka, sonrası detay" }, etiket: { type: "string", enum: ["manken", "aski"] }, adet: { type: "integer", description: "Sadece SON gönderilen N fotoğraf (Patron 'iki fotoğraf attım' dediyse 2)" }, sadece_bunlar: { type: "boolean" }, yeniden_baslat: { type: "boolean" } } } },
   { name: "bekleyenler", description: "Bütün botlarda Patron onayı bekleyen işleri (Pelin, Kemal SON YAYIN kartları, Selin taslakları, Venom kartları) ve bugünkü Selin listesini tek listede verir. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
+  { name: "deneme_modu", description: "Patron 'deneme başlıyor' derse islem=basla, 'deneme bitti' derse islem=bitir. Deneme modunda başlatılan kayıtlar 🧪 işaretlenir, rapora girmez; bitince hepsi sessizce kapanır. Aracın cevabını aynen aktar.", input_schema: { type: "object", additionalProperties: false, required: ["islem"], properties: { islem: { type: "string", enum: ["basla", "bitir"] } } } },
   { name: "karar_kaydet", description: "Patron yeni bir KALICI karar/kural söylediğinde (ör. 'bundan sonra …', 'her zaman …', 'asla …') Venom'un hafızasına yazar; sonraki her konuşmada uygulanır. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["metin"], properties: { metin: { type: "string" } } } },
   { name: "selin_durum", description: "Selin'de bir modelin durumu: neden taslak çıkmadı (fotoğraf gelmedi mi, hata mı, onayda mı, sitede mi), bugünkü listede mi, kaç gündür gelmiyor, stok. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "selin_taslak", description: "Selin'e bir model için site taslağı (başlık + EN/FR/PT açıklama) hazırlatır; fotoğrafı Selin'e gelmiş olmalı. Küçük yapay zekâ maliyeti (~0,05 $): önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
@@ -368,7 +370,7 @@ export async function kararVerildi(env, kod, karar, simdi, { aciklama = "", uygu
   const listele = async (prefix) => { try { return (await env.KAYIT.list({ prefix })).keys || []; } catch { return []; } };
   for (const k of (await listele("venom:bittiKart:")).slice(-80)) {
     const x = await oku(env, k.name, null);
-    if (!x || x.karar || x.deneme || String(x.kod) !== kod) continue;
+    if (!x || x.karar || x.deneme || x.mod || String(x.kod) !== kod) continue;
     Object.assign(x, { karar, kararKim: "Patron", kararZaman: simdi, kararDugme: "yazıyla / başka karttan" });
     await kaydet(env, k.name, x, 30 * 86400); n++;
     if (uygula && ["repete", "bekle"].includes(karar)) await kuyrugaEkle(env, "bittiKarar", { id: `${x.sip || k.name.split(":").pop()}:${simdi}`, sip: x.sip || k.name.split(":").slice(2).join(":"), karar, kim: "Patron", dugme: "yazıyla", zaman: simdi }).catch(() => null);
@@ -463,7 +465,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     return g.bot && g.bot !== "hepsi" ? botCevabi(env, g.bot, satirlar, canlilar[g.bot], { gun }) : herkesCevabi(env, satirlar, canlilar, { gun });
   }
   // 12 Kasım: DENEME modunda (Claude Code'un kabul testi) yazan araçlar ÇALIŞMAZ; ne yapacağı yazılır. Okuyan araçlar gerçek veriyle çalışır.
-  const YAZAN = new Set(["sesli_rapor", "bildirim_kurali", "hatirlat", "mesaj_taslagi", "mutabakat_gonder", "kemal_paylas", "geri_al", "kanal_paylasim_duzelt", "hatirlatici", "duraklatma", "pelin_foto_kaydet", "karar_kaydet", "site_duzelt", "selin_taslak", "bota_yaz", "yetenek_istegi", "not_kaydet", "bot_durdur", "repete_tekrar_ac", "hemra_izinli"]);
+  const YAZAN = new Set(["deneme_modu", "sesli_rapor", "bildirim_kurali", "hatirlat", "mesaj_taslagi", "mutabakat_gonder", "kemal_paylas", "geri_al", "kanal_paylasim_duzelt", "hatirlatici", "duraklatma", "pelin_foto_kaydet", "karar_kaydet", "site_duzelt", "selin_taslak", "bota_yaz", "yetenek_istegi", "not_kaydet", "bot_durdur", "repete_tekrar_ac", "hemra_izinli"]);
   if (env.__kuru && YAZAN.has(ad)) return `(DENEME: "${ad}" gerçekte çalışırdı; denemede çalıştırılmadı.)`;
   if (ad === "tek_defter") return tekDefterMetni(env, simdi, { kod: String(g.kod || "").replace(/\D/g, "") || null, kim: g.kim || null, durum: g.durum || null, sayfa: g.sayfa || 1, kuru: Boolean(env.__kuru) });
   if (ad === "kanal_kontrol") return kanalKontrolCevabi(env, (g.kodlar || []).map((k) => String(k).replace(/\D/g, "")).filter(Boolean).slice(0, 5), simdi);
@@ -631,6 +633,17 @@ export async function aracCalistir(env, ad, g, simdi) {
   if (ad === "pelin_foto_kaydet") return pelinFotoIlet(env, g, simdi);
   if (ad === "bekleyenler" && env.__kuru) return aracCalistir(env, "patron_kararlari", {}, simdi);
   if (ad === "bekleyenler") { turKanit(env).sus = true; const n = await bekleyenleriGonder(env, simdi); return n ? `${n} bekleyen karar, düğmeleriyle Patron'a AYRI mesajlar olarak gönderildi. Listeyi tekrar YAZMA; tek kısa cümle yeter.` : "Kararınızı bekleyen iş yok — bunu Patron'a zaten yazdım; tekrar yazma, boş cevap ver."; }
+  if (ad === "deneme_modu") { // 13 Kasım (Patron, kural 40)
+    if (g.islem === "basla") {
+      const r = await modBasla(env, simdi);
+      return r.zaten ? `Deneme modu zaten açık (${tarihSaat(r.basla)}).` : "🧪 Deneme modu açıldı. Bundan sonra başlatılan özel liste ve repete kayıtları deneme sayılır: kartların başında \"🧪 DENEME\" yazar; rapora, ciroya ve hatırlatmaya girmez. \"deneme bitti\" deyince hepsi tek seferde kapanır.";
+    }
+    const m = await modBitir(env);
+    if (!m) return "Deneme modu açık değildi; kapatılacak deneme kaydı yok.";
+    const l = (await env.KAYIT.get("sami:islemler", "json").catch(() => null)) || [];
+    await env.KAYIT.put("sami:islemler", JSON.stringify([...l, { tur: "denemeBitir" }]), { expirationTtl: 3 * 86400 });
+    return `🧪 Deneme bitti (${tarihSaat(m.basla)} – ${tarihSaat(simdi)}). Deneme kayıtları birkaç dakika içinde sessizce kapanır; kaç kayıt kapandığı tek satırla yazılacak. Kimseye mesaj gitmez.`;
+  }
   if (ad === "karar_kaydet") {
     const l = await oku(env, "venom:bot:kararlar", []);
     l.push({ zaman: simdi, metin: String(g.metin).slice(0, 400) });
@@ -908,7 +921,7 @@ export async function bekleyenKararlar(env, simdi) {
   for (const k of (await listele("venom:bittiKart:")).slice(-80)) {
     const x = await oku(env, k.name, null);
     const z = x ? Number(String(x.id || "").split(":").pop()) || simdi : 0;
-    if (!x || x.karar || x.deneme || simdi - z > KARAR_ESKI) continue;
+    if (!x || x.karar || x.deneme || x.mod || simdi - z > KARAR_ESKI) continue; // deneme modu kartı "karar bekleyenler"e girmez
     if (onayli[String(x.kod)] || silKodlari.has(String(x.kod)) || (await kararSonra(x.kod, z))) { if (!silKodlari.has(String(x.kod))) { Object.assign(x, { karar: "kapandi", kararKim: "sistem", kararZaman: simdi, kararDugme: "başka karar verildi" }); await kaydet(env, k.name, x, 30 * 86400).catch(() => null); } continue; }
     const mk = MAGAZA_BASLIK[x.magaza] || { VOLONTE: "VOLONTE", BLACKROSE: "Black Rose" }[(await markaKesin(env, String(x.kod)).catch(() => ({}))).marka] || "marka kayıtsız"; // marka biliniyorsa "mağaza yazılmamış" yazılmaz
     l.push({ baslik: `${x.kod} (${mk}): fabrikada bitti — Hemra önerisi: ${ONERI_AD[x.oneri] || x.oneri}`, zaman: z, klavye: bittiKlavye(x), kod: String(x.kod), tip: "bitti" });
@@ -916,7 +929,7 @@ export async function bekleyenKararlar(env, simdi) {
   // 3) repete kartları
   for (const k of (await listele("venom:rkKart:")).slice(-80)) {
     const x = await oku(env, k.name, null);
-    if (x && !x.karar && simdi - (x.zaman || simdi) <= KARAR_ESKI && !onayli[String(x.kod)]) l.push({ baslik: `${x.deneme ? "🧪 DENEME — " : ""}${x.kod} repete: ${x.dagilim} (toplam ${x.adet} adet)`, zaman: x.zaman || simdi, klavye: rkKlavye(x.rid), kod: String(x.kod), tip: "repete" });
+    if (x && !x.karar && !x.mod && simdi - (x.zaman || simdi) <= KARAR_ESKI && !onayli[String(x.kod)]) l.push({ baslik: `${x.deneme ? "🧪 DENEME — " : ""}${x.kod} repete: ${x.dagilim} (toplam ${x.adet} adet)`, zaman: x.zaman || simdi, klavye: rkKlavye(x.rid), kod: String(x.kod), tip: "repete" });
   }
   // 4) Pelin / Kemal kartları (para, son yayın): düğmeleri kendi kartlarında
   const ayna = await oku(env, "venom:pelinDurum", null);
@@ -1884,7 +1897,7 @@ async function kartHataSatiri(env, simdi) {
 const ONERI_AD = { repete: "🔁 Repete", sil: "🗑 Sil", bekle: "⏳ Stok bitene kadar bekle", sor: "❓ Hemra karar sizde dedi" };
 export function bittiKartMetni(x) {
   return [
-    `${x.deneme ? "🧪 DENEME – üretim yapmayın\n" : ""}🏭 ${x.tur === "az" ? "Fabrikada bitmek üzere" : x.tur === "stokBitti" ? "Mağaza stoğu bitti" : "Fabrikada bitti"} — ${MAGAZA_BASLIK[x.magaza] || "mağaza yazılmamış"} · ${x.kod}`,
+    `${x.mod ? MOD_SATIR : x.deneme ? "🧪 DENEME – üretim yapmayın\n" : ""}🏭 ${x.tur === "az" ? "Fabrikada bitmek üzere" : x.tur === "stokBitti" ? "Mağaza stoğu bitti" : "Fabrikada bitti"} — ${MAGAZA_BASLIK[x.magaza] || "mağaza yazılmamış"} · ${x.kod}`,
     x.fabrika ? `Fabrika: ${x.fabrika.kim} "${x.fabrika.ne}" dedi${x.fabrika.zaman ? ` (${kanitTarih(x.fabrika.zaman)})` : ""}` : null,
     x.fuat ? `Fuat onayladı (${kanitTarih(x.fuat.zaman)})` : null,
     `Mağaza stoğu: ${x.stok}`,
@@ -1895,7 +1908,7 @@ export function bittiKartMetni(x) {
 }
 // ---------- 11 Kasım (Patron): REPETE KARTI — sade Patron kartı (dağılım + [Onaylıyorum] [Reddediyorum]); Fuat cevabı TEK satır. Önce deneme yolunda. ----------
 export function rkKartMetni(x) {
-  return [`${x.deneme ? "🧪 DENEME – üretim yapmayın\n" : ""}🔁 REPETE — ${MAGAZA_BASLIK[x.magaza] || "mağaza yazılmamış"} · ${x.kod}`,
+  return [`${x.mod ? MOD_SATIR : x.deneme ? "🧪 DENEME – üretim yapmayın\n" : ""}🔁 REPETE — ${MAGAZA_BASLIK[x.magaza] || "mağaza yazılmamış"} · ${x.kod}`,
     `Dağılım: ${x.dagilim} (toplam ${x.adet} adet)`,
     `Mağazada kalan ${x.kalan} adet · son 7 günde ${x.satis7} satıldı${x.bitisGun ? ` · ~${x.bitisGun} günde biter` : ""}`,
     `${x.hemra || "Hemra"} önerdi. Onaylarsanız ${x.uretici === "Celal" ? "Celal'e" : "Fuat'a"} gider.`].join("\n");
@@ -1988,7 +2001,7 @@ async function bittiKararDugmesi(env, cq, simdi, cevap) {
   const ek = `\n\n✅ Kararınız: ${ONERI_AD[karar]}${karar === "sil" ? " (mağaza stoğu varsa stok bitince kaldırılır)" : karar === "repete" ? (x.deneme ? " (DENEME: taslak hazırlanmadı)" : yeniRk ? ` — Hemra dağılımı yazınca repete kartı doğrudan ${celalMi ? "Celal'e" : "Fuat'a"} gider` : " — taslak aşağıda, onayınızla Fuat'a gider") : ""}`;
   await tg(env, foto ? "editMessageCaption" : "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, [foto ? "caption" : "text"]: `${bittiKartMetni(x).replace("\nOnaylıyor musun?", "")}${ek}`.slice(0, foto ? 1024 : 4000), reply_markup: { inline_keyboard: [] } }).catch(() => null);
   if (karar === "repete" && !x.deneme && yeniRk) { // 12 Kasım (Patron): Celal'in modeli → repete kartı akışı (Hemra dağılımı → Patron onayı → Celal); Fuat'a taslak GİTMEZ
-    await kuyrugaEkle(env, "rkBaslat", { id: `rb:${x.kod}:${simdi}`, kodlar: [String(x.kod)], kim: "Patron", zaman: simdi });
+    await kuyrugaEkle(env, "rkBaslat", { id: `rb:${x.kod}:${simdi}`, kodlar: [String(x.kod)], kim: "Patron", zaman: simdi, ...(x.mod ? { mod: true } : {}) });
     await botaSor(env, "sami", "repeteAdim").catch(() => null);
   } else if (karar === "repete" && !x.deneme) { // ASLA doğrudan sipariş: Fuat'a gidecek TASLAK Patron onayına (en az 40 adet, ✏️ Düzelt)
     const v = await modelVerisi(env, x.kod, simdi).catch(() => null);

@@ -3303,3 +3303,139 @@ test("13 Kasım (Patron, kural 29): repete alt sınırı YOK; 10'dan az ya da 20
   assert.equal((await rk.rkOku(k2.o.env, k2.rec.id)).adet, 6);
   assert.ok(!k2.o.g.some((x) => /Doğru mu/.test(x.govde.text || "")));
 });
+
+test("13 Kasım DENEME MODU (kural 40): mod açıkken başlatılan özel liste GERÇEK zincirle (Aziz → Hemra → doğru fabrika: Celal) çalışır ama her kartın başında '🧪 DENEME — bu kart denemedir, gerçek sipariş değildir.' yazar; kayıt rapora / 'fabrikaya giden'e / hafızaya / tek deftere girmez; gerçek listeyle birleşmez; 'deneme bitti' → hepsi SESSİZCE kapanır (kimseye mesaj gitmez)", async () => {
+  const f = await import("./fabrika.js");
+  const rk = await import("./repete-kart.js");
+  const M = await import("./deneme-modu.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557", NURI_ID: "555", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }, { id: 555, ad: "Nuri" }, { id: 557, ad: "Fuat" }, { id: 600, ad: "Celal Kayran", grup: "celal" }]));
+  o.depo.set("kodlar", JSON.stringify({ 5068: [{ ids: [901], tarih: 1 }], 5076: [{ ids: [902], tarih: 1 }] }));
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const stokOku = async (yol, g = {}) => (await stokYaz(yol, g)).json();
+  const ayar = async (k) => { const v = (await stokOku("ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "5068", adet: 3, fiyat: 20, celal: true }, { kod: "5076", adet: 2, fiyat: 20, celal: true }], simdi: 1 });
+  await stokYaz("ayar-yaz", { k: "akis:yeni", v: "1" });
+  await stokYaz("ayar-yaz", { k: "fabrika:sonIstek", v: JSON.stringify({ 5068: { beden: "b", gruplar: { b: [{ renk: "siyah", adet: 12 }] } }, 5076: { beden: "b", gruplar: { b: [{ renk: "bordo", adet: 10 }] } } }) });
+  const kim = (id) => o.g.filter((x) => String(x.govde.chat_id) === String(id));
+  const yazi = (x) => x.govde.text || x.govde.caption || "";
+  const bas = (id, data, ad, mid = 9) => g2({ callback_query: { id: "c", from: { id, first_name: ad }, data, message: { chat: { id }, message_id: mid } } }, o.env);
+  const simdi = Math.floor(Date.now() / 1000);
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  const MOD = "🧪 DENEME — bu kart denemedir, gerçek sipariş değildir.";
+  const gunAnahtari = (z) => new Date((z + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  assert.equal(M.MOD_SATIR, `${MOD}\n`);
+  // Patron "deneme başlıyor" → mod açık; açılan özel liste 🧪
+  assert.equal(await M.modAcik(o.env), false);
+  assert.deepEqual(await M.modBasla(o.env, simdi - 60), { zaten: false, basla: simdi - 60 });
+  assert.equal((await M.modBasla(o.env, simdi)).zaten, true);
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "ozelListe", kodlar: ["5068", "5076"], magaza: "VOLONTE", baslik: "DENEME" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tgS);
+  const sn = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.equal(sn.mod, true);
+  const ek = sn.anahtar;
+  assert.equal((await ayar(`fabrika:${ek}`)).mod, true);
+  // 1) Aziz: liste başlığı ve her kart 🧪 satırıyla başlar
+  assert.ok(yazi(kim(444).find((x) => !x.govde.reply_markup)).startsWith(MOD));
+  const ak = kim(444).filter((x) => x.govde.reply_markup);
+  assert.equal(ak.length, 2);
+  for (const x of ak) assert.ok(yazi(x).startsWith(`${MOD}\n`), yazi(x).slice(0, 80));
+  await bas(444, `fe:o:${ek}:5068`, "Aziz");
+  await bas(444, `fe:o:${ek}:5076`, "Aziz");
+  await eminim(o, g2, 444, "Aziz");
+  // 2) Hemra'nın onay kartı 🧪; onaylayınca kartlar GERÇEK fabrikaya: SADECE Celal'e (Sinem / Fuat / Nuri'ye gitmez)
+  const hl = kim(333).find((x) => /Gidecek liste/.test(yazi(x)));
+  assert.ok(yazi(hl).startsWith(MOD), yazi(hl).slice(0, 80));
+  o.g.length = 0;
+  await bas(333, hl.govde.reply_markup.inline_keyboard[0][0].callback_data, "Hemra");
+  for (const id of [555, 556, 557]) assert.equal(kim(id).length, 0, `fabrika kişisine mesaj gitti: ${id}`);
+  const ck = kim(600).filter((x) => x.govde.reply_markup);
+  assert.equal(ck.length, 2);
+  assert.equal(yazi(ck.find((x) => /5068/.test(yazi(x)))), `${MOD}\n5068 · Büyük (44-50) · siyah 12`);
+  // 3) kayıtlar 🧪 işaretli; rapora, "fabrikaya giden"e, hafızaya girmez; Patron'a "fabrikaya gitti" satırı yok
+  const ozet = await stokOku("fs-ozet");
+  assert.deepEqual(ozet.map((x) => [x.kod, Boolean(x.mod)]).sort(), [["5068", true], ["5076", true]]);
+  assert.deepEqual((await f.fabrikayaGidenler(o.env, gunAnahtari(simdi))).giden, {});
+  assert.equal((await stokOku("kuyruk-al", { ad: "fabrikaGitti" })).length, 0);
+  assert.deepEqual((await ayar("fabrika:sonIstek"))["5068"], { beden: "b", gruplar: { b: [{ renk: "siyah", adet: 12 }] } }); // hafıza değişmedi
+  const rv = await stokOku("repete-veri", { bas14: gunAnahtari(simdi - 14 * 86400), bas7: gunAnahtari(simdi - 7 * 86400), bitis: gunAnahtari(simdi) }).catch(() => null);
+  if (rv && rv.fs) assert.equal(rv.fs.length, 0);
+  // 4) Celal "Bitti" → Hemra kartı 🧪 → Repete → repete kaydı da 🧪 (gerçek repeteyi engellemez)
+  const kart76 = ck.find((x) => /5076/.test(yazi(x)));
+  const dug = (x, re) => x.govde.reply_markup.inline_keyboard.flat().find((b) => re.test(b.text)).callback_data;
+  o.g.length = 0;
+  await bas(600, dug(kart76, /Bitti/), "Celal", 51 + 0);
+  const hk = kim(333).find((x) => x.govde.reply_markup && /5076/.test(yazi(x)));
+  assert.ok(yazi(hk).startsWith(MOD), yazi(hk).slice(0, 80));
+  await bas(333, dug(hk, /Repete/), "Hemra");
+  const rkl = (await ayar("rk:hepsi")) || [];
+  assert.equal(rkl.length, 1);
+  const r1 = await rk.rkOku(o.env, rkl[0]);
+  assert.deepEqual([r1.kod, r1.mod, Boolean(r1.deneme), r1.uretici], ["5076", true, false, "celal"]);
+  assert.equal(await rk.acikRepete(o.env, "5076", {}), null); // gerçek repete için engel değil
+  assert.ok(await rk.acikRepete(o.env, "5076", { mod: true }));
+  // 5) Patron "deneme bitti" → hepsi sessizce kapanır: Telegram'a HİÇBİR çağrı yok
+  await M.modBitir(o.env);
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "denemeBitir" }]));
+  o.g.length = 0;
+  await f.fabrikaZincirAdimi(o.env, simdi + 300, tgS);
+  assert.equal(o.g.length, 0, JSON.stringify(o.g.map((x) => x.metod)));
+  const bs = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.deepEqual(bs.fs.map((x) => x.kod).sort(), ["5068", "5076"]);
+  assert.deepEqual(bs.rk.map((x) => x.kod), ["5076"]);
+  assert.deepEqual(bs.liste, [ek]);
+  assert.equal((await stokOku("fs-ozet")).length, 0);
+  assert.equal((await rk.rkOku(o.env, rkl[0])).durum, "iptal");
+  assert.equal((await ayar(`fabrika:${ek}`)).asama, "iptal");
+  assert.equal((await ayar("rk:acik")).length, 0);
+  const son = await stokOku("kuyruk-al", { ad: "rkSonuc" });
+  assert.ok(son.some((x) => /^🧪 Deneme kapandı: 2 fabrika kaydı, 1 repete kaydı \(5068, 5076\)\. Kimseye mesaj gitmedi\.$/.test(x.metin)), JSON.stringify(son.map((x) => x.metin)));
+  // 6) mod kapalıyken açılan özel liste GERÇEKTİR (🧪 yok)
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "ozelListe", kodlar: ["5068"], magaza: "VOLONTE", baslik: "EK" }]));
+  o.g.length = 0;
+  await f.fabrikaZincirAdimi(o.env, simdi + 600, tgS);
+  assert.ok(!JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).mod);
+  assert.ok(!o.g.some((x) => yazi(x).includes("🧪")));
+});
+
+test("13 Kasım DENEME KAPAT (geriye dönük): işaretsiz açılmış deneme kayıtları (12 Kasım Celal denemesi gibi) verilen kimliklerle 🧪 işaretlenip SESSİZCE kapanır; 'fabrikaya giden' listesinden ve hafızadan çıkar; diğer modellere dokunulmaz", async () => {
+  const f = await import("./fabrika.js");
+  const rk = await import("./repete-kart.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", EKIP_IDS: "333,444", FUAT_ID: "557" });
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const stokOku = async (yol, g = {}) => (await stokYaz(yol, g)).json();
+  const ayar = async (k) => { const v = (await stokOku("ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
+  const simdi = Math.floor(Date.now() / 1000);
+  const gunAnahtari = (z) => new Date((z + 3 * 3600) * 1000).toISOString().slice(0, 10);
+  const fsYaz = (rec) => stokYaz("fs-yaz", { rec, kapali: false, takip: null, hafta: null, ozet: {} });
+  await fsYaz({ id: "5068-a", kod: "5068", grup: "celal", magaza: "VOLONTE", durum: "gelecek", gonderim: simdi - 3600, renkler: [], mesajlar: [], log: [] });
+  await fsYaz({ id: "5074-b", kod: "5074", grup: "celal", magaza: "VOLONTE", durum: "bitti", gonderim: simdi - 3600, renkler: [], mesajlar: [], log: [] });
+  await fsYaz({ id: "3394-c", kod: "3394", grup: "fabrika", magaza: "VOLONTE", durum: "bekliyor", gonderim: simdi - 3600, renkler: [], mesajlar: [], log: [] });
+  await stokYaz("ayar-yaz", { k: "rk:5074-r", v: JSON.stringify({ id: "5074-r", kod: "5074", uretici: "celal", durum: "acik", zaman: simdi - 1800, adet: 40, mesajlar: {} }) });
+  await stokYaz("ayar-yaz", { k: "rk:hepsi", v: JSON.stringify(["5074-r"]) });
+  await stokYaz("ayar-yaz", { k: "rk:acik", v: JSON.stringify(["5074-r"]) });
+  const gun = gunAnahtari(simdi);
+  await stokYaz("ayar-yaz", { k: `fabrika:fabrikayaGiden:${gun}`, v: JSON.stringify({ VOLONTE: ["3567", "5068", "5074"], BLACKROSE: ["3162"] }) });
+  await stokYaz("ayar-yaz", { k: "fabrika:sonIstek", v: JSON.stringify({ 5068: [{ renk: "siyah", adet: 8 }], 5074: [{ renk: "siyah", adet: 40 }], 3394: [{ renk: "bej", adet: 6 }] }) });
+  await stokYaz("ayar-yaz", { k: "fabrika:renkler", v: JSON.stringify({ 5068: ["siyah"], 5074: ["siyah"], 3394: ["bej"] }) });
+  await stokYaz("ayar-yaz", { k: "karar:son:5074", v: JSON.stringify({ zaman: simdi - 900, kim: "Patron", ne: "repete" }) });
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "denemeKapat", fs: ["5068-a", "5074-b"], rk: ["5074-r"], gun, kodlar: ["5068", "5074"], hafizaSil: true, bildir: false, neden: "12 Kasım Celal denemesi (Patron kararı)" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tgS);
+  assert.equal(o.g.length, 0); // kimseye mesaj gitmez, kartlara dokunulmaz
+  const s = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.deepEqual(s.fs.map((x) => x.id), ["5068-a", "5074-b"]);
+  assert.deepEqual(s.rk, [{ id: "5074-r", kod: "5074" }]);
+  assert.deepEqual((await stokOku("fs-ozet")).map((x) => x.id), ["3394-c"]); // gerçek kayıt duruyor
+  const r = await rk.rkOku(o.env, "5074-r");
+  assert.deepEqual([r.durum, r.mod, r.iptal.neden], ["iptal", true, "12 Kasım Celal denemesi (Patron kararı)"]);
+  assert.deepEqual(await ayar("rk:acik"), []);
+  assert.deepEqual(await ayar(`fabrika:fabrikayaGiden:${gun}`), { VOLONTE: ["3567"], BLACKROSE: ["3162"] });
+  assert.deepEqual(Object.keys(await ayar("fabrika:sonIstek")), ["3394"]);
+  assert.deepEqual(Object.keys(await ayar("fabrika:renkler")), ["3394"]);
+  assert.equal(await ayar("karar:son:5074"), null);
+  assert.equal((await stokOku("kuyruk-al", { ad: "rkSonuc" })).length, 0); // bildir: false → Patron'a da satır gitmez
+});

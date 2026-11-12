@@ -25,7 +25,7 @@ export async function repeteKayitlari(env, kod = null) {
   const idler = new Set((await ayar(env, "rk:acik", [])) || []);
   if (kod) for (const id of ((await ayar(env, "rk:hepsi", [])) || [])) if (String(id).startsWith(`${kod}-`)) idler.add(id);
   const l = [];
-  for (const id of [...idler].slice(-25)) { const r = await ayar(env, `rk:${id}`, null); if (r && !r.deneme && (!kod || String(r.kod) === String(kod))) l.push(r); } // kod verildiyse SADECE o modelin kayıtları
+  for (const id of [...idler].slice(-25)) { const r = await ayar(env, `rk:${id}`, null); if (r && !r.deneme && !r.mod && (!kod || String(r.kod) === String(kod))) l.push(r); } // kod verildiyse SADECE o modelin kayıtları
   return l;
 }
 // Venom'un botlara verdiği işler ve ekibe verdiği görevler (ortak kayıt, KV) → satır. Görev: her MODEL ayrı satır (kim, durum, kanıt).

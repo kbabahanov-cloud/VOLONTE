@@ -2192,3 +2192,28 @@ test("13 Kasım (kural 7 ve 66): model kartındaki 'Pelin video' düğmesi, Patr
   }
   assert.match(patronaGiden(o).at(-1).govde.text, /🎬 3627 → Pelin\. Önce maliyet kartı gelecek; onaylamadan para harcanmaz\./);
 });
+
+test("13 Kasım DENEME MODU (Venom, kural 40): 'deneme başlıyor' → mod açılır; 'deneme bitti' → Sami'ye sessiz kapatma işi; Patron kartları 🧪 satırıyla başlar ve 'karar bekleyenler'e girmez; kuru denemede hiçbir şey değişmez", async () => {
+  const { aracCalistir, rkKartMetni, bittiKartMetni } = await import("./venom-bot.js");
+  const M = await import("./deneme-modu.js");
+  const o = ortam();
+  const t = ist(13, 0);
+  // kuru deneme (kabul testi): mod açılmaz
+  o.env.__kuru = true;
+  assert.match(await aracCalistir(o.env, "deneme_modu", { islem: "basla" }, t), /^\(DENEME: "deneme_modu" gerçekte çalışırdı/);
+  assert.equal(await M.modAcik(o.env), false);
+  delete o.env.__kuru;
+  assert.match(await aracCalistir(o.env, "deneme_modu", { islem: "bitir" }, t), /Deneme modu açık değildi/);
+  assert.match(await aracCalistir(o.env, "deneme_modu", { islem: "basla" }, t), /^🧪 Deneme modu açıldı\. Bundan sonra başlatılan özel liste ve repete kayıtları deneme sayılır: kartların başında "🧪 DENEME" yazar; rapora, ciroya ve hatırlatmaya girmez\. "deneme bitti" deyince hepsi tek seferde kapanır\.$/);
+  assert.deepEqual(await M.modOku(o.env), { basla: t, kim: "Patron" });
+  assert.match(await aracCalistir(o.env, "deneme_modu", { islem: "basla" }, t + 60), /zaten açık/);
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "listeDurum" }]));
+  assert.match(await aracCalistir(o.env, "deneme_modu", { islem: "bitir" }, t + 600), /^🧪 Deneme bitti .*Deneme kayıtları birkaç dakika içinde sessizce kapanır; kaç kayıt kapandığı tek satırla yazılacak\. Kimseye mesaj gitmez\.$/);
+  assert.equal(await M.modAcik(o.env), false);
+  assert.deepEqual(JSON.parse(o.depo.get("sami:islemler")), [{ tur: "listeDurum" }, { tur: "denemeBitir" }]); // bekleyen iş silinmez, sona eklenir
+  // Patron kartları: deneme modu kaydı → Patron onaylı 🧪 satırı
+  const MOD = "🧪 DENEME — bu kart denemedir, gerçek sipariş değildir.\n";
+  assert.ok(rkKartMetni({ mod: true, kod: "5074", magaza: "VOLONTE", dagilim: "siyah · büyük 40", adet: 40, uretici: "Celal", hemra: "Hemra" }).startsWith(`${MOD}🔁 REPETE — `));
+  assert.ok(bittiKartMetni({ mod: true, kod: "5074", magaza: "VOLONTE", oneri: "repete", hemra: "Hemra", stok: "8 adet" }).startsWith(`${MOD}🏭 Fabrikada bitti`));
+  assert.ok(!rkKartMetni({ kod: "5074", magaza: "VOLONTE", dagilim: "siyah · büyük 40", adet: 40, uretici: "Celal", hemra: "Hemra" }).includes("🧪"));
+});
