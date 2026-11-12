@@ -112,7 +112,11 @@ export async function gunVerisi(env, gun) {
   const kodlar = (await oku(env, "kodlar", {})) || {}, kanalAd = await oku(env, "kanal", null);
   const kanal = [];
   for (const [kod, l] of Object.entries(kodlar)) for (const g of l || []) if (g.tarih >= bas && g.tarih < bit) kanal.push({ kod, zaman: g.tarih, mesaj: (g.ids || [])[0] || null, link: kanalAd && kanalAd.kullanici && (g.ids || [])[0] ? `https://t.me/${kanalAd.kullanici}/${g.ids[0]}` : null });
-  kanal.sort((a, b) => a.zaman - b.zaman);
+  kanal.sort((a, b) => a.zaman - b.zaman || (a.mesaj || 0) - (b.mesaj || 0));
+  // Aynı modelin aynı anda çıkan mesajları (albüm + yazı / video) TEK paylaşımdır: iki kez sayılmaz
+  const tek = [];
+  for (const x of kanal) { const o = tek.find((y) => y.kod === x.kod && Math.abs(x.zaman - y.zaman) <= 1800); if (o) { o.ekMesaj = [...(o.ekMesaj || []), x.mesaj]; } else tek.push(x); }
+  kanal.length = 0; kanal.push(...tek);
   const fab = await fabrikayaGidenler(env, gun).catch(() => ({ giden: {}, bekleyen: [] }));
   return { gun, site, kanal, fabrika: { VOLONTE: [...(fab.giden.VOLONTE || [])].sort(), BLACKROSE: [...(fab.giden.BLACKROSE || [])].sort(), bekleyen: fab.bekleyen || [] } };
 }
@@ -124,7 +128,7 @@ export function gunVerisiMetni(v, simdi) {
     `Siteye EKLENEN ${v.site.eklenen.length} model: ${kl(v.site.eklenen)}`,
     `Siteden KALDIRILAN ${v.site.kaldirilan.length} model: ${kl(v.site.kaldirilan)}`,
     `Site GÜNCELLEMESİ ${v.site.guncellenen.length} kez${v.site.guncellenen.length ? `: ${v.site.guncellenen.map((x) => `${x.ne} (${zamanYaz(x.zaman).slice(6)})`).join("; ")}` : ""}`,
-    `Kanala PAYLAŞIM ${v.kanal.length}: ${v.kanal.length ? v.kanal.map((x) => `${x.kod} (${zamanYaz(x.zaman).slice(6)}, mesaj ${x.mesaj})`).join(", ") : "yok"}`,
+    `Kanala PAYLAŞIM ${v.kanal.length}: ${v.kanal.length ? v.kanal.map((x) => `${x.kod} (${zamanYaz(x.zaman).slice(6)}, mesaj ${[x.mesaj, ...(x.ekMesaj || [])].join(" + ")})`).join(", ") : "yok"}`,
     `Fabrikaya giden: VOLONTE ${v.fabrika.VOLONTE.length}${v.fabrika.VOLONTE.length ? ` (${v.fabrika.VOLONTE.join(", ")})` : ""} · Black Rose ${v.fabrika.BLACKROSE.length}${v.fabrika.BLACKROSE.length ? ` (${v.fabrika.BLACKROSE.join(", ")})` : ""}`,
   ].join("\n");
 }

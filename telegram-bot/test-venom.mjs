@@ -1997,14 +1997,14 @@ test("YENİDEN YAPILANMA B/D16: cevapsız kartlar kişi kişi, tarihli, eksiksiz
       { zaman: ist(11, 20, 40), bot: "selin", tur: "is", kod: "3506", ozet: "site: 3506 siteden kaldırıldı (Patron)" }, { zaman: ist(11, 20, 41), bot: "selin", tur: "is", kod: "3529", ozet: "site: 3529 siteden kaldırıldı (Patron)" },
       { zaman: ist(11, 21), bot: "selin", tur: "is", ozet: "site: Vegawin stok güncellemesi (2 model)" }, { zaman: ist(11, 22), bot: "selin", tur: "is", ozet: "site: Vegawin stok güncellemesi (3 model)" }, { zaman: ist(11, 23), bot: "selin", tur: "is", ozet: "site: Vegawin stok güncellemesi (1 model)" },
     ] }) });
-    o.depo.set("kodlar", JSON.stringify({ 3578: [{ ids: [15101], tarih: ist(11, 10) }], 3335: [{ ids: [15105], tarih: ist(11, 11, 30) }], 3202: [{ ids: [15110], tarih: ist(11, 13) }, { ids: [14000], tarih: ist(5, 13) }] }));
+    o.depo.set("kodlar", JSON.stringify({ 3578: [{ ids: [15101], tarih: ist(11, 10) }], 3335: [{ ids: [15105], tarih: ist(11, 11, 30) }], 3202: [{ ids: [15110], tarih: ist(11, 13) }, { ids: [15111, 15112], tarih: ist(11, 13) }, { ids: [14000], tarih: ist(5, 13) }] })); // 3202: albüm + yazı aynı anda = TEK paylaşım
     o.depo.set("venom:siteDefteri", JSON.stringify({ zaman: 1, modeller: { 3189: { kod: "3189" }, 3202: { kod: "3202" } } }));
     const g = await aracla(o, "Dün Selin siteye hangi modelleri ekledi, Kemal kanala kaç paylaşım yaptı?", "gun_ozeti", { gun: "dun" });
     const gs = g.split("\n");
     assert.equal(gs[1], "Siteye EKLENEN 4 model: 3189 (12:00), 3202 (12:01), 3267 (12:02), 3269 (12:03)"); // 9 değil 4: kaldırma ve güncelleme AYRI
     assert.equal(gs[2], "Siteden KALDIRILAN 2 model: 3506 (20:40), 3529 (20:41)");
     assert.match(gs[3], /^Site GÜNCELLEMESİ 3 kez: /);
-    assert.equal(gs[4], "Kanala PAYLAŞIM 3: 3578 (10:00, mesaj 15101), 3335 (11:30, mesaj 15105), 3202 (13:00, mesaj 15110)"); // her paylaşım KODLU, bütün kodlar
+    assert.equal(gs[4], "Kanala PAYLAŞIM 3: 3578 (10:00, mesaj 15101), 3335 (11:30, mesaj 15105), 3202 (13:00, mesaj 15110 + 15111)"); // her paylaşım KODLU, bütün kodlar; aynı anda çıkan iki mesaj iki kez sayılmaz
     const rapor = (await v.sabahOzeti(o.env, ist(12, 9, 40))).split("\n");
     assert.ok(rapor.includes("📣 Kanal dün: 3 paylaşım")); // sabah raporu ile sohbet AYNI sayı
     assert.ok(rapor.includes("🌐 Site: 2 model, dün 4 eklendi, 2 kaldırıldı"));
