@@ -28,25 +28,29 @@ export async function repeteKayitlari(env, kod = null) {
   for (const id of [...idler].slice(-25)) { const r = await ayar(env, `rk:${id}`, null); if (r && !r.deneme) l.push(r); }
   return l;
 }
-// Venom'un botlara verdiği işler ve ekibe verdiği görevler (ortak kayıt, KV) → satır
+// Venom'un botlara verdiği işler ve ekibe verdiği görevler (ortak kayıt, KV) → satır. Görev: her MODEL ayrı satır (kim, durum, kanıt).
+const SECIM_AD = { c: "bugün çekerim", f: "fabrikada", b: "satıldı / bitti", y: "bulamadım / yapamadım", a: "açıklama yazdı", h: "hallettim", z: "Aziz'e verildi" };
+const buyukIlk = (k) => String(k)[0].toLocaleUpperCase("tr") + String(k).slice(1);
 export async function venomSatirlari(env, simdi) {
   const s = [];
   const isler = (await env.KAYIT.get("venom:bot:isler", "json").catch(() => null)) || [];
   for (const x of isler) {
     if (["eskidi", "iptal"].includes(x.durum) || simdi - (x.zaman || 0) > 3 * 86400) continue;
-    s.push({ id: `botis:${x.id}`, tur: "bot", kod: (String(x.ne).match(/\b\d{4,5}\b/) || [null])[0], marka: null, ne: kisalt(x.ne), kim: { kemal: "Kemal", selin: "Selin", pelin: "Pelin", sami: "Sami" }[x.bot] || x.bot, durum: x.durum === "bitti" ? "bitti" : "acik", bot: "venom", acildi: x.zaman, guncel: x.bitis || x.zaman, kanit: x.kanit || (x.durum === "bitti" ? `bot cevap verdi (${zamanYaz(x.bitis || x.zaman)})` : null) });
+    const bitti = x.durum === "bitti";
+    s.push({ id: `botis:${x.id}`, tur: "bot", kod: (String(x.ne).match(/\b\d{4,5}\b/) || [null])[0], marka: null, ne: kisalt(x.ne), kim: { kemal: "Kemal", selin: "Selin", pelin: "Pelin", sami: "Sami" }[x.bot] || buyukIlk(x.bot), durum: bitti ? "bitti" : "acik", bot: "venom", acildi: x.zaman, guncel: x.bitis || x.zaman,
+      kanit: x.kanit || (bitti ? `bot cevap verdi ${zamanYaz(x.bitis || x.zaman)}` : `Venom işi ${zamanYaz(x.zaman)} verdi; cevap bekleniyor`) });
   }
   const gorevler = (await env.KAYIT.get("venom:gorevler", "json").catch(() => null)) || [];
   for (const g of gorevler) {
-    if (g.durum === "bitti" && simdi - (g.bitis || g.zaman || 0) > 86400) continue;
-    if (g.durum === "kapandi") continue;
-    const kalan = (g.kalemler || []).filter((k) => !k.secim).length, hepsi = (g.kalemler || []).length;
-    s.push({ id: `gorev:${g.id}`, tur: "gorev", kod: hepsi === 1 ? String(g.kalemler[0].kod) : null, marka: null, ne: kisalt(g.baslik || g.metin), kim: (g.kimler || []).map((k) => k[0].toLocaleUpperCase("tr") + k.slice(1)).join(", "), durum: g.durum === "bitti" ? "bitti" : "acik", bot: "venom", acildi: g.zaman, guncel: g.bitis || g.zaman,
-      kanit: g.durum === "bitti" ? `${hepsi} modelin hepsi cevaplandı` : `${hepsi - kalan}/${hepsi} cevaplandı${g.durum === "yapilmadi" ? ", süre doldu" : ""}` });
+    if (g.durum === "kapandi" || simdi - (g.zaman || 0) > 3 * 86400) continue; // 3 günden eski görev listeden düşer
+    const kimler = (g.kimler || []).map(buyukIlk).join(", ");
+    for (const k of g.kalemler || []) {
+      s.push({ id: `gorev:${g.id}:${k.kod}`, tur: "gorev", kod: /^\d{3,6}$/.test(String(k.kod)) ? String(k.kod) : null, marka: null, ne: kisalt(String(g.metin || g.baslik).replace(/^Patron'dan:\s*/, ""), 90), kim: k.secim ? k.kim || kimler : kimler, durum: k.secim || g.durum === "bitti" ? "bitti" : "acik", bot: "venom", acildi: g.zaman, guncel: k.zaman || g.bitis || g.zaman,
+        kanit: k.secim ? `${k.kim || "?"}: ${SECIM_AD[k.secim] || k.secim}${k.aciklama ? ` — ${String(k.aciklama).slice(0, 60)}` : ""} (${zamanYaz(k.zaman || g.zaman)})` : `görev kartı ${zamanYaz(g.zaman)} gitti, son saat ${zamanYaz(g.son || g.zaman)}${g.durum === "yapilmadi" ? "; süre doldu" : ""}` });
+    }
   }
   return s;
 }
-
 // Venom kendi işlerini (botlara verdiği iş, ekibe verdiği görev) deftere YAZAR: her kayıt değişiminde ve her okumadan önce
 export async function venomDefterEsitle(env, simdi) {
   const satirlar = await venomSatirlari(env, simdi).catch(() => null);

@@ -40,7 +40,7 @@ export async function kanalBilgisi(env) {
     kodlar: await oku("kodlar", {}),
     kodsuz: await oku("kodsuz", {}),
     tarifler: await oku("tarifler", {}),
-    silinenler: await oku("hicgelmeyecek", {}),
+    silinenler: { ...(await oku("hicgelmeyecek", {})), ...(await oku("silme:onayli", {})) }, // 12 Kasım: silinmesi onaylanan model de listelere girmez
     atlananlar: await oku("atlananlar", {}),
     sonpaylasim: await oku("sonpaylasim", {}),
   };

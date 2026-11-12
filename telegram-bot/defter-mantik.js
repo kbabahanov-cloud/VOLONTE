@@ -74,34 +74,39 @@ function samiKartiOldu(r, bugun, fsAcik, simdi) {
 const YARDIMCI_KART = (r) => { const p = cbParca(r.cb); return (p[0] === "fc" && p[1] === "H") || p[0] === "hl"; };
 
 // ---------- SATIRLAR ----------
+// 12 Kasım (Patron): her satırda ZORUNLU alanlar — tarih + saat (acildi), kişi ADI (Sinem / Fuat / Nuri; "fabrika" yazılmaz), marka, model,
+// durum, kanıt. Kişi adı kaydın gittiği hesaplardan, marka Vegawin kartından (depo doldurur) gelir.
 const FS_DURUM = {
-  bekliyor: ["acik", "Fabrika", "Fabrikadan istendi, cevap bekleniyor"],
-  sureSoruluyor: ["acik", "Fabrika", "Fabrika süre yazacak"],
-  repete: ["beklemede", "Fabrika", "Fabrika: gelecek"],
-  gelecek: ["beklemede", "Fabrika", "Fabrika: gelecek"],
-  geldi: ["beklemede", "Mağaza", "Mal geldi, Vegawin girişi bekleniyor"],
-  bitti: ["acik", "Hemra", "Fabrikada bitti, karar bekleniyor"],
+  bekliyor: ["acik", null, "fabrikadan istendi, cevap bekleniyor"],
+  sureSoruluyor: ["acik", null, "süre yazması bekleniyor"],
+  repete: ["beklemede", null, "gelecek dedi"],
+  gelecek: ["beklemede", null, "gelecek dedi"],
+  geldi: ["beklemede", "Hemra", "mal geldi, Vegawin girişi bekleniyor"],
+  bitti: ["acik", "Hemra", "fabrikada bitti, karar bekleniyor"],
 };
 const RK_DURUM = {
   hemra: ["acik", "Hemra", "dağılım onayı bekleniyor"], patron: ["acik", "Patron", "onayınız bekleniyor"], fuat: ["acik", "Fuat", "Fuat'ın cevabı bekleniyor"],
-  acik: ["beklemede", "Fabrika", "üretimde"], beklemede: ["beklemede", "Fuat", "Fuat yapamam dedi, beklemede"],
-  red: ["bitti", "Patron", "reddedildi"], iptal: ["bitti", "Hemra", "iptal"], geldi: ["bitti", "Fabrika", "mal geldi"], kapandi: ["bitti", "Fabrika", "kapandı"],
+  acik: ["beklemede", "Fuat", "üretimde"], beklemede: ["beklemede", "Fuat", "Fuat yapamam dedi, beklemede"],
+  red: ["bitti", "Patron", "reddedildi"], iptal: ["bitti", "Hemra", "iptal"], geldi: ["bitti", "Fuat", "mal geldi"], kapandi: ["bitti", "Fuat", "kapandı"],
 };
 export function repeteSatiri(r) {
   const [durum, kim, yazi] = RK_DURUM[r.durum] || ["acik", "Hemra", r.durum];
   const onay = r.fuat && r.fuat.zaman ? `Fuat onayladı${r.fuat.kaynak ? ` (${r.fuat.kaynak})` : ` (${zamanYaz(r.fuat.zaman)})`}` : null;
   return { id: `repete:${r.id}`, tur: "repete", kod: String(r.kod), marka: r.magaza || null, ne: `Repete ${r.adet || "?"} adet`, kim, durum, bot: "sami", acildi: r.zaman || 0, guncel: (r.fuat && r.fuat.zaman) || (r.patron && r.patron.zaman) || r.zaman || 0,
-    kanit: r.durum === "acik" ? `${onay || "Fuat onayladı"}, teslim ${String(r.teslim || "").split("-").reverse().join(".")}` : yazi, ek: { adet: r.adet, teslim: r.teslim || null, rdurum: r.durum } };
+    kanit: r.durum === "acik" ? `${onay || "Fuat onayladı"}, teslim ${String(r.teslim || "").split("-").reverse().join(".")}` : `${yazi} (repete kaydı ${zamanYaz(r.zaman || 0)})`, ek: { adet: r.adet, teslim: r.teslim || null, rdurum: r.durum } };
 }
-export function fabrikaSatiri(f) {
-  const [durum, kim, yazi] = FS_DURUM[f.durum] || ["acik", "Fabrika", f.durum];
+export function fabrikaSatiri(f, adlar = {}) {
+  const [durum, sabitKim, yazi] = FS_DURUM[f.durum] || ["acik", null, f.durum];
+  const kisiler = [...new Set((f.chats || []).map((c) => adlar[String(c)]).filter(Boolean))];
+  const kim = sabitKim || (kisiler.length ? kisiler.join(", ") : "Sinem, Fuat, Nuri");
+  const sure = ["repete", "gelecek"].includes(f.durum) && (f.hazirGun || f.teslimSure) ? `${f.teslimSure ? `, ${f.teslimSure}` : ""}${f.hazirGun ? ` (hazır: ${String(f.hazirGun).split("-").reverse().join(".")})` : ""}` : "";
   return { id: `fabrika:${f.id}`, tur: "fabrika", kod: String(f.kod), marka: f.magaza || null, ne: "Fabrika isteği (eksik listesi)", kim, durum, bot: "sami", acildi: f.gonderim || 0, guncel: f.gonderim || 0,
-    kanit: ["repete", "gelecek"].includes(f.durum) && (f.hazirGun || f.teslimSure) ? `${yazi}${f.teslimSure ? `, ${f.teslimSure}` : ""}${f.hazirGun ? ` (hazır: ${String(f.hazirGun).split("-").reverse().join(".")})` : ""}` : yazi, ek: { fdurum: f.durum } };
+    kanit: `${yazi}${sure}; fabrikaya gitti ${zamanYaz(f.gonderim || 0)}`, ek: { fdurum: f.durum } };
 }
-// Sami'nin fabrika isteğine bağlı kart türleri (düğme öneki): fabrika kartı, "bitti" onayı, Hemra kararı, süre / geldi soruları
+// Sami'nin fabrika isteğine bağlı kart türleri (düğme öneki): fabrika kartı, "bitti" onayı, Hemra kararı
 export const FS_AILE = new Set(["fc", "fk", "fo"]);
 export function kartSatiri(r, adlar = {}) {
-  return { id: `kart:${r.anahtar}`, tur: "kart", kod: r.kod ? String(r.kod) : null, marka: null, ne: kartNe(r.ozet), kim: adlar[String(r.kime)] || "?", kimId: String(r.kime), durum: "acik", bot: r.bot, acildi: r.zaman, guncel: r.zaman, kanit: null,
+  return { id: `kart:${r.anahtar}`, tur: "kart", kod: r.kod ? String(r.kod) : null, marka: null, ne: kartNe(r.ozet), kim: adlar[String(r.kime)] || "adı kayıtsız kişi", kimId: String(r.kime), durum: "acik", bot: r.bot, acildi: r.zaman, guncel: r.zaman, kanit: `kart gitti ${zamanYaz(r.zaman)}${r.mesaj && r.mesaj < 1e8 ? `, mesaj ${r.mesaj}` : ""}; basılmadı`,
     ek: { isdId: r.id, chat: r.chat, mesaj: r.mesaj, hatirlatildi: Number(r.hatirlatildi) || 0, aile: kartAilesi(r.cb) } };
 }
 // ---------- TEK LİSTE (saf): kaynak verilerden defteri kurar — StokDO içinde çalışır (kaynağında), testte de aynısı ----------
@@ -123,7 +128,7 @@ export function defterKur({ isd = [], fs = [], rk = [], ek = [], simdi, adlar = 
   }
   const ekS = ek.filter((x) => x.durum !== "bitti" || simdi - (x.guncel || 0) < 3 * 86400);
   const rkS = rk.filter((r) => !["red", "iptal", "geldi", "kapandi"].includes(r.durum) || simdi - (r.kapandi || r.zaman || 0) < 3 * 86400).map(repeteSatiri);
-  const fsS = [...fsYeni.values()].map(fabrikaSatiri);
+  const fsS = [...fsYeni.values()].map((f) => fabrikaSatiri(f, adlar));
   // Bir işin kartı ayrı satır olmaz: görev kartı → görev satırı; repete / fabrika kartı → o modelin repete / fabrika satırı (kim: kart kimdeyse)
   const isVar = new Map();
   for (const x of [...fsS, ...rkS]) isVar.set(`${x.tur === "repete" ? "rk" : "fs"}|${x.kod}`, x);
@@ -142,6 +147,17 @@ export function defterKur({ isd = [], fs = [], rk = [], ek = [], simdi, adlar = 
   const sade = satirlar.filter((x) => !(x.tur === "fabrika" && repeteli.has(x.kod)));
   const ozet = { zaman: simdi, acik: sade.filter((x) => x.durum === "acik").length, beklemede: sade.filter((x) => x.durum === "beklemede").length, bitti: sade.filter((x) => x.durum === "bitti").length, kapatilan: kapanacak.length, fabrikaEskiTekrar: fsEski };
   return { satirlar: sade, kapanan: kapanacak, ozet };
+}
+// Zorunlu alan denetimi (deftere doğrudan yazılan satırlar için): boş alan varsa satır YAZILMAZ
+export function satirEksigi(s) {
+  const e = [];
+  if (!s || !s.id) e.push("kimlik");
+  if (!s || !String(s.ne || "").trim()) e.push("iş");
+  if (!s || !String(s.kim || "").trim() || /^(fabrika|\?)$/i.test(String(s.kim).trim())) e.push("kişi adı");
+  if (!s || !["acik", "beklemede", "bitti"].includes(s.durum)) e.push("durum");
+  if (!s || !String(s.kanit || "").trim()) e.push("kanıt");
+  if (!s || !Number(s.acildi)) e.push("tarih");
+  return e;
 }
 export const defterSatirYazi = (x) => `${x.kod ? `${x.kod} · ` : ""}${x.ne} · ${x.kim}${x.marka ? ` · ${MARKA_AD[x.marka] || x.marka}` : ""} · ${{ acik: "açık", beklemede: "beklemede", bitti: "bitti" }[x.durum] || x.durum}${x.kanit ? ` · ${x.kanit}` : ""}`;
 

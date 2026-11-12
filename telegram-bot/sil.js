@@ -34,6 +34,16 @@ export async function silKuyrugu(env, kod, kim, simdi) {
     await env.KAYIT.put("venom:silEngel", JSON.stringify([...l, { kod: String(kod), kim, zaman: simdi, adet }].slice(-100))).catch(() => null);
     return { engel: adet };
   }
+  await silOnayliYaz(env, kod, kim, simdi);
   return kuyruk(env, "venom:siteSil", { kod: String(kod), kim, zaman: simdi, kanal: true });
 }
-export const geriKuyrugu = (env, kod, kim, simdi) => kuyruk(env, "venom:siteGeri", { kod: String(kod), kim, zaman: simdi });
+// 12 Kasım (Patron): silinmesi ONAYLANAN model, silme bitmesini beklemeden, Selin'in fotoğraf listesine ve Kemal'in paylaşım sırasına ASLA girmez.
+// Kayıt: KV "silme:onayli" = { kod: { kim, zaman } }. "/geri" ile geri alınınca kayıttan çıkar.
+export async function silOnayli(env) { try { return (await env.KAYIT.get("silme:onayli", "json")) || {}; } catch { return {}; } }
+export async function silOnayliYaz(env, kod, kim, simdi, sil = false) {
+  const l = await silOnayli(env);
+  if (sil) delete l[String(kod)]; else l[String(kod)] = { kim, zaman: simdi };
+  await env.KAYIT.put("silme:onayli", JSON.stringify(l)).catch(() => null);
+  return l;
+}
+export const geriKuyrugu = async (env, kod, kim, simdi) => { await silOnayliYaz(env, kod, kim, simdi, true); return kuyruk(env, "venom:siteGeri", { kod: String(kod), kim, zaman: simdi }); };

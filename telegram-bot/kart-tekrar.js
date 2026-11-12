@@ -67,7 +67,10 @@ async function kartBilgisi(env, r) {
 }
 const acik = (klavye) => (klavye || []).map((s) => s.filter((b) => b && (b.url || (b.callback_data && b.callback_data !== "vg:-" && b.callback_data !== GUNCEL)))).filter((s) => s.length);
 // Her bot kendi cron'unda: kime = Merdan/Hemra kimlikleri; tg = botun telegram işlevi (defter kaydı atlanır: env.__kartTekrar)
-export async function kartTekrarAdimi(env, bot, tg, simdi, { stokIste = stokIsteOrtak, kimler = ekipKimlikleri(env) } = {}) {
+export async function kartTekrarAdimi(env, bot, tg, simdi, { stokIste = stokIsteOrtak, kimler = ekipKimlikleri(env), zorla = false } = {}) {
+  // 12 Kasım (Patron, C11): zamanlı iş eski kartı YENİDEN GÖNDERMEZ ve düzenlemez (3372 iki kez gitmişti). Cevapsız kartı Sami'nin kart
+  // takibi tek satır yazıyla hatırlatır (30 dk), 1 saat sonra Venom araştırır. Bu adım sadece açıkça istenirse (zorla) çalışır.
+  if (!zorla) return 0;
   if (!mesaiMi(simdi) || !env.STOK) return 0;
   const l = await stokIste(env, "/isd-bekleyen", { enEski: simdi - 3 * 86400, bot }).catch(() => []);
   const hedef = new Set((kimler || []).map(String).filter(Boolean));
@@ -146,7 +149,18 @@ export async function kartTamamlaAdimi(env, bot, tg, simdi, { stokIste = stokIst
   return sonuc.length;
 }
 // 9 Kasım (ekip düzeni): Hemra'nın seçtiği kişiye kartın KENDİSİ — StokDO kuyruğu "kartIlet:<bot>" ({ chat, mesaj, isdId, hedef, kim })
+// 12 Kasım (Patron, C10): karar verilen modelin kartları telefonlarda da kapanır — düğmeler tek "✔ Karar verildi" satırına iner (yazı aynen kalır)
+export async function kartKapatAdimi(env, bot, tg, { stokIste = stokIsteOrtak } = {}) {
+  const l = await stokIste(env, "/kuyruk-al", { ad: `kartKapat:${bot}` }).catch(() => []);
+  let n = 0;
+  for (const x of Array.isArray(l) ? l : []) {
+    const r = await tg(env, "editMessageReplyMarkup", { chat_id: x.chat, message_id: x.mesaj, reply_markup: { inline_keyboard: [[{ text: String(x.yazi || "✔ Karar verildi").slice(0, 60), callback_data: "vg:-" }]] } }).catch(() => null);
+    if (r && r.ok) n++;
+  }
+  return n;
+}
 export async function kartIletAdimi(env, bot, tg, { stokIste = stokIsteOrtak } = {}) {
+  await kartKapatAdimi(env, bot, tg, { stokIste }).catch(() => 0);
   const l = await stokIste(env, "/kuyruk-al", { ad: `kartIlet:${bot}` }).catch(() => []);
   for (const x of Array.isArray(l) ? l : []) {
     const b = await kartBilgisi(env, { chat: x.chat, mesaj: x.mesaj, cb: x.cb || "", ozet: x.ozet || "" });

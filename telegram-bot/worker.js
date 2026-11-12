@@ -705,6 +705,7 @@ async function dugmeIsle(cq, env) {
 // olarak almadığı için kod dizinini, günlük sayacı ve /hafta sayısını burada günceller.
 export async function kanaldaPaylas(env, kod, ids, simdi, beden = null, { zamanli = false } = {}) {
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
+  if (((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {})[String(kod)]) return { ok: false, hata: `${kod} için silme onaylandı; kanala paylaşılmaz` }; // 12 Kasım
   if (!zamanli && !(await yayinKapisi(env, simdi)).acik) return yayiniErtele(env, { kod: String(kod), yeni: false, ids, beden, kim: "onaylı" }, simdi);
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
@@ -970,7 +971,7 @@ async function turBaslat(env, onceki, simdi) {
   const kanal = await env.KAYIT.get("kanal", "json");
   const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
   const kodsuz = (await env.KAYIT.get("kodsuz", "json")) || {};
-  const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
+  const atlananlar = { ...((await env.KAYIT.get("atlananlar", "json")) || {}), ...Object.fromEntries(Object.keys((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {}).map((k) => [k, 4e9])) }; // 12 Kasım: silinmesi onaylanan model sıraya girmez
   const sonpaylasim = (await env.KAYIT.get("sonpaylasim", "json")) || {};
   const kuyruk = await kuyrukListesi(env);
   const arsiv = await env.KAYIT.get("arsiv", "json");
@@ -2059,7 +2060,7 @@ export function gunlukSecim(sec, son, adet = GUNLUK_SINIR) {
 export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
   const site = await siteUrunleriAl(env);
   const kuyruk = await kuyrukListesi(env);
-  const atlananlar = (await env.KAYIT.get("atlananlar", "json")) || {};
+  const atlananlar = { ...((await env.KAYIT.get("atlananlar", "json")) || {}), ...Object.fromEntries(Object.keys((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {}).map((k) => [k, 4e9])) }; // 12 Kasım: silinmesi onaylanan model sıraya girmez
   const haric = [...kuyruk.map((o) => o.kod), ...Object.entries(atlananlar).filter(([, t]) => t > simdi).map(([k]) => k)];
   const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
   const { son } = await telegramTarihleriAl(env);
@@ -2480,6 +2481,7 @@ async function siteyeVideoBildir(env, kod, mesajlar, simdi, ek = {}) {
 }
 export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null, zamanli = false, kim = null } = {}) {
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
+  if (((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {})[String(paket.kod)]) return { ok: false, hata: `${paket.kod} için silme onaylandı; kanala paylaşılmaz` }; // 12 Kasım
   if (!zamanli && !(await yayinKapisi(env, simdi)).acik) return yayiniErtele(env, { kod: String(paket.kod), yeni: true, paket, kim: kim || "onaylı", secenek: { sayma: false, stokKontrol, siteVideo, renk, onayliSorunlar } }, simdi);
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };

@@ -34,6 +34,7 @@ function ortam() {
   let no = 100;
   globalThis.fetch = async (url, istek = {}) => {
     const u = String(url);
+    if (u.startsWith("https://api.anthropic.com") && (globalThis.__beyinSira || []).length) { const c = globalThis.__beyinSira.shift(); return Response.json({ id: "m", type: "message", role: "assistant", stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: c.arac, input: c.girdi }], usage: { input_tokens: 1, output_tokens: 1 } }); } // 12 Kasım: beyin aracı seçer
     if (u.startsWith("https://api.anthropic.com")) return Response.json({ id: "m", type: "message", role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: "Tamam Patron." }], usage: { input_tokens: 1, output_tokens: 1 } });
     const m = u.match(/\/bot([^/]+)\/(\w+)$/);
     if (!m) return Response.json({ ok: false, description: "bilinmeyen adres" });
@@ -123,6 +124,7 @@ test("UÇTAN UCA: Sinem 'Bitti' → Hemra → Patron → Fuat [2 gün sonra dön
   assert.ok(!y.some((x) => x.kime === "Patron" && /TEST-002/.test(x.yazi)));
 
   // 6) Patron Venom'a "TEST-002 repete tekrar aç" → kart Fuat'a HEMEN; Patron'a TEK sonuç
+  globalThis.__beyinSira = [{ arac: "repete_tekrar_ac", girdi: { kod: "TEST-002" } }]; // Patron'un mesajı beyne gider; beyin "repete tekrar aç" aracını seçer
   await venomYaz("TEST-002 repete tekrar aç");
   y = adim("6) Patron 'TEST-002 repete tekrar aç'");
   assert.ok(y.some((x) => x.kime === "Fuat" && x.data.length), "kart Fuat'a yeniden gitmedi");

@@ -17,7 +17,7 @@ export const BEKLESIN_STOK_GUN = 7;
 
 import { sha256 } from "./sha256.js";
 import { MARKA_KARARLARI } from "./kurallar.js";
-import { defterKur } from "./defter-mantik.js";
+import { defterKur, satirEksigi } from "./defter-mantik.js";
 
 export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
 // İndirimli mal kodları (kullanıcı kararı 30 Ekim): 2000 = CRY'den toplu alınan indirimli malların ortak kodu, gerçek model
@@ -457,6 +457,7 @@ export class StokDeposu {
       // 12 Kasım (TEK DEFTER, kaynağında): yazıyla verilen cevap o kişinin o modeldeki bekleyen kartını kapatır; aynı kart (aynı kişi, aynı
       // düğmeler) yeniden gönderilirse eskisi kapanır — cevaplanan soru bir daha sorulmaz, aynı iş iki kez durmaz
       if (k.tur === "karar" && !k.cb && k.kod && k.kime != null && /: "|^"/.test(String(k.ozet || ""))) this.sql.exec("UPDATE isd SET durum = 'cevaplandi', sonuc = ? WHERE tur = 'kart' AND durum = 'bekliyor' AND bot = ? AND kime = ? AND kod = ? AND zaman <= ?", String(k.ozet || "").slice(0, 200), String(k.bot || "?"), String(k.kime), String(k.kod), z);
+      if (k.tur === "karar" && k.kesin && k.kod && !k.deneme) this.kararKapat({ kod: String(k.kod), kim: k.kimAd || String(k.kime || ""), ne: String(k.ozet || ""), zaman: z, haricCb: k.cb || null });
       if (k.tur === "kart" && (k.cbler || []).length && k.kime != null && !k.deneme) this.sql.exec("UPDATE isd SET durum = 'yenilendi' WHERE tur = 'kart' AND durum = 'bekliyor' AND deneme = 0 AND bot = ? AND kime = ? AND cb = ?", String(k.bot || "?"), String(k.kime), `|${k.cbler.map((x) => String(x).replace(/[%_|]/g, "")).join("|")}|`);
       this.sql.exec("INSERT INTO isd (zaman, bot, tur, kime, kod, ozet, chat, mesaj, durum, sonuc, deneme, cb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         z, String(k.bot || "?"), String(k.tur || "is"), k.kime != null ? String(k.kime) : null, k.kod ? String(k.kod) : null, String(k.ozet || "").slice(0, 300),
@@ -487,6 +488,22 @@ export class StokDeposu {
     for (const id of idler.slice(0, 200)) this.sql.exec(`UPDATE isd SET ${izin[alan]} = ? WHERE id = ?`, deger ?? Math.floor(Date.now() / 1000), Number(id));
     return { ok: true };
   }
+  // 12 Kasım (Patron, C10): bir model için KARAR verildi → o modelin bütün açık kartları (Hemra, Merdan, Aziz, fabrika, Patron) kapanır.
+  // Defterde hemen kapanır; telefondaki kartların düğmesi her botun kendi sırasında kalkar (kuyruk "kartKapat:<bot>"). Son karar "karar:son:<kod>".
+  kararKapat({ kod, kim = "", ne = "", zaman = Math.floor(Date.now() / 1000), haricCb = null }) {
+    const l = this.hepsi("SELECT id, bot, chat, mesaj, cb FROM isd WHERE tur = 'kart' AND durum = 'bekliyor' AND deneme = 0 AND kod = ? AND zaman <= ?", String(kod), zaman);
+    const yazi = `Karar verildi${kim ? ` (${String(kim).slice(0, 30)})` : ""}`;
+    for (const r of l) {
+      this.sql.exec("UPDATE isd SET durum = 'karar', sonuc = ? WHERE id = ?", `${yazi}: ${String(ne).slice(0, 120)}`, r.id);
+      if (haricCb && String(r.cb || "").includes(`|${String(haricCb).replace(/[%_|]/g, "")}|`)) continue; // basılan kartı kendi botu zaten güncelledi
+      if (!r.chat || !r.mesaj) continue;
+      const k = `kuyruk:kartKapat:${r.bot}`, q = JSON.parse(this.ayarOku(k) || "[]");
+      q.push({ id: `kk:${r.id}`, chat: r.chat, mesaj: r.mesaj, yazi: `✔ ${yazi}` });
+      this.ayarYaz(k, JSON.stringify(q.slice(-200)));
+    }
+    this.ayarYaz(`karar:son:${kod}`, JSON.stringify({ zaman, kim, ne: String(ne).slice(0, 160), kapanan: l.length }));
+    return { ok: true, kapanan: l.length };
+  }
   // 12 Kasım: düğmeleri kalkan (düzenlenen) kart defterde kapanır — bütün botlar kendi Telegram sarmalayıcısından bildirir
   isdKartKapat({ chat, mesaj, neden = "kapandi" }) {
     if (chat == null || mesaj == null) return { ok: false };
@@ -503,15 +520,18 @@ export class StokDeposu {
   // İş satırları: yaz (aynı kimlik = aynı satır; esitle: bu yazanın listede OLMAYAN açık satırları silinir), liste
   isYaz({ yazan, satirlar = [], esitle = false }) {
     const y = String(yazan || "?").slice(0, 20), simdi = Math.floor(Date.now() / 1000), idler = [];
-    for (const s of (satirlar || []).slice(0, 300)) {
-      if (!s || !s.id) continue;
+    const reddedilen = [];
+    for (const s0 of (satirlar || []).slice(0, 300)) {
+      const s = s0 && { ...s0, acildi: Number(s0.acildi) || simdi };
+      const eksik = satirEksigi(s); // 12 Kasım: zorunlu alanı boş satır YAZILAMAZ (tarih, kişi adı, durum, kanıt)
+      if (eksik.length) { reddedilen.push({ id: s && s.id, eksik }); continue; }
       const id = String(s.id).slice(0, 120); idler.push(id);
       this.sql.exec("INSERT INTO isler (id, yazan, tur, kod, marka, ne, kim, durum, kanit, bot, acildi, guncel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET tur = excluded.tur, kod = excluded.kod, marka = excluded.marka, ne = excluded.ne, kim = excluded.kim, durum = excluded.durum, kanit = excluded.kanit, guncel = excluded.guncel",
         id, y, s.tur ? String(s.tur).slice(0, 20) : null, s.kod ? String(s.kod).slice(0, 12) : null, s.marka ? String(s.marka).slice(0, 12) : null, String(s.ne || "").slice(0, 240), String(s.kim || "").slice(0, 60), ["acik", "beklemede", "bitti"].includes(s.durum) ? s.durum : "acik", s.kanit ? String(s.kanit).slice(0, 240) : null, String(s.bot || y).slice(0, 20), Number(s.acildi) || simdi, Number(s.guncel) || simdi);
     }
     if (esitle) for (const r of this.hepsi("SELECT id FROM isler WHERE yazan = ?", y)) if (!idler.includes(r.id)) this.sql.exec("DELETE FROM isler WHERE id = ?", r.id);
     this.sql.exec("DELETE FROM isler WHERE durum = 'bitti' AND guncel < ?", simdi - 7 * 86400);
-    return { ok: true, n: idler.length };
+    return { ok: true, n: idler.length, reddedilen };
   }
   isListe({ yazan = null } = {}) { return yazan ? this.hepsi("SELECT * FROM isler WHERE yazan = ? ORDER BY acildi", String(yazan)) : this.hepsi("SELECT * FROM isler ORDER BY acildi"); }
   // TEK DEFTER (kaynağında): bütün işlerin tek listesi; kapanması gereken kartlar burada kapanır (kuru = sadece göster)
@@ -522,6 +542,13 @@ export class StokDeposu {
     const rk = [];
     for (const id of JSON.parse(this.ayarOku("rk:acik") || "[]").slice(-40)) { try { const r = JSON.parse(this.ayarOku(`rk:${id}`) || "null"); if (r && !r.deneme) rk.push(r); } catch { /* bozuk kayıt atlanır */ } }
     const r = defterKur({ isd, fs: this.fsOzet(), rk, ek: this.isListe(), simdi, adlar: adlar || {} });
+    // marka: Vegawin kartından (model tek mağazadaysa o; ikisinde de varsa stoğu olan) — "marka kayıtsız" ancak kart hiç yoksa
+    const markaOn = new Map();
+    for (const x of r.satirlar) {
+      if (x.marka || !x.kod) continue;
+      if (!markaOn.has(x.kod)) { const m = this.hepsi("SELECT magaza, SUM(adet) AS a FROM urun WHERE kod = ? GROUP BY magaza ORDER BY a DESC", String(x.kod)); markaOn.set(x.kod, m.length ? String(m[0].magaza).toUpperCase().replace(/\s+/g, "") : null); }
+      x.marka = markaOn.get(x.kod);
+    }
     if (!kuru) {
       for (const x of r.kapanan) this.sql.exec("UPDATE isd SET durum = ? WHERE id = ? AND durum = 'bekliyor'", String(x.neden).slice(0, 20), Number(x.id));
       this.ayarYaz("defter:tek", JSON.stringify({ ...r.ozet, satirlar: r.satirlar.slice(0, 400) }));
@@ -634,6 +661,8 @@ export class StokDO {
     if (yol === "/isd-bekleyen") return cevap(d.isdBekleyen(g));
     if (yol === "/isd-isaretle") return cevap(d.isdIsaretle(g));
     if (yol === "/isd-kart-kapat") return cevap(d.isdKartKapat(g));
+    if (yol === "/karar-kapat") return cevap(d.kararKapat(g));
+    if (yol === "/isd-kod") return cevap(d.hepsi("SELECT * FROM isd WHERE kod = ? AND zaman >= ? AND deneme = 0 ORDER BY zaman LIMIT 400", String(g.kod), Number(g.basla) || 0));
     if (yol === "/isd-onar") return cevap(d.isdOnar(g));
     if (yol === "/is-yaz") return cevap(d.isYaz(g));
     if (yol === "/is-liste") return cevap(d.isListe(g));

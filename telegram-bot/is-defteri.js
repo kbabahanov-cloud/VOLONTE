@@ -65,7 +65,10 @@ export async function defterKarar(env, bot, cq) {
   const data = String(cq.data);
   if (data === "vg:-" || data === "kt:-") return; // işlevsiz düğmeler
   const { kod, ne } = cevapIcerigi(cq);
-  await defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: cq.from && cq.from.id, kod, ozet: ne ? `${kod ? `${kod}: ` : ""}${ne}`.slice(0, 120) : data.slice(0, 64), cb: data, sonuc: `${(cq.from && cq.from.first_name) || "biri"}: ${ne || data.slice(0, 40)}` });
+  // 12 Kasım (Patron): karar veren Patron ya da Hemra ise "kesin" — depo o modelin BÜTÜN açık kartlarını kapatır (aynı karar bir daha sorulmaz)
+  const kesinler = ["MURAT_ID", "HEMRA_ID", "FABRIKA_SORUMLU"].flatMap((k) => String(env[k] || "").split(",").map((x) => x.trim()).filter(Boolean));
+  const kesin = Boolean(kod && cq.from && kesinler.includes(String(cq.from.id)) && !/^(hl|vm|vb|fb|fc|vd|vs):/.test(data) && !denemeMi((cq.message && (cq.message.text || cq.message.caption)) || ""));
+  await defterYaz(env, { kesin, kimAd: (cq.from && cq.from.first_name) || null, zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: cq.from && cq.from.id, kod, ozet: ne ? `${kod ? `${kod}: ` : ""}${ne}`.slice(0, 120) : data.slice(0, 64), cb: data, sonuc: `${(cq.from && cq.from.first_name) || "biri"}: ${ne || data.slice(0, 40)}` });
 }
 // Yazıyla verilen cevap (açıklama, fabrika arama notu, düzeltme): kim, hangi model, ne yazdı
 export const defterCevap = (env, bot, kimId, kod, metin) => defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: kimId, kod: kod || null, ozet: `${kod ? `${kod}: ` : ""}"${String(metin || "").replace(/\s+/g, " ").slice(0, 100)}"` });
