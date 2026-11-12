@@ -16,7 +16,7 @@
 // Ayarlar (Cloudflare volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY (secret, kullanıcı girer), WEBHOOK_SECRET (kurulumda
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
-import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { ORTAK_KURALLAR } from "./kurallar.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
@@ -2576,6 +2576,12 @@ export async function aynaYaz(env, simdi) {
   if (ozet === (await env.KAYIT.get("pelin:aynaSon"))) return false; // KV yazma kotası: sadece değişince
   await env.KAYIT.put("pelin:aynaSon", ozet);
   await env.KAYIT.put("venom:pelinDurum", JSON.stringify({ zaman: simdi, ...ayna }), { expirationTtl: 7 * 86400 });
+  // 12 Kasım (TEK DEFTER): Pelin'in her üretim işi ortak defterde TEK satır (ne, kim, marka, durum, kanıt)
+  await defterSatir(env, "pelin", isler.map((x) => {
+    const calisiyor = CALISAN.includes(x.durum), onayda = BEKLEYEN.includes(x.durum), bitti = !calisiyor && !onayda && x.durum !== "bekle" && x.durum !== "grup_bekle";
+    return { id: `pelin:${x.id}`, tur: "uretim", kod: x.kod ? String(x.kod) : null, marka: x.marka || null, ne: "Fotoğraf / video üretimi", kim: onayda ? "Patron" : "Pelin", durum: bitti ? "bitti" : calisiyor || onayda ? "acik" : "beklemede", bot: "pelin", acildi: x.zaman, guncel: simdi,
+      kanit: onayda ? "onayınız bekleniyor" : calisiyor ? "üretiliyor" : x.durum === "hata" ? "hata verdi" : x.durum === "iptal" ? "iptal edildi" : bitti ? `bitti (${x.durum})` : "sırada" };
+  }), true);
   return true;
 }
 // ---------- MARKA RAPORU (4 Kasım, Patron): SADECE RAPOR — hiçbir şey silinmez/değiştirilmez ----------

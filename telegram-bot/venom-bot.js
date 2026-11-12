@@ -289,7 +289,7 @@ const ARACLAR = [
   { name: "fabrika_giden", description: "Fabrikaya giden eksik listesi: o gün hangi modeller gitti (VOLONTE ve Black Rose AYRI, Sami'nin kaydından). 'Fabrikaya dün/bugün ne gitti' sorularında SADECE bunu kullan; sonucu aynen yaz.", input_schema: { type: "object", additionalProperties: false, properties: { gun: { type: "string", enum: ["bugun", "dun"] }, tarih: { type: "string", description: "YYYY-AA-GG (isteğe bağlı)" } } } },
   { name: "repete_durum", description: "Bir modelin repetesinin durumu (repete kaydından: adet, kim onayladı, teslim tarihi). 'X'in repetesi ne durumda' sorularında SADECE bunu kullan; sonucu aynen yaz.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "gunluk_satis", description: "Günlük satış: marka marka ADET ve CİRO (Vegawin'den; iki mağaza AYRI, toplanmaz). 'Bugün/dün X kaç adet sattı, kaç dolarlık' sorularında SADECE bunu kullan. Sadece Patron'a. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { gun: { type: "string", enum: ["bugun", "dun"] }, magaza: { type: "string", enum: ["VOLONTE", "BLACKROSE"] } } } },
-  { name: "kisiye_soyle", description: "Patron 'Merdan'a / Aziz'e / Hemra'ya söyle / yaz / sor …' dediğinde: iş Sami üzerinden O KİŞİYE düğmeli kartla gider, cevabı takip edilir, sonuç Patron'a tek satır gelir. Onaysız. Pelin'e ya da başka bota GİTMEZ. Fuat/Nuri için KULLANMA (mesaj_taslagi).", input_schema: { type: "object", additionalProperties: false, required: ["kime", "metin"], properties: { kime: { type: "string", enum: ["merdan", "aziz", "hemra"] }, metin: { type: "string", description: "Patron'un söylediği iş, aynen" } } } },
+  { name: "kisiye_soyle", description: "Patron 'Merdan'a / Aziz'e / Hemra'ya söyle / yaz / sor …' dediğinde: iş Sami üzerinden O KİŞİYE düğmeli kartla gider, cevabı takip edilir, sonuç Patron'a tek satır gelir. Onaysız. Pelin'e ya da başka bota GİTMEZ. Fuat/Nuri için KULLANMA (mesaj_taslagi).", input_schema: { type: "object", additionalProperties: false, required: ["kime", "metin"], properties: { kime: { type: "string", enum: ["merdan", "aziz", "hemra"] }, metin: { type: "string", description: "Patron'un söylediği iş, AYNEN — söylediği saat ve gün dahil (ör. '12:00'ye kadar', 'yarın')" } } } },
   { name: "hatirlat", description: "Ekipten birine (merdan, hemra) Sami üzerinden kısa hatırlatma. Küçük iş: onaysız gider. Fuat/Nuri için KULLANMA (onlar için mesaj_taslagi).", input_schema: { type: "object", additionalProperties: false, required: ["kime", "metin"], properties: { kime: { type: "string", enum: ["merdan", "hemra"] }, metin: { type: "string" } } } },
   { name: "mesaj_taslagi", description: "Birine (fuat, nuri, merdan, hemra) Sami adına mesaj: önce TAM METİN Patron'a onay kartıyla gösterilir; onaysız gitmez. Patron'un kendi metni varsa aynen kullan.", input_schema: { type: "object", additionalProperties: false, required: ["kime", "metin"], properties: { kime: { type: "string", enum: ["fuat", "nuri", "merdan", "hemra"] }, metin: { type: "string" } } } },
   { name: "mutabakat_gonder", description: "Fuat'a güncel cuma mutabakatını (bakiye mesajları) tekrar gönderip onayını ister. Önce Patron'a önizleme kartı.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
@@ -346,7 +346,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     return g.bot && g.bot !== "hepsi" ? botCevabi(env, g.bot, satirlar, canlilar[g.bot], { gun }) : herkesCevabi(env, satirlar, canlilar, { gun });
   }
   if (ad === "tek_defter") {
-    const { satirlar } = await defterOku(env, simdi, { kapat: !env.__kuru, kuru: Boolean(env.__kuru) });
+    const { satirlar } = await defterOku(env, simdi, { kapat: !env.__kuru, kuru: Boolean(env.__kuru), venom: true });
     const kod = String(g.kod || "").replace(/\D/g, ""), kim = String(g.kim || "").toLocaleLowerCase("tr");
     const l = satirlar.filter((x) => (g.durum === "hepsi" ? true : g.durum === "beklemede" ? x.durum === "beklemede" : x.durum !== "bitti") && (!kod || x.kod === kod) && (!kim || String(x.kim).toLocaleLowerCase("tr").includes(kim)));
     if (!l.length) return `Tek defterde ${kod ? `${kod} için ` : ""}${g.kim ? `${g.kim} üzerinde ` : ""}açık iş yok.`;
@@ -355,7 +355,12 @@ export async function aracCalistir(env, ad, g, simdi) {
   if (ad === "fabrika_giden") return fabrikaGidenCevabi(env, simdi, /^\d{4}-\d{2}-\d{2}$/.test(String(g.tarih || "")) ? g.tarih : gunAnahtari(g.gun === "bugun" ? simdi : simdi - 86400));
   if (ad === "repete_durum") return repeteDurumCevabi(env, String(g.kod || "").replace(/\D/g, ""));
   if (ad === "gunluk_satis") return gunlukSatisMetni(await gunlukSatis(env, simdi, gunAnahtari(g.gun === "dun" ? simdi - 86400 : simdi)), simdi, g.magaza || null);
-  if (ad === "kisiye_soyle") { const s = kisiyeSoyleCoz(`${KISILER[g.kime] ? KISILER[g.kime].e : g.kime} söyle, ${g.metin}`, simdi); return s ? kisiyeSoyleYap(env, s, simdi) : "Kişi ya da iş anlaşılamadı."; }
+  if (ad === "kisiye_soyle") {
+    const s = kisiyeSoyleCoz(`${KISILER[g.kime] ? KISILER[g.kime].e : g.kime} söyle, ${g.metin}`, simdi);
+    if (!s) return "Kişi ya da iş anlaşılamadı.";
+    if (!soylenenSaat(g.metin) && soylenenSaat(env.__patronMetni)) s.son = isSonSaati(String(env.__patronMetni), simdi); // 12 Kasım: Patron'un söylediği saat AYNEN (araç metni saati düşürse bile)
+    return kisiyeSoyleYap(env, s, simdi);
+  }
   if (ad === "hatirlat") {
     if (!KISILER[g.kime] || KISILER[g.kime].dis) return "Dışarıya hatırlatma onaysız gitmez; mesaj_taslagi kullan.";
     const id = kisaId();
@@ -1546,8 +1551,8 @@ export async function venomCron(env, simdi) {
   // 9 Kasım (ekip düzeni): Hemra'nın seçimleri her çalışmada; toplu liste hafta içi 11:00 ve 16:00
   try { await hemraKararAdimi(env, simdi, hemraAraclari(env, simdi)); } catch (e) { await hataYaz(env, "hemraKarar", e); }
   // 11 Kasım (TEK DEFTER): 30 dakikada bir — her iş tek satır; cevaplanan / yinelenen / eski kartlar kökten kapanır, Hemra listesi buna göre düşer
-  if (Math.floor(simdi / 300) % 6 === 0) { try { const df = await defterOku(env, simdi); await listeyiTemizle(env, simdi, df); } catch (e) { await hataYaz(env, "tekDefter", e); } }
-  for (const h of LISTE_SAATLERI) if (saat(simdi) >= h && saat(simdi) < h + 1 && (await ilkKezBugun(env, `hemraListe:${h}:${gunAnahtari(simdi)}`))) { try { await hemraListesiGonder(env, simdi, { defter: await defterOku(env, simdi), biriktir: (m) => biriktir(env, { kaynak: "venom", metin: m, tur: "bilgi" }, simdi) }); } catch (e) { await hataYaz(env, "hemraListe", e); } }
+  if (Math.floor(simdi / 300) % 6 === 0) { try { const df = await defterOku(env, simdi, { venom: true }); await listeyiTemizle(env, simdi, df); } catch (e) { await hataYaz(env, "tekDefter", e); } }
+  for (const h of LISTE_SAATLERI) if (saat(simdi) >= h && saat(simdi) < h + 1 && (await ilkKezBugun(env, `hemraListe:${h}:${gunAnahtari(simdi)}`))) { try { await hemraListesiGonder(env, simdi, { defter: await defterOku(env, simdi, { venom: true }), biriktir: (m) => biriktir(env, { kaynak: "venom", metin: m, tur: "bilgi" }, simdi) }); } catch (e) { await hataYaz(env, "hemraListe", e); } }
   try { if (await env.KAYIT.get("venom:hemraDagit")) { await env.KAYIT.delete("venom:hemraDagit"); await kaydet(env, "venom:hemraDagitSonuc", { zaman: simdi, sonuc: await hemraDagit(env, simdi) }, 7 * 86400); } } catch (e) { await hataYaz(env, "hemraDagit", e); }
   try { if (await env.KAYIT.get("venom:ilkGorevler")) { await env.KAYIT.delete("venom:ilkGorevler"); await kaydet(env, "venom:ilkGorevlerSonuc", { zaman: simdi, sonuc: await ilkGorevler(env, simdi) }, 7 * 86400); } } catch (e) { await hataYaz(env, "ilkGorevler", e); }
   // Tek seferlik (Claude Code, 5 Kasım): KV "venom:pelinFotoIlet" = pelin_foto_kaydet girdisi → sonuç Patron'a (İLETİLDİ/İLETİLMEDİ)
@@ -1939,10 +1944,11 @@ async function claudeIslemAdimi(env, simdi) {
       sonuc.push({ tur: is.tur, zaman: simdi, kopruler: (o && o.kopruler) || null, alarm, satis: sat, sustu: ((o && o.kopruler) || []).map((k) => ({ m: k.magaza, sustu: kopruSustu(Math.max(k.son || 0, k.kalp || 0), simdi) })) });
     } else if (is.tur === "kopruSifirla") { for (const m of is.magazalar || []) await env.KAYIT.delete(`venom:kopruAlarm:${m}`).catch(() => null); sonuc.push({ tur: is.tur, ok: true }); }
     else if (is.tur === "defterOku") { // 11 Kasım (TEK DEFTER): kuru = sadece göster; değilse kapanması gerekenleri kapatır + Hemra listesini temizler
-      const df = await defterOku(env, simdi, { kuru: is.kuru !== false, kapat: is.kuru === false });
+      if (is.onar) await stokIste(env, "/isd-onar", { simdi }).then((r) => sonuc.push({ tur: "isdOnar", ...r })).catch(() => null); // 12 Kasım: yanlış "yenilendi" kapanışlarını geri aç (bir kez)
+      const df = await defterOku(env, simdi, { kuru: is.kuru !== false, kapat: is.kuru === false, venom: true });
       const hl = is.kuru === false ? await listeyiTemizle(env, simdi, df) : null;
       const say = {}; for (const x of df.kapanan) say[x.neden] = (say[x.neden] || 0) + 1;
-      const filtre = (x) => (!is.kod || String(x.kod) === String(is.kod)) && (is.bitenler || x.durum !== "bitti");
+      const filtre = (x) => (!is.kod || String(x.kod) === String(is.kod)) && (is.bitenler || x.durum !== "bitti") && (!is.tur || x.tur === is.tur);
       sonuc.push({ tur: is.tur, kuru: is.kuru !== false, ozet: df.ozet, kapanan: say, satirSayisi: df.satirlar.length, satirlar: df.satirlar.filter(filtre).slice(0, is.enFazla || 60).map(defterSatirYazi), hemra: hl ? { kapanan: hl.kapanan, kalan: hl.kalan.map((x) => x.ozet) } : null });
     } else if (is.tur === "soruDene") { // 11 Kasım: Patron sorusu DENEME — cevap Patron'a GİTMEZ, hiçbir mesaj / iş başlamaz; sonuç kayda
       const e2 = { ...env, __kuru: true };
@@ -2381,6 +2387,32 @@ async function repeteDurumCevabi(env, kod) {
   const [rk, fs] = await Promise.all([repeteKayitlari(env, kod), stokIste(env, "/fs-ozet", {}).catch(() => [])]);
   return repeteDurumMetni(kod, rk, Array.isArray(fs) ? fs : []);
 }
+// 12 Kasım (Patron): Patron saat söylediyse AYNEN o saat; söylemediyse mesai sonu (18:00).
+// Tanınan yazımlar: "12:00'ye kadar", "12.00", "saat 12", "12'ye kadar", "12 ye kadar", "12de", "öğlen", "5 buçuk", "akşam 6", "yarın 12".
+export const MESAI_SONU = 18;
+export function soylenenSaat(il) {
+  const t = String(il || "").toLocaleLowerCase("tr");
+  let h = null, dk = 0, m;
+  const tarihGibi = (x) => x[0].includes(".") && Number(x[2]) >= 1 && Number(x[2]) <= 12 && Number(x[1]) >= 1 && !/^\s?['’ʼ`]?\s?(?:ye|ya|e|a|de|da|te|ta)\s+kadar/.test(t.slice(x.index + x[0].length)) && !/saat\s*$/.test(t.slice(0, x.index)); // "12.11 tarihli" tarih; "12.10'a kadar" saat
+  if ((m = t.match(/(?<![\d.,:])(\d{1,2})[:.](\d{2})(?![\d.,:])/)) && Number(m[1]) < 24 && Number(m[2]) < 60 && !tarihGibi(m)) { h = Number(m[1]); dk = Number(m[2]); }
+  else if ((m = t.match(/saat\s+(\d{1,2})(?!\d)(\s+bu[çc]uk)?/)) && Number(m[1]) < 24) { h = Number(m[1]); dk = m[2] ? 30 : 0; }
+  else if ((m = t.match(/(?<![\d.,:])(\d{1,2})\s?['’ʼ`]?\s?(?:ye|ya|e|a|de|da|te|ta)\s+kadar/)) && Number(m[1]) < 24) h = Number(m[1]);
+  else if ((m = t.match(/(?<![\d.,:])(\d{1,2})\s+bu[çc]u[ğgk]\w*/)) && Number(m[1]) < 24) { h = Number(m[1]); dk = 30; }
+  else if ((m = t.match(/(sabah|[öo][ğg]len|[öo][ğg]leden sonra|ak[şs]am)\s+(\d{1,2})(?!\d)/)) && Number(m[2]) < 24) h = Number(m[2]);
+  else if (/[öo][ğg]len|[öo][ğg]lene kadar/.test(t)) h = 12;
+  if (h == null) return null;
+  if (h < 8 && /(ak[şs]am|[öo][ğg]leden sonra)/.test(t)) h += 12; // "akşam 6" = 18:00
+  else if (h >= 1 && h <= 7 && !/sabah/.test(t)) h += 12; // mesai içinde "5'e kadar" = 17:00
+  return { h, dk };
+}
+export function isSonSaati(il, simdi) {
+  const t = String(il || "").toLocaleLowerCase("tr"), s = soylenenSaat(t);
+  const gunBasi = simdi - ((simdi + SAAT_FARKI) % 86400), yarin = /yar[ıi]n/.test(t);
+  let son = gunBasi + (yarin ? 86400 : 0) + (s ? s.h * 3600 + s.dk * 60 : MESAI_SONU * 3600);
+  if (!yarin && son <= simdi) son += 86400; // saat bugün geçtiyse ertesi gün aynı saat
+  if (new Date((son + SAAT_FARKI) * 1000).getUTCDay() === 0) son += 86400; // pazar atlanır
+  return son;
+}
 // "Merdan'a söyle, yarın 12:00'ye kadar 3394'ün fotoğrafını çeksin" → { kimler, is, kodlar, son, kalip }; null = kişiye iş değil
 export function kisiyeSoyleCoz(metin, simdi) {
   const ham = String(metin || "").replace(/\s+/g, " ").trim(), t = ham.toLocaleLowerCase("tr");
@@ -2392,14 +2424,8 @@ export function kisiyeSoyleCoz(metin, simdi) {
   if (is.length < 3) return null;
   const sade = is.replace(/\b\d{1,2}[:.]\d{2}\b/g, " ").replace(/\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/g, " ");
   const kodlar = [...new Set(sade.match(/(?<![\d.,:])\d{3,5}(?![\d.,:]\d)/g) || [])].slice(0, 20);
-  const il = is.toLocaleLowerCase("tr"), zm = il.match(/\b(\d{1,2})[:.](\d{2})\b/) || il.match(/saat\s+(\d{1,2})()/);
-  const gunBasi = simdi - ((simdi + SAAT_FARKI) % 86400), yarin = /yar[ıi]n/.test(il), bugun = /bug[üu]n/.test(il);
-  let son = sonSaat(simdi, 18);
-  if (zm || yarin || bugun) {
-    const h = zm ? Math.min(23, Number(zm[1])) : 18, dk = zm ? Math.min(59, Number(zm[2] || 0)) : 0;
-    son = gunBasi + (yarin ? 86400 : 0) + h * 3600 + dk * 60;
-    if (!yarin && son <= simdi) son += 86400;
-  }
+  const il = is.toLocaleLowerCase("tr");
+  const son = isSonSaati(il, simdi);
   return { kimler, is: is[0].toLocaleUpperCase("tr") + is.slice(1), kodlar, son, kalip: /foto/.test(il) ? "foto" : /video/.test(il) ? "video" : "genel" };
 }
 export async function kisiyeSoyleYap(env, s, simdi) {

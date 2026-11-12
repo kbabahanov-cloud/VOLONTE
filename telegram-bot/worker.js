@@ -37,7 +37,7 @@
 //     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
-import { defterTg, defterKarar, defterIs, defterCevap } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterCevap, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
@@ -1833,6 +1833,7 @@ async function yayiniErtele(env, oge, simdi) {
   await env.KAYIT.put(`kuyruk:${oge.kod}`, JSON.stringify({ ...oge, tur: true, zaman: simdi, ertelendi: true, sinirsiz: true }));
   const k = await yayinKapisi(env, simdi);
   await defterIs(env, "kemal", `kanal kuyruğuna alındı (${tarihYaz(k.sonraki)} civarı gider)`, { kod: oge.kod });
+  await defterSatir(env, "kemal", { id: `kemal:kanal:${oge.kod}`, tur: "kanal", kod: String(oge.kod), ne: "Kanal paylaşımı (onaylandı, sırada)", kim: "Kemal", durum: "beklemede", bot: "kemal", acildi: simdi, guncel: simdi, kanit: `${tarihYaz(k.sonraki)} civarı kanala gider` }); // 12 Kasım: TEK DEFTER
   return { ok: true, ertelendi: true, saat: k.sonraki, hata: null };
 }
 export const ertelemeMetni = (p, kod) => `⏳ ${kod}: onaylandı, kuyruğa alındı — kanala ${tarihYaz(p.saat)} civarı gider (paylaşımlar 09:00–21:00, en az ${YAYIN_ARA_DK} dk arayla).`;
@@ -2503,6 +2504,7 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   sonpaylasim[paket.kod] = simdi;
   await dizineEkle(env, paket.kod, (g.ids || []).filter((id) => id > 0), simdi).catch(() => null); // 10 Kasım: geri alma / silme doğru mesaj numarasını bulsun
   await defterIs(env, "kemal", "kanala paylaşıldı", { kod: paket.kod });
+  await defterSatir(env, "kemal", { id: `kemal:kanal:${paket.kod}`, tur: "kanal", kod: String(paket.kod), ne: "Kanal paylaşımı", kim: "Kemal", durum: "bitti", bot: "kemal", guncel: simdi, kanit: `kanala paylaşıldı${(g.ids || []).filter((id) => id > 0).length ? ` (mesaj ${(g.ids || []).filter((id) => id > 0)[0]})` : ""}` }); // 12 Kasım: TEK DEFTER — kanıtla kapanır
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
   if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await bugunSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });

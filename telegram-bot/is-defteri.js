@@ -24,9 +24,20 @@ export async function defterYaz(env, kayit) {
     await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/isd-yaz", { method: "POST", body: JSON.stringify({ kayitlar: [].concat(kayit) }) });
   } catch { /* defter yazılamazsa iş durmaz */ }
 }
+// Bir botun kart olmayan işi için deftere TEK satır (ne, kim, marka, durum, kanıt): Pelin üretimi, Kemal kanal kuyruğu …
+export async function defterSatir(env, yazan, satirlar, esitle = false) {
+  if (!env || !env.STOK) return;
+  try { await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/is-yaz", { method: "POST", body: JSON.stringify({ yazan, esitle, satirlar: [].concat(satirlar) }) }); } catch { /* defter yazılamazsa iş durmaz */ }
+}
 export const defterIs = (env, bot, ozet, { kod = null, kime = null, deneme = false } = {}) => defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "is", ozet, kod: kod || kodBulDefter(ozet), kime, deneme: deneme || denemeMi(ozet) });
 // Telegram çağrısından sonra: mesaj / kart kaydı
+const gercekDugme = (g) => Boolean(g && g.reply_markup && Array.isArray(g.reply_markup.inline_keyboard) && g.reply_markup.inline_keyboard.flat().some((b) => b && b.callback_data && !/^(vg|kt):-$/.test(String(b.callback_data))));
 export async function defterTg(env, bot, metod, govde, sonuc) {
+  // 12 Kasım (TEK DEFTER, bütün botlar): düğmeleri kalkan kart (cevaplandı / kapandı / yerine yenisi geldi) defterde de kapanır
+  if (env && env.STOK && govde && /^editMessage(Text|Caption|ReplyMarkup|Media)$/.test(metod) && govde.chat_id != null && govde.message_id && !(sonuc && sonuc.ok === false) && !gercekDugme(govde)) {
+    try { await env.STOK.get(env.STOK.idFromName("stok")).fetch("https://stok/isd-kart-kapat", { method: "POST", body: JSON.stringify({ chat: String(govde.chat_id), mesaj: govde.message_id, neden: "kapandi" }) }); } catch { /* defter yazılamazsa iş durmaz */ }
+    return;
+  }
   if (!env || !env.STOK || !govde || SESSIZ.has(metod) || (sonuc && sonuc.ok === false) || env.__kartTekrar) return; // kart tekrarı yeni kart sayılmaz
   const chat = govde.chat_id != null ? String(govde.chat_id) : null;
   if (!chat) return;

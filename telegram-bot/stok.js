@@ -17,6 +17,7 @@ export const BEKLESIN_STOK_GUN = 7;
 
 import { sha256 } from "./sha256.js";
 import { MARKA_KARARLARI } from "./kurallar.js";
+import { defterKur } from "./defter-mantik.js";
 
 export const stokKodu = (kod) => String(kod || "").trim().toUpperCase();
 // İndirimli mal kodları (kullanıcı kararı 30 Ekim): 2000 = CRY'den toplu alınan indirimli malların ortak kodu, gerçek model
@@ -54,6 +55,11 @@ const TABLOLAR = [
   // 9 Kasım (Patron): İŞ DEFTERİ — botların yaptığı HER iş (mesaj, kart, karar, iş, hata). Venom "kim ne yaptı"yı buradan bilir.
   `CREATE TABLE IF NOT EXISTS isd (id INTEGER PRIMARY KEY AUTOINCREMENT, zaman INTEGER NOT NULL, bot TEXT NOT NULL, tur TEXT NOT NULL,
      kime TEXT, kod TEXT, ozet TEXT, chat TEXT, mesaj INTEGER, durum TEXT, sonuc TEXT, deneme INTEGER DEFAULT 0, hatirlatildi INTEGER, cb TEXT)`,
+  // 12 Kasım (Patron, TEK DEFTER): botların doğrudan yazdığı iş satırları (kart olmayan işler: Venom görevi / bot işi, Pelin üretimi,
+  // Kemal kanal kuyruğu …). Her işin TEK satırı: ne, kim, marka, durum (acik / beklemede / bitti), kanıt. Kartlar, fabrika ve repete
+  // kayıtları zaten bu depoda; "/defter" hepsini tek listede verir.
+  `CREATE TABLE IF NOT EXISTS isler (id TEXT PRIMARY KEY, yazan TEXT NOT NULL, tur TEXT, kod TEXT, marka TEXT, ne TEXT, kim TEXT, durum TEXT NOT NULL,
+     kanit TEXT, bot TEXT, acildi INTEGER, guncel INTEGER)`,
   `CREATE INDEX IF NOT EXISTS isd_zaman ON isd (zaman)`,
   `CREATE INDEX IF NOT EXISTS isd_kart ON isd (chat, mesaj)`,
   `CREATE INDEX IF NOT EXISTS urun_kod ON urun (kod)`,
@@ -448,12 +454,22 @@ export class StokDeposu {
       if (k.tur === "karar" && k.cb) { // düğme verisiyle eşleşen bekleyen kart(lar) kapanır (aynı kart iki kişiye gittiyse ikisi de: ilk basan geçerli)
         this.sql.exec("UPDATE isd SET durum = 'bitti', sonuc = ? WHERE tur = 'kart' AND durum = 'bekliyor' AND cb LIKE ?", String(k.sonuc || k.ozet || "").slice(0, 200), `%|${String(k.cb).replace(/[%_|]/g, "")}|%`);
       }
+      // 12 Kasım (TEK DEFTER, kaynağında): yazıyla verilen cevap o kişinin o modeldeki bekleyen kartını kapatır; aynı kart (aynı kişi, aynı
+      // düğmeler) yeniden gönderilirse eskisi kapanır — cevaplanan soru bir daha sorulmaz, aynı iş iki kez durmaz
+      if (k.tur === "karar" && !k.cb && k.kod && k.kime != null && /: "|^"/.test(String(k.ozet || ""))) this.sql.exec("UPDATE isd SET durum = 'cevaplandi', sonuc = ? WHERE tur = 'kart' AND durum = 'bekliyor' AND bot = ? AND kime = ? AND kod = ? AND zaman <= ?", String(k.ozet || "").slice(0, 200), String(k.bot || "?"), String(k.kime), String(k.kod), z);
+      if (k.tur === "kart" && (k.cbler || []).length && k.kime != null && !k.deneme) this.sql.exec("UPDATE isd SET durum = 'yenilendi' WHERE tur = 'kart' AND durum = 'bekliyor' AND deneme = 0 AND bot = ? AND kime = ? AND cb = ?", String(k.bot || "?"), String(k.kime), `|${k.cbler.map((x) => String(x).replace(/[%_|]/g, "")).join("|")}|`);
       this.sql.exec("INSERT INTO isd (zaman, bot, tur, kime, kod, ozet, chat, mesaj, durum, sonuc, deneme, cb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         z, String(k.bot || "?"), String(k.tur || "is"), k.kime != null ? String(k.kime) : null, k.kod ? String(k.kod) : null, String(k.ozet || "").slice(0, 300),
         k.chat != null ? String(k.chat) : null, k.mesaj != null ? Number(k.mesaj) : null, k.tur === "kart" ? "bekliyor" : null, k.sonuc ? String(k.sonuc).slice(0, 200) : null, k.deneme ? 1 : 0,
         k.tur === "kart" && (k.cbler || []).length ? `|${k.cbler.map((x) => String(x).replace(/[%_|]/g, "")).join("|")}|` : null);
     }
     if (Math.random() < 0.02) this.sql.exec("DELETE FROM isd WHERE zaman < ?", Math.floor(Date.now() / 1000) - 35 * 86400);
+    // 12 Kasım (TEK DEFTER): depo kendi bakımını kendisi yapar — yarım saatte bir, bir yazma sırasında (yeni zamanlayıcı yok):
+    // kapanması gereken kartlar kapanır, anlık görüntü ("defter:tek") yenilenir. Hata olursa yazma etkilenmez.
+    try {
+      const simdi = Math.floor(Date.now() / 1000);
+      if (simdi - (Number(this.ayarOku("defter:son")) || 0) >= 1800) { this.ayarYaz("defter:son", String(simdi)); this.defter({ simdi, adlar: JSON.parse(this.ayarOku("defter:adlar") || "{}") }); }
+    } catch { /* bakım yazmayı durdurmaz */ }
     return { ok: true };
   }
   isdOku({ basla = 0, bitis = 9e9, bot = null, denemeDahil = false }) {
@@ -467,8 +483,51 @@ export class StokDeposu {
   isdIsaretle({ idler = [], alan = "hatirlatildi", deger = null }) {
     const izin = { hatirlatildi: "hatirlatildi", durum: "durum" };
     if (!izin[alan]) return { ok: false };
+    if (alan === "durum" && deger === "yenilendi") return { ok: true, atlandi: true }; // 12 Kasım: "yenilendi" kararını SADECE depo verir (aynı kişi + aynı düğmeler); dışarıdan gelen kaba işaret (model bazlı) uygulanmaz
     for (const id of idler.slice(0, 200)) this.sql.exec(`UPDATE isd SET ${izin[alan]} = ? WHERE id = ?`, deger ?? Math.floor(Date.now() / 1000), Number(id));
     return { ok: true };
+  }
+  // 12 Kasım: düğmeleri kalkan (düzenlenen) kart defterde kapanır — bütün botlar kendi Telegram sarmalayıcısından bildirir
+  isdKartKapat({ chat, mesaj, neden = "kapandi" }) {
+    if (chat == null || mesaj == null) return { ok: false };
+    this.sql.exec("UPDATE isd SET durum = ? WHERE tur = 'kart' AND durum = 'bekliyor' AND chat = ? AND mesaj = ?", String(neden).slice(0, 20), String(chat), Number(mesaj));
+    return { ok: true };
+  }
+  // 12 Kasım (bir kez): 11 Kasım'daki kaba kural aynı modelin iki AYRI kaydını (ör. büyük / küçük beden) "yenilendi" diye kapatmıştı;
+  // gerçekten yenisi (aynı kişi, aynı düğmeler) olmayanlar yeniden "bekliyor" olur. Sonra "/defter" kuralları yeniden uygular.
+  isdOnar({ simdi = Math.floor(Date.now() / 1000) } = {}) {
+    const l = this.hepsi("SELECT id FROM isd a WHERE a.tur = 'kart' AND a.durum = 'yenilendi' AND a.zaman >= ? AND NOT EXISTS (SELECT 1 FROM isd b WHERE b.tur = 'kart' AND b.bot = a.bot AND b.kime = a.kime AND b.cb = a.cb AND b.id > a.id)", simdi - 3 * 86400);
+    for (const r of l) this.sql.exec("UPDATE isd SET durum = 'bekliyor' WHERE id = ?", r.id);
+    return { ok: true, acilan: l.length };
+  }
+  // İş satırları: yaz (aynı kimlik = aynı satır; esitle: bu yazanın listede OLMAYAN açık satırları silinir), liste
+  isYaz({ yazan, satirlar = [], esitle = false }) {
+    const y = String(yazan || "?").slice(0, 20), simdi = Math.floor(Date.now() / 1000), idler = [];
+    for (const s of (satirlar || []).slice(0, 300)) {
+      if (!s || !s.id) continue;
+      const id = String(s.id).slice(0, 120); idler.push(id);
+      this.sql.exec("INSERT INTO isler (id, yazan, tur, kod, marka, ne, kim, durum, kanit, bot, acildi, guncel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET tur = excluded.tur, kod = excluded.kod, marka = excluded.marka, ne = excluded.ne, kim = excluded.kim, durum = excluded.durum, kanit = excluded.kanit, guncel = excluded.guncel",
+        id, y, s.tur ? String(s.tur).slice(0, 20) : null, s.kod ? String(s.kod).slice(0, 12) : null, s.marka ? String(s.marka).slice(0, 12) : null, String(s.ne || "").slice(0, 240), String(s.kim || "").slice(0, 60), ["acik", "beklemede", "bitti"].includes(s.durum) ? s.durum : "acik", s.kanit ? String(s.kanit).slice(0, 240) : null, String(s.bot || y).slice(0, 20), Number(s.acildi) || simdi, Number(s.guncel) || simdi);
+    }
+    if (esitle) for (const r of this.hepsi("SELECT id FROM isler WHERE yazan = ?", y)) if (!idler.includes(r.id)) this.sql.exec("DELETE FROM isler WHERE id = ?", r.id);
+    this.sql.exec("DELETE FROM isler WHERE durum = 'bitti' AND guncel < ?", simdi - 7 * 86400);
+    return { ok: true, n: idler.length };
+  }
+  isListe({ yazan = null } = {}) { return yazan ? this.hepsi("SELECT * FROM isler WHERE yazan = ? ORDER BY acildi", String(yazan)) : this.hepsi("SELECT * FROM isler ORDER BY acildi"); }
+  // TEK DEFTER (kaynağında): bütün işlerin tek listesi; kapanması gereken kartlar burada kapanır (kuru = sadece göster)
+  defter({ simdi = Math.floor(Date.now() / 1000), kuru = false, adlar = {} } = {}) {
+    if (adlar && Object.keys(adlar).length) this.ayarYaz("defter:adlar", JSON.stringify(adlar)); // kişi adları (bakım için saklanır; depoda kalır)
+    else { try { adlar = JSON.parse(this.ayarOku("defter:adlar") || "{}"); } catch { adlar = {}; } }
+    const isd = this.hepsi("SELECT * FROM isd WHERE zaman >= ? AND deneme = 0 ORDER BY zaman LIMIT 5000", simdi - 6 * 86400);
+    const rk = [];
+    for (const id of JSON.parse(this.ayarOku("rk:acik") || "[]").slice(-40)) { try { const r = JSON.parse(this.ayarOku(`rk:${id}`) || "null"); if (r && !r.deneme) rk.push(r); } catch { /* bozuk kayıt atlanır */ } }
+    const r = defterKur({ isd, fs: this.fsOzet(), rk, ek: this.isListe(), simdi, adlar: adlar || {} });
+    if (!kuru) {
+      for (const x of r.kapanan) this.sql.exec("UPDATE isd SET durum = ? WHERE id = ? AND durum = 'bekliyor'", String(x.neden).slice(0, 20), Number(x.id));
+      this.ayarYaz("defter:tek", JSON.stringify({ ...r.ozet, satirlar: r.satirlar.slice(0, 400) }));
+      this.ayarYaz("defter:son", String(simdi));
+    }
+    return r;
   }
   repeteKarar(k) {
     const l = JSON.parse(this.ayarOku("repete:kararlar") || "[]");
@@ -574,6 +633,11 @@ export class StokDO {
     if (yol === "/isd-oku") return cevap(d.isdOku(g));
     if (yol === "/isd-bekleyen") return cevap(d.isdBekleyen(g));
     if (yol === "/isd-isaretle") return cevap(d.isdIsaretle(g));
+    if (yol === "/isd-kart-kapat") return cevap(d.isdKartKapat(g));
+    if (yol === "/isd-onar") return cevap(d.isdOnar(g));
+    if (yol === "/is-yaz") return cevap(d.isYaz(g));
+    if (yol === "/is-liste") return cevap(d.isListe(g));
+    if (yol === "/defter") return cevap(d.defter(g));
     if (yol === "/repete-karar") return cevap(d.repeteKarar(g));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());

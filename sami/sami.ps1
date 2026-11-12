@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026111101"
+$SURUM = "2026111102"
 
 function Gunluge([string]$m) {
   try {
@@ -385,6 +385,37 @@ function GunlukCiroOku([string]$sifre) {
   }
   return $gcSatir
 }
+# ---- Kasa gideri (12 Kasım; Patron: "akşam raporuna toplam gider ve net") — SADECE SELECT ----
+# Vegawin'de gider sadece kasa defterinde (adı TBLKASA ile biten tablolar: TARIH, GELIR, GIDER, PARABIRIMI) duruyor; masraf tabloları boş.
+# DÜN ve BUGÜN: gün × para birimi → kasadan çıkan (GIDER) toplamı ve satır sayısı. Ayrıca son 35 günün işlem türü dağılımı
+# (ISLEM sütunu: tür adı, adet, toplam) — giderin neyden oluştuğunu görmek için. Açıklama, kişi adı, müşteri ASLA okunmaz.
+# Ciro satırlarıyla aynı kalıpta gider: "tablo" = "KASA:yyyy-AA-gg" (tur "G") ve "KASAISLEM:<tür>" (tur "G").
+function KasaGiderOku([string]$sifre) {
+  $kgSatir = @()
+  $kgBas = (Get-Date).Date.AddDays(-1); $kgBit = (Get-Date).Date.AddDays(1)
+  $kgTablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLKASA" }
+  foreach ($kt in $kgTablolar.Rows) {
+    $ktAd = [string]$kt.AD
+    $ktSut = @(Sutunlar $sifre $ktAd | ForEach-Object { ([string]$_).Trim().ToUpperInvariant() })
+    if (($ktSut -notcontains "TARIH") -or ($ktSut -notcontains "GIDER")) { continue }
+    $ktDoviz = if ($ktSut -contains "PARABIRIMI") { "PARABIRIMI" } else { $null }
+    $ktSorgu = "SELECT CONVERT(char(10), TARIH, 23) AS G" + $(if ($ktDoviz) { ", [$ktDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(GIDER AS FLOAT)) AS TOPLAMI FROM [$ktAd] WHERE GIDER > 0 AND TARIH >= @bas AND TARIH < @bit GROUP BY CONVERT(char(10), TARIH, 23)" + $(if ($ktDoviz) { ", [$ktDoviz]" } else { "" })
+    foreach ($kx in (Sorgu $sifre $ktSorgu @{ bas = $kgBas; bit = $kgBit }).Rows) {
+      $kxGun = ([string]$kx.G).Trim()
+      if ($kxGun -notmatch '^\d{4}-\d{2}-\d{2}$') { continue }
+      $kgSatir += @{ tablo = "KASA:$kxGun"; yil = [int]$kxGun.Substring(0, 4); tur = "G"; doviz = $(if ($ktDoviz) { ([string]$kx.D).Trim() } else { "" }); n = [int]$kx.N; tutar = (Num $kx.TOPLAMI); aratoplam = $null }
+    }
+    if ($ktSut -contains "ISLEM") {
+      try {
+        $kiSorgu = "SELECT TOP 15 CAST(ISLEM AS NVARCHAR(40)) AS I" + $(if ($ktDoviz) { ", [$ktDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(GIDER AS FLOAT)) AS TOPLAMI FROM [$ktAd] WHERE GIDER > 0 AND TARIH >= @bas GROUP BY CAST(ISLEM AS NVARCHAR(40))" + $(if ($ktDoviz) { ", [$ktDoviz]" } else { "" }) + " ORDER BY COUNT(*) DESC"
+        foreach ($ki in (Sorgu $sifre $kiSorgu @{ bas = (Get-Date).Date.AddDays(-35) }).Rows) {
+          $kgSatir += @{ tablo = ("KASAISLEM:" + ([string]$ki.I).Trim()); yil = [int](Get-Date).Year; tur = "G"; doviz = $(if ($ktDoviz) { ([string]$ki.D).Trim() } else { "" }); n = [int]$ki.N; tutar = (Num $ki.TOPLAMI); aratoplam = $null }
+        }
+      } catch { }
+    }
+  }
+  return $kgSatir
+}
 # ---- Gider keşfi (3 Kasım, Patron: giderler nerede?) — SADECE SELECT, sürüm başına bir kez ----
 # Adında MASRAF/KASA/GIDER/BANKA/MUHASEBE/PERSONEL/MAAS/HESAP/ODEME/TEDIYE geçen tablolar: satır sayısı, sütun ADLARI, son 13
 # ayın ay ay adet + tutar toplamları ve kısa kod sütunlarının (KOD/TIP/TUR/GRUP) dağılımı. Kişi adı, ünvan, açıklama, TC,
@@ -645,7 +676,9 @@ function Esitle([switch]$Zorla) {
     try {
       $ciroYillik = @(CiroOku (Duz $g.Sifre)); $ciroGunluk = @()
       try { $ciroGunluk = @(GunlukCiroOku (Duz $g.Sifre)) } catch { $satisNot += ", günlük ciro okunamadı: $($_.Exception.Message)" }
-      CiroGonder (Duz $g.Anahtar) @($ciroYillik + $ciroGunluk); (Get-Date).ToString("o") | Set-Content $ciroDosya; $satisNot += ", ciro gönderildi (günlük $($ciroGunluk.Count) satır)"
+      $kasaGider = @()
+      try { $kasaGider = @(KasaGiderOku (Duz $g.Sifre)) } catch { $satisNot += ", kasa gideri okunamadı: $($_.Exception.Message)" }
+      CiroGonder (Duz $g.Anahtar) @($ciroYillik + $ciroGunluk + $kasaGider); (Get-Date).ToString("o") | Set-Content $ciroDosya; $satisNot += ", ciro gönderildi (günlük $($ciroGunluk.Count) satır, kasa $($kasaGider.Count) satır)"
     }
     catch { $satisNot += ", ciro okunamadı: $($_.Exception.Message)" }
   }

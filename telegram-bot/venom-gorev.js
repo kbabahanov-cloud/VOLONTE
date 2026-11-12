@@ -8,6 +8,7 @@
 // Çözüm basamakları: sebebi öğren → kendin düzelt / bota emir → gerekirse görev → takip → deftere yaz → kapat → çözülemeyeni tek kart.
 import { KISILER, kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { defterCevap } from "./is-defteri.js";
+import { venomDefterEsitle } from "./tek-defter.js"; // 12 Kasım: görevler TEK DEFTERE de yazılır
 
 const SAAT_FARKI = 3 * 3600;
 const gunAnahtari = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
@@ -81,6 +82,7 @@ export async function gorevAc(env, g, simdi) {
   }
   await kaydet(env, "venom:gorevler", [...l.filter((x) => ["acik", "yapilmadi"].includes(x.durum) || simdi - x.zaman < 14 * 86400), gorev].slice(-80), 30 * 86400);
   await sayac(env, "gorev", simdi);
+  await venomDefterEsitle(env, simdi).catch(() => null);
   return gorev;
 }
 export async function sayac(env, ne, simdi, n = 1) {
@@ -121,7 +123,7 @@ export async function gorevAdimi(env, simdi, f) {
       if (g.patron && f.patronaYaz) await f.patronaYaz(`⏰ ${kimler(g).join(", ")} son saate (${gunSaatYaz(g.son)}) kadar cevap vermedi: ${String(g.metin).replace(/^Patron'dan:\s*/, "").slice(0, 160)}`).catch(() => null);
     }
   }
-  if (degisti) await kaydet(env, "venom:gorevler", l, 30 * 86400);
+  if (degisti) { await kaydet(env, "venom:gorevler", l, 30 * 86400); await venomDefterEsitle(env, simdi).catch(() => null); }
   return l;
 }
 async function gorevKapat(env, g, simdi, f) {

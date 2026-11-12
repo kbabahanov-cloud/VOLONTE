@@ -1480,9 +1480,9 @@ test("ekip düzeni (11 Kasım, TEK DEFTER): Hemra'ya en fazla 5 iş, her iş AYR
   await isd([kart("505", "3493", 7, t - 9 * 3600), kart("505", "3493", 8, t - 8 * 3600), ...["3501", "3502", "3503", "3504", "3505", "3506"].map((k, i) => kart("505", k, 20 + i, t - 8 * 3600))]);
   const bek = await (await o.env.STOK.get().fetch("https://stok/isd-bekleyen", { method: "POST", body: "{}" })).json();
   await o.env.STOK.get().fetch("https://stok/isd-isaretle", { method: "POST", body: JSON.stringify({ idler: bek.map((x) => x.id), alan: "hatirlatildi", deger: ist(9, 12) }) }); // dün hatırlatıldı
+  assert.equal(bek.length, 7); // 12 Kasım: 3493'ün eski kopyası YAZILIRKEN (kaynağında) kapandı — bekleyenlerde tek kart
   const df = await D.defterOku(o.env, t);
-  assert.equal(df.kapanan.length, 1); // 3493'ün eski kopyası kökten kapandı
-  assert.equal(df.kapanan[0].neden, "yenilendi");
+  assert.equal(df.kapanan.length, 0);
   assert.equal(df.satirlar.filter((x) => x.tur === "kart").length, 7); // her iş TEK satır
   assert.match(D.defterSatirYazi(df.satirlar.find((x) => x.kod === "3493")), /^3493 · ⬆️ 3493 öneri kartı · Aziz · açık$/);
   assert.equal(await E.hemraListesiGonder(o.env, t, { defter: df, biriktir: async () => {} }), 5); // en fazla 5 iş
@@ -1774,6 +1774,28 @@ test("5 SORU (Patron'un testi): fabrikaya dün giden (markalar ayrı, ≤4 satı
     assert.equal(v.kisiyeSoyleCoz("Fuat'a yaz mutabakatı kontrol etsin", simdi), null); // fabrika: onay kartı yolu (değişmedi)
     assert.equal(v.kisiyeSoyleCoz("Merdan bugün ne yaptı", simdi), null);
     assert.equal(v.kisiyeSoyleCoz("Merdan’a söyle, yarın 12:00’ye kadar 3394’ün fotoğrafını çeksin", simdi).son, ist(12, 12));
+    // 12 Kasım (Patron, SAAT HATASI): saat söylendiyse AYNEN o saat; söylenmediyse mesai sonu 18:00
+    const s10 = ist(12, 10, 30); // perşembe 10:30
+    const sonu = (x, z = s10) => v.kisiyeSoyleCoz(x, z).son;
+    assert.equal(sonu("Merdan'a söyle, 12:00'ye kadar 3394'ün fotoğrafını çeksin"), ist(12, 12));
+    assert.equal(sonu("merdana soyle 12 ye kadar 3394 fotosunu ceksin"), ist(12, 12));
+    assert.equal(sonu("Merdan’a söyle 12’ye kadar 3394’ün fotoğrafını çeksin"), ist(12, 12));
+    assert.equal(sonu("Merdan'a söyle saat 12 de 3394 fotoğrafı hazır olsun"), ist(12, 12));
+    assert.equal(sonu("Merdan'a söyle 12.00'ye kadar 3394"), ist(12, 12));
+    assert.equal(sonu("Merdan'a söyle 14.30'a kadar 3394 3512 çeksin"), ist(12, 14, 30));
+    assert.equal(sonu("Merdan'a söyle 12.10'a kadar 3394 çeksin"), ist(12, 12, 10));
+    assert.equal(sonu("Merdan'a söyle 5'e kadar 3512 fotoğrafı"), ist(12, 17));
+    assert.equal(sonu("Merdan'a söyle akşam 6'ya kadar 3394 videosu"), ist(12, 18));
+    assert.equal(sonu("Hemra'ya söyle öğlene kadar vitrin değişsin"), ist(12, 12));
+    assert.equal(sonu("Aziz'e söyle saat 15 buçukta depoyu saysın"), ist(12, 15, 30));
+    assert.equal(sonu("Merdan'a söyle yarın 12'ye kadar 3394"), ist(13, 12));
+    assert.equal(sonu("Merdan'a söyle 10:00'a kadar 3394"), ist(13, 10)); // saat bugün geçti → ertesi gün AYNI saat
+    assert.equal(sonu("Merdan'a söyle, 3394'ün fotoğrafını çeksin"), ist(12, 18)); // saat yok → mesai sonu
+    assert.equal(sonu("Merdan'a söyle, yarın 3394'ün fotoğrafını çeksin"), ist(13, 18));
+    assert.equal(sonu("Merdan'a söyle 12.11 tarihli listeyi kontrol etsin"), ist(12, 18)); // tarih, saat değil
+    assert.equal(sonu("Merdan'a söyle 3394 çeksin", ist(12, 19)), ist(13, 18)); // mesai bitti → yarın 18:00
+    assert.equal(sonu("Merdan'a söyle 12'ye kadar 3394 çeksin", ist(14, 10)), ist(14, 12)); // cumartesi
+    assert.equal(sonu("Merdan'a söyle 12'ye kadar 3394 çeksin", ist(14, 13)), ist(16, 12)); // cumartesi öğleden sonra → pazar atlanır, pazartesi 12:00
     // 5) Bugün Black Rose kaç adet sattı, kaç dolarlık?  (adet: satış sayımı; ciro: köprünün günlük fatura satırları)
     await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun: "2026-11-11", kalemler: [{ kod: "3490", adet: 4 }, { kod: "3632", adet: 2 }] }) });
     await o.ayar("ciro:BLACKROSE", { zaman: simdi - 600, satirlar: [{ tablo: "D0026TBLSATFATBASLIK", yil: 2026, tur: "21", doviz: "$", n: 900, tutar: 250000, kaynak: "satis" }, { tablo: "GUN:2026-11-11", yil: 2026, tur: "21", doviz: "$", n: 3, tutar: 1250.5, kaynak: "satis" }, { tablo: "GUN:2026-11-11", yil: 2026, tur: "22", doviz: "$", n: 1, tutar: 50.5, kaynak: "iade" }, { tablo: "GUN:2026-11-10", yil: 2026, tur: "21", doviz: "$", n: 9, tutar: 7000, kaynak: "satis" }] });
@@ -1789,6 +1811,13 @@ test("5 SORU (Patron'un testi): fabrikaya dün giden (markalar ayrı, ≤4 satı
     await yazi(o, PATRON, "bugün volonte kaç sattı kaç dolar");
     assert.match(patronaGiden(o).at(-1).govde.text, /VOLONTE: 0 adet \(0 model\) · ciro: Vegawin'den günlük fatura toplamı henüz gelmedi\nGünlük ciro köprüden henüz gelmedi \(köprü güncellemesi gerekiyor\); gelince bu satırda yazar\./);
     assert.equal(o.claude.length, once); // beş sorunun hiçbiri yapay zekâya gitmedi
+    // yapay zekâ aracı saati düşürse bile Patron'un söylediği saat kullanılır
+    const o9 = ortam();
+    o9.env.__patronMetni = "Merdan'a 3394 işini ilet, 12:00'ye kadar bitsin";
+    const g0 = Date.now; Date.now = () => s10 * 1000;
+    try { await v.aracCalistir(o9.env, "kisiye_soyle", { kime: "merdan", metin: "3394'ün fotoğrafını çeksin" }, s10); } finally { Date.now = () => simdi * 1000; void g0; }
+    assert.equal(JSON.parse(o9.depo.get("venom:gorevler"))[0].son, ist(12, 12));
+    assert.match((await kuyruguAl(o9.env, "giden"))[0].metin, /⏰ Son saat: 12\.11 12:00/);
   } finally { Date.now = gercek; }
 });
 
@@ -1830,4 +1859,73 @@ test("VENOM GENEL KURALLAR (11 Kasım): '$' tek başına fiyat değil; '…yapay
   const pm = patronaGiden(o3);
   assert.equal(pm.length, 1);
   assert.equal(pm[0].govde.text, "🧹 Kanal: 3512 paylaşımında sorun vardı (yazıda FİYAT var) → Kemal yazıyı düzeltti.\nKanıt: https://t.me/kanaladi/15020");
+});
+
+test("TEK DEFTER KAYNAĞINDA (12 Kasım): depo tek listeyi kendisi kurar; bütün botlar düğmesi kalkan kartı bildirir; aynı modelin iki AYRI kaydı ayrı iş kalır; Venom / Pelin / Kemal işleri tek satır; biten iş kanıtla kapanır", async () => {
+  const o = ortam();
+  const D = await import("./tek-defter.js");
+  const { defterTg, defterKarar, defterCevap, defterIs, defterSatir } = await import("./is-defteri.js");
+  const simdi = ist(12, 11);
+  const gercek = Date.now; Date.now = () => simdi * 1000;
+  try {
+    const kart = (bot, chat, mesaj, text, cb) => defterTg(o.env, bot, "sendMessage", { chat_id: chat, text, reply_markup: { inline_keyboard: [cb.map((c) => ({ text: "x", callback_data: c }))] } }, { ok: true, result: { message_id: mesaj } });
+    const bekleyen = async () => (await (await o.env.STOK.get().fetch("https://stok/isd-bekleyen", { method: "POST", body: "{}" })).json());
+    // Sami: aynı modelin İKİ ayrı fabrika kaydı (büyük / küçük) → iki ayrı kart, ikisi de açık kalır
+    await kart("sami", "501", 10, "🟦 VOLONTE · 3408 · Büyük (44-50) · beyaz 4", ["fc:g:3408-a", "fc:b:3408-a"]);
+    await kart("sami", "501", 11, "🟦 VOLONTE · 3408 · Küçük (38-44) · beyaz 4", ["fc:g:3408-b", "fc:b:3408-b"]);
+    assert.equal((await bekleyen()).length, 2);
+    // aynı kart yeniden gönderilirse (aynı kişi, aynı düğmeler) eskisi yazılırken kapanır
+    await kart("sami", "501", 12, "🟦 VOLONTE · 3408 · Küçük (38-44) · beyaz 4", ["fc:g:3408-b", "fc:b:3408-b"]);
+    assert.deepEqual((await bekleyen()).map((x) => x.mesaj).sort(), [10, 12]);
+    // Kemal, Selin, Pelin: kartın düğmeleri kalkınca (düzenleme) defterde kapanır
+    await kart("kemal", "503", 20, "⬆️ 3493 öneri kartı", ["sz:3493:p"]);
+    await kart("selin", "503", 21, "🌸 3267 — siteye hazır taslak", ["sb:3267:k"]);
+    await kart("pelin", "999", 22, "🎬 3627 — ön fotoğraf onayı", ["pf:3627:o"]);
+    await defterTg(o.env, "kemal", "editMessageText", { chat_id: "503", message_id: 20, text: "✅ 3493 paylaşıldı" }, { ok: true, result: {} });
+    await defterTg(o.env, "selin", "editMessageReplyMarkup", { chat_id: "503", message_id: 21, reply_markup: { inline_keyboard: [[{ text: "✔ Onaylandı", callback_data: "vg:-" }]] } }, { ok: true, result: {} });
+    await defterTg(o.env, "pelin", "editMessageCaption", { chat_id: "999", message_id: 22, caption: "hâlâ soruluyor", reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: "pf:3627:o" }]] } }, { ok: true, result: {} }); // düğmesi duran kart kapanmaz
+    assert.deepEqual((await bekleyen()).map((x) => x.mesaj).sort(), [10, 12, 22]);
+    // yazıyla cevap: o kişinin o modeldeki bekleyen kartı yazılırken kapanır (bir daha sorulmaz)
+    await kart("sami", "505", 30, "🟦 VOLONTE · 3500 · satılan 4 · stok 2", ["fe:k:2026-11-12:3500"]);
+    await defterCevap(o.env, "sami", "505", "3500", "siyah 20 beyaz 20");
+    assert.ok(!(await bekleyen()).some((x) => x.mesaj === 30));
+    // botların kart olmayan işleri: Pelin üretimi, Kemal kanal kuyruğu, Venom'un bota verdiği iş → her biri TEK satır
+    await defterSatir(o.env, "pelin", [{ id: "pelin:i1", tur: "uretim", kod: "3627", marka: "BLACKROSE", ne: "Fotoğraf / video üretimi", kim: "Pelin", durum: "acik", kanit: "üretiliyor" }], true);
+    await defterSatir(o.env, "kemal", { id: "kemal:kanal:3512", tur: "kanal", kod: "3512", ne: "Kanal paylaşımı (onaylandı, sırada)", kim: "Kemal", durum: "beklemede", kanit: "12.11 14:10 civarı kanala gider" });
+    const Y = await import("./venom-yonetim.js");
+    await Y.isKaydet(o.env, "selin", "3625 için site taslağı hazırla", simdi);
+    await defterIs(o.env, "selin", "site: 3501 eklendi", { kod: "3501" });
+    for (const id of ["3408-a", "3408-b"]) await o.env.STOK.get().fetch("https://stok/fs-yaz", { method: "POST", body: JSON.stringify({ rec: { id, kod: "3408", magaza: "VOLONTE", durum: "bekliyor", gonderim: simdi - 600, mesajlar: [] } }) });
+    let df = await D.defterOku(o.env, simdi + 5, { venom: true });
+    const yazi = df.satirlar.map(D.defterSatirYazi);
+    assert.ok(yazi.includes("3627 · Fotoğraf / video üretimi · Pelin · Black Rose · açık · üretiliyor"));
+    assert.ok(yazi.includes("3512 · Kanal paylaşımı (onaylandı, sırada) · Kemal · beklemede · 12.11 14:10 civarı kanala gider"));
+    assert.ok(yazi.includes("3625 · 3625 için site taslağı hazırla · Selin · açık"));
+    assert.ok(yazi.some((x) => /^3501 · site: 3501 eklendi · Selin · bitti · iş defteri 12\.11 11:00$/.test(x))); // biten iş kanıtıyla
+    assert.deepEqual(yazi.filter((x) => /^3408 · /.test(x)), ["3408 · Fabrika isteği (eksik listesi) · Fuat · VOLONTE · açık · Fabrikadan istendi, cevap bekleniyor"]); // defterde model başına tek satır
+    assert.deepEqual((await bekleyen()).map((x) => x.mesaj).filter((m) => m < 20).sort(), [10, 12]); // ama iki AYRI kaydın kartı da açık kalır (biri diğerini kapatmaz)
+    // biten iş kanıtla kapanır ve açık listeden düşer: Kemal paylaştı, Selin cevap verdi, Pelin işi bitti
+    await defterSatir(o.env, "kemal", { id: "kemal:kanal:3512", tur: "kanal", kod: "3512", ne: "Kanal paylaşımı", kim: "Kemal", durum: "bitti", kanit: "kanala paylaşıldı (mesaj 15100)" });
+    await Y.isCevap(o.env, "selin", simdi + 60);
+    await defterSatir(o.env, "pelin", [], true); // Pelin'in listesinde artık yok → satır düşer
+    df = await D.defterOku(o.env, simdi + 120, { venom: true });
+    const acik = df.satirlar.filter((x) => x.durum !== "bitti").map(D.defterSatirYazi);
+    assert.ok(!acik.some((x) => /3512|3625|3627 · Fotoğraf/.test(x)));
+    assert.ok(df.satirlar.map(D.defterSatirYazi).includes("3512 · Kanal paylaşımı · Kemal · bitti · kanala paylaşıldı (mesaj 15100)"));
+    // anlık görüntü depoda; kuru okuma hiçbir şey kapatmaz
+    await kart("sami", "505", 40, "🟦 VOLONTE · 3477 · satılan 2", ["fe:k:2026-11-10:3477"]); // önceki günün listesi
+    const kuru = await D.defterOku(o.env, simdi + 130, { kuru: true });
+    assert.deepEqual(kuru.kapanan.map((x) => x.neden), ["listeKapandi"]);
+    assert.ok((await bekleyen()).some((x) => x.mesaj === 40));
+    await D.defterOku(o.env, simdi + 140);
+    assert.ok(!(await bekleyen()).some((x) => x.mesaj === 40));
+    // onarım: yanlışlıkla "yenilendi" diye kapanmış AYRI kayıt yeniden açılır; gerçekten yenisi olan açılmaz
+    const id10 = (await (await o.env.STOK.get().fetch("https://stok/isd-oku", { method: "POST", body: "{}" })).json()).filter((x) => x.mesaj === 10).map((x) => x.id);
+    await o.env.STOK.get().fetch("https://stok/isd-isaretle", { method: "POST", body: JSON.stringify({ idler: id10, alan: "durum", deger: "yenilendi" }) }); // dışarıdan "yenilendi" işareti UYGULANMAZ (kararı depo verir)
+    assert.ok((await bekleyen()).some((x) => x.mesaj === 10));
+    o.stok.depo.sql.exec("UPDATE isd SET durum = 'yenilendi' WHERE id = ?", id10[0]); // 11 Kasım'ın yanlış kapanışı
+    const on = await (await o.env.STOK.get().fetch("https://stok/isd-onar", { method: "POST", body: JSON.stringify({ simdi: simdi + 150 }) })).json();
+    assert.equal(on.acilan, 1);
+    assert.deepEqual((await bekleyen()).map((x) => x.mesaj).sort(), [10, 12, 22]);
+  } finally { Date.now = gercek; }
 });

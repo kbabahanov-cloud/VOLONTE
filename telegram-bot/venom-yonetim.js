@@ -3,6 +3,7 @@
 // yapay zekâ bütçesinden, haftada bir ~0,02 $). Bütün sayılar Sami'nin deposundan (StokDO) ve ortak kayıttan (KV).
 import { stokIste } from "./stokbot.js";
 import { durYaz, durDurumu } from "./durdurma.js";
+import { venomDefterEsitle } from "./tek-defter.js"; // 12 Kasım: Venom'un verdiği her iş TEK DEFTERE de yazılır
 
 const oku = async (env, k, bos) => (await env.KAYIT.get(k, "json").catch(() => null)) ?? bos;
 const kaydet = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { expirationTtl: ttl } : undefined);
@@ -21,6 +22,7 @@ export async function isKaydet(env, bot, ne, simdi) {
   const l = await oku(env, "venom:bot:isler", []);
   l.push({ id: `${simdi}-${Math.random().toString(36).slice(2, 6)}`, bot, ne: kisaYaz(kodAdiSil(ne), 300), zaman: simdi, durum: "bekliyor" });
   await kaydet(env, "venom:bot:isler", l.slice(-60), 7 * 86400).catch(() => null);
+  await venomDefterEsitle(env, simdi).catch(() => null);
 }
 export async function isCevap(env, bot, simdi) {
   const l = await oku(env, "venom:bot:isler", []);
@@ -28,6 +30,7 @@ export async function isCevap(env, bot, simdi) {
   if (!x) return null;
   Object.assign(x, { durum: "bitti", bitis: simdi });
   await kaydet(env, "venom:bot:isler", l, 7 * 86400).catch(() => null);
+  await venomDefterEsitle(env, simdi).catch(() => null);
   return simdi - (x.zaman || 0) < 30 * 60 ? x : null; // 9 Kasım: 30 dk içindeki iş → Patron'un isteğinin cevabı (hemen gider); 13:09 sızıntısı 2 saatlik pencereden
 }
 export async function isHatirlat(env, simdi) {

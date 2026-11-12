@@ -9,11 +9,19 @@ const SAAT_FARKI = 3 * 3600;
 const para = (x) => Number(x).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const tarihSaat = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)} ${d.slice(11, 16)}`; };
 const birim = (d) => (!d || d === "$" || /^usd$/i.test(d) ? "$" : d);
-const gunlukMu = (s) => /^GUN:\d{4}-\d{2}-\d{2}$/.test(String((s && s.tablo) || ""));
+const gunlukMu = (s) => /^(GUN:\d{4}-\d{2}-\d{2}$|KASA:|KASAISLEM:)/.test(String((s && s.tablo) || "")); // günlük ciro ve kasa satırları yıllık toplama girmez
+// 12 Kasım (Patron): KASA GİDERİ — Vegawin kasa defterinde o gün "gider" yazılan toplam (para birimi ayrı). null = köprü kasa satırı göndermiyor
+export function kasaGideri(c, gun) {
+  if (!c || !(c.satirlar || []).some((s) => /^KASA(ISLEM)?:/.test(String(s.tablo || "")))) return null;
+  const b = {};
+  for (const s of c.satirlar) { if (String(s.tablo) !== `KASA:${gun}`) continue; const k = birim(s.doviz); b[k] = b[k] || { birim: k, tutar: 0, n: 0 }; b[k].tutar += Number(s.tutar) || 0; b[k].n += s.n || 0; }
+  return Object.values(b).sort((x, y) => x.birim.localeCompare(y.birim));
+}
+export const kasaIslemleri = (c) => ((c && c.satirlar) || []).filter((s) => /^KASAISLEM:/.test(String(s.tablo || ""))).map((s) => ({ islem: String(s.tablo).slice(10), birim: birim(s.doviz), n: s.n || 0, tutar: Number(s.tutar) || 0 })).sort((a, b) => b.tutar - a.tutar);
 // 11 Kasım (Patron): GÜNLÜK ciro — köprünün gönderdiği "GUN:<gün>" satırları (satış faturası 21, satıştan iade 22), para birimi ayrı.
 // Dönen: null = o gün için köprüden günlük satır hiç gelmemiş; yoksa { okuma, satirlar: [{ birim, satis, iade, net, fatura, iadeAdet }] }
 export function gunlukCiro(c, gun) {
-  if (!c || !(c.satirlar || []).some(gunlukMu)) return null; // köprü günlük satır göndermiyor (eski sürüm)
+  if (!c || !(c.satirlar || []).some((s) => /^GUN:/.test(String(s.tablo || "")))) return null; // köprü günlük satır göndermiyor (eski sürüm)
   const b = {};
   for (const s of c.satirlar) {
     if (String(s.tablo) !== `GUN:${gun}`) continue;
