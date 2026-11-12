@@ -2150,6 +2150,11 @@ export async function zincirDugmesi(env, cq, tg, simdi) {
   await siparisYaz(env, rec);
   if (rec.deneme) await denemeKaydi(env, rec.liste, `Hemra önerisi: ${oneri} (${kim}) → Venom → Patron kartı`);
 }
+// Model Patron kararıyla silindi mi / silinmesi onaylandı mı? (Kemal'in silme kaydı ya da onay kaydı)
+export async function modelSilindi(env, kod) {
+  try { if (await env.KAYIT.get(`silinen:${kod}`)) return true; } catch { /* */ }
+  try { return Boolean(((await env.KAYIT.get("silme:onayli", "json")) || {})[String(kod)]); } catch { return false; }
+}
 // Patron'un kararı (Venom → "bittiKarar"): repete / sil / bekle
 export async function bittiKararAdimi(env, simdi, tg) {
   const l = await stokIste(env, "/kuyruk-al", { ad: "bittiKarar" }).catch(() => []);
@@ -2866,7 +2871,9 @@ export async function siparisTakip(env, simdi, tg) {
     } else if (rec.durum === "bitti" && rec.karar === "stokBitene" && rec.stokKontrol && simdi >= rec.stokKontrol) {
       // 10 Kasım KESİN KURAL: mağaza stoğu bitince yeniden sorulur (Patron "sil" dediyse o zaman kaldırılır)
       const st = rec.deneme ? { var: false } : await magazaStoklari(env, rec.kod);
-      if (st.var) rec.stokKontrol = simdi + 86400;
+      // 12 Kasım (C10/C12): model Patron kararıyla SİLİNDİYSE (ya da silinmesi onaylandıysa) kayıt kapanır; "ne yapalım?" bir daha sorulmaz
+      if (!rec.deneme && (await modelSilindi(env, rec.kod))) { Object.assign(rec, { karar: "sil", durum: "kapandi", stokKontrol: null }); rec.log.push("model silindi (Patron) → kayıt kapandı, yeniden sorulmaz"); }
+      else if (st.var) rec.stokKontrol = simdi + 86400;
       else if (rec.deneme) rec.stokKontrol = null;
       else if (rec.silOnayli) {
         Object.assign(rec, { karar: "sil", durum: "kapandi", stokKontrol: null });
@@ -2890,6 +2897,7 @@ export async function siparisTakip(env, simdi, tg) {
       }
     } else if (rec.durum === "bitti" && rec.karar === "beklesin" && simdi >= rec.beklesinZaman && !rec.tekrarSoruldu) {
       rec.tekrarSoruldu = true;
+      if (!rec.deneme && (await modelSilindi(env, rec.kod))) { Object.assign(rec, { karar: "sil", durum: "kapandi" }); rec.log.push("model silindi (Patron) → kayıt kapandı, yeniden sorulmaz"); await siparisYaz(env, rec); continue; }
       rec.karar = null;
       await hemraKarti(env, tg, rec, "bitti", rec.cevaplayan || "fabrika", simdi); // 10 Kasım: yeni zincir (Hemra önerir, Patron onaylar)
     }

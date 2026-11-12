@@ -2897,3 +2897,27 @@ test("YENİ AKIŞ: 0 modelli liste Hemra'ya onay kartı olarak GİTMEZ — Sami 
   await f.fabrikaZincirAdimi(o.env, simdi + 600, tg2);
   assert.equal(JSON.parse(o.depo.get("sami:islemSonuc")).at(-1).siparis.length >= 1, true);
 });
+
+test("12 Kasım (C10/C12): Patron'un sildiği modelin fabrika 'bitti' kaydı kapanır; 'stok bitti, ne yapalım?' bir daha SORULMAZ. Silinmemiş model için stok bitince sorulur", async () => {
+  const f = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", AZIZ_ID: "444", BR_SORUMLU: "222", ALLOWED_IDS: "111,222", EKIP_IDS: "333,444", FUAT_ID: "557", NURI_ID: "555", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Nuri" }, { id: 556, ad: "Sinem" }, { id: 557, ad: "Fuat" }]));
+  const tg2 = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  const ayar = async (k) => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k }) })).json()).v || "null");
+  const simdi = Math.floor(Date.now() / 1000);
+  const ac = async (kod) => { const r = await f._test.siparisAc(o.env, { kod, renkler: [{ renk: "siyah", adet: 20 }], beden: "b", liste: "x", fotoKod: kod, grup: "fabrika", magaza: "BLACKROSE" }, simdi - 5 * 86400); Object.assign(r, { durum: "bitti", cevaplayan: "Sinem", karar: "stokBitene", stokKontrol: simdi - 60 }); await f._test.siparisYaz(o.env, r); return r; };
+  const a = await ac("3377"), b = await ac("3500");
+  o.depo.set("silinen:3377", JSON.stringify({ kod: "3377", kim: "Patron (Venom)", zaman: simdi - 3600, kopya: [] })); // 3377 Patron kararıyla silindi; mağaza stoğu ikisinde de yok
+  o.g.length = 0;
+  await f.siparisTakip(o.env, simdi, tg2);
+  const ra = await ayar(`fs:${a.id}`), rb = await ayar(`fs:${b.id}`);
+  assert.deepEqual([ra.durum, ra.karar, ra.stokKontrol], ["kapandi", "sil", null]); // kayıt kapandı
+  assert.ok(!o.g.some((x) => /3377/.test(JSON.stringify(x.govde)))); // 3377 için HİÇBİR kart / soru gitmedi
+  assert.ok(!((await ayar("fs:acik")) || []).includes(a.id)); // açık işlerden çıktı
+  assert.equal(rb.durum, "bitti"); // silinmemiş model: stok bitti → Hemra'ya yeniden sorulur (eski davranış aynen)
+  assert.ok(o.g.some((x) => /3500/.test(JSON.stringify(x.govde))));
+  assert.equal(await f.modelSilindi(o.env, "3500"), false);
+  o.depo.set("silme:onayli", JSON.stringify({ 3500: { kim: "Patron", zaman: simdi } }));
+  assert.equal(await f.modelSilindi(o.env, "3500"), true); // silinmesi ONAYLANAN model de sorulmaz
+});
