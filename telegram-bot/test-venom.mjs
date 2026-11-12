@@ -1547,7 +1547,7 @@ test("Venom kanal: 'sil' niyeti (kod / link / yanıt); bot yapamadıysa Patron'a
   o.cevaplar.push({ arac: "bota_yaz", girdi: { bot: "kemal", metin: "3512 yazısını düzelt" } }, { text: "Kemal yapamadı Patron." });
   await yazi(o, PATRON, "3512 yazısını Kemal düzeltsin");
   const tum = o.g.filter((x) => String(x.govde.chat_id) === String(PATRON) && x.govde.text).map((x) => x.govde.text);
-  assert.deepEqual(tum, ["Yapılamadı, sebep: Kemal: Bunu yapamıyorum: eski paylaşımın yazısını değiştirme yetkim yok. Şu an çözülüyor."]); // 11 Kasım: TEK mesaj, çelişki yok
+  assert.deepEqual(tum, ["Yapılamadı, sebep: Kemal: Bunu yapamıyorum: eski paylaşımın yazısını değiştirme yetkim yok."]); // 11 Kasım: TEK mesaj, çelişki yok
   assert.match(JSON.stringify(o.claude.at(-1).messages.at(-1)), /KEMAL YAPAMADI/);
   o.g.length = 0;
   // 12 Kasım: "sil" kelimesi kestirmesi yok → beyin kanal_paylasim_sil aracını seçer; stok yokken siler, stok VARKEN model kanaldan kaldırılmaz
@@ -1612,6 +1612,11 @@ test("11 Kasım REPETE SON HAL (Venom): Patron 'TEST-002 repete tekrar aç' → 
   assert.deepEqual((await kuyruguAl(o.env, "rkBaslat")).map((x) => x.kodlar), [["3490"]]);
   assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 3490 repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Fuat'a kart gider."]);
   assert.ok(!patronaGiden(o).some((x) => /Fuat'a gidecek mesaj/.test(x.govde.text)));
+  // 12 Kasım (Patron): Venom'un yazısı modelin GERÇEK fabrikasını gösterir — Celal'in modelinde "Celal'e kart gider"
+  await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "VOLONTE", urunler: [{ kod: "5074", adet: 8, fiyat: 20, celal: true }], simdi: 1 }) });
+  o.g.length = 0;
+  await v.aracCalistir({ ...o.env, __izin: "cevap" }, "mesaj_taslagi", { kime: "fuat", metin: "5074 modelinden repete rica ediyoruz: siyah 40." }, ist(11, 16, 10));
+  assert.deepEqual(patronaGiden(o).map((x) => x.govde.text), ["🔁 5074 repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Celal'e kart gider."]);
 });
 
 // ---------- 11 Kasım (Patron): VENOM VE SİSTEM — KÖKTEN DÜZELTME ----------
@@ -1806,6 +1811,12 @@ test("VENOM GENEL KURALLAR (11 Kasım): '$' tek başına fiyat değil; '…yapay
   const pm = patronaGiden(o3);
   assert.equal(pm.length, 1);
   assert.equal(pm[0].govde.text, "🧹 Kanal: 3512 paylaşımında sorun vardı (yazıda FİYAT var) → Kemal yazıyı düzeltti.\nKanıt: https://t.me/kanaladi/15020");
+  // 12 Kasım (Patron): elle yazılmış, kodsuz fiyatlı mesaj — "Şu an çözülüyor" YAZILMAZ; gerçek durum yazılır (Kemal düzeltemez, mesaj kanalda duruyor)
+  o3.g.length = 0;
+  await guncelleme({ update_id: uid++, channel_post: { message_id: 15168, date: ist(12, 14, 21), chat: { id: -100, type: "channel" }, text: "44-46-48-50 size have Price 46$" } }, o3.env);
+  assert.equal(duzelt.length, 1); // kodsuz mesaj Kemal'e gönderilmez
+  assert.deepEqual(patronaGiden(o3).map((x) => x.govde.text), ["⚠️ Kanalda elle yazılmış mesajda sorun (yazıda FİYAT var): \"44-46-48-50 size have Price 46$\"\nhttps://t.me/kanaladi/15168\nKemal düzeltemez: bu onun paylaşımı değil ve model kodu yok. Mesaj kanalda duruyor."]);
+  assert.ok(!patronaGiden(o3).some((x) => /çözülüyor/.test(x.govde.text)));
 });
 
 test("TEK DEFTER KAYNAĞINDA (12 Kasım): depo tek listeyi kendisi kurar; bütün botlar düğmesi kalkan kartı bildirir; aynı modelin iki AYRI kaydı ayrı iş kalır; Venom / Pelin / Kemal işleri tek satır; biten iş kanıtla kapanır", async () => {

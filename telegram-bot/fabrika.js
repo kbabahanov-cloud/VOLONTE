@@ -1907,9 +1907,9 @@ async function azKaldi(env, tg, rec, { kim }, simdi, aynen) {
 // 11 Kasım (yeni akış): Sami'nin önerisi — hızlı satıyor ve az kaldıysa repete; satış yoksa bekle
 export function samiOnerisi(kalan, s7) {
   const bitis = s7 > 0 ? Math.max(1, Math.ceil(kalan / (s7 / 7))) : null;
-  if (kalan <= 0) return s7 > 0 ? `Mağazada kalmadı, satıyordu (7 günde ${s7}); repete öneriyorum.` : "Mağazada kalmadı, son 7 günde satış yok; karar sizde.";
+  if (!s7) return kalan <= 0 ? "Satış yok, repete önerilmez; mağazada kalmadı, karar sizde." : `Satış yok, repete önerilmez; ${kalan} adet var, bitene kadar beklemeyi öneriyorum.`; // 12 Kasım (Patron): satış hızı 0 → repete önerilmez
+  if (kalan <= 0) return `Mağazada kalmadı, satıyordu (7 günde ${s7}); repete öneriyorum.`;
   if (s7 >= 7 || (bitis != null && bitis <= 7)) return `Hızlı satıyor (7 günde ${s7}), ${kalan} adet kaldı, ~${bitis} günde biter; repete öneriyorum.`;
-  if (!s7) return `Son 7 günde satış yok, ${kalan} adet var; bitene kadar beklemeyi öneriyorum.`;
   return `Yavaş satıyor (7 günde ${s7}), ${kalan} adet kaldı, ~${bitis} günde biter; bitene kadar beklenebilir.`;
 }
 // Önerilen repete dağılımı: son istekteki renk/beden oranı, en az 40 adede ölçeklenir, 4'ün katlarına yuvarlanır (seri = 4)
@@ -1927,7 +1927,8 @@ export function dagilimOner(onceki, rec = null) {
 }
 // Sinem "Bitti" → Hemra'ya HEMEN kart: fotoğraf + kod + mağazada kalan + son 7 gün / yıllık satış + Sami'nin önerisi + önerilen dağılım.
 // Düğmeler: [Repete] [Bitene kadar bekle] [Sil] (Sil kararı Patron'a gider; Hemra silemez)
-async function hemraKartiYeni(env, tg, rec, tur, kim, simdi) {
+// Repete verisi (kalan, satış hızı, önerilen dağılım). 12 Kasım (Patron): satış hızı 0 ise dağılım ÖNERİLMEZ (Hemra isterse kendisi yazar).
+async function rkVeriOku(env, rec, simdi) {
   let kalan, kalanYazi, s7, yil;
   const tv = rec.test ? rec.testVeri || {} : null;
   if (tv) { kalan = Number(tv.kalan) || 0; kalanYazi = `${kalan} adet`; s7 = Number(tv.s7) || 0; yil = Number(tv.yil) || 0; }
@@ -1939,7 +1940,11 @@ async function hemraKartiYeni(env, tg, rec, tur, kim, simdi) {
     s7 = Number(((await stokIste(env, "/satis-donem", { basla: gunAnahtari(simdi - 7 * 86400), bitis: gunAnahtari(simdi) }).catch(() => ({}))) || {})[rec.kod]) || 0;
     yil = Number(((await stokIste(env, "/satis-donem", { basla: gunAnahtari(simdi - 365 * 86400), bitis: gunAnahtari(simdi) }).catch(() => ({}))) || {})[rec.kod]) || 0;
   }
-  const dagilim = tv && tv.dagilim ? tv.dagilim : dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[rec.kod], rec);
+  const dagilim = !s7 ? null : tv && tv.dagilim ? tv.dagilim : dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[rec.kod], rec);
+  return { kalan, kalanYazi, s7, yil, dagilim };
+}
+async function hemraKartiYeni(env, tg, rec, tur, kim, simdi) {
+  const { kalan, kalanYazi, s7, yil, dagilim } = await rkVeriOku(env, rec, simdi);
   rec.rkVeri = { kalan, s7, yil, dagilim };
   const metin = [`${rec.deneme ? DENEME : ""}${magazaAdi(rec.magaza)} · ${rec.kod}`,
     tur === "stokBitti" ? "📦 Mağaza stoğu bitti (fabrika daha önce \"bitti\" demişti)." : `❌ Fabrikada bitti (${kim}).`,
@@ -1955,6 +1960,7 @@ async function hemraKartiYeni(env, tg, rec, tur, kim, simdi) {
   rec.hemraOneri = null;
 }
 async function hemraKarti(env, tg, rec, tur, kim, simdi) {
+  if (tur !== "az" && !rec.yeni && !rec.deneme && (await yeniAkisAcik(env))) rec.yeni = true; // 12 Kasım (Patron): dağılım Hemra'nın İLK kartında belirlenir
   if (rec.yeni && tur !== "az") return hemraKartiYeni(env, tg, rec, tur, kim, simdi);
   const st = rec.deneme ? null : await magazaStoklari(env, rec.kod);
   const stok = rec.deneme ? "— (deneme)" : st && st.yazi ? st.yazi : "yok (0)";
@@ -2120,7 +2126,10 @@ export async function zincirDugmesi(env, cq, tg, simdi) {
   if (!rec || !["bitti", "gelecek", "repete", "bekliyor"].includes(rec.durum) || rec.hemraOneri) return cevapla(rec && rec.hemraOneri ? `${rec.hemraOneri.kim} zaten seçti.` : "Bu karar artık geçerli değil.");
   let oneri = { r: "repete", s: "sil", w: "bekle", q: "sor" }[islem];
   if (!oneri) return cevapla("Geçersiz düğme.");
-  if (rec.yeni && (oneri === "repete" || oneri === "bekle")) { // 11 Kasım (yeni akış)
+  // 12 Kasım (Patron): Hemra "Repete" derse (hangi karttan olursa olsun, ör. "az kaldı") dağılım AYNI kartta belirlenir → Patron BİR KEZ onaylar → fabrika; iş Hemra'ya geri dönmez
+  const rkYolu = oneri === "repete" && !rec.yeni && !rec.deneme && (await yeniAkisAcik(env));
+  if (rkYolu && !rec.rkVeri) { const v = await rkVeriOku(env, rec, simdi); rec.rkVeri = { kalan: v.kalan, s7: v.s7, yil: v.yil, dagilim: v.dagilim }; }
+  if ((rec.yeni && (oneri === "repete" || oneri === "bekle")) || rkYolu) { // 11 Kasım (yeni akış)
     const kart = rec.hemraMesaj && rec.hemraMesaj[3] ? String(rec.hemraMesaj[3]).replace(/\nNe yapalım\?$/, "") : `${rec.deneme ? DENEME : ""}${magazaAdi(rec.magaza)} · ${rec.kod}`;
     if (oneri === "repete") { // Repete → dağılım onayı → Patron'a kart ([Onaylıyorum] [Reddediyorum]) → Fuat'ın repete kartı
       const acik = await acikRepete(env, rec.kod, { deneme: Boolean(rec.deneme) }).catch(() => null);

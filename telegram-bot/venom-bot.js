@@ -518,7 +518,10 @@ export async function aracCalistir(env, ad, g, simdi) {
       for (const kod of kodlar) { const acik = await acikRepete(env, kod).catch(() => null); if (acik) return `AÇIK REPETE VAR — taslak HAZIRLANMADI. Patron'a aynen şunu söyle: ${engelMetni(acik)}`; }
       if (kodlar.length && (await yeniAkisAcik(env))) { // eski düz yazı yolu KAPALI: repete kartla istenir (Hemra dağılımı onaylar → Patron kartı → Fuat kartı)
         await kuyrugaEkle(env, "rkBaslat", { id: `rb:${kodlar.join("-")}:${simdi}`, kodlar, kim: "Patron", zaman: simdi });
-        const bilgi = `🔁 ${kodlar.join(", ")} repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra Fuat'a kart gider.`;
+        const tedR = await stokIste(env, "/tedarikci", { kodlar }).catch(() => ({}));
+        const celalR = kodlar.filter((k) => (tedR[k] || {}).tedarikci === "CELAL" || celalKoduMu(k));
+        const kimeR = !celalR.length ? "Fuat'a" : celalR.length === kodlar.length ? "Celal'e" : `Celal'e (${celalR.join(", ")}) ve Fuat'a (${kodlar.filter((k) => !celalR.includes(k)).join(", ")})`; // 12 Kasım: modelin gerçek fabrikası
+        const bilgi = `🔁 ${kodlar.join(", ")} repete: Hemra'ya dağılım kartı gitti. Hemra onaylayınca onay kartı size gelecek; onayınızdan sonra ${kimeR} kart gider.`;
         if (!env.__llmArac) await yaz(env, bilgi, { posta: { izin: "cevap" } });
         return `Repete artık KARTLA isteniyor (Fuat'a düz yazı gitmez). Yapılan: ${bilgi} Patron'a sadece bunu söyle.`;
       }
@@ -655,7 +658,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (cevap && YAPAMADI.test(cevap)) {
       // 11 Kasım (Patron, ÇELİŞKİ YASAK): ara mesaj YOK — Venom önce başka yolla çözmeyi dener, sonra TEK mesaj (kanıtlı tamam / yapılamadı)
       turKanit(env).yapamadi.push(`${BOT_AD[g.bot]}: ${etiketTemizle(cevap).replace(/\s+/g, " ").slice(0, 200)}`);
-      if (env.__sohbette === false || env.__sohbette == null) await yaz(env, `Yapılamadı, sebep: ${BOT_AD[g.bot]} — ${etiketTemizle(cevap).replace(/\s+/g, " ").slice(0, 300)}. Şu an çözülüyor.`, { posta: { izin: "cevap" } });
+      if (env.__sohbette === false || env.__sohbette == null) await yaz(env, `Yapılamadı, sebep: ${BOT_AD[g.bot]} — ${etiketTemizle(cevap).replace(/\s+/g, " ").slice(0, 300)}.`, { posta: { izin: "cevap" } });
       return `${BOT_AD[g.bot].toUpperCase()} YAPAMADI. Cevabı: «${etiketTemizle(cevap).slice(0, 400)}». Patron'a HENÜZ bir şey yazılmadı. Başka yolun varsa (ör. kanal_paylasim_sil, kanal_paylasim_duzelt) HEMEN kullan. Sonra TEK mesaj: ya "Tamam, kanıt: <kanal linki / mesaj no>" ya da "Yapılamadı, sebep: …, şu an çözülüyor". Kanıtın yoksa "düzeltildi/yapıldı" DEME.`;
     }
     return cevap ? `${BOT_AD[g.bot]}'in cevabı: «${cevap.slice(0, 400)}». Bu iş YAPILDI demek değil; Patron'a sadece bu cevabı aktar, "verdim/hallettim" deme.` : `${BOT_AD[g.bot]}'e iletildi, henüz cevap yok. Patron'a "ilettim, sonucu gelince söylerim" de; "verdim/hallettim" DEME.`;
@@ -1429,7 +1432,8 @@ async function kanalIzle(env, post, duzenlendi, simdi) {
     const link = kanal && kanal.kullanici ? `https://t.me/${kanal.kullanici}/${post.message_id}` : `#${post.message_id}`;
     const r = kod ? await botaSor(env, "kemal", "paylasimDuzelt", { kod, ids: [post.message_id], yerinde: true, kim: "Venom (kanal kontrolü)" }) : null;
     if (r && r.ok) { await cozdumYaz(env, `${kod} kanal yazısı`, simdi); await yaz(env, `🧹 Kanal: ${kod} paylaşımında sorun vardı (${sorunlar.join("; ")}) → Kemal yazıyı düzeltti.\nKanıt: ${link}`, { posta: { tur: "cevap", izin: "cevap" } }); }
-    else await yaz(env, `⚠️ Kanalda sorun — ${kod || "kodsuz"}: ${sorunlar.join("; ")}\n${link}\nDüzeltilemedi, sebep: ${r ? r.hata || "Kemal düzeltemedi" : kod ? "Kemal'e ulaşılamadı" : "model kodu okunamadı"}. Şu an çözülüyor.`, { posta: { tur: "kritik" } });
+    else await yaz(env, kod ? `⚠️ Kanalda sorun — ${kod}: ${sorunlar.join("; ")}\n${link}\nDüzeltilemedi, sebep: ${r ? r.hata || "Kemal düzeltemedi" : "Kemal'e ulaşılamadı"}. Kanalda duruyor.`
+      : `⚠️ Kanalda elle yazılmış mesajda sorun (${sorunlar.join("; ")}): "${String(yazi).replace(/\s+/g, " ").slice(0, 160)}"\n${link}\nKemal düzeltemez: bu onun paylaşımı değil ve model kodu yok. Mesaj kanalda duruyor.`, { posta: { tur: "kritik" } });
   }
 }
 
@@ -1481,7 +1485,7 @@ export function tekMesajKapisi(metin, t) {
   if (!t || (!t.yapamadi.length && !t.kanit.length && !t.sirada.length)) return metin;
   const kanitSatiri = t.kanit.length ? `Kanıt: ${t.kanit.join(" · ")}` : "";
   const siraSatiri = t.sirada.length ? `Sırada: ${t.sirada.join(" · ")}. Paylaşılınca mesaj numarasıyla yazacağım.` : "";
-  if (!t.kanit.length && !t.sirada.length) return `Yapılamadı, sebep: ${t.yapamadi.join(" · ").slice(0, 400).replace(/[.\s]+$/, "")}. Şu an çözülüyor.`;
+  if (!t.kanit.length && !t.sirada.length) return `Yapılamadı, sebep: ${t.yapamadi.join(" · ").slice(0, 400).replace(/[.\s]+$/, "")}.`;
   if (!t.kanit.length && BASARI_IDDIASI.test(metin)) return [`Henüz tamam değil.`, siraSatiri, t.yapamadi.length ? `Yapılamayan: ${t.yapamadi.join(" · ").slice(0, 300)}` : ""].filter(Boolean).join("\n");
   return [metin.trim(), kanitSatiri, siraSatiri].filter(Boolean).join("\n");
 }
@@ -2564,7 +2568,7 @@ export async function kanalKontrolCevabi(env, kodlar, simdi) {
       if (env.__kuru) { satir.push(`${kod}: ${gunSaatKisa(x.zaman)} paylaşımında ${s.join("; ")} (deneme: düzeltme başlatılmadı) ${link}`); continue; }
       const r = await botaSor(env, "kemal", "paylasimDuzelt", { kod, ids: [x.id], yerinde: true, kim: "Venom (kanal kontrolü)" });
       if (r && r.ok) { await cozdumYaz(env, `${kod} kanal yazısı`, simdi); satir.push(`${kod}: ${gunSaatKisa(x.zaman)} paylaşımında ${s.join("; ")} → Kemal yazıyı düzeltti. Kanıt: ${link}`); }
-      else satir.push(`${kod}: ${s.join("; ")} — düzeltilemedi, sebep: ${r ? r.hata || "Kemal düzeltemedi" : "Kemal'e ulaşılamadı"}. Şu an çözülüyor. ${link}`);
+      else satir.push(`${kod}: ${s.join("; ")} — düzeltilemedi, sebep: ${r ? r.hata || "Kemal düzeltemedi" : "Kemal'e ulaşılamadı"}. Kanalda duruyor. ${link}`);
     }
   }
   return satir.slice(0, 5).join("\n");

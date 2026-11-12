@@ -134,7 +134,7 @@ const dagilimSatiri = (rec) => (rec.dagilim ? `${dagilimYazi(rec.dagilim)} (topl
 export function hemraMetni(rec) {
   return [`${D(rec)}🔁 REPETE ÖNERİSİ — ${baslik(rec)}`,
     `${rec.kaynak === "patron" ? "Patron repete istedi" : "Fabrikada bitti"} · mağazada kalan: ${rec.kalan} adet`,
-    `Satış hızı: son 7 günde ${rec.satis7} adet${rec.bitisGun ? ` · bu hızla ~${rec.bitisGun} günde biter` : ""}`,
+    rec.satis7 > 0 ? `Satış hızı: son 7 günde ${rec.satis7} adet${rec.bitisGun ? ` · bu hızla ~${rec.bitisGun} günde biter` : ""}` : "Satış hızı: son 7 günde satış yok, repete önerilmez",
     `Önerilen repete: ${dagilimSatiri(rec)}`].join("\n");
 }
 // Hemra'nın kartının (dağılım onayı aşamasındaki) tam yazısı: "bitti" kartından geldiyse o kartın yazısı korunur
@@ -154,7 +154,7 @@ export async function oneriAc(env, tg, g, simdi) {
   const deneme = Boolean(g.deneme);
   const engel = await acikRepete(env, kod, { deneme });
   if (engel) return { engel, metin: engelMetni(engel) };
-  const adet = dagilimAdet(g.dagilim);
+  let adet = dagilimAdet(g.dagilim);
   if (g.dagilim && adet < REPETE_EN_AZ) return { hata: `Repete en az ${REPETE_EN_AZ} adet olmalı (yazılan ${adet}).` };
   let kalan = g.kalan, satis7 = g.satis7;
   if (!g.test) {
@@ -163,6 +163,7 @@ export async function oneriAc(env, tg, g, simdi) {
     kalan = st ? Math.max(0, Number(st.toplam) || 0) : 0;
     satis7 = Number((donem || {})[kod]) || 0;
   }
+  if (g.samiOnerisi && !(Number(satis7) > 0)) { g = { ...g, dagilim: null }; adet = 0; } // 12 Kasım (Patron): satış yoksa Sami dağılım ÖNERMEZ (Hemra isterse kendisi yazar)
   const uretici = g.uretici || (g.test ? "fuat" : ((await stokIste(env, "/tedarikci", { kodlar: [kod] }).catch(() => ({})))[kod] || {}).tedarikci === "CELAL" ? "celal" : "fuat");
   const rec = { id: yeniId(kod, deneme, simdi), kod, uretici, magaza: g.magaza || "VOLONTE", deneme, test: Boolean(g.test), ikinciDene: Boolean(g.ikinciDene), kaynak: g.kaynak || null, donSn: g.donSn || null,
     dagilim: g.dagilim || null, adet, kalan: Number(kalan) || 0, satis7: Number(satis7) || 0, durum: "hemra", zaman: simdi, mesajlar: {}, kanit: [] };
@@ -426,9 +427,6 @@ async function islemler(env, simdi, tg) {
         const r = await oneriAc(env, tg, { kod, magaza: is.magaza || "VOLONTE", dagilim: is.dagilim, deneme: true, test: true, kalan: is.kalan, satis7: is.satis7, ikinciDene: is.ikinciDene !== false, donSn: is.donSn || null }, simdi);
         Object.assign(s, { id: r.rec ? r.rec.id : null, hata: r.hata || null, kanit: r.rec ? r.rec.kanit : null });
         if (r.rec) { r.rec.fuatHaber = s.fuatHaber; await rkYaz(env, r.rec); }
-      } else if (is.tur === "oneriAc") { // 12 Kasım: Patron'un verdiği repete kararı (gerçek) — Hemra'ya dağılım kartı {kod, magaza}; üretici (Fuat / Celal) kendiliğinden
-        const r = await oneriAc(env, tg, { kod: String(is.kod), magaza: is.magaza || "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[String(is.kod)]), kaynak: "patron" }, simdi);
-        Object.assign(s, { kod: is.kod, rid: r.rec ? r.rec.id : null, uretici: r.rec ? r.rec.uretici : null, engel: r.engel ? r.metin : null, hata: r.hata || null, kanit: r.rec ? r.rec.kanit : null });
       } else if (is.tur === "kayitAc") { // Patron'un bildirdiği, Fuat'ın zaten onayladığı gerçek repete
         const kod = String(is.kod);
         const engel = await acikRepete(env, kod, { deneme: false });
@@ -504,7 +502,7 @@ export async function repeteKartAdimi(env, simdi, tg) {
       const magazalar = new Set(((bilgi && bilgi.satirlar) || []).map((x) => x.magaza));
       if (!magazalar.size) continue; // Vegawin'de olmayan sayı (ör. adet) model sayılmaz
       bilinen++;
-      const r = await oneriAc(env, tg, { kod, magaza: magazalar.size === 1 && magazalar.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[kod]), kaynak: "patron" }, simdi);
+      const r = await oneriAc(env, tg, { kod, magaza: magazalar.size === 1 && magazalar.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[kod]), samiOnerisi: true, kaynak: "patron" }, simdi);
       if (r.engel || r.hata) await kuyruk(env, "rkSonuc", { id: `rb:${kod}:${simdi}`, rid: `rb-${kod}`, metin: r.engel ? r.metin : `⚠️ ${kod} repete başlatılamadı: ${r.hata}` });
     }
     if (!bilinen) await kuyruk(env, "rkSonuc", { id: `rb:yok:${simdi}`, rid: "rb-yok", metin: `⚠️ Repete başlatılamadı: ${(b.kodlar || [b.kod]).join(", ")} Vegawin'de bulunamadı.` });
