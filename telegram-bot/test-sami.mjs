@@ -657,7 +657,7 @@ test("Celal: listede Celal notu (iki kart notu); onayda CELAL modeli SADECE Cela
   const cid = giden.find((x) => x.govde.chat_id === 777).govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 777, first_name: "Celal" }, data: `fc:g:${cid}`, message: { chat: { id: 777 }, message_id: 3 } } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /👤 Celal · 5079 → Gelecek/);
+  assert.match(cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "333").govde.text, /👤 Celal · 5079 → ✅ Onaylandı, gelecek/); // 12 Kasım: Gelecek = onay, süre sorulmaz
   // yazıyla başkasının modeli
   o.g.length = 0;
   await g2({ message: { chat: { id: 777, type: "private" }, from: { id: 777, first_name: "Celal" }, text: "3194 geldi" } }, o.env);
@@ -1820,18 +1820,16 @@ test("fabrika zinciri: süre düğmeleri, geri al, az kaldı, bitti → Fuat ona
   const id = kart("3194").govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   const id2 = kart("3100").govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   const mid = 51 + o.g.indexOf(kart("3194")); // test Telegram'ının verdiği mesaj numarası
-  // 1) Gelecek → süre düğmeleri + ↩️ Geri al (kırmızı)
+  // 1) 12 Kasım (Patron): "Gelecek" = onay — süre SORULMAZ; kart "Onaylandı, gelecek" olur (sadece ↩️ Geri al), Hemra'ya bilgi
   o.g.length = 0;
   await bas(556, `fc:g:${id}`, mid);
-  const sure = o.g.find((x) => x.metod === "editMessageCaption" && /Kaç günde hazır olur\?/.test(x.govde.caption));
-  assert.deepEqual(sure.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["⏱ 4-6 gün", "⏱ 10-15 gün", "⏱ 15+ gün", "✏️ Tarih yaz", "↩️ Geri al"]);
-  assert.equal(sure.govde.reply_markup.inline_keyboard.at(-1)[0].style, "danger");
-  await bas(556, `fc:t:${id}:6`, 501);
-  assert.ok(o.g.some((x) => x.govde.chat_id === "333" && /Sinem · 3194 → Gelecek — 4-6 gün/.test(x.govde.text || "")));
-  // ✏️ Tarih yaz → yazıyla tarih
-  await bas(556, `fc:t:${id}:y`, 501);
-  await yaz(556, "Sinem", "20.11");
-  assert.match(o.g.filter((x) => String(x.govde.chat_id) === "556").at(-1).govde.text, /3194: 20\.11 \(tarih\)/);
+  assert.ok(!o.g.some((x) => /Kaç günde|Ne zaman hazır/.test(x.govde.caption || x.govde.text || "")));
+  const onay = o.g.find((x) => x.metod === "editMessageCaption" && String(x.govde.chat_id) === "556");
+  assert.match(onay.govde.caption, /\n\n✅ Sinem: Onaylandı, gelecek$/);
+  assert.deepEqual(onay.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["↩️ Geri al"]);
+  assert.equal(onay.govde.reply_markup.inline_keyboard.at(-1)[0].style, "danger");
+  assert.ok(o.g.some((x) => x.govde.chat_id === "333" && /Sinem · 3194 → ✅ Onaylandı, gelecek/.test(x.govde.text || "")));
+  assert.equal(JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `fs:${id}` }) })).json()).v).durum, "gelecek");
   // 2) Geri al → cevap iptal, kart aynı fotoğrafla en alta yeniden
   o.g.length = 0;
   await bas(556, `fc:u:${id}`, 501);
@@ -1839,6 +1837,15 @@ test("fabrika zinciri: süre düğmeleri, geri al, az kaldı, bitti → Fuat ona
   assert.match(yeni.govde.caption, /↩️ Cevap geri alındı — yeniden seçin/);
   assert.deepEqual(yeni.govde.reply_markup.inline_keyboard.flat().map((d) => d.text).slice(0, 3), ["✅ Gelecek", "🔁 Repete olacak", "❌ Bitti, gelmeyecek"]);
   assert.equal(JSON.parse(o.depo.get("sami:geriAllar"))[0].tur, "fabrika kartı");
+  // 2b) "Repete olacak" → süre SADECE 4-8 gün / 10-15 gün (+ ↩️ Geri al); seçince repete kaydı (Hemra'ya bilgi)
+  const mid2 = 51 + o.g.indexOf(yeni);
+  o.g.length = 0;
+  await bas(556, `fc:r:${id}`, mid2);
+  const rs = o.g.find((x) => x.metod === "editMessageCaption" && /Ne zaman hazır olur\?/.test(x.govde.caption || ""));
+  assert.deepEqual(rs.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["⏱ 4-8 gün", "⏱ 10-15 gün", "↩️ Geri al"]);
+  await bas(556, `fc:s:${id}:8`, mid2);
+  assert.ok(o.g.some((x) => x.govde.chat_id === "333" && /Sinem · 3194 → Repete olacak — 4-8 gün/.test(x.govde.text || "")));
+  assert.equal(JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `fs:${id}` }) })).json()).v).durum, "repete");
   // 3) Az kaldı → Hemra'ya "repete kararı verelim mi?"
   o.g.length = 0;
   await bas(556, `fc:z:${id}`, 502);
@@ -1861,7 +1868,7 @@ test("fabrika zinciri: süre düğmeleri, geri al, az kaldı, bitti → Fuat ona
   assert.deepEqual(kanit.map((x) => [x.kim, x.ne]), [["Sinem", "Bitti, gelmeyecek"], ["Fuat", "Onayladı: bitti"]]);
   assert.match(f.kanitMetni("3100", kanit), /^📒 3100 fabrika kaydı \(silinemez defter\):\n\d+ \S+ \d\d:\d\d Sinem: Bitti, gelmeyecek — "❌ Bitti, gelmeyecek"\n\d+ \S+ \d\d:\d\d Fuat: Onayladı: bitti/);
   assert.equal((await (await o.env.STOK.get().fetch("https://stok/arsiv-dogrula", { method: "POST", body: "{}" })).json()).tamam, true);
-  assert.deepEqual((await f.kanitGecmisi(o.env, "3194")).map((x) => x.ne.replace(/ \(~[\d.]+\)$/, "")).slice(0, 4), ["Gelecek (süre soruldu)", "Gelecek — 4-6 gün", "Gelecek — 20.11 (tarih)", "Geri aldı (önceki: ✅ Sinem: Gelecek — 20.11 (tarih) (~20.11.2026))"]);
+  assert.deepEqual((await f.kanitGecmisi(o.env, "3194")).map((x) => x.ne.replace(/ \(~[\d.]+\)$/, "")).slice(0, 4), ["Onaylandı, gelecek", "Geri aldı (önceki: ✅ Sinem: Onaylandı, gelecek)", "Repete olacak (süre soruldu)", "Repete olacak — 4-8 gün"]);
   // 6) Hemra "Repete öner" → Venom'a (Patron kartı) fotoğraf + kod + görüş
   await bas(333, `fh:r:${id2}`, 8);
   const oneri = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "bittiOneri" }) })).json();
@@ -1897,14 +1904,13 @@ test("fabrika zinciri: Sinem yazıyla (bitti / 5 gün / hepsi), mal geldi + adet
   // gönderim parça parça (4 model / çalışma) — 3 model tek seferde gider
   const bitti = o.g.find((x) => String(x.govde.chat_id) === "556" && /VOLONTE LİSTESİ – SONU/.test(x.govde.text || ""));
   assert.equal(bitti.govde.reply_markup.inline_keyboard[0][0].text, "✅ Hepsi gelecek");
-  // Toplu: Hepsi gelecek → 10-15 gün → bütün kartlar
+  // Toplu: Hepsi gelecek → 12 Kasım (Patron): süre SORULMAZ — bütün kartlar "Onaylandı, gelecek"
   o.g.length = 0;
   await bas(556, bitti.govde.reply_markup.inline_keyboard[0][0].callback_data, 90);
-  const sec = o.g.find((x) => x.metod === "editMessageText" && /ne zaman hazır olur\?/.test(x.govde.text));
-  await bas(556, sec.govde.reply_markup.inline_keyboard[0][1].callback_data, 90); // 10-15 gün
+  assert.ok(!o.g.some((x) => /ne zaman hazır olur\?/i.test(x.govde.text || "")));
   const ac = await (await o.env.STOK.get().fetch("https://stok/fs-ozet", { method: "POST", body: "{}" })).json();
-  assert.deepEqual(ac.map((x) => [x.kod, x.durum, x.teslimSure]).sort(), [["3100", "gelecek", "10-15 gün"], ["3194", "gelecek", "10-15 gün"], ["3628", "gelecek", "10-15 gün"]]);
-  assert.ok(o.g.some((x) => x.govde.chat_id === "333" && /Sinem · 🟦 VOLONTE: hepsi gelecek — 10-15 gün .*3 model/.test(x.govde.text || "")));
+  assert.deepEqual(ac.map((x) => [x.kod, x.durum, x.teslimSure]).sort(), [["3100", "gelecek", null], ["3194", "gelecek", null], ["3628", "gelecek", null]]);
+  assert.ok(o.g.some((x) => x.govde.chat_id === "333" && /Sinem · 🟦 VOLONTE: hepsi onaylandı, gelecek, 3 model/.test(x.govde.text || "")));
   // Yazıyla: "3628 5 gün", "3100 bitti"
   o.g.length = 0;
   await yaz(556, "Sinem", "3628 5 gün, 3100 bitti");
@@ -2997,9 +3003,11 @@ test("12 Kasım CELAL — UÇTAN UCA (sahte Telegram, kimseye mesaj gitmez): Azi
   const dug = (x, re) => x.govde.reply_markup.inline_keyboard.flat().find((b) => re.test(b.text)).callback_data;
   o.g.length = 0;
   await bas(600, dug(kart5068, /Gelecek/), "Celal", mid68);
-  const sure = o.g.find((x) => String(x.govde.chat_id) === "600" && x.govde.reply_markup && /Kaç günde/.test(yazi(x)));
-  assert.ok(sure, "Celal'e süre sorusu gelmedi");
-  await bas(600, sure.govde.reply_markup.inline_keyboard.flat()[0].callback_data, "Celal", mid68);
+  assert.ok(!o.g.some((x) => /Kaç günde|Ne zaman hazır/.test(yazi(x)))); // 12 Kasım: "Gelecek" = onay, süre SORULMAZ
+  const onay68 = o.g.find((x) => /^edit/.test(x.metod) && String(x.govde.chat_id) === "600");
+  assert.equal(yazi(onay68), "5068 · Büyük (44-50) · siyah 12\n\n✅ Celal: Onaylandı, gelecek");
+  assert.deepEqual(onay68.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["↩️ Geri al"]);
+  assert.ok(kim(333).some((x) => /👤 Celal · 5068 → ✅ Onaylandı, gelecek/.test(yazi(x)))); // Hemra'ya bilgi
   o.g.length = 0;
   await bas(600, dug(kart5076, /Bitti/), "Celal", mid76);
   for (const id of [555, 556, 557]) assert.equal(kim(id).length, 0); // Fuat'a "bitti onayı" GİTMEZ (Celal kendisi)
@@ -3083,4 +3091,30 @@ test("12 Kasım CELAL — fotoğrafsız: Celal'in modeli (CELAL işaretli ya da 
   const patron = o.g.filter((x) => String(x.govde.chat_id) === "111").map(yazi);
   assert.ok(!patron.some((t) => /5068|5078/.test(t)), patron.join(" | ")); // Celal için "fotoğraf bulunamadı" yok
   assert.ok(patron.some((t) => /📷 3394 fotoğraf bulunamadı/.test(t))); // diğer modelde kural aynı
+});
+
+test("12 Kasım: kartYenidenGonder — listenin açık fabrika kartı kapanır (düğmesiz), aynı sipariş yeni kartla aynı kişiye (Celal) gider; başka liste etkilenmez", async () => {
+  const f = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }, { id: 600, ad: "Celal Kayran", grup: "celal" }]));
+  const simdi = Math.floor(Date.now() / 1000);
+  const tgS = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 700 + o.g.length } }; };
+  const a = await f._test.siparisAc(o.env, { kod: "5068", beden: "b", renkler: [{ renk: "siyah", adet: 8 }], liste: "L1", deneme: false, fotoKod: "5068", grup: "celal", magaza: "VOLONTE" }, simdi);
+  Object.assign(a, { durum: "sureSoruluyor", cevaplayan: "Celal", mesajlar: [["600", 2240, "metin"]] }); await f._test.siparisYaz(o.env, a);
+  const b = await f._test.siparisAc(o.env, { kod: "5068", beden: "b", renkler: [{ renk: "siyah", adet: 8 }], liste: "L2", deneme: false, fotoKod: "5068", grup: "celal", magaza: "VOLONTE" }, simdi);
+  o.depo.set("sami:islemler", JSON.stringify([{ tur: "kartYenidenGonder", liste: "L1", kodlar: ["5068"], neden: "deneme yeniden" }]));
+  await f.fabrikaZincirAdimi(o.env, simdi, tgS);
+  const sn = JSON.parse(o.depo.get("sami:islemSonuc")).at(-1);
+  assert.equal(sn.l.length, 1);
+  assert.equal(sn.l[0].giden, 1);
+  const kapat = o.g.find((x) => x.metod === "editMessageText" && x.govde.message_id === 2240);
+  assert.equal(kapat.govde.text, "5068 · Büyük (44-50) · siyah 8\n\n⏩ Bu kart kapandı (deneme yeniden) — yeni kart aşağıda.");
+  assert.deepEqual(kapat.govde.reply_markup.inline_keyboard, []);
+  const yeni = o.g.find((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === "600");
+  assert.equal(yeni.govde.text, "5068 · Büyük (44-50) · siyah 8");
+  assert.ok(yeni.govde.reply_markup.inline_keyboard.flat().some((x) => x.text === "✅ Gelecek"));
+  const oku = async (id) => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `fs:${id}` }) })).json()).v);
+  assert.equal((await oku(a.id)).durum, "kapandi");
+  assert.equal((await oku(b.id)).durum, "bekliyor"); // başka liste etkilenmez
 });
