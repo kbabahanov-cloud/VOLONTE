@@ -2717,10 +2717,10 @@ test("13 Kasım (Patron, B2) YENİ KANAL TASARIMI: en fazla 5 satır ([etiket ·
   assert.equal(or.not, `<b>Order ${or.kod}</b>`);
   assert.ok(or.foto && or.dugmeler.inline_keyboard.length === 2);
   assert.equal(o.gonderilen.filter((m) => /send|copy|edit/.test(m.url)).length, 0);
-  assert.equal(d.tasarimOku(), null); assert.equal(o.depo.has("kemal:tasarim"), false);
+  assert.equal(w.tasarimOku(), null); assert.equal(o.depo.has("kemal:tasarim"), false);
   // onay: anahtar açılır; geri alınabilir
   assert.deepEqual(await w.tasarimOnayi(o.env, { acik: true }), { ok: true, acik: true });
-  assert.equal(o.depo.get("kemal:tasarim"), "yeni"); assert.equal(d.tasarimOku(), "yeni");
+  assert.equal(o.depo.get("kemal:tasarim"), "yeni"); assert.equal(w.tasarimOku(), "yeni");
   await w.tasarimOnayi(o.env, { acik: false });
-  assert.equal(o.depo.has("kemal:tasarim"), false); assert.equal(d.tasarimOku(), null);
+  assert.equal(o.depo.has("kemal:tasarim"), false); assert.equal(w.tasarimOku(), null);
 });
