@@ -62,7 +62,7 @@ const ARACLAR = [
   { name: "magaza_stok_ozeti", description: "İki mağazanın (VOLONTE / Black Rose) stok özeti Vegawin'den: stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu gerekmez. \"iki mağazanın stoğunu ver\", \"stok özeti\" denince kullan; sonucu AYNEN yaz.", strict: true, input_schema: nesne({}) },
   { name: "eksik_listesi_karti", description: "Fabrikaya giden son eksik listesi kartının AYNISINI (tam yazı + düğmeler, düğmeler sadece görüntü) bu sohbete gönderir. gun: 'bugun', 'dun', YYYY-AA-GG ya da boş (son kart). \"eksik listesi kartını göster\" denince kullan; kart gidince sadece aracın verdiği tek satırı yaz.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
   { name: "stoksuz_modeller", description: "Vegawin'de stoğu biten (0 ya da eksi) modellerin kodları.", strict: true, input_schema: nesne({}) },
-  { name: "eksik_listesi_durumu", description: "Bugünkü fabrika eksik listesinin durumu: Hemra'ya gitti mi, onaylandı mı, her modelin kararı (renkler / istenmeyecek / bekliyor) ve önceki istek kaydı.", strict: true, input_schema: nesne({}) },
+  { name: "eksik_listesi_durumu", description: "Bugünkü fabrika eksik listelerinin durumu, MARKA MARKA (VOLONTE ve Black Rose AYRI listedir; VOLONTE'yi Aziz, Black Rose'u Merdan kontrol eder, ikisini Hemra onaylar): kontrol kartı kimde, onaylandı mı, fabrikaya gitti mi; her modelin MARKASI, kararı (renkler / istenmeyecek / bekliyor) ve önceki istek kaydı. Cevapta her markayı ayrı yaz; soran kişiye önce kendi markasını anlat.", strict: true, input_schema: nesne({}) },
   { name: "siparis_durumu", description: "Bir modelin son 3 haftadaki fabrika siparişleri: istenen renkler, fabrikanın cevabı (gelecek/repete/bitti), teslim günü, geldi mi.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
   {
     name: "eksik_listesine_isle",
@@ -115,7 +115,7 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     const l = Object.entries(t).filter(([k, x]) => !(x.toplam > 0) && !indirimliMi(k)).map(([k]) => k).sort();
     return { sayi: l.length, kodlar: l.slice(0, 80) };
   }
-  if (ad === "eksik_listesi_durumu") return listeDurumu(env, simdi);
+  if (ad === "eksik_listesi_durumu") return listeDurumu(env, simdi, kim); // 13 Kasım (kural 75): marka marka; soranın kendi markası önde
   if (ad === "siparis_durumu") {
     const pzt = (t) => gunAnahtari(t - ((new Date((t + SAAT_FARKI) * 1000).getUTCDay() + 6) % 7) * 86400);
     const l = [];

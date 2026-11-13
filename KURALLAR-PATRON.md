@@ -1,14 +1,14 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-13.2
+Sürüm: 2026-11-13.3
 
-Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü ve PARA SINIRLARI bölümünü okur.
+Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
 `KURALLAR-PATRON.md okundu, X kural kontrol edildi, ihlal yok / ihlal: …`
 Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satırı değişir, `python3 araclar/kitap-yukle.py` ile bütün botlara aynı anda gider ve raporda "kitaba eklendi" yazılır.
 (Bu depo herkese açık: burada kişi kimliği, telefon, fiyat, anahtar YOK.)
 
-13 Kasım: Patron'un 12 Kasım "TEK KİTAP, TEK DEFTER, DERS DEFTERİ" kararlarıyla yeni baskı. 1–36 eski numaralarını korur (4, 6, 15, 24 ve 29 Patron'un 12 Kasım kararıyla güncellendi); 37'den sonrası yenidir. Henüz kurulmamış kararlar (Kemal döngü sırası ve yeni paylaşım düzeni, Pelin iki onay, Nora iki senaryo, Venom yönetim işleri) kuruldukları gece kitaba girer.
+13 Kasım: Patron'un 12 Kasım "TEK KİTAP, TEK DEFTER, DERS DEFTERİ" kararlarıyla yeni baskı. 1–36 eski numaralarını korur (4, 6, 15, 24 ve 29 Patron'un 12 Kasım kararıyla güncellendi); 37'den sonrası yenidir. Henüz kurulmamış kararlar (Kemal döngü sırası ve yeni paylaşım düzeni, Pelin iki onay, Nora iki senaryo, Venom yönetim işleri) kuruldukları gece kitaba girer. 13 Kasım akşamı Patron 75 ve 76'yı ekledi (korunan akışlar).
 
 ## ORTAK
 
@@ -113,3 +113,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 
 ## PARA SINIRLARI
 74. Yapay zekâ ve üretim harcama sınırları: Venom 50 $/ay · Kemal 20 $/ay · Selin 10 $/ay · Sami 5 $/ay · Pelin 10 $/gün ve 100 $/ay; bir bot sınırının %80'ine gelince Venom Patron'a tek satır yazar.
+
+## KORUNAN AKIŞLAR
+75. Eksik listesi MARKA BAZINDA ayrı kalır: VOLONTE kontrol kartı Hemra / Aziz'e, Black Rose kontrol kartı Merdan'a gider; sadece rapordaki SAYIM birleşik olur. Sami ve kayıt her modelin markasını Vegawin'den okur ve yazar; "marka bilinmiyor" olamaz. Sayım birleşir, iş akışı birleşmez.
+76. Claude Code her değişiklikten önce "korunan akışa dokunuyor mu?" kontrolü yapar (eksik listesi, kontrol kartları, fabrika / repete, Selin–Merdan akışı); dokunuyorsa önce Patron'a eski hali / yeni hali gösterir, Patron "tamam" demeden yapmaz. Sayım ya da rapor düzeltmesi akışı ASLA değiştiremez.

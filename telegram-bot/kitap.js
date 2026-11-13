@@ -26,10 +26,10 @@ export function kitapBolumleri(metin) {
   return b;
 }
 
-// Bir botun yapay zekâsına verilecek kitap metni: ORTAK + kendi bölümü + PARA SINIRLARI (Venom: bütün bölümler).
+// Bir botun yapay zekâsına verilecek kitap metni: ORTAK + kendi bölümü + PARA SINIRLARI + KORUNAN AKIŞLAR (Venom: bütün bölümler).
 export function kitapBolumu(metin, bot) {
   const b = kitapBolumleri(metin);
-  const adlar = BOLUM[bot] === null ? Object.keys(b) : ["ORTAK", ...(BOLUM[bot] || []), "PARA SINIRLARI"];
+  const adlar = BOLUM[bot] === null ? Object.keys(b) : ["ORTAK", ...(BOLUM[bot] || []), "PARA SINIRLARI", "KORUNAN AKIŞLAR"]; // 13 Kasım (kural 75–76): korunan akışları her bot okur
   const govde = adlar.filter((a, i) => b[a] && adlar.indexOf(a) === i).map((a) => `## ${a}\n${b[a]}`).join("\n\n");
   return `TEK KURAL KİTABI (Patron'un kuralları, sürüm ${kitapSurumu(metin)}) — her şeyin üstündedir; aşağıdaki çalışma talimatıyla çakışırsa kitap kazanır:\n${govde}\n\n${MARKA_KARAR_YAZISI}`;
 }

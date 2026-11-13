@@ -3578,3 +3578,75 @@ test("13 Kasım (Patron) EKSİK LİSTESİ KARTINI GÖSTER: fabrikaya giden SON s
   assert.equal(JSON.parse((await (await stokYaz("ayar-oku", { k: "kartTakip" })).json()).v || "[]").length, 0);
   assert.equal(await kt.acikAyniKart(o.env, "sendMessage", { chat_id: 333, text: k.yazi, reply_markup: kl }), null);
 });
+
+test("13 Kasım (Patron, kural 75) KORUNAN AKIŞ — eksik listesi MARKA BAZINDA ayrı: VOLONTE kontrol kartı sadece Aziz'e, Black Rose kontrol kartı sadece Merdan'a (19:05 sonrası); Hemra'nın onay kartında markalar karışmaz; Sami'nin 'liste durumu' cevabı her markayı AYRI ve her modelin markasıyla yazar, soranın markası önde; cevap sadece okur", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", BR_SORUMLU: "222", AZIZ_ID: "444", EKIP_IDS: "333,444", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:satisAcik", "1");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Sinem" }]));
+  o.depo.set("kodlar", JSON.stringify({ 3183: [{ ids: [700], tarih: 1 }], 3186: [{ ids: [701], tarih: 1 }], 7001: [{ ids: [900], tarih: 1 }] }));
+  const gun = "2026-10-28";
+  const stok = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  await stok("satis-yaz", { magaza: "VOLONTE", gun, kalemler: [{ kod: "3183", adet: 2 }, { kod: "3186", adet: 1 }] });
+  await stok("satis-yaz", { magaza: "BLACKROSE", gun, kalemler: [{ kod: "7001", adet: 3 }] });
+  const ayar = async (k) => { const v = (await (await stok("ayar-oku", { k })).json()).v; return v == null ? null : JSON.parse(v); };
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 60 + g.length } }; };
+  await f.fabrikaAdimi(o.env, ist(12, 0), tg);
+  await f.fabrikaAdimi(o.env, ist(12, 15), tg);
+  // VOLONTE kontrol kartı SADECE Aziz'e; içinde Black Rose modeli (7001) yok
+  assert.ok(g.length && g.every((x) => String(x.govde.chat_id) === "444"));
+  assert.ok(!g.some((x) => /7001/.test(x.govde.text || x.govde.caption || "")));
+  // gündüz durum: VOLONTE Aziz'de; Black Rose listesi 19:05'ten önce açılmaz
+  let d = await f.listeDurumu(o.env, ist(12, 20));
+  assert.deepEqual(d.listeler.map((l) => [l.marka, l.kontrol, l.durum]), [
+    ["VOLONTE", "Aziz", "kontrol kartı Aziz'de, kararlar bekleniyor"],
+    ["Black Rose", "Merdan", "Black Rose listesi her gün 19:05'ten sonra açılır; satışlar 10 dakika değişmezse kontrol kartı Merdan'a gider"],
+  ]);
+  assert.deepEqual(d.listeler[0].modeller.map((m) => [m.kod, m.marka]), [["3183", "VOLONTE"], ["3186", "VOLONTE"]]);
+  const yaz = (kim, ad, text) => g2({ message: { chat: { id: kim, type: "private" }, from: { id: kim, first_name: ad }, text } }, o.env);
+  const gercek = Date.now;
+  try {
+    Date.now = () => ist(12, 30) * 1000;
+    o.g.length = 0;
+    await yaz(444, "Aziz", "3183 küçük siyah 5, 3186 büyük bej 2");
+    await teyitEt(o, g2, 444, "Aziz", /Şunu anladım: /);
+    await eminim(o, g2, 444, "Aziz", /^🟦 VOLONTE listesi: 2 model — 2 istendi, 0 istenmedi, 0 bot hatası\. Göndereyim mi\?$/);
+  } finally { Date.now = gercek; }
+  // Hemra'nın onay kartı: sadece VOLONTE (markalar karışmaz)
+  const kart1 = cagri(o.g, "sendMessage").find((x) => /Gidecek liste/.test(x.govde.text || ""));
+  assert.equal(String(kart1.govde.chat_id), "333");
+  assert.ok(!/7001|Black Rose/i.test(kart1.govde.text));
+  const birlesik = await ayar(`fabrika:birlesik:${gun}`);
+  assert.deepEqual((await ayar(`fabrika:${birlesik[0]}`)).parcalar, [gun]); // onay kartının parçası SADECE VOLONTE listesi
+  d = await f.listeDurumu(o.env, ist(12, 40));
+  assert.deepEqual([d.listeler[0].durum, d.listeler[0].istenecek, d.listeler[0].istenmeyecek, d.listeler[0].kararBekleyen], ["Aziz kontrol etti; onay kartı Hemra'da", 2, 0, 0]);
+  o.g.length = 0;
+  await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: kart1.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
+  // 13 Kasım'daki durumun aynısı: VOLONTE fabrikaya gitti, Black Rose henüz açılmadı → Merdan sorar
+  const once = { g: g.length, og: o.g.length, v: JSON.stringify(await ayar(`fabrika:${gun}`)), br: JSON.stringify(await ayar(`fabrika:${gun}-BR`)) };
+  d = await f.listeDurumu(o.env, ist(18, 55), "222");
+  assert.equal(d.soranınListesi, "Black Rose");
+  assert.deepEqual(d.listeler.map((l) => [l.marka, l.durum]), [
+    ["Black Rose", "Black Rose listesi her gün 19:05'ten sonra açılır; satışlar 10 dakika değişmezse kontrol kartı Merdan'a gider"],
+    ["VOLONTE", "Aziz kontrol etti, Hemra onayladı, fabrikaya gönderildi"],
+  ]);
+  assert.ok(d.listeler[1].modeller.every((m) => m.marka === "VOLONTE")); // "marka bilinmiyor" olamaz
+  assert.match(d.kural, /MARKA BAZINDA ayrıdır/);
+  // cevap SADECE OKUR: mesaj / kart gitmedi, kayıt değişmedi
+  assert.deepEqual({ g: g.length, og: o.g.length, v: JSON.stringify(await ayar(`fabrika:${gun}`)), br: JSON.stringify(await ayar(`fabrika:${gun}-BR`)) }, once);
+  // 19:05 sonrası: önce satış bekleme, 10 dakika sabit kalınca Black Rose kontrol kartı SADECE Merdan'a
+  g.length = 0;
+  await f.fabrikaAdimi(o.env, ist(19, 10), tg);
+  assert.equal(g.length, 0);
+  d = await f.listeDurumu(o.env, ist(19, 12), "222");
+  assert.equal(d.listeler[0].durum, "satış girişi sürüyor; satışlar 10 dakika değişmezse kontrol kartı Merdan'a gider (henüz gitmedi)");
+  await f.fabrikaAdimi(o.env, ist(19, 25), tg);
+  assert.ok(g.length && g.every((x) => String(x.govde.chat_id) === "222"), "Black Rose kontrol kartı Merdan'dan başkasına gitti");
+  assert.ok(g.some((x) => /7001/.test(x.govde.text || x.govde.caption || "")));
+  assert.deepEqual(g.filter((x) => x.metod !== "sendMessage").map((x) => (x.govde.caption || "").split("\n").slice(0, 2).join(" | ")), ["🌹 BLACK ROSE | 7001 · satılan 3 · stok —"]); // Merdan'a SADECE Black Rose modelinin kartı (marka başlıkta); VOLONTE modeli sorulmaz
+  d = await f.listeDurumu(o.env, ist(19, 26), "222");
+  assert.deepEqual([d.listeler[0].marka, d.listeler[0].durum, d.listeler[0].modeller.map((m) => [m.kod, m.marka])], ["Black Rose", "kontrol kartı Merdan'da, kararlar bekleniyor", [["7001", "Black Rose"]]]);
+});

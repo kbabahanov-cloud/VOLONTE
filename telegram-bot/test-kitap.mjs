@@ -16,24 +16,26 @@ test("TEK KİTAP: pakete gömülü yedek KURALLAR-PATRON.md ve DERSLER.md ile bi
 
 test("TEK KİTAP: kurallar 1'den başlar, atlamasız ve tekrarsız numaralıdır; her kural tek satırdır", () => {
   const no = [...kitapDosya.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
-  assert.ok(no.length >= 74);
+  assert.ok(no.length >= 76);
   no.forEach((n, i) => assert.equal(n, i + 1));
   assert.match(kitapDosya, /^Sürüm: \d{4}-\d{2}-\d{2}\.\d+$/m);
 });
 
-test("TEK KİTAP: her bot ORTAK + kendi bölümü + PARA SINIRLARI'nı okur; başka botun bölümünü okumaz; Venom hepsini okur", async () => {
+test("TEK KİTAP: her bot ORTAK + kendi bölümü + PARA SINIRLARI + KORUNAN AKIŞLAR'ı okur; başka botun bölümünü okumaz; Venom hepsini okur", async () => {
   kitapBellegiSil();
   const env = kvEnv();
   const ad = { sami: "SAMİ", kemal: "KEMAL", selin: "SELİN", pelin: "PELİN", nora: "NORA" };
   for (const [bot, baslik] of Object.entries(ad)) {
     const t = await kitapOku(env, bot, 1000);
     const basliklar = t.split("\n").filter((x) => x.startsWith("## "));
-    assert.deepEqual(basliklar, ["## ORTAK", `## ${baslik}`, "## PARA SINIRLARI"], bot);
+    assert.deepEqual(basliklar, ["## ORTAK", `## ${baslik}`, "## PARA SINIRLARI", "## KORUNAN AKIŞLAR"], bot);
+    assert.match(t, /75\. Eksik listesi MARKA BAZINDA ayrı kalır/); // 13 Kasım (Patron): korunan akışları her bot okur
+    assert.match(t, /76\. Claude Code her değişiklikten önce "korunan akışa dokunuyor mu\?" kontrolü yapar/);
     assert.match(t, /Kanıtsız "tamam \/ hazır \/ yapıldı" denmez/);
     assert.match(t, /907 = VOLONTE/); // Patron'un kesin marka kararları da gelir
   }
   const v = await kitapOku(env, "venom", 1000);
-  for (const b of ["ORTAK", "VENOM", "SAMİ", "KEMAL", "SELİN", "PELİN", "NORA", "PARA SINIRLARI"]) assert.ok(v.includes(`## ${b}\n`), b);
+  for (const b of ["ORTAK", "VENOM", "SAMİ", "KEMAL", "SELİN", "PELİN", "NORA", "PARA SINIRLARI", "KORUNAN AKIŞLAR"]) assert.ok(v.includes(`## ${b}\n`), b);
   assert.deepEqual(KITAP_BOTLARI, ["venom", "sami", "kemal", "selin", "pelin", "nora"]);
 });
 

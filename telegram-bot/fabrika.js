@@ -921,16 +921,45 @@ export async function acikListe(env, simdi, cfg = MAGAZALAR[0]) {
   }
   return { gun, anahtar, d, ana };
 }
-export async function listeDurumu(env, simdi) {
-  const { gun, anahtar, d, ana } = await acikListe(env, simdi);
-  if (!ana) return { gun, durum: "bugün liste yok (satış girilmedi ya da henüz 10 dk sabit kalmadı)" };
+// 13 Kasım (Patron, kural 75): eksik listesi MARKA BAZINDA ayrıdır — cevap her markanın listesini AYRI yazar, her modelin markası yazılır
+// ("marka bilinmiyor" olamaz). SADECE OKUR: kart göndermez, kayıt değiştirmez (akışa dokunmaz). kim: soran kişi (kendi markası öne alınır).
+const EKI = { Aziz: ["Aziz'de", "Aziz'e"], Merdan: ["Merdan'da", "Merdan'a"], Hemra: ["Hemra'da", "Hemra'ya"] };
+const kiside = (ad) => (EKI[ad] || [`${ad}'da`])[0];
+const kisiye = (ad) => (EKI[ad] || [null, `${ad}'a`])[1];
+async function magazaListeDurumu(env, simdi, cfg, sonIstek) {
+  const { anahtar, d, ana } = await acikListe(env, simdi, cfg);
+  const taban = { marka: cfg.etiket, kontrol: cfg.ad, onay: "Hemra" };
+  if (!ana) return { ...taban, durum: cfg.basla != null && saat(simdi) < cfg.basla ? `${cfg.etiket} listesi her gün 19:05'ten sonra açılır; satışlar 10 dakika değişmezse kontrol kartı ${kisiye(cfg.ad)} gider` : `bugün ${cfg.etiket} listesi henüz yok (satış girilmedi ya da satışlar henüz 10 dakika sabit kalmadı)`, modelSayisi: 0, modeller: [] };
   const x = d || ana;
+  const ad = adOf(env, x);
+  const b = x.asama === "birlesti" && x.birlesik ? await ayarOku(env, `fabrika:${x.birlesik}`, null) : null;
+  const durum = {
+    bekliyor: `satış girişi sürüyor; satışlar 10 dakika değişmezse kontrol kartı ${kisiye(cfg.ad)} gider (henüz gitmedi)`,
+    satisYok: "bugün satış yok",
+    soruldu: `kontrol kartı ${kiside(ad)}, kararlar bekleniyor`,
+    duzelt: `${ad} düzeltiyor`,
+    eminMi: `${ad} kararları girdi; "emin misiniz" sorusu ${kiside(ad)}`,
+    kontrolEdildi: `${ad} kontrol etti; Hemra'nın onay kartı hazırlanıyor`,
+    onayda: `onay kartı ${kiside(ad)}`,
+    birlesti: b && b.asama === "gonderildi" ? `${cfg.ad} kontrol etti, Hemra onayladı, fabrikaya gönderildi` : `${cfg.ad} kontrol etti; onay kartı Hemra'da`,
+    gonderildi: `onaylandı (${x.onaylayan || "Hemra"}), fabrikaya gönderildi`,
+  }[x.asama] || x.asama;
+  const sec = (kod) => secimNorm(x.secim && x.secim[kod]);
+  const modeller = (x.modeller || []).map((m) => ({ kod: m.kod, marka: cfg.etiket, satilan: m.satilan, stok: m.kalan, karar: secimTamam(sec(m.kod)) ? secimYazi(sec(m.kod)).replace(/✓ /g, "") : secimEksigi(sec(m.kod)), onceki: sonIstek[m.kod] ? sonIstekYazi(sonIstek[m.kod]) : null }));
+  const istenmeyecek = (x.modeller || []).filter((m) => sec(m.kod) && sec(m.kod).isteme).length;
+  const istenecek = (x.modeller || []).filter((m) => sec(m.kod) && !sec(m.kod).isteme && secimTamam(sec(m.kod))).length;
+  return { ...taban, liste: anahtar || `${gunAnahtari(simdi)}${cfg.ek}`, durum, modelSayisi: modeller.length, istenecek, istenmeyecek, kararBekleyen: modeller.length - istenecek - istenmeyecek, modeller, ekler: ana.ekler || [] };
+}
+export async function listeDurumu(env, simdi, kim = null) {
   const sonIstek = await ayarOku(env, "fabrika:sonIstek", {});
+  const listeler = [];
+  for (const cfg of MAGAZALAR) listeler.push(await magazaListeDurumu(env, simdi, cfg, sonIstek));
+  const benim = kim == null ? null : MAGAZALAR.find((c) => c.kime(env) && String(c.kime(env)) === String(kim));
   return {
-    gun, liste: anahtar || gun,
-    durum: { soruldu: "Hemra'ya gitti, renkler bekleniyor", duzelt: "Hemra düzeltiyor", onayda: "onay kartı Hemra'da", gonderildi: `onaylandı (${x.onaylayan || "Hemra"}), fabrikaya gönderildi`, bekliyor: "satış girişi sürüyor (10 dk sabit bekleniyor)" }[x.asama] || x.asama,
-    modeller: (x.modeller || []).map((m) => ({ kod: m.kod, satilan: m.satilan, stok: m.kalan, karar: secimTamam(secimNorm(x.secim && x.secim[m.kod])) ? secimYazi(secimNorm(x.secim[m.kod])).replace(/✓ /g, "") : secimEksigi(secimNorm(x.secim && x.secim[m.kod])), onceki: sonIstek[m.kod] ? sonIstekYazi(sonIstek[m.kod]) : null })),
-    ekler: ana.ekler || [],
+    gun: gunAnahtari(simdi),
+    kural: "Eksik listesi MARKA BAZINDA ayrıdır: VOLONTE listesini Aziz, Black Rose listesini Merdan kontrol eder; ikisini de Hemra onaylar. İki markanın listesi birbirine karışmaz; cevapta her modelin markasını yaz, \"birleştirildi\" ya da \"marka bilinmiyor\" deme. Soran kişiye önce KENDİ markasının listesini anlat.",
+    ...(benim ? { soranınListesi: benim.etiket } : {}),
+    listeler: benim ? [...listeler.filter((l) => l.marka === benim.etiket), ...listeler.filter((l) => l.marka !== benim.etiket)] : listeler,
   };
 }
 // kararlar: [{ kod, beden: ""|kucuk|buyuk|ikisi, renkler, renkler_buyuk (ikisi için), isteme, onceki_gibi }]; hepsiOnceki: bekleyenlerin hepsi önceki gibi.
@@ -2874,6 +2903,7 @@ async function tekIslem(env, simdi, tg) {
     sonuc.metin = gittiMetni(lg, simdi, giden, bekleyen); sonuc.giden = giden;
   } else if (is.tur === "listeDurum") { // 10 Kasım: bugünün ve dünün liste durumu (okuma; hiçbir şey göndermez)
     sonuc.satisAcik = (await env.KAYIT.get("sami:satisAcik")) === "1";
+    { const sc = is.soran ? MAGAZALAR.find((c) => c.magaza === is.soran) : null; sonuc.cevap = await listeDurumu(env, simdi, sc ? sc.kime(env) : null); } // 13 Kasım: Sami'nin "liste durumu" cevabının aynısı (soran: "VOLONTE" | "BLACKROSE" → o markanın kontrol sorumlusu sormuş gibi); sadece okur
     sonuc.gunler = {};
     for (const i of [0, 1, 2]) {
       const g = gunAnahtari(simdi - i * 86400);
