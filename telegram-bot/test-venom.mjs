@@ -2430,3 +2430,34 @@ test("13 Kasım (Patron) İŞ BEKÇİSİ — Venom: 11/15/19'da bakar; önce ken
   assert.equal(k.kemal.durdu, true); assert.deepEqual(o.cagri, []);
   assert.equal(patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text)).length, 0);
 });
+
+test("13 Kasım (Patron, kural 77 + B4) — cuma 20:00 mutabakat kontrolü: kapalıysa / çalışmadıysa / onayda bekliyorsa Patron'a TEK satır, gittiyse sessiz; akşam raporu en fazla 10 satır ve 'Stokta var, sitede yok' satırı, sabah raporu 8; hafta sonu fabrika satırı", async () => {
+  const v = await import("./venom-bot.js");
+  const stokYaz = (o, k, val) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k, v: JSON.stringify(val) }) });
+  const cuma = ist(13, 20, 5), gun = "2026-11-13";
+  // 1) adım kapalı (bugünkü gerçek durum)
+  let o = ortam();
+  let r = await v.mutabakatBak(o.env, cuma);
+  assert.deepEqual([r.ok, r.sebep], [false, "mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı)"]);
+  assert.equal(v.mutabakatSatiri(r), "Cuma mutabakatı Fuat'a gitmedi — sebep: mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı) — önerim: \"mutabakatı aç\" derseniz açarım.");
+  // 2) açık ama çalışmadı
+  o.depo.set("kagit:ac", JSON.stringify(["sami:mutabakat"]));
+  assert.equal((await v.mutabakatBak(o.env, cuma)).sebep, "mutabakat adımı açık ama bugün çalışmadı");
+  // 3) çalıştı, onay kartı Patron'da
+  await stokYaz(o, `mt:cuma:${gun}`, 1); await stokYaz(o, "mt:liste", ["a1"]); await stokYaz(o, "mt:a1", { id: "a1", gun, durum: "onizleme" });
+  assert.equal((await v.mutabakatBak(o.env, cuma)).sebep, "onay kartı sizde bekliyor (Fuat'a henüz gitmedi)");
+  // 4) Fuat'a gitti
+  await stokYaz(o, "mt:a1", { id: "a1", gun, durum: "gonderildi" });
+  assert.equal((await v.mutabakatBak(o.env, cuma)).ok, true);
+  // rapor: akşam satırı + sınırlar
+  o = ortam();
+  o.env.SELIN_W = { ozet: async () => ({ stoktaSitedeYok: 41, bugunListe: { n: 30, gelen: 12 } }) };
+  const aksam = (await v.raporSatirlari(o.env, ist(13, 20, 0), "aksam")).split("\n");
+  assert.ok(aksam.includes("📷 Stokta var, sitede yok: 41 model · bugün istenen 30 · gelen 12"), aksam.join(" | "));
+  assert.ok(aksam.length <= 10);
+  const sabah = (await v.raporSatirlari(o.env, ist(13, 9, 40), "sabah")).split("\n");
+  assert.ok(sabah.length <= 8 && !sabah.some((x) => x.startsWith("📷")));
+  // cumartesi akşamı: "hafta sonu eksik listesi yok"
+  const cmt = (await v.raporSatirlari(o.env, ist(14, 20, 0), "aksam")).split("\n");
+  assert.ok(cmt.includes("🏭 Fabrika: hafta sonu eksik listesi yok (cumartesi satışları pazartesi listesinde)"), cmt.join(" | "));
+});

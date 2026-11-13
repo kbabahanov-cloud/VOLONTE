@@ -1734,7 +1734,7 @@ export async function guncelleme(u, env) {
 // ---------- 13 Kasım (Patron): İŞ BEKÇİSİ — her gün 11:00, 15:00, 19:00: İŞ yapıldı mı? ----------
 // Önce Venom çözer (onay bekleyene hatırlatma; öneri kalmadıysa Kemal'i çalıştırır); çözülemeyen Patron'a TEK satır (aynı sebep günde bir kez).
 // kuru: hiçbir şey göndermez, kaydetmez (rapor / sohbet / deneme). KV "venom:isBekcisi:sessiz" = gün → o gün sadece kayıt (mesaj / kart yok).
-const sonMesaiGunu = (simdi) => { for (let i = 1; i <= 3; i++) { const t = simdi - i * 86400; if (new Date((t + SAAT_FARKI) * 1000).getUTCDay() !== 0) return gunAnahtari(t); } return gunAnahtari(simdi - 86400); };
+const sonMesaiGunu = (simdi) => { for (let i = 1; i <= 4; i++) { const t = simdi - i * 86400; if (![0, 6].includes(new Date((t + SAAT_FARKI) * 1000).getUTCDay())) return gunAnahtari(t); } return gunAnahtari(simdi - 86400); }; // son LİSTE günü: cumartesi-pazar eksik listesi yok (13 Kasım, A1)
 async function bekciDun(env, simdi) {
   const g = sonMesaiGunu(simdi);
   const ayar = async (k) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); };
@@ -1793,7 +1793,39 @@ export async function isBekcisi(env, simdi, { kuru = false } = {}) {
   await kaydet(env, `venom:isBekcisi:${gun}`, kayit, 14 * 86400);
   return k;
 }
+// 13 Kasım (Patron, kural 77): her cuma 20:00 — "mutabakat gitti mi?". Sadece okur (mutabakat akışına dokunmaz). Önce sebebi kendisi bulur;
+// çözemezse Patron'a TEK satır. Kayıt: venom:isBekcisi:<gün>.mutabakat
+export async function mutabakatBak(env, simdi) {
+  const gun = gunAnahtari(simdi);
+  const ayar = async (k) => { try { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); } catch { return undefined; } };
+  const calisti = await ayar(`mt:cuma:${gun}`);
+  if (calisti === undefined) return { ok: false, sebep: "mutabakat kaydı okunamadı", oneri: "Claude Code baksın" };
+  if (!calisti) {
+    const ac = await env.KAYIT.get("kagit:ac", "json").catch(() => null);
+    const kapali = !(Array.isArray(ac) && ac.includes("sami:mutabakat"));
+    return { ok: false, sebep: kapali ? "mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı)" : "mutabakat adımı açık ama bugün çalışmadı", oneri: kapali ? "\"mutabakatı aç\" derseniz açarım" : "Claude Code baksın" };
+  }
+  const liste = (await ayar("mt:liste")) || [];
+  const son = liste.length ? await ayar(`mt:${liste[liste.length - 1]}`) : null;
+  if (!son || son.gun !== gun) return { ok: false, sebep: "bugünün mutabakat kaydı bulunamadı", oneri: "Claude Code baksın" };
+  if (son.durum === "onizleme") return { ok: false, sebep: "onay kartı sizde bekliyor (Fuat'a henüz gitmedi)", oneri: "karttaki \"✅ Fuat'a gönder\" düğmesine basın" };
+  if (son.durum === "eskidi") return { ok: false, sebep: "önizleme geçersiz kaldı (yenisi istenmiş)", oneri: "Venom'a \"Fuat'a mutabakatı gönder\" yazın" };
+  return { ok: true, durum: son.durum, bilgi: "mutabakat Fuat'a gitti" };
+}
+export const mutabakatSatiri = (r) => `Cuma mutabakatı Fuat'a gitmedi — sebep: ${r.sebep} — önerim: ${r.oneri}.`;
+async function mutabakatBekcisi(env, simdi) {
+  const s = saat(simdi);
+  if (new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() !== 5 || s < 20 || s >= 20.5) return;
+  const gun = gunAnahtari(simdi);
+  const kayit = (await oku(env, `venom:isBekcisi:${gun}`, null)) || {};
+  if (kayit.mutabakat) return;
+  const r = await mutabakatBak(env, simdi);
+  kayit.mutabakat = { zaman: simdi, ...r };
+  await kaydet(env, `venom:isBekcisi:${gun}`, kayit, 14 * 86400);
+  if (!r.ok && (await oku(env, "venom:isBekcisi:sessiz", null)) !== gun) await bildir(env, mutabakatSatiri(r), { simdi, kaynak: "venom", tur: "kritik" });
+}
 async function isBekcisiAdimi(env, simdi) {
+  if (env[BOT_BAG.kemal] && env[BOT_BAG.selin]) await mutabakatBekcisi(env, simdi).catch((e) => hataYaz(env, "mutabakatBekcisi", e));
   const s = saat(simdi), h = BEKCI_SAATLERI.find((x) => s >= x && s < x + 0.5);
   if (h == null || !(env[BOT_BAG.kemal] && env[BOT_BAG.selin])) return; // botlara bağlı değilse (deneme ortamı) bekçi çalışmaz
   const kayit = await oku(env, `venom:isBekcisi:${gunAnahtari(simdi)}`, null);
@@ -2013,7 +2045,7 @@ export async function raporSatirlari(env, simdi, tur) {
   for (const k of birlesik) { const b = await ayar(`fabrika:${k}`, null); if (b && !b.deneme && b.asama === "onayda" && (b.liste || []).length) bekleyenListe++; }
   const gvn = gv ? gv.fabrika.VOLONTE.length : 0, gbr = gv ? gv.fabrika.BLACKROSE.length : 0;
   const gcl = gv ? (gv.fabrika.celal || []).length : 0; // 12 Kasım: Celal ayrı
-  const fabrika = gcl ? `🏭 Fabrika: Celal'e ${gcl} model, Sinem'e ${gvn + gbr - gcl} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : gvn || gbr ? `🏭 Fabrika: eksik listesi gitti — VOLONTE ${gvn}, Black Rose ${gbr} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : bekleyenListe ? `🏭 Fabrika: eksik listesi henüz gitmedi (${bekleyenListe} liste Hemra onayında)` : `🏭 Fabrika: ${ne} eksik listesi gitmedi`;
+  const fabrika = gcl ? `🏭 Fabrika: Celal'e ${gcl} model, Sinem'e ${gvn + gbr - gcl} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : gvn || gbr ? `🏭 Fabrika: eksik listesi gitti — VOLONTE ${gvn}, Black Rose ${gbr} model${bekleyenListe ? ` (${bekleyenListe} liste Hemra onayında)` : ""}` : bekleyenListe ? `🏭 Fabrika: eksik listesi henüz gitmedi (${bekleyenListe} liste Hemra onayında)` : [0, 6].includes(new Date(`${g}T12:00:00Z`).getUTCDay()) ? "🏭 Fabrika: hafta sonu eksik listesi yok (cumartesi satışları pazartesi listesinde)" : `🏭 Fabrika: ${ne} eksik listesi gitmedi`;
   // 7) Venom'un kendi çözdükleri
   const duz = (await oku(env, "venom:kontrol:duzeltme", [])).filter((x) => gunAnahtari(x.zaman) === g).length;
   const coz = (await oku(env, `venom:cozdum:${g}`, [])) || [];
@@ -2023,7 +2055,12 @@ export async function raporSatirlari(env, simdi, tur) {
   const gs = await gunlukSatis(env, simdi, g).catch(() => null); // 11 Kasım: adet + ciro (Vegawin), markalar ayrı
   const satisSatiri = gs && gs.VOLONTE.adet != null && gs.BLACKROSE.adet != null ? `💰 ${raporSatisSatiri(gs).replace(/^Satış:/, `Satış ${ne}:`)}` : `💰 Satış ${ne}: VOLONTE ${sat.VOLONTE}, Black Rose ${sat.BLACKROSE}`;
   const l = [baslik, genel, karar, satisSatiri, `📣 Kanal ${ne}: ${payN} paylaşım`, site, fabrika, venom].filter(Boolean);
-  return [...new Set(l)].slice(0, 8).join("\n");
+  // 13 Kasım (Patron, B4): akşam raporuna Selin–Merdan fotoğraf akışı satırı; sabah raporu en fazla 8, akşam raporu en fazla 10 satır (kural 13)
+  if (tur === "aksam") {
+    const so = await botaSor(env, "selin", "ozet").catch(() => null);
+    if (so && so.stoktaSitedeYok != null) l.splice(l.indexOf(site) + 1, 0, `📷 Stokta var, sitede yok: ${so.stoktaSitedeYok} model · bugün istenen ${so.bugunListe ? so.bugunListe.n : 0} · gelen ${so.bugunListe ? so.bugunListe.gelen : 0}`);
+  }
+  return [...new Set(l)].slice(0, tur === "aksam" ? 10 : 8).join("\n");
 }
 export async function sabahOzeti(env, simdi) {
   const metin = await raporSatirlari(env, simdi, "sabah");
