@@ -2250,3 +2250,39 @@ test("13 Kasım (Patron) BİTMİŞ MODEL KARTI: stoğu 0 olan modelde sadece 'Re
   assert.deepEqual(kartDugmeleri("3700", "2· ", true).flat().map((d) => [d.text, d.callback_data]), [["2· 🔁 Repete al", "vmk:r:3700"]]);
   assert.deepEqual(kartDugmeleri("3700").flat().map((d) => d.text), ["📣 Kanalda paylaş", "🔁 Repete al", "🎬 Pelin video"]);
 });
+
+test("13 Kasım (Patron) VENOM — iki yeni yetenek: 'iki mağazanın stoğunu ver' (model kodu sormadan tek özet) ve 'eksik listesi kartını göster' (fabrikaya giden son kartın aynısı, düğmeler sadece görüntü); Celal listesi tamdır", async () => {
+  const { aracCalistir } = await import("./venom-bot.js");
+  const o = ortam();
+  const t = ist(13, 17, 0);
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 44, fiyat: 30 }, { kod: "5068", adet: 4, fiyat: 20, celal: true }], simdi: t - 7200 });
+  await stokYaz("yaz", { magaza: "BLACKROSE", urunler: [{ kod: "3534", adet: 10, fiyat: 40 }], simdi: t - 7200 });
+  const oz = await aracCalistir(o.env, "magaza_stok_ozeti", {}, t);
+  assert.match(oz, /^📦 Mağaza stoğu — Vegawin \(13\.11 17:00\)\nVOLONTE: stokta 2 model · toplam 48 adet\n {3}bugün biten 0 · bugün gelen 0\nBlack Rose: stokta 1 model · toplam 10 adet\n {3}bugün biten 0 · bugün gelen 0/);
+  assert.ok(oz.split("\n").length <= 8 && !/\$/.test(oz));
+  assert.match(await aracCalistir(o.env, "celal_modelleri", {}, t), /^Celal'in Vegawin'deki modelleri \(8\): .*Vegawin'de bunların dışında Celal modeli yok/);
+  // eksik listesi kartı: Sami'den okunur, Patron'a AYNI yazı + görüntü düğmeleriyle gider
+  const kart = { ok: true, gun: "2026-11-12", zaman: ist(12, 20, 5), kisiler: ["Sinem", "Nuri", "Fuat"], yazi: "🟦 VOLONTE\n3607 · Küçük (38-44) · kahve 4", dugmeler: [["✅ Gelecek", "🔁 Repete olacak"], ["❌ Bitti, gelmeyecek"]], resim: false, kod: "3607", kartSayisi: 4 };
+  const istenen = [];
+  o.env.SAMI_W = { eksikKarti: async (gun) => { istenen.push(gun); return gun === "2026-11-01" ? { ok: false, neden: "01.11.2026 günü fabrikaya giden eksik listesi kartı yok" } : kart; } };
+  const c = await aracCalistir(o.env, "eksik_listesi_karti", {}, t);
+  const giden = patronaGiden(o).at(-1).govde;
+  assert.equal(giden.text, kart.yazi);
+  assert.deepEqual(giden.reply_markup.inline_keyboard.map((s) => s.map((b) => [b.text, b.callback_data])), [[["✅ Gelecek", "gz:-"], ["🔁 Repete olacak", "gz:-"]], [["❌ Bitti, gelmeyecek", "gz:-"]]]);
+  assert.equal(c, "KART GÖSTERİLDİ. Patron'a sadece şunu yaz: Yukarıdaki kart 12.11 20:05'te Sinem, Nuri, Fuat hesabına giden son eksik listesi kartıdır (o listede 4 kart). Düğmeler sadece görüntüdür.");
+  // tarih: dün / belirli gün / kart yok
+  await aracCalistir(o.env, "eksik_listesi_karti", { gun: "dun" }, t);
+  assert.deepEqual(istenen, [null, "2026-11-12"]);
+  assert.equal(await aracCalistir(o.env, "eksik_listesi_karti", { gun: "2026-11-01" }, t), "Kart yok: 01.11.2026 günü fabrikaya giden eksik listesi kartı yok.");
+  // görüntü düğmesine basılırsa hiçbir şey olmaz
+  const n = patronaGiden(o).length;
+  await bas(o, "gz:-");
+  assert.equal(patronaGiden(o).length, n);
+  assert.equal(o.g.filter((x) => x.metod === "answerCallbackQuery").at(-1).govde.text, "Bu kart sadece görüntü; düğmeleri basılamaz.");
+  // kuru denemede kart gitmez, yazısı araç sonucunda görünür
+  o.env.__kuru = true;
+  const n2 = patronaGiden(o).length;
+  assert.match(await aracCalistir(o.env, "eksik_listesi_karti", {}, t), /^\(DENEME: kart Patron'a gösterilirdi\.\) KART YAZISI:\n🟦 VOLONTE\n3607 · Küçük \(38-44\) · kahve 4\nDÜĞMELER: \[✅ Gelecek\] \[🔁 Repete olacak\] \/ \[❌ Bitti, gelmeyecek\]/);
+  assert.equal(patronaGiden(o).length, n2);
+});

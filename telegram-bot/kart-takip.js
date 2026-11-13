@@ -44,7 +44,7 @@ export async function kayitliKisiler(env) {
   for (const p of fk) ad[String(p.id)] = ad[String(p.id)] || p.ad;
   return ad;
 }
-const dugmeli = (g) => Boolean(g && g.reply_markup && Array.isArray(g.reply_markup.inline_keyboard) && g.reply_markup.inline_keyboard.flat().some((b) => b && b.callback_data));
+const dugmeli = (g) => Boolean(g && g.reply_markup && Array.isArray(g.reply_markup.inline_keyboard) && g.reply_markup.inline_keyboard.flat().some((b) => b && b.callback_data && b.callback_data !== "gz:-")); // "gz:-" = sadece görüntü (gösterilen kart kopyası takip edilmez)
 // Sami'nin tg() katmanından: her gönderim/düzenleme sonrası
 export async function kartIzle(env, metod, govde, r) {
   try {

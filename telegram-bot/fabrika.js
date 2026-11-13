@@ -1330,6 +1330,29 @@ export async function denemeKayitlariKapat(env, simdi, sec = {}) {
   }
   return sonuc;
 }
+// 13 Kasım (Patron): "Eksik listesi kartını göster" → fabrikaya (Sinem / Nuri / Fuat / Celal) giden SON sipariş kartının AYNISI:
+// Telegram'ın döndürdüğü yazı + düğmeler (kanıt kaydı "kanit:gercek:<gün>"). gun verilirse o günün son kartı; verilmezse bugünden
+// geriye 7 gün içinde bulunan ilk gün. Düğmeler sadece görüntüdür (GORUNTU_DUGME: basılınca hiçbir şey yapmaz).
+export const GORUNTU_DUGME = "gz:-";
+// Kartın altına yazılan tek satır: ne zaman, kime gitti, o listede kaç kart vardı
+export const eksikKartiSatiri = (k) => `Yukarıdaki kart ${gunGoster(k.gun)} ${new Date((k.zaman + SAAT_FARKI) * 1000).toISOString().slice(11, 16)}'te ${k.kisiler.join(", ")} hesabına giden son eksik listesi kartıdır (o listede ${k.kartSayisi} kart). Düğmeler sadece görüntüdür.${k.resim ? " Kartta modelin fotoğrafı da vardı." : ""}`;
+export const goruntuKlavye = (dugmeler) => ({ inline_keyboard: (dugmeler || []).map((satir) => satir.map((text) => ({ text: String(text).slice(0, 60), callback_data: GORUNTU_DUGME }))) });
+export async function eksikKartiBul(env, gun = null, simdi = Math.floor(Date.now() / 1000)) {
+  const kisiler = await tumKisiler(env);
+  const ad = Object.fromEntries(kisiler.map((k) => [String(k.id), k.ad]));
+  const gunler = gun ? [gun] : Array.from({ length: 7 }, (_, i) => gunAnahtari(simdi - i * 86400));
+  for (const g of gunler) {
+    let l = [];
+    try { l = JSON.parse((await stokIste(env, "/ayar-oku", { k: `kanit:gercek:${g}` })).v || "[]"); } catch { l = []; }
+    const kartlar = l.filter((x) => /^(send|copy)/.test(x.metod || "") && ad[String(x.chat)] && (x.dugmeler || []).flat().some((d) => /Gelecek/.test(d)) && !/LİSTESİ – (SONU|BİTTİ|BAŞLANGIÇ)/.test(String(x.yazi || "").split("\n")[0]));
+    if (!kartlar.length) continue;
+    const son = kartlar.reduce((a, b) => (b.zaman >= a.zaman ? b : a));
+    const ayni = kartlar.filter((x) => x.yazi === son.yazi && Math.abs(x.zaman - son.zaman) <= 300);
+    const liste = kartlar.filter((x) => son.zaman - x.zaman <= 1800);
+    return { ok: true, gun: g, zaman: son.zaman, kisiler: [...new Set(ayni.map((x) => ad[String(x.chat)]))], yazi: son.yazi, dugmeler: son.dugmeler || [], resim: Boolean(son.resim), kod: kartKodu(son.yazi), kartSayisi: new Set(liste.map((x) => x.yazi)).size };
+  }
+  return { ok: false, neden: gun ? `${gunGoster(gun)} günü fabrikaya giden eksik listesi kartı yok` : "son 7 günde fabrikaya giden eksik listesi kartı yok" };
+}
 // 11 Kasım (TEK DEFTER): Venom "fabrikaya dün hangi modeller gitti?" sorusunu buradan okur (Sami'nin kendi kaydı; gittiMetni ile aynı sayım)
 export const fabrikayaGidenler = async (env, gun) => ({ ...(await gidenSay(env, gun, null, null)), listeler: await gidenListeOku(env, gun) });
 

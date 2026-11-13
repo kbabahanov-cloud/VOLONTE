@@ -10,6 +10,7 @@
 //    Fuat/Nuri'ye giden metin güvenlik süzgecinden geçer.
 // Ayarlar: BOT_TOKEN, ANTHROPIC_API_KEY, OPENAI_API_KEY (ses), WEBHOOK_SECRET (secret); KAYIT (KV), STOK (StokDO, volonte-asistan),
 // SELIN_DEPO; MURAT_ID, FUAT_ID, NURI_ID, BR_SORUMLU (Merdan), HEMRA_ID, FABRIKA_SORUMLU (venom:kimlikler); SELF_URL.
+import { magazaOzetMetni, celalListeMetni } from "./stok-ozet.js";
 import { MOD_SATIR, modOku, modBasla, modBitir } from "./deneme-modu.js";
 import { kanitKaydet } from "./tg-guvenli.js";
 import { claudeIstemci, claudeVar, claudeTur, openaiFetch, openaiVar } from "./ai-istemci.js";
@@ -331,6 +332,9 @@ const ARACLAR = [
   { name: "duraklatma", description: "Sağlamlaştırma haftası anahtarları: Venom üzerinden Kemal paylaşımı (kemal_paylas) ve Pelin'in yeni üretimi (pelin_uretim). SADECE Patron açıkça 'aç/kapat' derse.", input_schema: { type: "object", additionalProperties: false, required: ["is", "acik"], properties: { is: { type: "string", enum: ["kemal_paylas", "pelin_uretim"] }, acik: { type: "boolean" } } } },
   { name: "pelin_foto_kaydet", description: "Patron'un Venom'a son gönderdiği FOTOĞRAFLARI dosya olarak Pelin'e iletir ve ürün fotoğrafı olarak kaydeder: '<kod> <renk> ön/arka' (sıra: roller). sadece_bunlar=true → o rengin eski fotoğrafları (ör. site) silinir, üretimde SADECE bunlar kullanılır. yeniden_baslat=true → o kod/renk için bekleyen Pelin kartları iptal edilir ve üretim yeniden başlar (önce anlama/maliyet kartı, sonra ön fotoğraf onayı; onaysız para harcanmaz). Sonuç 'İLETİLDİ' ya da 'İLETİLMEDİ' diye döner; Patron'a aynen söyle.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Türkçe renk (beyaz, siyah, bordo…); bilinmiyorsa boş" }, roller: { type: "array", items: { type: "string", enum: ["on", "arka", "detay"] }, description: "Fotoğrafların gönderiliş sırasıyla rolleri; boşsa 1. ön, 2. arka, sonrası detay" }, etiket: { type: "string", enum: ["manken", "aski"] }, adet: { type: "integer", description: "Sadece SON gönderilen N fotoğraf (Patron 'iki fotoğraf attım' dediyse 2)" }, sadece_bunlar: { type: "boolean" }, yeniden_baslat: { type: "boolean" } } } },
   { name: "bekleyenler", description: "Bütün botlarda Patron onayı bekleyen işleri (Pelin, Kemal SON YAYIN kartları, Selin taslakları, Venom kartları) ve bugünkü Selin listesini tek listede verir. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
+  { name: "eksik_listesi_karti", description: "Patron 'eksik listesi kartını göster' derse: Sami'nin fabrikaya gönderdiği SON eksik listesi kartının AYNISINI (tam yazı + düğmeler; düğmeler sadece görüntü) Patron'a gönderir. gun: 'bugun', 'dun', YYYY-AA-GG ya da boş (son kart). Kart gidince sadece aracın verdiği tek satırı yaz.", input_schema: { type: "object", additionalProperties: false, properties: { gun: { type: "string" } } } },
+  { name: "magaza_stok_ozeti", description: "Patron 'iki mağazanın stoğunu ver', 'stok özeti', 'mağazalarda ne var' derse: Vegawin'den mağaza mağaza (VOLONTE / Black Rose ayrı) stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu SORMA. Sonucu AYNEN yaz (en fazla 8 satır).", input_schema: { type: "object", additionalProperties: false, properties: {} } },
+  { name: "celal_modelleri", description: "Celal'in Vegawin'deki bütün modelleri (kod + stok). Celal'in satışı / stoğu / modelleri sorulunca ÖNCE bunu çağır; liste TAMDIR — 'başka Celal modeli olabilir', 'bu sayıya girmedi' gibi tahmin cümlesi yazma.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "deneme_modu", description: "Patron 'deneme başlıyor' derse islem=basla, 'deneme bitti' derse islem=bitir. Deneme modunda başlatılan kayıtlar 🧪 işaretlenir, rapora girmez; bitince hepsi sessizce kapanır. Aracın cevabını aynen aktar.", input_schema: { type: "object", additionalProperties: false, required: ["islem"], properties: { islem: { type: "string", enum: ["basla", "bitir"] } } } },
   { name: "karar_kaydet", description: "Patron yeni bir KALICI karar/kural söylediğinde (ör. 'bundan sonra …', 'her zaman …', 'asla …') Venom'un hafızasına yazar; sonraki her konuşmada uygulanır. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["metin"], properties: { metin: { type: "string" } } } },
   { name: "selin_durum", description: "Selin'de bir modelin durumu: neden taslak çıkmadı (fotoğraf gelmedi mi, hata mı, onayda mı, sitede mi), bugünkü listede mi, kaç gündür gelmiyor, stok. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
@@ -669,6 +673,33 @@ export async function aracCalistir(env, ad, g, simdi) {
   if (ad === "pelin_foto_kaydet") return pelinFotoIlet(env, g, simdi);
   if (ad === "bekleyenler" && env.__kuru) return aracCalistir(env, "patron_kararlari", {}, simdi);
   if (ad === "bekleyenler") { turKanit(env).sus = true; const n = await bekleyenleriGonder(env, simdi); return n ? `${n} bekleyen karar, düğmeleriyle Patron'a AYRI mesajlar olarak gönderildi. Listeyi tekrar YAZMA; tek kısa cümle yeter.` : "Kararınızı bekleyen iş yok — bunu Patron'a zaten yazdım; tekrar yazma, boş cevap ver."; }
+  if (ad === "magaza_stok_ozeti") { // 13 Kasım (Patron): model kodu sormadan, mağaza mağaza tek özet
+    const gb = simdi - ((simdi + SAAT_FARKI) % 86400);
+    return magazaOzetMetni(await stokIste(env, "/magaza-ozet", { basla: gb, bitis: gb + 86400 }).catch(() => null), simdi);
+  }
+  if (ad === "celal_modelleri") return celalListeMetni(await stokIste(env, "/celal-liste", {}).catch(() => null));
+  if (ad === "eksik_listesi_karti") { // 13 Kasım (Patron): fabrikaya giden son kartın AYNISI (yazı + görüntü düğmeleri)
+    const gs = String(g.gun || "").trim();
+    const gun = gs === "dun" ? gunA9(simdi - 86400) : gs === "bugun" ? gunA9(simdi) : /^\d{4}-\d{2}-\d{2}$/.test(gs) ? gs : null;
+    const k = await botaSor(env, "sami", "eksikKarti", gun);
+    if (!k) return "Sami'ye ulaşılamadı; kart okunamadı.";
+    if (!k.ok) return `Kart yok: ${k.neden}.`;
+    const kl = { inline_keyboard: (k.dugmeler || []).map((satir) => satir.map((text) => ({ text: String(text).slice(0, 60), callback_data: "gz:-" }))) };
+    const altSatir = `Yukarıdaki kart ${k.gun.split("-").reverse().slice(0, 2).join(".")} ${tarihSaat(k.zaman).slice(11, 16)}'te ${k.kisiler.join(", ")} hesabına giden son eksik listesi kartıdır (o listede ${k.kartSayisi} kart). Düğmeler sadece görüntüdür.`;
+    if (env.__kuru) return `(DENEME: kart Patron'a gösterilirdi.) KART YAZISI:\n${k.yazi}\nDÜĞMELER: ${(k.dugmeler || []).map((sx) => sx.map((d) => `[${d}]`).join(" ")).join(" / ")}\n${altSatir}`;
+    let gitti = false;
+    if (k.resim && k.kod) { // kartta fotoğraf vardı: aynı model fotoğrafıyla
+      const f = await botaSor(env, "kemal", "modelFoto", k.kod);
+      if (f && f.ok && f.bayt) {
+        const fd = new FormData();
+        fd.append("chat_id", patron(env)); fd.append("photo", new Blob([f.bayt], { type: "image/jpeg" }), `${k.kod}.jpg`); fd.append("caption", String(k.yazi).slice(0, 1000)); fd.append("reply_markup", JSON.stringify(kl)); fd.append("protect_content", "true");
+        const r = await tgForm(env, "sendPhoto", fd).catch(() => null);
+        gitti = Boolean(r && r.ok);
+      }
+    }
+    if (!gitti) await yaz(env, k.yazi, { reply_markup: kl, posta: { tur: "cevap" } });
+    return `KART GÖSTERİLDİ. Patron'a sadece şunu yaz: ${altSatir}`;
+  }
   if (ad === "deneme_modu") { // 13 Kasım (Patron, kural 40)
     if (g.islem === "basla") {
       const r = await modBasla(env, simdi);
@@ -798,6 +829,7 @@ export async function dugme(env, cq, simdi) {
     await yaz(env, `🏷 ${kod} = ${marka === "BLACKROSE" ? "BLACK ROSE" : "VOLONTE"} (kalıcı; bütün botlar bunu kullanır).`);
     return cevap("Kaydedildi");
   }
+  if (String(cq.data) === "gz:-") return cevap("Bu kart sadece görüntü; düğmeleri basılamaz."); // 13 Kasım: gösterilen kart kopyası
   if (/^vmk:/.test(String(cq.data))) return modelKartDugmesi(env, cq, simdi, cevap); // 9 Kasım: kısa model kartı
   if (/^vrk:/.test(String(cq.data))) return rkKararDugmesi(env, cq, simdi, cevap); // 11 Kasım: repete kartı [Onaylıyorum] [Reddediyorum]
   if (/^vbo:/.test(String(cq.data))) return bittiKararDugmesi(env, cq, simdi, cevap); // 10 Kasım: fabrika bitti → Hemra önerisi → Patron

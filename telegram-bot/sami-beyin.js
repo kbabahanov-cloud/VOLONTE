@@ -6,6 +6,8 @@
 //  - Bütçe: ekibin 80 $'ından ayrı, aylık 30 $ (11 Kasım; önce 10 $); %80'de (24 $) Murat'a uyarı; dolunca beyin durur, komutlar çalışır.
 //  - Sohbet geçmişi ve harcama Sami'nin deposunda (StokDO ayar; KV günlük yazma sınırını harcamaz).
 
+import { magazaOzetMetni } from "./stok-ozet.js";
+import { eksikKartiBul, goruntuKlavye, eksikKartiSatiri } from "./fabrika.js";
 import { kitapOku, botSiniri } from "./kitap.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { claudeTur } from "./ai-istemci.js";
@@ -57,6 +59,8 @@ const nesne = (props) => ({ type: "object", properties: props, required: Object.
 const ARACLAR = [
   { name: "stok_bilgisi", description: "Bir model kodunun Vegawin stok adedi (mağaza bazında) ve durumu (stokta / bitti / gizli). Fiyat vermez.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
   { name: "satislar", description: "Bir günün satılan modelleri (çok satandan aza): kod, satılan adet, kalan stok. gun: 'bugun', 'dun' ya da YYYY-AA-GG.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
+  { name: "magaza_stok_ozeti", description: "İki mağazanın (VOLONTE / Black Rose) stok özeti Vegawin'den: stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu gerekmez. \"iki mağazanın stoğunu ver\", \"stok özeti\" denince kullan; sonucu AYNEN yaz.", strict: true, input_schema: nesne({}) },
+  { name: "eksik_listesi_karti", description: "Fabrikaya giden son eksik listesi kartının AYNISINI (tam yazı + düğmeler, düğmeler sadece görüntü) bu sohbete gönderir. gun: 'bugun', 'dun', YYYY-AA-GG ya da boş (son kart). \"eksik listesi kartını göster\" denince kullan; kart gidince sadece aracın verdiği tek satırı yaz.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
   { name: "stoksuz_modeller", description: "Vegawin'de stoğu biten (0 ya da eksi) modellerin kodları.", strict: true, input_schema: nesne({}) },
   { name: "eksik_listesi_durumu", description: "Bugünkü fabrika eksik listesinin durumu: Hemra'ya gitti mi, onaylandı mı, her modelin kararı (renkler / istenmeyecek / bekliyor) ve önceki istek kaydı.", strict: true, input_schema: nesne({}) },
   { name: "siparis_durumu", description: "Bir modelin son 3 haftadaki fabrika siparişleri: istenen renkler, fabrikanın cevabı (gelecek/repete/bitti), teslim günü, geldi mi.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
@@ -93,6 +97,18 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     const l = ham.filter((x) => !indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })).sort((a, b) => b.satilan - a.satilan);
     const ind = muratMi(env, kim) ? ham.filter((x) => indirimliMi(x.kod)).map((x) => ({ kod: x.kod, satilan: x.satilan, kalan: x.kalan })) : [];
     return { gun, model: l.length, toplam: l.reduce((t, x) => t + x.satilan, 0), satislar: l.slice(0, 40), ...(ind.length ? { indirimli_mal: ind } : {}) };
+  }
+  if (ad === "magaza_stok_ozeti") {
+    const gb = simdi - ((simdi + SAAT_FARKI) % 86400);
+    return { sonuc: magazaOzetMetni(await stokIste(env, "/magaza-ozet", { basla: gb, bitis: gb + 86400 }), simdi) };
+  }
+  if (ad === "eksik_listesi_karti") {
+    const g = String(girdi.gun || "").trim();
+    const gun = g === "dun" ? gunAnahtari(simdi - 86400) : g === "bugun" ? gunAnahtari(simdi) : /^\d{4}-\d{2}-\d{2}$/.test(g) ? g : null;
+    const k = await eksikKartiBul(env, gun, simdi);
+    if (!k.ok) return { sonuc: k.neden };
+    await tg(env, "sendMessage", { chat_id: kim, text: k.yazi, reply_markup: goruntuKlavye(k.dugmeler) });
+    return { sonuc: eksikKartiSatiri(k) };
   }
   if (ad === "stoksuz_modeller") {
     const t = await stokIste(env, "/tum");

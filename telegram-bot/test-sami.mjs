@@ -3509,3 +3509,72 @@ test("13 Kasım (Patron) EKSİK LİSTESİ SAYISI TEK: gün içinde birden fazla 
   assert.equal(fabrikaGidenMetni(gun, simdi, giden, [], [L1, L2]), "Bugün (12.11) fabrikaya 8 model gitti (2 listede, toplam).\nVOLONTE (4): 3567, 3569, 3596, 3607\nBlack Rose (4): 3162, 3205, 3412, 3587\n2 ayrı liste: 19:25 Black Rose 4 · 20:05 VOLONTE 4");
   assert.equal(fabrikaGidenMetni(gun, simdi, { BLACKROSE: L1.BLACKROSE }, [], [L1]), "Bugün (12.11) fabrikaya 4 model gitti.\nVOLONTE: giden yok\nBlack Rose (4): 3162, 3205, 3412, 3587");
 });
+
+test("13 Kasım (Patron) İKİ MAĞAZANIN STOĞU: Vegawin'den mağaza mağaza tek özet — stoktaki model, toplam adet, bugün biten / gelen; model kodu sorulmaz; en fazla 8 satır; fiyat yok; mağazalar toplanmaz", async () => {
+  const { magazaOzetMetni, celalListeMetni } = await import("./stok-ozet.js");
+  const o = ortam();
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const t0 = Date.UTC(2026, 10, 13, 6, 0) / 1000; // 13 Kasım 09:00
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 44, fiyat: 30 }, { kod: "3500", adet: 5, fiyat: 20 }, { kod: "3627", adet: 0, fiyat: 25 }, { kod: "5068", adet: 4, fiyat: 20, celal: true }], simdi: t0 });
+  await stokYaz("yaz", { magaza: "BLACKROSE", urunler: [{ kod: "3534", adet: 44, fiyat: 40 }, { kod: "3587", adet: 2, fiyat: 35 }], simdi: t0 });
+  // gün içinde: 3500 bitti, 3627 geldi (VOLONTE); 3587 bitti (Black Rose)
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 40, fiyat: 30 }, { kod: "3500", adet: 0, fiyat: 20 }, { kod: "3627", adet: 12, fiyat: 25 }, { kod: "5068", adet: 4, fiyat: 20, celal: true }], simdi: t0 + 3600 });
+  await stokYaz("yaz", { magaza: "BLACKROSE", urunler: [{ kod: "3534", adet: 44, fiyat: 40 }, { kod: "3587", adet: 0, fiyat: 35 }], simdi: t0 + 7200 });
+  const gb = t0 - 6 * 3600 - 3 * 3600 + 3 * 3600; // İstanbul gün başı (00:00)
+  const oz = await (await stokYaz("magaza-ozet", { basla: t0 - 9 * 3600, bitis: t0 + 15 * 3600 })).json();
+  void gb;
+  const metin = magazaOzetMetni(oz, t0 + 8 * 3600);
+  assert.deepEqual(metin.split("\n").slice(0, 5), [
+    "📦 Mağaza stoğu — Vegawin (13.11 17:00)",
+    "VOLONTE: stokta 3 model · toplam 56 adet",
+    "   bugün biten 1 (3500) · bugün gelen 1 (3627)",
+    "Black Rose: stokta 1 model · toplam 44 adet",
+    "   bugün biten 1 (3587) · bugün gelen 0",
+  ]);
+  assert.ok(metin.split("\n").length <= 8);
+  assert.ok(!/\$|fiyat|ciro/i.test(metin));
+  assert.match(metin.split("\n").at(-1), /^Son Vegawin okuması: /);
+  assert.equal(magazaOzetMetni(null, t0), "Mağaza stoğu şu an okunamadı (Vegawin kaydı boş).");
+  // Celal listesi: köprünün işaretlediği kart + Patron'un listesi; liste tamdır
+  const cl = await (await stokYaz("celal-liste", {})).json();
+  assert.ok(cl.some((x) => x.kod === "5068" && x.adet === 4 && x.isaretli && x.listede));
+  assert.deepEqual(cl.map((x) => x.kod).sort(), ["3000", "3002", "5067", "5068", "5074", "5076", "5078", "9334"]);
+  assert.match(celalListeMetni(cl), /^Celal'in Vegawin'deki modelleri \(8\): 3000 \(stok 0\), .*5068 \(stok 4\).*\. Vegawin'de bunların dışında Celal modeli yok; Celal sorularında liste budur\.$/);
+  // Vegawin'de CELAL işaretli yeni bir kart görünürse listeye kendiliğinden girer
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "5080", adet: 7, fiyat: 20, celal: true }], simdi: t0 + 9000 });
+  assert.ok((await (await stokYaz("celal-liste", {})).json()).some((x) => x.kod === "5080" && x.isaretli && !x.listede));
+});
+
+test("13 Kasım (Patron) EKSİK LİSTESİ KARTINI GÖSTER: fabrikaya giden SON sipariş kartının aynısı (yazı + düğmeler) kanıt kaydından; tarih verilirse o gün; düğmeler sadece görüntü (kart sayılmaz, hatırlatılmaz); liste başı / sonu kartı sayılmaz", async () => {
+  const f = await import("./fabrika.js");
+  const kt = await import("./kart-takip.js");
+  const o = ortam();
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }, { id: 555, ad: "Nuri" }, { id: 557, ad: "Fuat" }]));
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const z = (g, hh, mm) => Date.UTC(2026, 10, g, hh - 3, mm) / 1000;
+  const D = [["✅ Gelecek", "🔁 Repete olacak"], ["⚠️ Az kaldı", "❌ Bitti, gelmeyecek"]];
+  const kart = (zaman, chat, yazi, dugmeler = D, metod = "sendPhoto") => ({ zaman, metod, chat: String(chat), mesaj: 1, resim: true, yazi, dugmeler });
+  await stokYaz("ayar-yaz", { k: "kanit:gercek:2026-11-12", v: JSON.stringify([
+    kart(z(12, 19, 25), 556, "🌹 BLACK ROSE\n3587 · Büyük (44-50) · gri 8"),
+    kart(z(12, 20, 3), 556, "🟦 VOLONTE\n3567 · Küçük (38-44) · siyah 8"), kart(z(12, 20, 3), 555, "🟦 VOLONTE\n3567 · Küçük (38-44) · siyah 8"),
+    kart(z(12, 20, 5), 556, "🟦 VOLONTE\n3607 · Küçük (38-44) · kahve 4"), kart(z(12, 20, 5), 555, "🟦 VOLONTE\n3607 · Küçük (38-44) · kahve 4"), kart(z(12, 20, 5), 557, "🟦 VOLONTE\n3607 · Küçük (38-44) · kahve 4"),
+    kart(z(12, 20, 5) + 20, 556, "🟦 VOLONTE LİSTESİ – SONU (2 model)\nHepsi aynı sürede gelecekse aşağıdan seçin.", [["✅ Hepsi gelecek"]], "sendMessage"),
+    kart(z(12, 20, 6), 333, "📋 Gidecek liste (12.11)", [["✅ Onayla", "✏️ Düzelt"]], "sendMessage"), // Hemra'nın kartı — fabrika kartı değil
+    { zaman: z(12, 21, 0), metod: "editMessageCaption", chat: "556", mesaj: 1, resim: true, yazi: "🟦 VOLONTE\n3607 · Küçük (38-44) · kahve 4\n\n✅ Sinem: Onaylandı, gelecek", dugmeler: [["↩️ Geri al"]] },
+  ]) });
+  const k = await f.eksikKartiBul(o.env, null, z(13, 17, 0));
+  assert.deepEqual([k.ok, k.gun, k.zaman, k.kod, k.kartSayisi, k.resim], [true, "2026-11-12", z(12, 20, 5), "3607", 2, true]);
+  assert.equal(k.yazi, "🟦 VOLONTE\n3607 · Küçük (38-44) · kahve 4"); // tam yazı, sonradan düzenlenen hali değil
+  assert.deepEqual(k.dugmeler, D);
+  assert.deepEqual([...k.kisiler].sort(), ["Fuat", "Nuri", "Sinem"]);
+  assert.equal(f.eksikKartiSatiri(k), "Yukarıdaki kart 12.11.2026 20:05'te Sinem, Nuri, Fuat hesabına giden son eksik listesi kartıdır (o listede 2 kart). Düğmeler sadece görüntüdür. Kartta modelin fotoğrafı da vardı.");
+  // tarih verilirse o günün kartı; o gün kart yoksa açık cevap
+  assert.equal((await f.eksikKartiBul(o.env, "2026-11-12", z(13, 17, 0))).kod, "3607");
+  assert.deepEqual(await f.eksikKartiBul(o.env, "2026-11-10", z(13, 17, 0)), { ok: false, neden: "10.11.2026 günü fabrikaya giden eksik listesi kartı yok" });
+  // görüntü düğmeleri: basılamaz veri taşır; kart takibine ve deftere "cevap bekleyen kart" olarak girmez
+  const kl = f.goruntuKlavye(k.dugmeler);
+  assert.deepEqual(kl.inline_keyboard.map((s) => s.map((b) => [b.text, b.callback_data])), [[["✅ Gelecek", "gz:-"], ["🔁 Repete olacak", "gz:-"]], [["⚠️ Az kaldı", "gz:-"], ["❌ Bitti, gelmeyecek", "gz:-"]]]);
+  await kt.kartIzle(o.env, "sendMessage", { chat_id: 333, text: k.yazi, reply_markup: kl }, { ok: true, result: { message_id: 77 } });
+  assert.equal(JSON.parse((await (await stokYaz("ayar-oku", { k: "kartTakip" })).json()).v || "[]").length, 0);
+  assert.equal(await kt.acikAyniKart(o.env, "sendMessage", { chat_id: 333, text: k.yazi, reply_markup: kl }), null);
+});

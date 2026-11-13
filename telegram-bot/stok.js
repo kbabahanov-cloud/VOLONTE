@@ -587,6 +587,27 @@ export class StokDeposu {
     return { kod, satirlar, toplam: this.toplam(kod), karar };
   }
 
+  // 13 Kasım (Patron): mağaza mağaza stok özeti — stoktaki model, toplam adet, bugün biten / gelen (olay kaydı; model hangi mağazadaysa oraya yazılır)
+  magazaOzet({ basla, bitis }) {
+    const magazalar = this.hepsi("SELECT magaza, SUM(CASE WHEN adet > 0 THEN 1 ELSE 0 END) AS model, SUM(CASE WHEN adet > 0 THEN adet ELSE 0 END) AS adet FROM urun GROUP BY magaza ORDER BY magaza").map((m) => ({ magaza: m.magaza, model: Number(m.model) || 0, adet: Number(m.adet) || 0, biten: [], gelen: [] }));
+    const sonOlay = new Map();
+    for (const o of this.olaylar(basla, bitis)) if (o.tur === "bitti" || o.tur === "geldi") sonOlay.set(String(o.kod), o.tur); // gün içinde bitip gelen model son durumuyla sayılır
+    for (const [kod, tur] of sonOlay) {
+      if (indirimliMi(kod)) continue;
+      for (const r of this.hepsi("SELECT magaza, adet FROM urun WHERE kod = ?", kod)) {
+        const m = magazalar.find((x) => x.magaza === r.magaza);
+        if (!m) continue;
+        if (tur === "bitti" && !(Number(r.adet) > 0)) m.biten.push(kod);
+        if (tur === "geldi" && Number(r.adet) > 0) m.gelen.push(kod);
+      }
+    }
+    return { magazalar, kopruler: this.hepsi("SELECT magaza, son FROM kopru ORDER BY magaza") };
+  }
+  // Celal'in Vegawin'deki bütün modelleri: köprünün "CELAL" işaretlediği kartlar + Patron'un listesi (kural 31)
+  celalListe() {
+    const kodlar = new Set([...this.hepsi("SELECT DISTINCT kod FROM urun WHERE tedarikci = 'CELAL'").map((r) => String(r.kod)), ...CELAL_KODLAR]);
+    return [...kodlar].sort().map((kod) => ({ kod, adet: Number((this.tek("SELECT SUM(adet) AS a FROM urun WHERE kod = ?", kod) || {}).a) || 0, isaretli: Boolean(this.tek("SELECT 1 AS v FROM urun WHERE kod = ? AND tedarikci = 'CELAL'", kod)), listede: CELAL_KODLAR.includes(kod) }));
+  }
   ozet() {
     return {
       kopruler: this.hepsi("SELECT magaza, son, adet, degisim, kalp FROM kopru ORDER BY magaza"),
@@ -677,6 +698,8 @@ export class StokDO {
     if (yol === "/repete-karar") return cevap(d.repeteKarar(g));
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
+    if (yol === "/magaza-ozet") return cevap(d.magazaOzet(g));
+    if (yol === "/celal-liste") return cevap(d.celalListe());
     return new Response("?", { status: 404 });
   }
 }

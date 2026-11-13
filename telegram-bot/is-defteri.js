@@ -44,7 +44,7 @@ export async function defterTg(env, bot, metod, govde, sonuc) {
   const k = await kanallar(env);
   if (chat === k.arsiv || chat === k.kanal) return; // arşiv kopyaları ve kanal gönderimleri defterIs ile (çift sayılmaz)
   const metin = String(govde.text || govde.caption || (Array.isArray(govde.media) && govde.media[0] && govde.media[0].caption) || "");
-  const cbler = ((govde.reply_markup && govde.reply_markup.inline_keyboard) || []).flat().map((b) => b && b.callback_data).filter(Boolean);
+  const cbler = ((govde.reply_markup && govde.reply_markup.inline_keyboard) || []).flat().map((b) => b && b.callback_data).filter((c) => c && c !== "gz:-"); // "gz:-" = sadece görüntü düğmesi (kart sayılmaz)
   const r = sonuc && sonuc.result;
   if (cbler.length) await kopyaKaydet(env, metod, govde, sonuc).catch(() => null); // 9 Kasım: kartın kendisi yeniden gönderilebilsin
   const botAd = bot === "pelin" && /\bNora\b|senaryo/i.test(metin) ? "nora" : bot;

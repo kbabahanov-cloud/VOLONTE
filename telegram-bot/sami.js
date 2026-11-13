@@ -200,6 +200,7 @@ export async function guncelleme(u, env) {
     const simdiD = Math.floor(Date.now() / 1000);
     // Fabrika düğmeleri: fabrika kişileri de basabilir (sadece bunlar)
     if (cq.data === GUNCEL) return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "⏩ Güncel kart aşağıda" });
+    if (cq.data === "gz:-") return tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: "Bu kart sadece görüntü; düğmeleri basılamaz." }); // 13 Kasım: gösterilen kart kopyası
     if (String(cq.data || "").startsWith("fc:")) return siparisDugmesi(env, cq, tg, simdiD, izinli(cq.from.id, env) || (await fabrikaKisisiMi(env, cq.from.id)));
     if (String(cq.data || "").startsWith("fk:")) return kararDugmesi(env, cq, tg, simdiD);
     if (/^f[oh]:/.test(String(cq.data || ""))) return zincirDugmesi(env, cq, tg, simdiD); // 10 Kasım: Fuat onayı / Hemra önerisi
