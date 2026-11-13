@@ -953,11 +953,13 @@ test("11 Kasım REPETE KARTI (Venom): Sami'nin önerisi → sade Patron kartı (
   assert.ok(!o.depo.has("venom:rkKart:DTEST-001-a") && !o.depo.has("venom:rkKanit:DTEST-001-a"));
 });
 
-test("11 Kasım VENOM LİSTELERİ (B1–B5): Bekleyenler = sadece Patron kararı, her biri kendi düğmesiyle; bilgi satırı yok; 3 günden eski ve tekrar düşer; satır kesilmez; kod adı görünmez; biten Kemal işi kanıtla kapanır", async () => {
+test("11 Kasım VENOM LİSTELERİ (B1–B5): Bekleyenler = sadece Patron kararı, her biri kendi düğmesiyle; bilgi satırı yok; 3 günden eski ve tekrar düşer; satır kesilmez; kod adı görünmez; biten Kemal işi kanıtla kapanır", async (tc) => {
   const v = await import("./venom-bot.js");
   const { bitmeyenIsler, isBasligi } = await import("./venom-yonetim.js");
   const o = ortam();
   const simdi = ist(11, 15, 0);
+  // 13 Kasım (ders 36): test verisi sabit tarihli — "şimdi" de sabitlenir (yoksa test birkaç gün sonra kendiliğinden düşer)
+  const gercekSaat = Date.now; Date.now = () => (simdi + 60) * 1000; tc.after(() => { Date.now = gercekSaat; });
   const kart = (id, tur, gunOnce, ek = {}) => o.depo.set(`venom:bot:is:${id}`, JSON.stringify({ id, tur, durum: "bekliyor", zaman: simdi - gunOnce * 86400, metin: "📋 Fuat'a gidecek mutabakat (birebir; altında ✅ Mutabıkım / ❌ Uyuşmuyor / ⏳ Sonra düğmeleri):\n\n…", ...ek }));
   kart("m1", "mutabakat", 5); // eski → düşer
   kart("m2", "mutabakat", 1.5); // aynı iş, eski kopya → düşer (12 Kasım: 2 gün idi; mesaj gerçek saatle işlendiği için 12.11 15:00'ten sonra 3 günü geçip "eskidi" oluyordu)
@@ -1416,7 +1418,7 @@ test("manken kuralı: büyük bedeni olan bütün modeller (38-50 dahil) dolgun 
   assert.equal(s.yuzler.kucuk.ad, "2 numaralı siyahi kız");
 });
 
-test("ekip düzeni (11 Kasım, TEK DEFTER): Hemra'ya en fazla 5 iş, her iş AYRI kart + kendi düğmeleri (satırda 2); tekrar yok; defterde kapanan iş düşer; seçim → kart seçilen kişiye", async () => {
+test("ekip düzeni (11 Kasım, TEK DEFTER): Hemra'ya en fazla 5 iş, her iş AYRI kart + kendi düğmeleri (satırda 2); tekrar yok; defterde kapanan iş düşer; seçim → kart seçilen kişiye", async (tc) => {
   const o = ortam();
   const E = await import("./venom-ekip.js");
   const K = await import("./venom-kopru.js");
@@ -1424,6 +1426,7 @@ test("ekip düzeni (11 Kasım, TEK DEFTER): Hemra'ya en fazla 5 iş, her iş AYR
   const { kartIletAdimi } = await import("./kart-tekrar.js");
   o.env.AZIZ_ID = "505";
   const t = ist(10, 11);
+  const gercekSaat = Date.now; Date.now = () => (t + 60) * 1000; tc.after(() => { Date.now = gercekSaat; }); // 13 Kasım (ders 36): sabit tarihli veri → sabit "şimdi"
   const isd = (kayitlar) => o.env.STOK.get().fetch("https://stok/isd-yaz", { method: "POST", body: JSON.stringify({ kayitlar }) });
   const kart = (kime, kod, mesaj, zaman, cb = `sz:${kod}:x`) => ({ zaman, bot: "kemal", tur: "kart", kime, kod, ozet: `⬆️ ${kod} öneri kartı`, chat: kime, mesaj, cbler: [cb] });
   // Aziz'e 7 ayrı modelin kartı + 3493 için aynı kart İKİ kez (yeniden gönderilmiş) → 7 iş, tekrar yok
