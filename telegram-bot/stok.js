@@ -634,11 +634,17 @@ export class StokDeposu {
     const kodlar = new Set([...this.hepsi("SELECT DISTINCT kod FROM urun WHERE tedarikci = 'CELAL'").map((r) => String(r.kod)), ...CELAL_KODLAR]);
     return [...kodlar].sort().map((kod) => ({ kod, adet: Number((this.tek("SELECT SUM(adet) AS a FROM urun WHERE kod = ?", kod) || {}).a) || 0, isaretli: Boolean(this.tek("SELECT 1 AS v FROM urun WHERE kod = ? AND tedarikci = 'CELAL'", kod)), listede: CELAL_KODLAR.includes(kod) }));
   }
+  // 13 Kasım (Patron): son 30 günde stoğu BİTEN ve hâlâ stoksuz olan modeller (eski pasif kartlar sayılmaz)
+  bitenler30(simdi) {
+    return this.hepsi("SELECT kod, MAX(zaman) AS z FROM olay WHERE tur = 'bitti' AND zaman >= ? GROUP BY kod ORDER BY z DESC", simdi - 30 * 86400)
+      .filter((r) => !indirimliMi(r.kod) && !((this.toplam(r.kod) || 0) > 0)).map((r) => ({ kod: String(r.kod), zaman: r.z }));
+  }
   ozet() {
     return {
       kopruler: this.hepsi("SELECT magaza, son, adet, degisim, kalp FROM kopru ORDER BY magaza"),
       stokta: this.tek("SELECT COUNT(*) AS n FROM (SELECT kod FROM urun GROUP BY kod HAVING SUM(adet) > 0)").n,
       stoksuz: this.tek("SELECT COUNT(*) AS n FROM (SELECT kod FROM urun GROUP BY kod HAVING SUM(adet) <= 0)").n,
+      biten30: this.bitenler30(Math.floor(Date.now() / 1000)).length, // 13 Kasım (Patron): "stoksuz 886" yerine son 30 günde biten modeller
       kararlar: this.hepsi("SELECT durum, COUNT(*) AS n FROM karar GROUP BY durum"),
     };
   }
@@ -725,6 +731,7 @@ export class StokDO {
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
     if (yol === "/magaza-ozet") return cevap(d.magazaOzet(g));
+    if (yol === "/biten30") return cevap(d.bitenler30(Number(g.simdi) || Math.floor(Date.now() / 1000)));
     if (yol === "/haftalik-liste") return cevap(d.haftalikListe({ bugun: g.bugun, simdi: Number(g.simdi) || Math.floor(Date.now() / 1000) })); // 13 Kasım (B1): sadece okuma
     if (yol === "/celal-liste") return cevap(d.celalListe());
     return new Response("?", { status: 404 });

@@ -106,6 +106,23 @@ const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim)
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
+// 13 Kasım (Patron) — DÖNGÜ SIRASI: stokta + sitede (fotoğraflı) bütün modeller sırayla paylaşılır; sıra "en uzun süredir paylaşılmayan
+// önce (hiç paylaşılmamış en önde)" olduğu için hepsi paylaşılmadan hiçbiri tekrar çıkmaz; biten model sıradan çıkar, yeni model öne geçer.
+// Sayaç: bu döngüde paylaşılan / sıradaki toplam model. Hepsi paylaşılınca döngü biter, yenisi başlar. Kayıt: "kemal:dongu" (ofis okur).
+export async function donguIsle(env, kod, simdi) {
+  const site = await siteUrunleriAl(env);
+  const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
+  const stokVar = Object.keys(stok).length > 0;
+  const uygun = site.filter((u) => !u.gizli && (u.fotolar || []).length && (stok[u.kod] ? stok[u.kod].toplam > 0 && !stok[u.kod].gizli : stokVar)).map((u) => String(u.kod));
+  let d = (await env.KAYIT.get("kemal:dongu", "json").catch(() => null)) || { no: 1, basla: simdi, kodlar: [] };
+  const kume = new Set([...(d.kodlar || []), ...(kod ? [String(kod)] : [])]);
+  let x = uygun.filter((k) => kume.has(k)).length;
+  if (uygun.length && x >= uygun.length) { d = { no: (d.no || 1) + 1, basla: simdi, kodlar: [], onceki: { no: d.no || 1, bitis: simdi, y: uygun.length } }; x = 0; }
+  else d.kodlar = [...kume];
+  Object.assign(d, { x, y: uygun.length, guncel: simdi });
+  await env.KAYIT.put("kemal:dongu", JSON.stringify(d));
+  return d;
+}
 // 13 Kasım (Patron, B2): yeni kanal tasarımının TEK SEFERLİK örneği (Venom Patron'a gösterir; kanala hiçbir şey gitmez) ve onayı
 export async function tasarimOrnegi(env, simdi = Math.floor(Date.now() / 1000)) {
   const site = await siteUrunleriAl(env);
@@ -1864,6 +1881,7 @@ export async function kemalOzet(env, simdi) {
     // 13 Kasım (iş bekçisi): son paylaşımın zamanı + öneri havuzu tükendi mi
     sonPaylasim: Math.max(0, ...Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).map(Number).filter(Boolean)),
     tukendi: Boolean(tur && tur.tukendi),
+    dongu: await env.KAYIT.get("kemal:dongu", "json").then((d) => (d ? { no: d.no, x: d.x, y: d.y, basla: d.basla } : null)).catch(() => null), // 13 Kasım: döngü sayacı
   };
 }
 
@@ -2639,6 +2657,7 @@ export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKo
   await defterIs(env, "kemal", "kanala paylaşıldı", { kod: paket.kod });
   await defterSatir(env, "kemal", { id: `kemal:kanal:${paket.kod}`, tur: "kanal", kod: String(paket.kod), ne: "Kanal paylaşımı", kim: "Kemal", durum: "bitti", bot: "kemal", guncel: simdi, kanit: `kanala paylaşıldı${(g.ids || []).filter((id) => id > 0).length ? ` (mesaj ${(g.ids || []).filter((id) => id > 0)[0]})` : ""}` }); // 12 Kasım: TEK DEFTER — kanıtla kapanır
   await env.KAYIT.put("sonpaylasim", JSON.stringify(sonpaylasim));
+  await donguIsle(env, paket.kod, simdi).catch(() => null); // 13 Kasım: döngü sayacı (ofis "döngü: X/Y")
   if (env.STOK) await stokIste(env, "/tg-yaz", { kayitlar: { [paket.kod]: simdi } }).catch(() => null);
   if (sayma) await env.KAYIT.put(`sayac:${gunAnahtari(simdi)}`, String((await turSayac(env, simdi)) + 1), { expirationTtl: 3 * 86400 });
   await gecmisKaydet(env, String(paket.kod), (paket.renkler || []).join(","), simdi);

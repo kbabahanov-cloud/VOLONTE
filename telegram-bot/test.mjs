@@ -2724,3 +2724,22 @@ test("13 Kasım (Patron, B2) YENİ KANAL TASARIMI: en fazla 5 satır ([etiket ·
   await w.tasarimOnayi(o.env, { acik: false });
   assert.equal(o.depo.has("kemal:tasarim"), false); assert.equal(w.tasarimOku(), null);
 });
+
+test("13 Kasım (Patron) DÖNGÜ SAYACI: paylaşılan model bu döngüye yazılır (X/Y); stoğu biten sıradan çıkar; hepsi paylaşılınca döngü biter, yenisi başlar", async () => {
+  const w = await import("./worker.js");
+  const o = await yeniOrtam();
+  const t = ist(15, 0);
+  let d = await w.donguIsle(o.env, null, t);
+  const y = d.y;
+  assert.ok(y >= 2, `sıradaki model sayısı: ${y}`);
+  assert.deepEqual([d.no, d.x], [1, 0]);
+  d = await w.donguIsle(o.env, "3403", t + 60);
+  assert.deepEqual([d.no, d.x, d.y], [1, 1, y]);
+  d = await w.donguIsle(o.env, "3403", t + 120); // aynı model iki kez sayılmaz
+  assert.equal(d.x, 1);
+  // kalan bütün modeller paylaşılınca döngü kapanır, 2. döngü 0'dan başlar
+  const site = JSON.parse(JSON.stringify(await (await fetch("https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/main/veri/urunler.json")).json()));
+  for (const u of site) d = await w.donguIsle(o.env, String(u.kod), t + 300);
+  assert.deepEqual([d.no, d.x, d.onceki.no], [2, 0, 1]);
+  assert.equal((await w.kemalOzet(o.env, t + 400)).dongu.no, 2);
+});

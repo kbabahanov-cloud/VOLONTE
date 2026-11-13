@@ -61,7 +61,7 @@ const ARACLAR = [
   { name: "satislar", description: "Bir günün satılan modelleri (çok satandan aza): kod, satılan adet, kalan stok. gun: 'bugun', 'dun' ya da YYYY-AA-GG.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
   { name: "magaza_stok_ozeti", description: "İki mağazanın (VOLONTE / Black Rose) stok özeti Vegawin'den: stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu gerekmez. \"iki mağazanın stoğunu ver\", \"stok özeti\" denince kullan; sonucu AYNEN yaz.", strict: true, input_schema: nesne({}) },
   { name: "eksik_listesi_karti", description: "Fabrikaya giden son eksik listesi kartının AYNISINI (tam yazı + düğmeler, düğmeler sadece görüntü) bu sohbete gönderir. gun: 'bugun', 'dun', YYYY-AA-GG ya da boş (son kart). \"eksik listesi kartını göster\" denince kullan; kart gidince sadece aracın verdiği tek satırı yaz.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
-  { name: "stoksuz_modeller", description: "Vegawin'de stoğu biten (0 ya da eksi) modellerin kodları.", strict: true, input_schema: nesne({}) },
+  { name: "stoksuz_modeller", description: "Son 30 günde stoğu biten (ve hâlâ stoksuz olan) modellerin kodları ve bittiği gün. Eski pasif kartlar sayılmaz; 'stoksuz kaç model' sorusunun cevabı budur.", strict: true, input_schema: nesne({}) },
   { name: "eksik_listesi_durumu", description: "Bugünkü fabrika eksik listelerinin durumu, MARKA MARKA (VOLONTE ve Black Rose AYRI listedir; VOLONTE'yi Aziz, Black Rose'u Merdan kontrol eder, ikisini Hemra onaylar): kontrol kartı kimde, onaylandı mı, fabrikaya gitti mi; her modelin MARKASI, kararı (renkler / istenmeyecek / bekliyor) ve önceki istek kaydı. Cevapta her markayı ayrı yaz; soran kişiye önce kendi markasını anlat.", strict: true, input_schema: nesne({}) },
   { name: "siparis_durumu", description: "Bir modelin son 3 haftadaki fabrika siparişleri: istenen renkler, fabrikanın cevabı (gelecek/repete/bitti), teslim günü, geldi mi.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
   {
@@ -110,10 +110,10 @@ async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
     await tg(env, "sendMessage", { chat_id: kim, text: k.yazi, reply_markup: goruntuKlavye(k.dugmeler) });
     return { sonuc: eksikKartiSatiri(k) };
   }
-  if (ad === "stoksuz_modeller") {
-    const t = await stokIste(env, "/tum");
-    const l = Object.entries(t).filter(([k, x]) => !(x.toplam > 0) && !indirimliMi(k)).map(([k]) => k).sort();
-    return { sayi: l.length, kodlar: l.slice(0, 80) };
+  if (ad === "stoksuz_modeller") { // 13 Kasım (Patron): "stoksuz 886" yerine son 30 günde biten modeller
+    const l = await stokIste(env, "/biten30", { simdi });
+    const gun = (t) => { const d = new Date((t + SAAT_FARKI) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}`; };
+    return { baslik: "Son 30 günde biten modeller", sayi: l.length, modeller: l.slice(0, 120).map((x) => `${x.kod} (${gun(x.zaman)})`) };
   }
   if (ad === "eksik_listesi_durumu") return listeDurumu(env, simdi, kim); // 13 Kasım (kural 75): marka marka; soranın kendi markası önde
   if (ad === "siparis_durumu") {

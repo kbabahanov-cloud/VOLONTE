@@ -9,7 +9,6 @@ const SAAT = 3 * 3600; // İstanbul
 const SITE_VERI = "https://raw.githubusercontent.com/kbabahanov-cloud/VOLONTE/main/veri/urunler.json";
 const SITE_FOTO = "https://kbabahanov-cloud.github.io/VOLONTE/";
 const BOT_LINK = { pelin: "https://t.me/VolontePelinBot", kemal: "https://t.me/VolonteasistantBOT" };
-const HF_BASLANGIC_USD = 20; // Patron 4 Kasım: 20 $ yükledi, otomatik yükleme kapalı (bakiye tahmini = 20 − harcanan)
 const AYLIK_SINIR_USD = 150;
 
 const gun = (t) => new Date((t + SAAT) * 1000).toISOString().slice(0, 10);
@@ -169,16 +168,24 @@ async function durum(env, simdi) {
   const kitap = { surum: kitapSurum ? kitapSurum.surum : null, kural: kitapSurum ? kitapSurum.kural : null, botlar: Object.fromEntries(KITAP_BOTLARI.map((b, i) => [b, kitapOkudu[i] ? { surum: kitapOkudu[i].surum, zaman: kitapOkudu[i].zaman } : null])) };
   const harcama = { fal: sayi(hFal), claude: sayi(hClaude), openai: sayi(hOpenai), hf: sayi(hHf) };
   harcama.toplam = Math.round((harcama.fal + harcama.claude + harcama.openai + harcama.hf) * 100) / 100;
-  const hf = { bakiyeTahmini: Math.max(0, Math.round((HF_BASLANGIC_USD - harcama.hf) * 100) / 100), baslangic: HF_BASLANGIC_USD, bitis: hfAnahtar && hfAnahtar.bitis ? hfAnahtar.bitis : null, bagli: Boolean(pelinHfSonuc && pelinHfSonuc.anahtar && pelinHfSonuc.anahtar.var) };
+  // 13 Kasım (Patron): PARA SINIRLARI tek tablo — sınırlar kitaptan (kural 74), harcama her botun aylık sayacından (mikro-dolar)
+  const [kitapMetni, donguKaydi, ...botAy] = await Promise.all([okuMetin(env, "kitap:metin"), oku(env, "kemal:dongu"), ...["venom", "kemal", "selin", "sami", "pelin"].map((b) => okuMetin(env, `harcama-ay:${b}:${ay}`))]);
+  const paraBolumu = (String(kitapMetni || "").split(/^## PARA SINIRLARI\s*$/m)[1] || "").split(/^## /m)[0];
+  const sinirOf = (ad, vars) => { const m = new RegExp(`${ad}\\s+([^·;]+)`).exec(paraBolumu); const a = m && /(\d+(?:[.,]\d+)?)\s*\$\s*\/\s*ay/.exec(m[1]); return a ? Number(a[1].replace(",", ".")) : vars; };
+  const sinirlar = { venom: sinirOf("Venom", 50), kemal: sinirOf("Kemal", 20), selin: sinirOf("Selin", 10), sami: sinirOf("Sami", 5), pelin: sinirOf("Pelin", 100) };
+  const para = ["venom", "kemal", "selin", "sami", "pelin"].map((b, i) => ({ bot: b, harcanan: Math.round((Number(botAy[i]) || 0) / 1e4) / 100, sinir: sinirlar[b] }));
+  // 13 Kasım (Patron): Higgsfield bakiyesi gerçek hesaptan okunamıyor → sabit 20 $ hesabı ve tahmini bakiye KALDIRILDI (sadece bu ayki harcama görünür)
+  const hf = { bitis: hfAnahtar && hfAnahtar.bitis ? hfAnahtar.bitis : null, bagli: Boolean(pelinHfSonuc && pelinHfSonuc.anahtar && pelinHfSonuc.anahtar.var) };
   return {
     zaman: simdi, gun: bugun, saat: saat(simdi), botlar, onaylar, tasima, olaylar, son5, kitap,
-    uyarilar: [...(hf.bakiyeTahmini < 3 ? [`Higgsfield bakiyesi düşük: ~${hf.bakiyeTahmini} $ (3 $ altı) — yükleme gerekebilir`] : []), ...(ayna && ayna.bugun >= (ayna.gunlukSinir || 10) * 0.8 ? [`Pelin bugün ${ayna.bugun} $ harcadı (günlük sınır ${ayna.gunlukSinir} $)`] : [])],
+    para,
+    uyarilar: [...(ayna && ayna.bugun >= (ayna.gunlukSinir || 10) * 0.8 ? [`Pelin bugün ${ayna.bugun} $ harcadı (günlük sınır ${ayna.gunlukSinir} $)`] : [])],
     panolar: {
-      satis, stok: ozet ? { stokta: ozet.stokta, stoksuz: ozet.stoksuz, kopruler: (ozet.kopruler || []).map((k) => ({ magaza: k.magaza, son: k.son, adet: k.adet })), uyari: rSami ? rSami.yapilacak || [] : [] } : null,
-      kemal: { bugunPaylasim: kemalPaylasim.length, turPaylasim: sayi(sayac), onaylayan, siteOnay, son: sonPaylasimlar, rapor: rKemal || null },
+      satis, stok: ozet ? { stokta: ozet.stokta, biten30: ozet.biten30 == null ? null : ozet.biten30, kopruler: (ozet.kopruler || []).map((k) => ({ magaza: k.magaza, son: k.son, adet: k.adet })), uyari: rSami ? rSami.yapilacak || [] : [] } : null,
+      kemal: { dongu: donguKaydi ? { no: donguKaydi.no, x: donguKaydi.x, y: donguKaydi.y } : null, bugunPaylasim: kemalPaylasim.length, turPaylasim: sayi(sayac), onaylayan, siteOnay, son: sonPaylasimlar, rapor: rKemal || null },
       selin: { site, rapor: rSelin || null },
-      pelin: { isler: pelinIsler.slice(0, 12), kaynakZaman: pelinKaynakZaman, harcama, sinir: AYLIK_SINIR_USD, hf, bugun: ayna ? ayna.bugun : null, gunlukSinir: ayna ? ayna.gunlukSinir : 10 },
-      venom: { isler: venomIsler, harcama: sayi(venomHarcama), sinir: sayi(venomSinir) || 30 },
+      pelin: { isler: pelinIsler.slice(0, 12), kaynakZaman: pelinKaynakZaman, harcama, sinir: sinirlar.pelin, hf, bugun: ayna ? ayna.bugun : null, gunlukSinir: ayna ? ayna.gunlukSinir : 10 },
+      venom: { isler: venomIsler, harcama: sayi(venomHarcama), sinir: sinirlar.venom },
     },
     raporlar: { kemal: rKemal, sami: rSami, selin: rSelin },
     sohbet: { bugun: sayi(await env.KAYIT.get(`ofis:sohbetUsd:${bugun}`)), sinir: SOHBET_GUNLUK_USD, acik: Object.keys(SOHBET_BOTLARI) },
