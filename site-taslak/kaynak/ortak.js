@@ -114,9 +114,10 @@
     let ham = window.VOLONTE_VERI;
     if (!Array.isArray(ham)) { try { ham = await (await fetch("/veri")).json(); } catch { ham = []; } }
     const sinir = Date.now() - AYAR.yeniGun * 86400000;
-    MODELLER = ham.filter((u) => !u.gizli && (u.fotolar || []).length)
-      .map((u) => ({ ...u, yeni: u.eklenme ? new Date(u.eklenme).getTime() > sinir : false }))
-      .sort((a, b) => String(b.eklenme || "").localeCompare(String(a.eklenme || "")));
+    // 13 Kasım (Patron): stoğu biten model görünür kalır, "SOLD OUT" yazar, sipariş düğmesi çıkmaz; listede en sonda durur
+    MODELLER = ham.filter((u) => (!u.gizli || u.bitti) && (u.fotolar || []).length)
+      .map((u) => ({ ...u, bitti: Boolean(u.bitti), yeni: !u.bitti && u.eklenme ? new Date(u.eklenme).getTime() > sinir : false }))
+      .sort((a, b) => (a.bitti ? 1 : 0) - (b.bitti ? 1 : 0) || String(b.eklenme || "").localeCompare(String(a.eklenme || "")));
   }
   // Temiz fotoğraf: üzerinde yazı olan afiş değil (sunucu "temiz" listesini verir; afişler sadece model sayfasında, en sonda)
   const foto = (u, i = 0) => { const l = u.temiz && u.temiz.length ? u.temiz : u.fotolar; return l[Math.min(i, l.length - 1)]; };
@@ -249,7 +250,7 @@
     return `<article class="kart">
       <button class="kalp" data-kalp="${esc(u.kod)}" aria-pressed="${istekte(u.kod)}" aria-label="${esc(t("wishlist"))}">${IKON.kalp}</button>
       <a href="#model/${esc(u.kod)}">
-        <div class="kart-foto"><img data-tembel="${esc(img(foto(u), w))}" alt="${esc(u.baslik)}" decoding="async" onload="this.classList.add('yuklendi')">${u.yeni ? `<span class="kart-yeni">${esc(t("newBadge"))}</span>` : ""}</div>
+        <div class="kart-foto"><img data-tembel="${esc(img(foto(u), w))}" alt="${esc(u.baslik)}" decoding="async" onload="this.classList.add('yuklendi')">${u.bitti ? '<span class="kart-yeni kart-bitti">SOLD OUT</span>' : u.yeni ? `<span class="kart-yeni">${esc(t("newBadge"))}</span>` : ""}</div>
         <div class="kart-alt"><span class="kart-kod">${esc(u.kod)}</span></div>
         <h3 class="kart-ad">${esc(u.baslik)}</h3>
         <p class="kart-beden">${esc(g.g.length ? g.g.map((x) => `${x.ad} ${x.aralik}`).join(" / ") : g.duz)}</p>
@@ -329,10 +330,10 @@
       return `<section class="bolum model">
         <div><div class="galeri" id="galeri">${ogeler.map((o) => (o.v ? `<div class="video-kutu">${o.v}</div>` : `<div><img src="${esc(img(o.f, w))}" alt="${esc(u.baslik)} ${o.i + 1}" ${o.i ? 'loading="lazy"' : ""} decoding="async" data-buyuk="${esc(img(o.f, 1600))}"><button class="buyut" data-zoom="${o.i}" aria-label="Zoom">${IKON.buyut}</button></div>`)).join("")}</div>
           <div class="kucukler">${ogeler.map((o, k) => `<button data-git="${k}" class="${k ? "" : "aktif"}"${o.v ? ' aria-label="Video"' : ""}>${o.v ? '<span class="video-kucuk">▶</span>' : `<img src="${esc(img(o.f, 120))}" alt="" loading="lazy">`}</button>`).join("")}</div></div>
-        <div class="model-bilgi"><p class="kod-buyuk">${esc(u.kod)}${u.yeni ? ` · ${esc(t("newBadge"))}` : ""}</p><h1>${esc(u.baslik)}</h1><p>${esc(aciklama(u))}</p>
+        <div class="model-bilgi"><p class="kod-buyuk">${esc(u.kod)}${u.bitti ? " · SOLD OUT" : u.yeni ? ` · ${esc(t("newBadge"))}` : ""}</p><h1>${esc(u.baslik)}</h1><p>${esc(aciklama(u))}</p>
           <div class="gruplar">${g.g.length ? g.g.map((x) => `<div class="grup"><b>${esc(x.ad)} · ${x.aralik}</b>${esc(t("series"))}</div>`).join("") : `<div class="grup"><b>${esc(t("sizesLbl"))}</b>${esc(g.duz)}</div>`}</div>
           <p class="not">${esc(t("soldBy"))} · <a href="#sizes" style="border-bottom:1px solid var(--cizgi)">${esc(t("sizes"))}</a></p>
-          <div class="siparis"><a class="dugme dolu" target="_blank" rel="noopener" href="${esc(wa(AYAR.siparisNo, t("waOrder").replace("{k}", u.kod)))}">${IKON.wa} ${esc(t("order"))}</a>
+          <div class="siparis">${u.bitti ? '<span class="dugme bitti-dugme" aria-disabled="true">SOLD OUT</span>' : `<a class="dugme dolu" target="_blank" rel="noopener" href="${esc(wa(AYAR.siparisNo, t("waOrder").replace("{k}", u.kod)))}">${IKON.wa} ${esc(t("order"))}</a>`}
             <a class="dugme" target="_blank" rel="noopener" href="${esc(wa(AYAR.bilgiNo, t("waInfo").replace("{k}", u.kod)))}">${esc(t("info"))}</a>
             <button class="dugme" data-kalp="${esc(u.kod)}" aria-pressed="${istekte(u.kod)}">${IKON.kalp.replace("<svg", '<svg width="18" height="18" fill="none" stroke="currentColor"')} ${esc(t("wishlist"))}</button></div></div></section>
         <section class="bolum"><p class="baslik-ust">${esc(t("new"))}</p><div class="izgara">${MODELLER.filter((x) => x.kod !== u.kod).slice(0, 4).map((x) => kart(x)).join("")}</div></section>`;

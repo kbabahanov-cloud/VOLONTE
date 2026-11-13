@@ -856,10 +856,13 @@ export async function siteStokEsitle(env, simdi) {
     const st = stok[u.kod];
     if (!st) return u; // Vegawin'de yok: dokunulmaz
     const gizli = Boolean(st.gizli);
-    if (gizli === Boolean(u.gizli) && !("fiyat" in u)) return u;
-    degisen.push(`${u.kod}${gizli !== Boolean(u.gizli) ? (gizli ? " gizlendi" : " yeniden görünür") : " (fiyat alanı kaldırıldı)"}`);
-    const { fiyat, ...temiz } = u; // fiyat açık depoya yazılmaz (4 Kasım)
-    return { ...temiz, gizli };
+    // 13 Kasım (Patron, A3): stoğu BİTEN model sitede "SOLD OUT" yazısıyla görünür kalır (bitti); "Sil" ile gizlenen model görünmez.
+    // "gizli" alanı botlar için aynen kalır (stoksuz model önerilmez / paylaşılmaz); siteyi sadece "bitti" alanı değiştirir.
+    const bitti = Boolean(gizli && st.silindi === false && !(st.toplam > 0));
+    if (gizli === Boolean(u.gizli) && bitti === Boolean(u.bitti) && !("fiyat" in u)) return u;
+    degisen.push(`${u.kod}${gizli !== Boolean(u.gizli) ? (gizli ? (bitti ? " stoğu bitti (sitede SOLD OUT)" : " gizlendi") : " yeniden görünür") : bitti !== Boolean(u.bitti) ? (bitti ? " sitede SOLD OUT olarak görünür" : " SOLD OUT kalktı") : " (fiyat alanı kaldırıldı)"}`);
+    const { fiyat, bitti: _eski, ...temiz } = u; // fiyat açık depoya yazılmaz (4 Kasım)
+    return { ...temiz, gizli, ...(bitti ? { bitti: true } : {}) };
   });
   if (!degisen.length) return;
   await siteyeYaz(env, [], yeni, `Selin: Vegawin stok güncellemesi (${degisen.length} model)`);
@@ -894,7 +897,8 @@ async function siteyeYukle(env, kod, kim, simdi) {
     kod, baslik: t.baslik, kategori: t.kategori, aciklama: { en: t.aciklama.en, fr: t.aciklama.fr, pt: t.aciklama.pt },
     bedenler: t.bedenler, fotolar: dosyalar.map((d) => d.yol),
     videolar: t.kaynak === "ozel" ? t.videolar.filter((v) => !(v.boyut > VIDEO_SINIR)).map((v) => `selin/${kod}/${v.id}`) : t.videolar.map((v) => `${bilgi.kanal.kullanici}/${v.id}`),
-    gizli: Boolean(st && st.gizli),        // stoğu bitince sitede görünmez (kayıt silinmez)
+    gizli: Boolean(st && st.gizli),        // stoksuz / silinmiş (botlar için); stoğu biten model sitede "SOLD OUT" görünür (bitti)
+    ...(st && st.gizli && st.silindi === false && !(st.toplam > 0) ? { bitti: true } : {}),
     eklenme: gunAnahtari(simdi),
   };
   // 5 Kasım (3627 bordo sitede kayboldu): yeniden onayda sitedeki PELİN fotoğrafları ve PELİN videoları korunur

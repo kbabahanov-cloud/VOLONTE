@@ -42,7 +42,9 @@ function temizle(kod, fotolar) {
 async function veri(env) {
   const r = await depo(env, "veri/urunler.json");
   const l = r.ok ? await r.json() : [];
-  return (Array.isArray(l) ? l : []).filter((u) => !u.gizli).map((u) => ({
+  // 13 Kasım (Patron, A3): stoğu biten model sitede görünür kalır, "SOLD OUT" yazar (bitti); "Sil" ile gizlenen model yine görünmez
+  return (Array.isArray(l) ? l : []).filter((u) => !u.gizli || u.bitti).map((u) => ({
+    ...(u.bitti ? { bitti: true } : {}),
     kod: String(u.kod), baslik: u.baslik || String(u.kod), kategori: u.kategori || "", bedenler: u.bedenler || "",
     aciklama: { en: (u.aciklama && u.aciklama.en) || "", fr: (u.aciklama && u.aciklama.fr) || "" },
     ...temizle(String(u.kod), (u.fotolar || []).filter((f) => /^galeri\//.test(f))), videolar: u.videolar || [], eklenme: u.eklenme || null,

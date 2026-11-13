@@ -218,7 +218,7 @@ export class StokDeposu {
       const kod = stokKodu(ham);
       const r = this.tek("SELECT SUM(adet) AS t, MAX(fiyat) AS f, COUNT(*) AS n FROM urun WHERE kod = ?", kod);
       if (!r || !r.n) continue;
-      sonuc[kod] = { toplam: r.t, fiyat: r.f, gizli: r.t <= 0 || silinen.has(kod) };
+      sonuc[kod] = { toplam: r.t, fiyat: r.f, gizli: r.t <= 0 || silinen.has(kod), silindi: silinen.has(kod) }; // silindi: Patron "sil" dedi (13 Kasım: site "SOLD OUT" ayrımı için)
     }
     return sonuc;
   }

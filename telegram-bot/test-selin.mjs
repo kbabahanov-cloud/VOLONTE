@@ -290,6 +290,24 @@ test("hazırlık: bütün pozlar (tekrarsız, en büyük boyut), video gömülü
   site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
   assert.equal(site[0].gizli, false); // stok gelince yeniden görünür
   assert.ok(o.github.commitler.length > commitSayisi);
+  // 13 Kasım (Patron, A3): stoğu BİTEN model (silinmemiş) sitede "SOLD OUT" olarak görünür kalır: gizli (botlar için) + bitti (site için)
+  o.stok["3194"] = { toplam: 0, fiyat: 72, gizli: true, silindi: false };
+  await siteStokEsitle(o.env, ist(15));
+  site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual([site[0].gizli, site[0].bitti], [true, true]);
+  assert.match(JSON.parse(o.depo.get("selin:notlar")).at(-1), /3194 stoğu bitti \(sitede SOLD OUT\)/);
+  // Patron "sil" dediyse: görünmez (bitti yok)
+  o.stok["3194"] = { toplam: 0, fiyat: 72, gizli: true, silindi: true };
+  await siteStokEsitle(o.env, ist(16));
+  site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual([site[0].gizli, "bitti" in site[0]], [true, false]);
+  // stok gelince SOLD OUT kalkar
+  o.stok["3194"] = { toplam: 0, fiyat: 72, gizli: true, silindi: false };
+  await siteStokEsitle(o.env, ist(17));
+  o.stok["3194"] = { toplam: 5, fiyat: 72, gizli: false, silindi: false };
+  await siteStokEsitle(o.env, ist(18));
+  site = JSON.parse(o.github.dosyalar.get("veri/urunler.json"));
+  assert.deepEqual([site[0].gizli, "bitti" in site[0]], [false, false]);
 });
 
 test("beden yoksa onaylanmaz; /beden ile yazılır. Düzelt isteği yeniden yazdırır. 13 Kasım: ekipte siteden kaldırma düğmesi yok", async () => {
