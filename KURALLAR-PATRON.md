@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-13.3
+Sürüm: 2026-11-13.4
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -116,4 +116,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 
 ## KORUNAN AKIŞLAR
 75. Eksik listesi MARKA BAZINDA ayrı kalır: VOLONTE kontrol kartı Hemra / Aziz'e, Black Rose kontrol kartı Merdan'a gider; sadece rapordaki SAYIM birleşik olur. Sami ve kayıt her modelin markasını Vegawin'den okur ve yazar; "marka bilinmiyor" olamaz. Sayım birleşir, iş akışı birleşmez.
-76. Claude Code her değişiklikten önce "korunan akışa dokunuyor mu?" kontrolü yapar (eksik listesi, kontrol kartları, fabrika / repete, Selin–Merdan akışı); dokunuyorsa önce Patron'a eski hali / yeni hali gösterir, Patron "tamam" demeden yapmaz. Sayım ya da rapor düzeltmesi akışı ASLA değiştiremez.
+76. Claude Code her değişiklikten önce "korunan akışa dokunuyor mu?" kontrolü yapar (eksik listesi, kontrol kartları, fabrika / repete, Selin–Merdan akışı, cuma mutabakatı); dokunuyorsa önce Patron'a eski hali / yeni hali gösterir, Patron "tamam" demeden yapmaz. Sayım ya da rapor düzeltmesi akışı ASLA değiştiremez.
+77. Cuma mutabakatı korunan akıştır: her cuma, eksik listesi gittikten sonra mutabakat önce Patron'un onayına gelir, Patron onaylayınca Fuat'a gider. İş bekçisi her cuma 20:00'de "mutabakat gitti mi?" diye kontrol eder; gitmediyse önce sebebini kendisi bulur, çözemezse Patron'a tek satır yazar.
