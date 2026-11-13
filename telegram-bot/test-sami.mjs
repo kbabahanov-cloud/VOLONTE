@@ -3737,3 +3737,20 @@ test("13 Kasım (Patron, A2 — kural 39) TEKRAR SORU ENGELİ: fabrika önceki k
   assert.deepEqual(gd.giden.VOLONTE, ["3186"]);
   assert.equal(f.tekrarSatirlari({ 3573: 24, 3596: 20 }).join("\n"), "3573: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün 24 adet daha istendi\n3596: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün 20 adet daha istendi");
 });
+
+test("13 Kasım (Patron, B1) — Hemra'ya haftalık liste satış ADEDİ taşıyabilir (tek istisna); aynı yazı izinsiz giderse ya da fiyat içerirse yine durur", async () => {
+  const { venomGidenAdimi } = await import("./venom-kopru.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", HEMRA_ID: "333", MURAT_ID: "111" });
+  const stok = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 1 + g.length } }; };
+  const metin = "🔥 Haftanın en çok satan 5 modeli:\n1) 3394 — 7 günde 42 satış · kalan 18\n(Repetesi açık olan modeller listede yok.)";
+  await stok("kuyruk-ekle", { ad: "giden", kayit: { id: "hl-1", kime: "hemra", tur: "mesaj", metin, izinli: "haftalikListe" } });
+  await stok("kuyruk-ekle", { ad: "giden", kayit: { id: "x-1", kime: "hemra", tur: "mesaj", metin: "Dün 42 satış oldu" } });
+  await stok("kuyruk-ekle", { ad: "giden", kayit: { id: "hl-2", kime: "hemra", tur: "mesaj", metin: `${metin}\nfiyat 30 $`, izinli: "haftalikListe" } });
+  await venomGidenAdimi(o.env, ist(10, 5), tg);
+  const hemra = g.filter((x) => String(x.govde.chat_id) === "333").map((x) => x.govde.text);
+  assert.equal(hemra.filter((t) => t.includes("7 günde 42 satış")).length, 1); // sadece izinli liste gitti
+  assert.ok(!hemra.some((t) => /Dün 42 satış|fiyat 30/.test(t)));
+});

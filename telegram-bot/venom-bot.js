@@ -11,6 +11,7 @@
 // Ayarlar: BOT_TOKEN, ANTHROPIC_API_KEY, OPENAI_API_KEY (ses), WEBHOOK_SECRET (secret); KAYIT (KV), STOK (StokDO, volonte-asistan),
 // SELIN_DEPO; MURAT_ID, FUAT_ID, NURI_ID, BR_SORUMLU (Merdan), HEMRA_ID, FABRIKA_SORUMLU (venom:kimlikler); SELF_URL.
 import { calistirSatiri } from "./kemal-satir.js";
+import { hizliSatanMetni, hizliSatanSatiri, hicSatmayanMetni } from "./haftalik-liste.js";
 import { BEKCI_SAATLERI, kemalBak, selinBak, samiBak, patronSatiri, eksikYazi, bekciMetni } from "./is-bekcisi.js";
 import { mesaiMi } from "./kart-tekrar.js";
 import { magazaOzetMetni, celalListeMetni } from "./stok-ozet.js";
@@ -1842,6 +1843,28 @@ async function bekciEksikleri(env, gun) {
   const l = kayit ? Object.entries(kayit).filter(([a]) => /^\d+$/.test(a)).sort((a, b) => Number(a[0]) - Number(b[0])) : [];
   return l.length ? l[l.length - 1][1].eksik || [] : undefined;
 }
+// 13 Kasım (Patron, B1): HAFTALIK LİSTE — her pazartesi 10:00 Hemra'ya: 🔥 haftanın en çok satan 5 modeli + (Patron örneği onayladıysa,
+// KV "venom:hicSatmayanOnay" = "1") 🧊 hiç satmayanlar, aynı mesajda. Karar Hemra'da; para harcayan hiçbir iş otomatik başlamaz.
+export async function haftalikListeMesajlari(env, simdi, { hic = null } = {}) {
+  const v = await stokIste(env, "/haftalik-liste", { bugun: gunAnahtari(simdi), simdi }).catch(() => null);
+  const hicAcik = hic == null ? (await oku(env, "venom:hicSatmayanOnay", null)) === "1" : hic;
+  const parcalar = [hizliSatanMetni(v), ...(hicAcik ? hicSatmayanMetni(v) : [])];
+  const m = [];
+  for (const p of parcalar) { if (m.length && `${m[m.length - 1]}\n\n${p}`.length <= 3800) m[m.length - 1] = `${m[m.length - 1]}\n\n${p}`; else m.push(p); }
+  return { v, mesajlar: m };
+}
+export async function haftalikListeAdimi(env, simdi) {
+  const s = saat(simdi);
+  if (new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() !== 1 || s < 10 || s >= 20) return null;
+  const k = `venom:haftalikListe:${gunAnahtari(simdi)}`;
+  if (await oku(env, k, null)) return null;
+  const { v, mesajlar } = await haftalikListeMesajlari(env, simdi);
+  if (!v || !Array.isArray(v.hizli)) return null; // okunamadı: sonraki çalışmada yeniden dener
+  await kaydet(env, k, { zaman: simdi, n: mesajlar.length, hizli: v.hizli.map((x) => x.kod), hic: (v.hic || []).length }, 14 * 86400);
+  for (const [i, metin] of mesajlar.entries()) await kuyrugaEkle(env, "giden", { id: `hl-${gunAnahtari(simdi)}-${i}`, kime: "hemra", tur: "mesaj", metin, izinli: "haftalikListe" });
+  await isKaydet(env, "venom", `Haftalık liste Hemra'ya gitti: hızlı satan ${v.hizli.map((x) => x.kod).join(", ") || "yok"}`, simdi).catch(() => null);
+  return mesajlar.length;
+}
 // 13 Kasım (Patron, B2): yeni kanal tasarımı canlıya alınmadan önce TEK SEFERLİK örnek — Venom Patron'a gösterir (fotoğraf + yeni yazı,
 // "Order KOD" mesajı + düğmeler, onay kartı). Patron onaylayınca Kemal yeni tasarıma geçer. Gece gitmez (09:00–21:00).
 export const TASARIM_KART = "🎨 Yeni kanal paylaşım tasarımının örneği yukarıda: fotoğrafın altındaki yazı ve \"Order …\" mesajıyla düğmeler. Onaylarsanız bundan sonraki paylaşımlar böyle çıkar (kartlar yine Hemra / Merdan'ın onayına gider). Onaylamazsanız eski tasarım kalır.";
@@ -1882,7 +1905,8 @@ export async function venomCron(env, simdi) {
   try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
   try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); }
   try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); }
-  try { await tasarimOrnekAdimi(env, simdi); } catch (e) { await hataYaz(env, "tasarimOrnek", e); } // 13 Kasım (B2): tek seferlik örnek
+  try { await tasarimOrnekAdimi(env, simdi); } catch (e) { await hataYaz(env, "tasarimOrnek", e); }
+  try { await haftalikListeAdimi(env, simdi); } catch (e) { await hataYaz(env, "haftalikListe", e); } // 13 Kasım (B1): pazartesi 10:00 Hemra'ya // 13 Kasım (B2): tek seferlik örnek
   try { await isBekcisiAdimi(env, simdi); } catch (e) { await hataYaz(env, "isBekcisi", e); } // 13 Kasım (Patron): 11:00, 15:00, 19:00 — iş yapıldı mı
   if (Math.floor(simdi / 300) % 6 === 0) try { await kartKapanisAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartKapanis", e); } // 13 Kasım: yarım saatte bir — onaylanan kartın kapanışı // 11 Kasım (kural 54) // 11 Kasım: repete kartı (Patron kartı + tek satır sonuç)
   // Diğer botların sonuçları → "✅ yapıldı"
@@ -2080,6 +2104,8 @@ export async function raporSatirlari(env, simdi, tur) {
   // 13 Kasım (Patron, B4): akşam raporuna Selin–Merdan fotoğraf akışı satırı; sabah raporu en fazla 8, akşam raporu en fazla 10 satır (kural 13)
   if (tur === "aksam") {
     const so = await botaSor(env, "selin", "ozet").catch(() => null);
+    const hz = hizliSatanSatiri(await stokIste(env, "/haftalik-liste", { bugun: gunAnahtari(simdi), simdi }).catch(() => null));
+    if (hz) l.splice(l.indexOf(site) + 1, 0, hz);
     if (so && so.stoktaSitedeYok != null) l.splice(l.indexOf(site) + 1, 0, `📷 Stokta var, sitede yok: ${so.stoktaSitedeYok} model · bugün istenen ${so.bugunListe ? so.bugunListe.n : 0} · gelen ${so.bugunListe ? so.bugunListe.gelen : 0}`);
   }
   return [...new Set(l)].slice(0, tur === "aksam" ? 10 : 8).join("\n");
@@ -2302,6 +2328,8 @@ async function claudeIslemAdimi(env, simdi) {
   for (const is of l.slice(0, 12)) {
     if (is.tur === "kararVer") sonuc.push({ tur: is.tur, kod: is.kod, ...(await kararVerildi(env, is.kod, is.karar || "kapat", simdi, { aciklama: is.aciklama || "" })) }); // model için karar: bütün açık kartlar kapanır
     else if (is.tur === "bekciDene") sonuc.push({ tur: is.tur, ...(await isBekcisi(env, simdi, { kuru: !is.kayit })) }); // 13 Kasım: iş bekçisi kuru çalışma (hiçbir şey göndermez)
+    else if (is.tur === "haftalikOku") { const h = await haftalikListeMesajlari(env, simdi, { hic: true }); sonuc.push({ tur: is.tur, mesajlar: h.mesajlar, hizli: h.v && h.v.hizli, hicSayi: h.v && h.v.hic ? h.v.hic.length : null, ilkGun: h.v && h.v.ilkGun }); } // 13 Kasım (B1): haftalık listenin gerçek hali (göndermez)
+    else if (is.tur === "tasarimOrnekOku") sonuc.push({ tur: is.tur, ...(await botaSor(env, "kemal", "tasarimOrnek") || { ok: false, hata: "Kemal'e ulaşılamadı" }) }); // 13 Kasım (B2): örnek (göndermez)
     else if (is.tur === "sozEkle") { await sozEkle(env, is.soz, is.zaman || simdi); sonuc.push({ tur: is.tur, ok: true }); }
     else if (is.tur === "sozAdim") sonuc.push({ tur: is.tur, n: await sozAdimi(env, simdi), sozler: await oku(env, "venom:sozler", []) });
     else if (is.tur === "isdKod") sonuc.push({ tur: is.tur, kod: is.kod, v: await stokIste(env, "/isd-kod", { kod: String(is.kod), basla: simdi - (is.gun || 4) * 86400 }).catch((e) => String(e.message || e)) });

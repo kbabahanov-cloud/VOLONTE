@@ -2491,3 +2491,40 @@ test("13 Kasım (Patron, B2) TASARIM ÖRNEĞİ — tek seferlik: gece gitmez; 09
   assert.deepEqual(cagri, [{ acik: true }]);
   assert.ok(patronaGiden(o).some((x) => /^✅ Yeni kanal tasarımı açıldı/.test(x.govde.text || "")));
 });
+
+test("13 Kasım (Patron, B1) HAFTALIK LİSTE: pazartesi 10:00'da Hemra'ya 🔥 hızlı satan 5 (7 günlük satış + kalan; açık isteği olan girmez) BİR kez; 🧊 hiç satmayanlar Patron onayına kadar KAPALI, açılınca aynı mesajda (Celal ayrı başlık, yeni gelen model yok); akşam raporunda tek satır", async () => {
+  const v = await import("./venom-bot.js");
+  const o = ortam();
+  const stok = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const pzt = ist(16, 10, 5); // 16 Kasım 2026 pazartesi
+  await stok("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 18, fiyat: 30 }, { kod: "3573", adet: 3, fiyat: 30 }, { kod: "3183", adet: 12, fiyat: 30 }, { kod: "5067", adet: 20, fiyat: 20, celal: true }, { kod: "3999", adet: 9, fiyat: 30 }], simdi: ist(1, 10) });
+  await stok("yaz", { magaza: "BLACKROSE", urunler: [{ kod: "3627", adet: 8, fiyat: 40 }], simdi: ist(1, 10) });
+  await stok("satis-yaz", { magaza: "VOLONTE", gun: "2026-11-12", kalemler: [{ kod: "3394", adet: 30 }, { kod: "3573", adet: 29 }, { kod: "3999", adet: 50 }] });
+  await stok("satis-yaz", { magaza: "VOLONTE", gun: "2026-11-14", kalemler: [{ kod: "3394", adet: 12 }] });
+  await stok("satis-yaz", { magaza: "BLACKROSE", gun: "2026-10-01", kalemler: [{ kod: "3627", adet: 4 }] }); // 30 günden eski
+  // 3999'un fabrikada açık isteği var → hızlı satan listesine girmez
+  await stok("ayar-yaz", { k: "fs:acik", v: JSON.stringify(["F1"]) }); await stok("ayar-yaz", { k: "fs:F1", v: JSON.stringify({ id: "F1", kod: "3999", durum: "gelecek" }) });
+  // pazar: gitmez; pazartesi 09:30: gitmez; 10:05: gider (bir kez)
+  assert.equal(await v.haftalikListeAdimi(o.env, ist(15, 10, 5)), null);
+  assert.equal(await v.haftalikListeAdimi(o.env, ist(16, 9, 30)), null);
+  assert.equal(await v.haftalikListeAdimi(o.env, pzt), 1);
+  assert.equal(await v.haftalikListeAdimi(o.env, pzt + 300), null);
+  const giden = (await (await stok("kuyruk-al", { ad: "giden" })).json());
+  const hl = (Array.isArray(giden) ? giden : giden.liste || []).filter((x) => String(x.id).startsWith("hl-"));
+  assert.equal(hl.length, 1);
+  assert.deepEqual([hl[0].kime, hl[0].tur, hl[0].izinli], ["hemra", "mesaj", "haftalikListe"]);
+  assert.equal(hl[0].metin, "🔥 Haftanın en çok satan 5 modeli:\n1) 3394 — 7 günde 42 satış · kalan 18\n2) 3573 — 7 günde 29 satış · kalan 3\n(Repetesi açık olan modeller listede yok.)");
+  assert.ok(!/\$|fiyat|ciro/i.test(hl[0].metin));
+  // hiç satmayanlar (onaylanınca): stokta var + 30 günde satış yok; Celal ayrı başlık
+  const h = await v.haftalikListeMesajlari(o.env, pzt, { hic: true });
+  const tum = h.mesajlar.join("\n");
+  assert.match(tum, /🧊 Hiç satmayanlar — stokta var, .* hiç satış yok: 3 model/);
+  assert.match(tum, /\n3183 · VOLONTE · kalan 12 · son satış: .* · kanal: hiç paylaşılmadı/);
+  assert.match(tum, /\n3627 · Black Rose · kalan 8 · son satış: 01\.10 · kanal: /);
+  assert.match(tum, /👤 Celal'in modelleri \(1\):\n5067 · VOLONTE · kalan 20/);
+  assert.ok(!/\n3394 · |\n3999 · /.test(tum.split("🧊")[1])); // satanlar listede yok
+  // akşam raporu: tek satır
+  const aksam = (await v.raporSatirlari(o.env, ist(16, 20, 0), "aksam")).split("\n");
+  assert.ok(aksam.includes("🔥 Hızlı satan 5: 3394, 3573"), aksam.join(" | "));
+  assert.ok(aksam.length <= 10);
+});

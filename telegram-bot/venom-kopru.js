@@ -44,7 +44,8 @@ export async function venomGidenAdimi(env, simdi, tg) {
       const hedef = k.id(env);
       if (!hedef) { await sonucBildir(env, is.id, false, `${k.in} Telegram kimliği kayıtlı değil.`); continue; }
       { // 6 Kasım (Patron): fiyat/satış/kâr bilgisi Patron dışında KİMSEYE gitmez (ekip dahil)
-        const yasak = k.dis ? fuatSuzgec(is.metin) : ekipSuzgec(is.metin);
+        // 13 Kasım (Patron, B1): Hemra'ya haftalık liste (hızlı satan / hiç satmayan) satış ADEDİ taşır — Patron'un onayladığı tek istisna (fiyat / ciro yine gitmez)
+        const yasak = k.dis ? fuatSuzgec(is.metin) : is.izinli === "haftalikListe" && is.kime === "hemra" ? ((ekipSuzgec(is.metin) || []).filter((x) => !/sat\[ıi\]/.test(x)).length ? ekipSuzgec(is.metin) : null) : ekipSuzgec(is.metin);
         if (yasak) { await arsiv(env, "venom-engel", is.id, { kime: is.kime, neden: yasak }, simdi); await sonucBildir(env, is.id, false, `${k.e} mesaj GİTMEDİ: gizli bilgi içeriyor (${yasak.join(", ")}).`); continue; }
       }
       // 11 Kasım (Patron, ACİL): fabrikaya (Fuat / Nuri) "test" / "deneme" içerikli mesaj DENEME başlığı olmadan ASLA gitmez

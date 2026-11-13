@@ -404,6 +404,32 @@ export class StokDeposu {
   }
 
   // 10 Kasım (Sinem / fabrika zinciri): açık siparişler tek çağrıda (her biri ayrı istek olmasın — Cloudflare istek sınırı)
+  // 13 Kasım (Patron, B1): HAFTALIK LİSTE verisi (sadece okur) — hızlı satanlar: son 7 günün satışı (iki mağaza toplamı), fabrikada açık
+  // isteği olan model girmez; hiç satmayanlar: stokta var, son 30 günde 0 satış, son 30 günde mağazaya gelen (yeni / yeniden gelen) model girmez.
+  haftalikListe({ bugun, simdi }) {
+    const gunEk = (g, n) => new Date(Date.parse(`${g}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+    const b7 = gunEk(bugun, -6), b30 = gunEk(bugun, -29);
+    const ilkGun = (this.tek("SELECT MIN(gun) AS g FROM satis") || {}).g || null;
+    const stok = new Map();
+    for (const r of this.hepsi("SELECT magaza, kod, adet FROM urun")) {
+      const k = String(r.kod), x = stok.get(k) || { toplam: 0, magazalar: {} };
+      x.toplam += Number(r.adet) || 0; if ((Number(r.adet) || 0) > 0) x.magazalar[r.magaza] = (x.magazalar[r.magaza] || 0) + Number(r.adet);
+      stok.set(k, x);
+    }
+    const marka = (k) => { const m = Object.keys((stok.get(k) || {}).magazalar || {}); return m.length ? m.sort().reverse().join("+") : null; }; // "VOLONTE", "BLACKROSE", "VOLONTE+BLACKROSE"
+    const acik = new Set(this.fsAcikler().filter((r) => !r.deneme && !r.mod && ["bekliyor", "gelecek", "repete", "sureSoruluyor"].includes(r.durum)).map((r) => String(r.kod)));
+    const hizli = this.hepsi("SELECT kod, SUM(adet) AS n FROM satis WHERE gun >= ? AND gun <= ? GROUP BY kod HAVING n > 0 ORDER BY n DESC, kod LIMIT 80", b7, bugun)
+      .filter((r) => !indirimliMi(r.kod) && !acik.has(String(r.kod))).slice(0, 5)
+      .map((r) => ({ kod: String(r.kod), satis7: r.n, kalan: Math.max(0, (stok.get(String(r.kod)) || {}).toplam || 0), marka: marka(String(r.kod)) }));
+    const satan30 = new Set(this.hepsi("SELECT kod, SUM(adet) AS n FROM satis WHERE gun >= ? AND gun <= ? GROUP BY kod HAVING n > 0", b30, bugun).map((r) => String(r.kod)));
+    const yeniGelen = new Set(this.hepsi("SELECT DISTINCT kod FROM olay WHERE tur = 'geldi' AND zaman >= ?", simdi - 30 * 86400).map((r) => String(r.kod)));
+    const sonSatis = Object.fromEntries(this.hepsi("SELECT kod, MAX(gun) AS g FROM satis WHERE adet > 0 GROUP BY kod").map((r) => [String(r.kod), r.g]));
+    const tg = Object.fromEntries(this.hepsi("SELECT kod, son FROM tg").map((r) => [String(r.kod), r.son]));
+    const hic = [...stok.entries()].filter(([k, x]) => x.toplam > 0 && !satan30.has(k) && !yeniGelen.has(k) && !indirimliMi(k))
+      .map(([k, x]) => ({ kod: k, marka: marka(k), kalan: x.toplam, sonSatis: sonSatis[k] || null, tgSon: tg[k] || null, celal: this.tedarikci(k).tedarikci === "CELAL" }))
+      .sort((a, b) => String(a.kod).localeCompare(String(b.kod), "tr", { numeric: true }));
+    return { bugun, b7, b30, ilkGun, hizli, hic };
+  }
   fsAcikler() { return JSON.parse(this.ayarOku("fs:acik") || "[]").map((id) => { try { return JSON.parse(this.ayarOku(`fs:${id}`) || "null"); } catch { return null; } }).filter(Boolean); }
   // Kodun en son açık siparişi (deneme hariç; chat verilirse o kişiye gitmiş olan)
   fsKod({ kod, chat = null, deneme = false }) {
@@ -699,6 +725,7 @@ export class StokDO {
     if (yol === "/bilgi") return cevap(d.bilgi(stokKodu(g.kod)));
     if (yol === "/ozet") return cevap(d.ozet());
     if (yol === "/magaza-ozet") return cevap(d.magazaOzet(g));
+    if (yol === "/haftalik-liste") return cevap(d.haftalikListe({ bugun: g.bugun, simdi: Number(g.simdi) || Math.floor(Date.now() / 1000) })); // 13 Kasım (B1): sadece okuma
     if (yol === "/celal-liste") return cevap(d.celalListe());
     return new Response("?", { status: 404 });
   }
