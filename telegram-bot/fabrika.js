@@ -705,17 +705,34 @@ async function magazaAnahtarlari(env, gun, d, anahtar) {
   for (const k of x.ekler || []) { const e = await ayarOku(env, `fabrika:${k}`, null); if (!(e && e.mod)) l.push(k); }
   return l;
 }
+// 13 Kasım (Patron, A1): cumartesi ve pazar eksik listesi ÇIKMAZ (kontrol kartı da fabrika kartı da gitmez); cumartesi (ve varsa pazar)
+// satışları PAZARTESİ listesine eklenir — marka marka (VOLONTE'ninki VOLONTE listesine, Black Rose'unki Black Rose listesine).
+const haftaGunuOf = (gun) => new Date(`${gun}T12:00:00Z`).getUTCDay(); // 0 pazar … 6 cumartesi
+export const listeGunuMu = (gun) => ![0, 6].includes(haftaGunuOf(gun));
+export async function listeSatislari(env, gun, magaza) {
+  const bugun = await satislarAl(env, gun, magaza);
+  if (haftaGunuOf(gun) !== 1) return { satislar: bugun, haftaSonu: 0 };
+  const t = gunBasi(gun) + 43200, m = new Map(bugun.map((x) => [String(x.kod), { ...x }]));
+  let haftaSonu = 0;
+  for (const g of [gunAnahtari(t - 2 * 86400), gunAnahtari(t - 86400)]) for (const x of await satislarAl(env, g, magaza)) {
+    const k = String(x.kod), e = m.get(k);
+    haftaSonu += Number(x.satilan) || 0;
+    m.set(k, e ? { ...e, satilan: (Number(e.satilan) || 0) + (Number(x.satilan) || 0) } : { ...x });
+  }
+  return { satislar: [...m.values()].sort((a, b) => String(a.kod).localeCompare(String(b.kod), "tr", { numeric: true })), haftaSonu };
+}
 async function magazaAdimi(env, simdi, tg, gun, cfg) {
   const ana = `${gun}${cfg.ek}`; // VOLONTE: "2026-10-30", Black Rose: "2026-10-30-BR"
+  if (!listeGunuMu(gun)) return; // 13 Kasım (A1): cumartesi-pazar liste yok
   if (cfg.basla != null && saat(simdi) < cfg.basla) return; // Black Rose: gün içinde hiçbir mesaj yok, 19:05'ten sonra
   const d = await ayarOku(env, `fabrika:${ana}`, null);
-  const satislar = await satislarAl(env, gun, cfg.magaza);
+  const { satislar, haftaSonu } = await listeSatislari(env, gun, cfg.magaza);
   const iz = JSON.stringify(satislar.map((x) => [x.kod, x.satilan]));
   if (!d || ["bekliyor", "satisYok"].includes(d.asama)) {
     if (!satislar.length) return;
     if (!d || d.iz !== iz) return ayarYaz(env, `fabrika:${ana}`, { asama: "bekliyor", iz, izZaman: simdi, magaza: cfg.magaza, sorumlu: cfg.kime(env) }); // giriş sürüyor olabilir
     if (simdi - d.izZaman < SABIT_SN) return;
-    return listeyiGonder(env, gun, satislar, simdi, tg, null, { anahtar: ana, cfg });
+    return listeyiGonder(env, gun, satislar, simdi, tg, null, { anahtar: ana, cfg, ...(haftaSonu ? { baslik: "bugün ve cumartesi satılan modeller" } : {}) });
   }
   // Ek: listede olmayan yeni modeller (bilinen yoksa eski kayıt: hepsi bilinen sayılır)
   const bilinen = new Set(d.bilinen || satislar.map((x) => x.kod));
@@ -1291,7 +1308,7 @@ export function gittiMetni(lg, simdi, giden, bekleyen, listeler = []) {
 const gidenListeOku = async (env, lg) => (await ayarOku(env, `fabrika:fabrikayaGidenListe:${lg}`, [])) || [];
 async function gidenSay(env, lg, d, anahtar) {
   const giden = (await ayarOku(env, `fabrika:fabrikayaGiden:${lg}`, {})) || {};
-  const ekle = (b) => { const atl = new Set(b.atlanan || []); for (const x of b.liste || []) { if (atl.has(x.kod)) continue; const mg = x.magaza || b.magaza || MAGAZA; giden[mg] = [...new Set([...(giden[mg] || []), x.kod])]; } };
+  const ekle = (b) => { const atl = new Set([...(b.atlanan || []), ...Object.keys(b.tekrar || {})]); for (const x of b.liste || []) { if (atl.has(x.kod)) continue; const mg = x.magaza || b.magaza || MAGAZA; giden[mg] = [...new Set([...(giden[mg] || []), x.kod])]; } };
   if (d) ekle(d);
   const bekleyen = [];
   for (const k of (await ayarOku(env, `fabrika:birlesik:${lg}`, [])) || []) {
@@ -1385,6 +1402,12 @@ export async function eksikKartiBul(env, gun = null, simdi = Math.floor(Date.now
 // 11 Kasım (TEK DEFTER): Venom "fabrikaya dün hangi modeller gitti?" sorusunu buradan okur (Sami'nin kendi kaydı; gittiMetni ile aynı sayım)
 export const fabrikayaGidenler = async (env, gun) => ({ ...(await gidenSay(env, gun, null, null)), listeler: await gidenListeOku(env, gun) });
 
+// 13 Kasım (Patron, A2): aynı model için fabrikada CEVAPSIZ ("bekliyor") duran eski istek var mı? (cevap verilmişse — Gelecek / Repete / Bitti — engel yok)
+async function cevapsizEskiIstek(env, kod, grup, buListeninKartlari) {
+  const l = await stokIste(env, "/fs-ozet", {}).catch(() => []);
+  return (Array.isArray(l) ? l : []).some((y) => String(y.kod) === String(kod) && !y.deneme && !y.mod && (y.grup || "fabrika") === grup && y.durum === "bekliyor" && !buListeninKartlari.includes(y.id));
+}
+export const tekrarSatirlari = (tekrar) => Object.entries(tekrar || {}).map(([kod, adet]) => `${kod}: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün ${adet} adet daha istendi`);
 async function gonderimParcasi(env, anahtar, tg, simdi) {
   const d = await ayarOku(env, `fabrika:${anahtar}`, null);
   // 10 Kasım (Patron): fabrikaya da aynı anda en fazla 5 cevapsız kart; kalanlar cevap verdikçe (5 dk'lık görev) gelir
@@ -1407,6 +1430,11 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
       const magaza = x.magaza || d.magaza || MAGAZA;
       if (!d.baslik[magaza]) { d.baslik[magaza] = "basladi"; await listeBaslik(env, tg, d, magaza, false, anahtar); }
       if (bitenler[kod] && !d.deneme) { d.atlanan = [...new Set([...(d.atlanan || []), kod])]; }
+      else if (!d.deneme && !d.mod && !(d.acil || []).includes(kod) && (d.tekrar && d.tekrar[kod] != null || await cevapsizEskiIstek(env, kod, (d.gruplar && d.gruplar[kod]) || "fabrika", d.gidenRecler || []))) {
+        // 13 Kasım (Patron, A2 — kural 39): fabrika bu modelin önceki kartına HİÇ cevap vermediyse ikinci kart gitmez; Hemra'ya tek satır (aşağıda)
+        d.tekrar = d.tekrar || {};
+        d.tekrar[kod] = (d.tekrar[kod] || 0) + (x.renkler || []).reduce((t, r) => t + (Number(r.adet) || 0), 0);
+      }
       else {
         const rec = await siparisAc(env, { kod, beden: x.beden || null, renkler: x.renkler, liste: anahtar, deneme: Boolean(d.deneme), mod: Boolean(d.mod), fotoKod: kod, grup: (d.gruplar && d.gruplar[kod]) || "fabrika", sorumlu: d.sorumlu || null, magaza, sadece: d.sadece || null }, simdi);
         if (d.zincir) rec.zincir = true;
@@ -1428,6 +1456,7 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
           }
         }
         const r = await fabrikayaGonder(env, rec, tg, site);
+        d.gidenRecler = [...(d.gidenRecler || []), rec.id]; // bu listenin kendi kartları (aynı modelin Küçük + Büyük satırı birbirini engellemez)
         d.giden = (d.giden || 0) + r.giden;
         if ((rec.grup || "fabrika") === "fabrika") (d.recler[magaza] = d.recler[magaza] || []).push(rec.id); // toplu cevap sadece fabrikanın kartlarına
       }
@@ -1452,7 +1481,7 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
       const { giden, bekleyen } = await gidenSay(env, lg, d, anahtar);
       await ayarYaz(env, `fabrika:fabrikayaGiden:${lg}`, giden);
       // bu listenin kendi modelleri (fabrikada bittiği için atlananlar hariç) → günün liste kaydı
-      const atl = new Set(d.atlanan || []), buListe = { zaman: simdi, anahtar };
+      const atl = new Set([...(d.atlanan || []), ...Object.keys(d.tekrar || {})]), buListe = { zaman: simdi, anahtar };
       for (const x of d.liste) { if (atl.has(x.kod)) continue; const mg = x.magaza || d.magaza || MAGAZA; buListe[mg] = [...new Set([...(buListe[mg] || []), x.kod])]; }
       const listeler = [...(await gidenListeOku(env, lg)).filter((y) => y.anahtar !== anahtar), buListe];
       await ayarYaz(env, `fabrika:fabrikayaGidenListe:${lg}`, listeler);
@@ -1461,6 +1490,10 @@ async function gonderimParcasi(env, anahtar, tg, simdi) {
     }
     if (d && d.liste && d.liste.length) {
       await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: `${dn(d)}✅ ${gunGoster(d.gun || anahtar.slice(0, 10))} listesi ${d.sadece ? "SADECE Sinem'e" : "fabrikaya"} gönderildi (${d.liste.length} model, ${d.giden || 0} mesaj).${(d.atlanan || []).length ? ` Fabrikada bitti, gönderilmedi: ${d.atlanan.join(", ")}.` : ""}` });
+      if (Object.keys(d.tekrar || {}).length && !d.tekrarBildirildi) { // A2: Hemra'ya tek mesaj (model başına bir satır; o gün istenen adet yazılır)
+        d.tekrarBildirildi = simdi; await ayarYaz(env, `fabrika:${anahtar}`, d);
+        await tg(env, "sendMessage", { chat_id: kimeOf(env, d), text: tekrarSatirlari(d.tekrar).join("\n") });
+      }
       const sl = d.deneme ? null : await ayarOku(env, "fabrika:sonListeler", []); // toplu cevap ("hepsi 5 gün") için — deneme gerçek toplu cevaba karışmaz
       if (sl) await ayarYaz(env, "fabrika:sonListeler", [...sl.filter((x) => x.anahtar !== anahtar && simdi - x.zaman < 10 * 86400), { anahtar, zaman: simdi }].slice(-10));
     }

@@ -3650,3 +3650,90 @@ test("13 Kasım (Patron, kural 75) KORUNAN AKIŞ — eksik listesi MARKA BAZINDA
   d = await f.listeDurumu(o.env, ist(19, 26), "222");
   assert.deepEqual([d.listeler[0].marka, d.listeler[0].durum, d.listeler[0].modeller.map((m) => [m.kod, m.marka])], ["Black Rose", "kontrol kartı Merdan'da, kararlar bekleniyor", [["7001", "Black Rose"]]]);
 });
+
+test("13 Kasım (Patron, A1) — cumartesi ve pazar eksik listesi YOK; cumartesi satışları pazartesi listesine eklenir, MARKA MARKA (VOLONTE → Aziz, Black Rose → Merdan); cuma listesi aynen", async () => {
+  const f = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", BR_SORUMLU: "222", AZIZ_ID: "444", EKIP_IDS: "333,444", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:satisAcik", "1");
+  o.depo.set("kodlar", JSON.stringify({ 3183: [{ ids: [700], tarih: 1 }], 3186: [{ ids: [701], tarih: 1 }], 3190: [{ ids: [702], tarih: 1 }], 7001: [{ ids: [900], tarih: 1 }], 7002: [{ ids: [901], tarih: 1 }] }));
+  const stok = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const cmt = "2026-10-31", paz = "2026-11-01", pzt = "2026-11-02"; // ist(…, 3) cumartesi, 4 pazar, 5 pazartesi
+  assert.deepEqual([f.listeGunuMu("2026-10-30"), f.listeGunuMu(cmt), f.listeGunuMu(paz), f.listeGunuMu(pzt)], [true, false, false, true]);
+  await stok("satis-yaz", { magaza: "VOLONTE", gun: cmt, kalemler: [{ kod: "3183", adet: 2 }, { kod: "3186", adet: 1 }] });
+  await stok("satis-yaz", { magaza: "BLACKROSE", gun: cmt, kalemler: [{ kod: "7001", adet: 3 }] });
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 60 + g.length } }; };
+  // cumartesi: gün boyu ve akşam hiçbir kontrol kartı gitmez, liste kaydı açılmaz
+  for (const [h, m] of [[12, 0], [12, 15], [19, 10], [19, 25], [20, 30]]) await f.fabrikaAdimi(o.env, ist(h, m, 3), tg);
+  assert.equal(g.length, 0);
+  const ayar = async (k) => { const v = (await (await stok("ayar-oku", { k })).json()).v; return v == null ? null : JSON.parse(v); };
+  assert.equal(await ayar(`fabrika:${cmt}`), null); assert.equal(await ayar(`fabrika:${cmt}-BR`), null);
+  // pazar: yine yok
+  for (const [h, m] of [[12, 0], [12, 15], [19, 10], [19, 25]]) await f.fabrikaAdimi(o.env, ist(h, m, 4), tg);
+  assert.equal(g.length, 0);
+  // pazartesi: o günün satışı + cumartesi satışı aynı listede, marka marka
+  await stok("satis-yaz", { magaza: "VOLONTE", gun: pzt, kalemler: [{ kod: "3183", adet: 1 }, { kod: "3190", adet: 4 }] });
+  await stok("satis-yaz", { magaza: "BLACKROSE", gun: pzt, kalemler: [{ kod: "7002", adet: 2 }] });
+  assert.deepEqual((await f.listeSatislari(o.env, pzt, "VOLONTE")).satislar.map((x) => [x.kod, x.satilan]), [["3183", 3], ["3186", 1], ["3190", 4]]);
+  assert.deepEqual((await f.listeSatislari(o.env, pzt, "BLACKROSE")).satislar.map((x) => [x.kod, x.satilan]), [["7001", 3], ["7002", 2]]);
+  await f.fabrikaAdimi(o.env, ist(12, 0, 5), tg);
+  await f.fabrikaAdimi(o.env, ist(12, 15, 5), tg);
+  assert.ok(g.length && g.every((x) => String(x.govde.chat_id) === "444"), "VOLONTE kontrol kartı Aziz'den başkasına gitti");
+  const yazilar = (kim) => g.filter((x) => String(x.govde.chat_id) === kim).map((x) => x.govde.text || x.govde.caption || "");
+  assert.match(yazilar("444")[0], /bugün ve cumartesi satılan modeller: 3 model, toplam 8 adet/);
+  for (const k of ["3183", "3186", "3190"]) assert.ok(yazilar("444").some((y) => new RegExp(`(^|\\n)${k} · satılan`).test(y)), `${k} Aziz'in listesinde yok`);
+  assert.ok(!yazilar("444").some((y) => /(^|\n)700[12] · satılan/.test(y))); // Black Rose modeli Aziz'e sorulmaz
+  g.length = 0;
+  await f.fabrikaAdimi(o.env, ist(19, 10, 5), tg);
+  await f.fabrikaAdimi(o.env, ist(19, 25, 5), tg);
+  const br = g.filter((x) => String(x.govde.chat_id) === "222").map((x) => x.govde.text || x.govde.caption || "");
+  assert.match(br[0], /BLACK ROSE — bugün ve cumartesi satılan modeller: 2 model, toplam 5 adet/);
+  for (const k of ["7001", "7002"]) assert.ok(br.some((y) => new RegExp(`(^|\\n)${k} · satılan`).test(y)), `${k} Merdan'ın listesinde yok`);
+  assert.ok(!br.some((y) => /(^|\n)31\d\d · satılan/.test(y))); // VOLONTE modeli Merdan'a sorulmaz
+  // salı: sadece o günün satışı (cumartesi tekrar eklenmez)
+  assert.equal((await f.listeSatislari(o.env, "2026-11-03", "VOLONTE")).haftaSonu, 0);
+});
+
+test("13 Kasım (Patron, A2 — kural 39) TEKRAR SORU ENGELİ: fabrika önceki karta hiç cevap vermediyse aynı model için ikinci kart GİTMEZ, Hemra'ya 'KOD: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün N adet daha istendi'; aynı listenin Küçük + Büyük satırı birbirini engellemez; sayıma girmez", async () => {
+  const f = await import("./fabrika.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", BR_SORUMLU: "222", AZIZ_ID: "444", EKIP_IDS: "333,444", MESAJ_ARASI_MS: "0" });
+  o.depo.set("sami:satisAcik", "1");
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 555, ad: "Sinem" }]));
+  o.depo.set("kodlar", JSON.stringify({ 3183: [{ ids: [700], tarih: 1 }], 3186: [{ ids: [701], tarih: 1 }] }));
+  const stok = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 60 + g.length } }; };
+  const gercek = Date.now;
+  const gunYap = async (ek, gun, kalemler, yazi) => {
+    await stok("satis-yaz", { magaza: "VOLONTE", gun, kalemler });
+    await f.fabrikaAdimi(o.env, ist(12, 0, ek), tg);
+    await f.fabrikaAdimi(o.env, ist(12, 15, ek), tg);
+    try {
+      Date.now = () => ist(12, 30, ek) * 1000;
+      o.g.length = 0;
+      await g2({ message: { chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Aziz" }, text: yazi } }, o.env);
+      await teyitEt(o, g2, 444, "Aziz", /Şunu anladım: /);
+      await eminim(o, g2, 444, "Aziz", /Göndereyim mi\?$/);
+      const kart = cagri(o.g, "sendMessage").find((x) => /Gidecek liste/.test(x.govde.text || ""));
+      o.g.length = 0;
+      await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: kart.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
+      for (let i = 1; i <= 3; i++) { Date.now = () => (ist(12, 30, ek) + i * 300) * 1000; await f.fabrikaAdimi(o.env, ist(12, 30, ek) + i * 300, async (e, m, gv) => { o.g.push({ metod: m, govde: gv }); return { ok: true, result: { message_id: 900 + o.g.length } }; }); }
+    } finally { Date.now = gercek; }
+    return { fabrika: cagri(o.g, "copyMessage").filter((x) => x.govde.chat_id === 555).map((x) => x.govde.caption.split("\n").slice(0, 2).join(" | ")), hemra: cagri(o.g, "sendMessage").filter((x) => String(x.govde.chat_id) === "333").map((x) => x.govde.text) };
+  };
+  // 1. gün (çarşamba): 3183 Küçük + Büyük aynı listede → ikisi de gider (birbirini engellemez)
+  const g1 = await gunYap(0, "2026-10-28", [{ kod: "3183", adet: 2 }], "3183 küçük siyah 5, büyük siyah 3");
+  assert.deepEqual(g1.fabrika, ["🟦 VOLONTE | 3183 · Küçük (38-44) · siyah 5", "🟦 VOLONTE | 3183 · Büyük (44-50) · siyah 3"]);
+  assert.ok(!g1.hemra.some((x) => /yeniden sorulmadı/.test(x)));
+  // 2. gün (perşembe): fabrika 3183'e cevap vermedi; 3183 yine istendi + 3186 yeni → sadece 3186 gider; Hemra'ya tek satır (o günkü adetle)
+  const g2s = await gunYap(1, "2026-10-29", [{ kod: "3183", adet: 1 }, { kod: "3186", adet: 1 }], "3183 küçük siyah 6, büyük siyah 4, 3186 büyük bej 2");
+  assert.deepEqual(g2s.fabrika, ["🟦 VOLONTE | 3186 · Büyük (44-50) · bej 2"]);
+  assert.deepEqual(g2s.hemra.filter((x) => /yeniden sorulmadı/.test(x)), ["3183: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün 10 adet daha istendi"]);
+  // sayım: 2. günün "fabrikaya giden"inde 3183 yok
+  const gd = await f.fabrikayaGidenler(o.env, "2026-10-29");
+  assert.deepEqual(gd.giden.VOLONTE, ["3186"]);
+  assert.equal(f.tekrarSatirlari({ 3573: 24, 3596: 20 }).join("\n"), "3573: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün 24 adet daha istendi\n3596: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün 20 adet daha istendi");
+});
