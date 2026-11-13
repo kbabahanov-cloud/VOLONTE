@@ -874,7 +874,7 @@ export async function rotasyon(env, simdi) {
   }
   if (s < SABAH_SAATI || s >= YAYIN_BIT) return;
 
-  // Günde tek tur: o günün turu yoksa sabah açılır (yeni düzen: stokta + sitede + 14 gündür paylaşılmamış 10 model).
+  // Günde tek tur: o günün turu yoksa sabah açılır (yeni düzen: stokta + sitede + 7 gündür paylaşılmamış modeller).
   if ((!tur || turGunu(tur) < gun) && s < AKSAM_SAATI) {
     // ESKI_TUR=1: eski düzen (kanal paylaşımı kopyası; sadece testlerde/geri dönüş için).
     if (!siliyor) await (env.ESKI_TUR === "1" ? turBaslat(env, tur, simdi) : yeniTurBaslat(env, tur, simdi));
@@ -1892,7 +1892,7 @@ export async function kanalVideo(env, t, aralik = null) {
 }
 
 // ---------- YENİ KANAL DÜZENİ (duzen.js, kullanıcı kararı 29 Ekim) ----------
-// Günlük modeller Sami'nin stoğundan (stokta + sitede + ≥14 gün paylaşılmamış), medya siteden, alt yazı yeni düzende,
+// Günlük modeller Sami'nin stoğundan (stokta + sitede + ≥7 gün paylaşılmamış), medya siteden, alt yazı yeni düzende,
 // fiyat YOK. Önizleme Murat'a ve Hemra'ya: ✅ Paylaş / ✏️ Düzelt / ❌ Geç. Onaylanan sıraya girer (08–20, 50–60 dk arayla,
 // günde en fazla 10; akşam onaylananlar ertesi güne kalır, stoğu biterse paylaşılmaz). Eski paylaşımlara dokunulmaz.
 
@@ -2313,7 +2313,7 @@ export async function turTamamla(env, simdi) {
   tur.dalgalar = tur.dalgalar || [];
   let d = tur.dalgalar.find((x) => x.durum === "hazirlaniyor");
   if (!d) {
-    if (tur.tukendi || saat(simdi) < SABAH_SAATI || saat(simdi) >= YAYIN_BIT) return false;
+    if (tur.tukendi === PAYLASIM_ARASI_GUN || saat(simdi) < SABAH_SAATI || saat(simdi) >= YAYIN_BIT) return false; // "tükendi" o günkü gün kuralıyla geçerlidir (kural değişirse yeniden bakılır)
     const kuyruk = await kuyrukListesi(env);
     const bos = siganPaylasim(simdi, (await yayinKapisi(env, simdi)).sonraki) - kuyruk.length;
     const ih = tamamlamaIhtiyaci(tur, simdi, bos);
@@ -2333,7 +2333,7 @@ export async function turTamamla(env, simdi) {
       kodlar.push(k);
     }
     if (!kodlar.length) {
-      tur.tukendi = true;
+      tur.tukendi = PAYLASIM_ARASI_GUN;
       await env.KAYIT.put("tur", JSON.stringify(tur));
       await defterIs(env, "kemal", `ek öneri yapılamadı: uygun model kalmadı (bugün ${ih.onay}/${GUNLUK_SINIR} onay)`);
       return false;

@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-13.1
+Sürüm: 2026-11-13.2
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü ve PARA SINIRLARI bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -83,7 +83,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 
 ## KEMAL
 52. Kanal paylaşımı sadece 09:00–21:00 arasındadır; 21:00'den sonra hiçbir yoldan paylaşım çıkmaz, kalan sabah 09:00'a kalır ve öneri kartları da 09:00'da gider.
-53. Günde en fazla 12 paylaşım yapılır (repete, yeni model ve ertelenen dahil), iki paylaşım arası en az 60 dakikadır; hafta sonu paylaşım devam eder.
+53. Günde en fazla 12 paylaşım yapılır (repete, yeni model ve ertelenen dahil), iki paylaşım arası en az 60 dakikadır; aynı model 7 gün içinde tekrar paylaşılmaz (repete hariç); hafta sonu paylaşım devam eder.
 54. Marka her zaman Vegawin'den okunur; "büyük ihtimalle" gibi tahmin cümlesi yazılmaz.
 55. Kemal yeniden paylaşımda eski alt yazıyı kopyalamaz: medyayı alır, alt yazıyı her zaman kendi düzeniyle yazar (EN/FR, fiyatsız, marka imzalı, düğmeli).
 56. Kemal'in kartları ve bildirimleri sadece Merdan ve Hemra'ya gider; Merdan'a sadece Black Rose kartı gider.

@@ -4,7 +4,7 @@
 // tek satır İngilizce + tek satır Fransızca, imza. FİYAT ASLA YAZILMAZ. Türkçe/Portekizce yok.
 // Numaralar ve site tıklanabilir düğme (yazı olarak değil). Medya siteden (galeri/ + Selin videoları);
 // eski kanal alt yazıları kullanılmaz.
-// Model seçimi: stokta + sitede + en az 14 gündür Telegram'da paylaşılmamış; en uzun süredir paylaşılmayan önce.
+// Model seçimi: stokta + sitede + en az 7 gündür (PAYLASIM_ARASI_GUN) Telegram'da paylaşılmamış; en uzun süredir paylaşılmayan önce.
 // Telegram son paylaşım tarihi Sami'nin deposunda (StokDO "tg" tablosu) — stok tablosunda sütun olarak görünür.
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -19,7 +19,7 @@ export const BILGI_WA = "https://wa.me/905363448488";
 export const IMZA = "VOLONTE – Premium Women's Fashion";
 // 5 Kasım (Patron): imza modelin markasına göre — Black Rose modellerinde VOLONTE imzası YOK
 export const IMZA_MARKA = { VOLONTE: IMZA, BLACKROSE: "BLACK ROSE – Premium Women's Fashion" };
-export const PAYLASIM_ARASI_GUN = 14; // aynı model 14 gün dolmadan tekrar önerilmez
+export const PAYLASIM_ARASI_GUN = 7; // 13 Kasım (Patron, kitap kural 53): aynı model 7 gün içinde tekrar önerilmez (14 günle havuz tükeniyordu: günde 12 paylaşım × 14 gün > sitedeki model sayısı)
 export const YENI_GUN = 21; // ilk Telegram paylaşımı bu kadar günden yeniyse (ya da hiç yoksa) 🆕
 export const DONUS_GUN = 14; // stok bu kadar gün içinde 0'dan geri geldiyse 🔁
 export const COK_SATAN_GUN = 14; // çok satan: son 14 günün satışı
@@ -99,7 +99,7 @@ export function durumSec({ kod, ilkPaylasim, toplam, bedenler, geldiZaman, satis
   return "hazir";
 }
 
-// Günün modelleri: stokta + sitede + en az 14 gündür paylaşılmamış; en uzun süredir paylaşılmayan önce.
+// Günün modelleri: stokta + sitede + en az PAYLASIM_ARASI_GUN (7) gündür paylaşılmamış; en uzun süredir paylaşılmayan önce.
 // site: urunler.json; stok: { kod: { toplam, gizli } }; tg: { kod: son paylaşım }; haric: kodlar (sırada/atlanan).
 export function gununModelleri({ site, stok, tg, haric = [], simdi, adet = 10 }) {
   const blackRoseSay = Object.keys(stok).length > 0; // stok okunamadıysa (boş) hiçbir model "Black Rose" sayılmaz
