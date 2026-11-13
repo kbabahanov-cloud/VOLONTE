@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-13.5
+Sürüm: 2026-11-13.7
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -44,7 +44,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 
 ### E. Markalar, silme, kanal, site, fabrika
 23. VOLONTE (Aziz) ve Black Rose (Merdan) ayrıdır: karıştırılmaz, toplanmaz, karşılaştırılmaz, marka tahmin edilmez.
-24. Fiyat, kâr, ciro ve satış bilgisi sadece Patron'a gider (tek istisna: Janet, kural 48).
+24. Fiyat, kâr, ciro ve satış bilgisi sadece Patron'a gider (istisnalar: Janet, kural 48; Hemra'ya giden haftalık listede satış adedi ve tarihi, kural 80).
 25. Mağaza stoğu bitmeden hiçbir model silinmez ve silme kartı hiç açılmaz; silme kararı sadece Patron'undur.
 26. Silinmesi onaylanan model Selin'in fotoğraf listesine ve Kemal'in paylaşım sırasına asla girmez.
 27. Kanala ve siteye onaysız hiçbir şey gitmez; kanal yazısı EN/FR, fiyatsız ve marka imzalıdır, stok bitince SOLD OUT olur.
@@ -120,3 +120,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 77. Cuma mutabakatı korunan akıştır: her cuma, eksik listesi gittikten sonra mutabakat önce Patron'un onayına gelir, Patron onaylayınca Fuat'a gider. İş bekçisi her cuma 20:00'de "mutabakat gitti mi?" diye kontrol eder; gitmediyse önce sebebini kendisi bulur, çözemezse Patron'a tek satır yazar.
 78. Eksik listesi pazartesi–cuma çıkar; cumartesi ve pazar liste yoktur, cumartesi satışları pazartesi listesine marka marka eklenir; bu düzen cuma mutabakatına dokunmaz.
 79. Fabrika bir modelin kartına hiç cevap vermemişken aynı model yeniden istenirse ikinci kart gitmez; Hemra'ya "KOD: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün N adet daha istendi" yazılır, eski kart ve hatırlatması sürer.
+80. Her pazartesi 10:00'da Hemra'ya haftanın en çok satan 5 modeli gider (7 günlük satış ve kalan stok; adet önerisi yoktur, repetesi açık model listeye girmez); Patron'a akşam raporunda tek satır yazılır. Kararı Hemra verir, para harcayan hiçbir iş bu listeden otomatik başlamaz.
+81. Stoğu biten model silinmez: kanalda ve sitede "SOLD OUT" yazısıyla görünür kalır, stok geri gelince aynı paylaşım "BACK IN STOCK" olur. Patron "sil" deyince Venom önce stoğa bakar: stok bitmişse kartsız SOLD OUT yapar; stok varsa tek satır "stok var, yine de sileyim mi?" diye sorar ve Patron "evet" demeden silmez.
