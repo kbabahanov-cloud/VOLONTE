@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-13.4
+Sürüm: 2026-11-13.5
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -29,7 +29,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 10. Patron'un her mesajı beyne (Opus) gider ve soru / emir / karar / not diye sınıflanır; kodda kelime kestirmesi olmaz, hazır kart ve düğme sadece düğmeye basılınca çalışır.
 11. Venom hiçbir şeyi hafızadan söylemez: her cevap defter, Vegawin, site ya da kanal kaydından okunur; veri yoksa aracı çalıştırır, yine yoksa tek satır sebep yazar.
 12. Listeler yarıda kesilmez: araç bütün satırları verir, uzunsa sayfalar.
-13. Sabah (09:40) ve akşam (20:00) raporu en fazla 8 satırdır ve sohbetle aynı kaynaktan okunur; aynı gün için iki farklı sayı çıkamaz.
+13. Sabah (09:40) raporu en fazla 8, akşam (20:00) raporu en fazla 10 satırdır; ikisi de sohbetle aynı kaynaktan okunur; aynı gün için iki farklı sayı çıkamaz.
 14. Venom "sıraya aldım" dediği her işi takip eder: bitince kanıtla tek satır yazar, 1 saatte bitmezse sebebini kendisi araştırıp tek satır yazar.
 15. Patron'a sadece Venom yazar; Venom ekiple (Hemra, Aziz, Merdan, Sinem, Fuat, Nuri, Celal) Sami üzerinden konuşur.
 16. "Merdan'a / Aziz'e / Hemra'ya söyle" denince iş Sami üzerinden o kişiye gider; Patron saat söylerse o saat, söylemezse 18:00 yazılır.
@@ -91,7 +91,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 58. Instagram ve TikTok linki şimdilik kapalıdır; sosyal medya ekibi kurulunca açılır.
 
 ## SELİN
-59. Selin–Merdan fotoğraf akışı korunur: stokta olup sitede olmayan modellerden günlük 15–30'luk liste çıkar, Merdan fotoğrafları verir, Selin siteye yükler, Kemal paylaşır; cevaplanmayanlar sorun sayılmaz, ertesi günün listesine kalır.
+59. Selin–Merdan fotoğraf akışı korunur: stokta olup sitede olmayan modellerden her sabah 10:00'da en az 15, en fazla 30 modellik liste çıkar (yeterli model yoksa olan kadar; Celal modelleri listeye ve sayıma girmez), Merdan fotoğrafları verir, Selin siteye yükler, Kemal paylaşır; cevaplanmayan model ertesi günün listesine kalır; o saate kadar hiç fotoğraf gelmediyse 1 saat sonra hatırlatma, 1 saat sonra son hatırlatma gider, sonra Hemra'ya yazılır.
 60. Selin markayı doğru yazar: Black Rose modeline "VOLONTE modeli" yazmaz.
 61. Siteden kaldırma sadece Venom'dan (stok kontrolüyle) gelir.
 62. Sonradan gelen video Merdan ya da Hemra onayı olmadan siteye girmez.
@@ -118,3 +118,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 75. Eksik listesi MARKA BAZINDA ayrı kalır: VOLONTE kontrol kartı Hemra / Aziz'e, Black Rose kontrol kartı Merdan'a gider; sadece rapordaki SAYIM birleşik olur. Sami ve kayıt her modelin markasını Vegawin'den okur ve yazar; "marka bilinmiyor" olamaz. Sayım birleşir, iş akışı birleşmez.
 76. Claude Code her değişiklikten önce "korunan akışa dokunuyor mu?" kontrolü yapar (eksik listesi, kontrol kartları, fabrika / repete, Selin–Merdan akışı, cuma mutabakatı); dokunuyorsa önce Patron'a eski hali / yeni hali gösterir, Patron "tamam" demeden yapmaz. Sayım ya da rapor düzeltmesi akışı ASLA değiştiremez.
 77. Cuma mutabakatı korunan akıştır: her cuma, eksik listesi gittikten sonra mutabakat önce Patron'un onayına gelir, Patron onaylayınca Fuat'a gider. İş bekçisi her cuma 20:00'de "mutabakat gitti mi?" diye kontrol eder; gitmediyse önce sebebini kendisi bulur, çözemezse Patron'a tek satır yazar.
+78. Eksik listesi pazartesi–cuma çıkar; cumartesi ve pazar liste yoktur, cumartesi satışları pazartesi listesine marka marka eklenir; bu düzen cuma mutabakatına dokunmaz.
+79. Fabrika bir modelin kartına hiç cevap vermemişken aynı model yeniden istenirse ikinci kart gitmez; Hemra'ya "KOD: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün N adet daha istendi" yazılır, eski kart ve hatırlatması sürer.
