@@ -1051,7 +1051,9 @@ test("12 Kasım MODEL DURUMU: model kodu geçen mesaja hazır kart GİTMEZ; beyi
     assert.equal(Object.keys(JSON.parse(o.depo.get("venom:bot:is:dummy") || "{}")).length, 0);
     // zaten silinmiş modele ikinci silme kartı açılmaz; kanıt döner
     assert.match(await aracla(o, "3377'yi sil", "siteden_kaldir", { kod: "3377" }), /^3377 zaten silinmiş; kart açılmadı\. Silme: BİTTİ/);
-    assert.deepEqual(kartSatirlari({ kod: "3700", marka: "VOLONTE", stok: { VOLONTE: 0 }, s7: 0, s14: 0, gun14: 14, fs: [], sitede: false, fotoYok: true }).at(-1), "📷 Fotoğraf yok — Selin'in fotoğraf listesine ekledim.");
+    // 13 Kasım (Patron): stoğu 0 olan model fotoğraf listesine eklenmez; stoğu olan eklenir
+    assert.deepEqual(kartSatirlari({ kod: "3700", marka: "VOLONTE", stok: { VOLONTE: 0 }, s7: 0, s14: 0, gun14: 14, fs: [], sitede: false, fotoYok: true }).at(-1), "📷 Fotoğraf yok (stok bittiği için fotoğraf listesine eklenmedi).");
+    assert.deepEqual(kartSatirlari({ kod: "3700", marka: "VOLONTE", stok: { VOLONTE: 6 }, s7: 0, s14: 0, gun14: 14, fs: [], sitede: false, fotoYok: true }).at(-1), "📷 Fotoğraf yok — Selin'in fotoğraf listesine ekledim.");
   } finally { Date.now = gercek; }
 });
 
@@ -2238,4 +2240,13 @@ test("13 Kasım (TEK DEFTER — iş bitince kayıt kapanır): onaylanıp çalı�
   const d = (id) => JSON.parse(o.depo.get(`venom:bot:is:${id}`)).durum;
   assert.deepEqual(["a1", "a2", "b1", "b2", "b3", "c1"].map(d), ["bitti", "yapiliyor", "yapiliyor", "bitti", "eskidi", "bekliyor"]);
   assert.equal(patronaGiden(o).length, 0); // kapanış sessizdir
+});
+
+test("13 Kasım (Patron) BİTMİŞ MODEL KARTI: stoğu 0 olan modelde sadece 'Repete al' — 'Kanalda paylaş' ve 'Pelin video' yok; stoğu olan modelde üç düğme; kaydı olmayan model bitmiş sayılmaz; eski karttaki düğme de çalışmaz", async () => {
+  const { kartDugmeleri, stokBitti } = await import("./venom-model.js");
+  for (const [stok, beklenen] of [[{ VOLONTE: 0 }, true], [{ VOLONTE: 0, BLACKROSE: 0 }, true], [{ VOLONTE: -2 }, true], [{ VOLONTE: 0, BLACKROSE: 3 }, false], [{ VOLONTE: 5 }, false], [{}, false]]) assert.equal(stokBitti({ stok }), beklenen, JSON.stringify(stok));
+  assert.equal(stokBitti(null), false);
+  assert.deepEqual(kartDugmeleri("3700", "", true).flat().map((d) => d.text), ["🔁 Repete al"]);
+  assert.deepEqual(kartDugmeleri("3700", "2· ", true).flat().map((d) => [d.text, d.callback_data]), [["2· 🔁 Repete al", "vmk:r:3700"]]);
+  assert.deepEqual(kartDugmeleri("3700").flat().map((d) => d.text), ["📣 Kanalda paylaş", "🔁 Repete al", "🎬 Pelin video"]);
 });

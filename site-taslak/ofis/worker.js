@@ -100,7 +100,10 @@ async function durum(env, simdi) {
   // Bot durumları: yeşil = son 20 dk kalp atışı/iş var; sarı = Patron onayı bekliyor; kırmızı = son 2 saatte hata; gri = sessiz
   const kalp = (w, alan = "zaman") => (w && w[alan] ? simdi - w[alan] < 20 * 60 : false);
   const bot = (ad, { canli, onay, hata, balon, son }) => ({ ad, durum: hata ? "kirmizi" : onay ? "sari" : canli ? "yesil" : "gri", balon: temiz(balon), son: son || null, hata: hata || null, onay: onay || 0 });
-  const kemalPaylasim = (paylasimlarBugun || []).map((p) => ({ kod: p.kod, zaman: p.zaman })); // fiyat alınmaz
+  // 13 Kasım (Patron — TEK SAYIM): aynı modelin aynı anda çıkan mesajları (albüm + kod yazısı / video) TEK paylaşımdır.
+  // Venom'un raporu (venom-veri.js gunVerisi) ile aynı kural: aynı kod, 30 dakika içinde → tek satır.
+  const kemalPaylasim = [];
+  for (const p of [...(paylasimlarBugun || [])].sort((a, b) => a.zaman - b.zaman)) { if (!kemalPaylasim.some((y) => y.kod === p.kod && Math.abs(p.zaman - y.zaman) <= 1800)) kemalPaylasim.push({ kod: p.kod, zaman: p.zaman }); } // fiyat alınmaz
   // Onaylayanlar: Kemal'in günlük turu (KV "tur": öğe başına onaylayan kişi; Merdan, Hemra, Patron…) + Selin'in site onayları
   const tur = await oku(env, "tur").catch(() => null);
   const onaylayan = {};
@@ -111,7 +114,7 @@ async function durum(env, simdi) {
   const sonPaylasimlar = Object.entries(sonPaylasim || {}).filter(([k]) => /^\d{3,6}$/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([kod, z]) => ({ kod, zaman: z, foto: `${SITE_FOTO}galeri/${kod}/1.jpg` }));
   const botlar = {
     kemal: bot("Kemal", { canli: kalp(kemalW) || kalp(kemalW, "yzZaman"), onay: sayi(kemalW && kemalW.bekleyen), hata: hataKaydi(kemalHata, simdi) || (kemalW && kemalW.sonHataZamani && simdi - kemalW.sonHataZamani < 7200 ? { zaman: kemalW.sonHataZamani, metin: temiz(kemalW.sonHata) } : null),
-      balon: kPelinKanal.length ? `${kPelinKanal[0].kod} videosunu kanala alıyorum` : kemalPaylasim.length ? `Bugün kanalda ${kemalPaylasim.length} paylaşım (${sayi(sayac)} benim turumdan)` : rKemal ? rKemal.ozet : "Kanalı izliyorum", son: kemalW && kemalW.zaman }),
+      balon: kPelinKanal.length ? `${kPelinKanal[0].kod} videosunu kanala alıyorum` : kemalPaylasim.length ? `Bugün kanalda ${kemalPaylasim.length} paylaşım` : rKemal ? rKemal.ozet : "Kanalı izliyorum", son: kemalW && kemalW.zaman }),
     selin: bot("Selin", { canli: kalp(selinW) || Boolean(selinRapor && simdi - (selinRapor.son || 0) < 1200), onay: 0, hata: hataKaydi(selinHata, simdi),
       balon: kPelinSite.length ? `${kPelinSite[0].kod} siteye ekleniyor` : rSelin ? rSelin.ozet : "Siteyi düzenliyorum", son: Math.max(sayi(selinW && selinW.zaman), sayi(selinRapor && selinRapor.son)) || null }),
     sami: bot("Sami", { canli: kalp(samiW) || Boolean(samiAktif), onay: 0, hata: hataKaydi(samiHata, simdi),

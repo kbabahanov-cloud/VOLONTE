@@ -171,12 +171,16 @@ export const defterSatirYazi = (x) => `${x.kod ? `${x.kod} · ` : ""}${x.ne} · 
 
 // ---------- HAZIR CEVAPLAR (Venom; yapay zekâsız, tek defterden) ----------
 // "Fabrikaya dün hangi modeller gitti?" → en fazla 4 satır, markalar AYRI
-export function fabrikaGidenMetni(gun, simdi, giden, bekleyen = []) {
+export function fabrikaGidenMetni(gun, simdi, giden, bekleyen = [], listeler = []) {
   const ne = gun === gunA(simdi) ? "Bugün" : gun === gunA(simdi - 86400) ? "Dün" : gunYaz(gun);
   const v = giden.VOLONTE || [], b = giden.BLACKROSE || [];
   if (!v.length && !b.length) return [`${ne} (${gunYaz(gun)}) fabrikaya giden liste yok.`, ...bekleyen.slice(0, 2)].join("\n");
   const satir = (ad, l) => (l.length ? `${ad} (${l.length}): ${[...l].sort().join(", ")}` : `${ad}: giden yok`);
-  return [`${ne} (${gunYaz(gun)}) fabrikaya ${v.length + b.length} model gitti.`, satir("VOLONTE", v), satir("Black Rose", b), ...(bekleyen.length ? [kisalt(bekleyen.join("; "), 200)] : [])].slice(0, 4).join("\n");
+  // 13 Kasım (Patron): gün içinde birden fazla liste gittiyse her biri saatiyle ayrı yazılır; toplam ilk satırdadır
+  const sa = (z) => new Date((z + 3 * 3600) * 1000).toISOString().slice(11, 16);
+  const ls = (listeler || []).filter((y) => (y.VOLONTE || []).length || (y.BLACKROSE || []).length);
+  const listeSatiri = ls.length > 1 ? [`${ls.length} ayrı liste: ${ls.map((y) => `${sa(y.zaman)} ${[(y.VOLONTE || []).length ? `VOLONTE ${y.VOLONTE.length}` : null, (y.BLACKROSE || []).length ? `Black Rose ${y.BLACKROSE.length}` : null].filter(Boolean).join(" + ")}`).join(" · ")}`] : [];
+  return [`${ne} (${gunYaz(gun)}) fabrikaya ${v.length + b.length} model gitti${ls.length > 1 ? ` (${ls.length} listede, toplam)` : ""}.`, satir("VOLONTE", v), satir("Black Rose", b), ...listeSatiri, ...(bekleyen.length ? [kisalt(bekleyen.join("; "), 200)] : [])].slice(0, 5).join("\n");
 }
 // "3419'un repetesi ne durumda?" → en fazla 3 satır
 export function repeteDurumMetni(kod, kayitlar, fsAcik = []) {

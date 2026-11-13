@@ -363,7 +363,7 @@ test("fabrika: satış girişi 10 dk değişmeyince (saat şartı yok) Hemra'ya;
   // 10 Kasım (Patron): Patron'a ayrıntılı kopya YOK; liste fabrikaya ulaşınca Venom'dan TEK satır
   assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "111" && /onaylayan/.test(x.govde.text)));
   const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
-  assert.deepEqual(fg.map((x) => x.metin), ["Bugünkü eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 0 model."]);
+  assert.deepEqual(fg.map((x) => x.metin), ["Bugünkü eksik listesi fabrikaya gitti (14:20): VOLONTE 1 model."]);
   // Nuri ✅ Gelecek → "Kaç günde hazır olur?" → 3 gün; o gün Murat'a ve Hemra'ya "geldi mi?"
   const nid = nuri.govde.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   o.g.length = 0;
@@ -937,7 +937,7 @@ test("Black Rose eksik listesi: gün içinde Merdan'a mesaj yok; 19:05 sonrası 
     await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: onay, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
     assert.equal(cagri(o.g, "copyMessage").find((x) => x.govde.chat_id === 555).govde.caption, "🌹 BLACK ROSE\n7001 · Küçük (38-44) · siyah 5");
     const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
-    assert.deepEqual(fg.map((x) => x.metin), ["Bugünkü eksik listesi fabrikaya gitti: VOLONTE 0 model, Black Rose 1 model."]); // 10 Kasım: Patron'a tek satır (Venom'dan)
+    assert.deepEqual(fg.map((x) => x.metin), ["Bugünkü eksik listesi fabrikaya gitti (19:30): Black Rose 1 model."]); // 10 Kasım: Patron'a tek satır (Venom'dan)
   } finally { Date.now = gercek; }
   // Ertesi gün: onaylanmazsa Murat'a "Merdan onaylamadı"
   await o.env.STOK.get().fetch("https://stok/satis-yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", gun: "2026-10-29", kalemler: [{ kod: "7001", adet: 1 }] }) });
@@ -2295,7 +2295,7 @@ test("inceleme bulguları (10 Kasım): '3394 geldi 30' eksik yoluna takılmaz; d
   await yaz(g, liste(["3477"]));
   o.g.length = 0;
   await msj("3477 büyük siyah 10");
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /^⚡ 3477 ACİL \(stok ~2 günde bitiyor\): en az 40 adet isteyin — yazdığınız toplam 10\./);
+  assert.ok(!o.g.some((x) => /en az \d+ adet/.test(x.govde.text || x.govde.caption || ""))); // 13 Kasım (Patron): acil listede "en az 40 adet" kalktı — adedi Hemra / Patron belirler
   await msj("3477 büyük siyah 30 küçük siyah 10");
   assert.match(o.g.filter((x) => /Şunu anladım/.test(x.govde.text || "")).at(-1).govde.text, /3477 Büyük siyah 30, Küçük siyah 10/);
   // 6) dünden kalan (Black Rose): bugünkü listede olan çıkar, kalan hepsi seçiliyse "Göndereyim mi?"
@@ -2331,18 +2331,18 @@ test("ACİL EK LİSTE (10 Kasım akşam): bugünkü liste gitmişken ⚡ acil mo
   o.g.length = 0;
   await f.fabrikaZincirAdimi(o.env, simdi, tg2);
   const kart = o.g.find((x) => String(x.govde.chat_id) === "444" && /3477/.test(x.govde.caption || x.govde.text || "") && x.govde.reply_markup);
-  assert.match(kart.govde.caption || kart.govde.text, /⚡ ACİL — stok ~2 günde bitiyor · en az 40 adet isteyin/);
+  assert.match(kart.govde.caption || kart.govde.text, /⚡ ACİL — stok ~2 günde bitiyor(?! ·)/); // 13 Kasım: "en az 40 adet isteyin" yok
   assert.ok(o.g.some((x) => String(x.govde.chat_id) === "444" && /⚡ ACİL EK LİSTE/.test(x.govde.text || "")));
   const ekAd = `${g}-acil1`;
   const msj = (text) => g2({ message: { chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Aziz" }, text } }, o.env);
   o.g.length = 0;
   await msj("3477 küçük beyaz 4");
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /en az 40 adet isteyin — yazdığınız toplam 4/);
+  assert.ok(!o.g.some((x) => /en az \d+ adet/.test(x.govde.text || x.govde.caption || "")));
   await msj("3477 büyük beyaz 30 küçük beyaz 10");
   await teyitEt(o, g2, 444, "Aziz", /Şunu anladım: 3477 Büyük beyaz 30, Küçük beyaz 10\. Doğru mu\?/);
   await eminim(o, g2, 444, "Aziz");
   const hl = o.g.find((x) => String(x.govde.chat_id) === "333" && /Gidecek liste/.test(x.govde.text || ""));
-  assert.match(hl.govde.text, /⚡ ACİL \(listenin başında, en az 40 adet\): 3477/);
+  assert.match(hl.govde.text, /⚡ ACİL \(listenin başında\): 3477/); // 13 Kasım: "en az 40 adet" yok
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: hl.govde.reply_markup.inline_keyboard[0][0].callback_data, message: { chat: { id: 333 }, message_id: 2 } } }, o.env);
   const sinem = o.g.filter((x) => String(x.govde.chat_id) === "556").map((x) => x.govde.caption || x.govde.text || "");
@@ -2354,7 +2354,7 @@ test("ACİL EK LİSTE (10 Kasım akşam): bugünkü liste gitmişken ⚡ acil mo
   const yeniKartlar = sinem.filter((t) => /⚡ ACİL — bugünkü isteğin YERİNE bu geçerli[\s\S]*3477/.test(t));
   assert.equal(yeniKartlar.length, 2); // iki beden satırı da fabrikada açık
   const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
-  assert.match(fg.at(-1).metin, /^Bugünkü eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 0 model\.$/);
+  assert.match(fg.at(-1).metin, /^Bugünkü eksik listesi fabrikaya gitti \(\d\d:\d\d\): VOLONTE 1 model\.$/); // 13 Kasım: bu listenin sayısı (acil istek eskisinin yerine geçti → günün toplamı da 1)
   assert.ok(ekAd);
 });
 
@@ -2399,7 +2399,7 @@ test("Venom 'fabrikaya gitti' satırı listenin KENDİ gününü sayar: dün ak�
   await f._test.gonderimParcasi(o.env, `${dun}-T4`, tg2, simdi);
   const fg = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "fabrikaGitti" }) })).json();
   const [y, a, gn] = dun.split("-");
-  assert.equal(fg.at(-1).metin, `${gn}.${a}.${y} eksik listesi fabrikaya gitti: VOLONTE 1 model, Black Rose 2 model.`);
+  assert.equal(fg.at(-1).metin, `${gn}.${a}.${y} bir eksik listesi daha fabrikaya gitti (14:00): VOLONTE 1 model. O gün toplam: VOLONTE 1 model, Black Rose 2 model.`); // 13 Kasım: bu liste + günün toplamı ayrı
 });
 
 // 11 Kasım (Patron): deneme zinciri takibi — gecikende Venom yazar (Merdan / Hemra), Patron'a sadece sonuç; "gittiHesap" okuma
@@ -3490,4 +3490,22 @@ test("13 Kasım: 'kartTakipAc' — Patron listeyi onaylayınca eski kartlar yeni
   assert.equal(o.g.length, 0); // süre açıldığı andan başlar
   await kt.kartTakipAdimi(o.env, sabah + 3700, tgS);
   assert.deepEqual(o.g.map((x) => x.govde.text), ["🔔 Hatırlatma: cevap bekleyen kartınız var — 3394 · fabrika siparişi. En alttaki karta bakın, düğmeye basın."]);
+});
+
+test("13 Kasım (Patron) EKSİK LİSTESİ SAYISI TEK: gün içinde birden fazla liste giderse her satır BU listenin sayısını ve günün TOPLAMINI ayrı yazar; sohbet cevabı aynı kayıttan, listeleri saatiyle gösterir (12 Kasım: 2 → 2+4 → 6+4 karışıklığı)", async () => {
+  const f = await import("./fabrika.js");
+  const { fabrikaGidenMetni } = await import("./defter-mantik.js");
+  const gun = "2026-11-12", z = (hh, mm) => Date.UTC(2026, 10, 12, hh - 3, mm) / 1000, simdi = z(20, 10);
+  const L1 = { zaman: z(19, 25), anahtar: "a", BLACKROSE: ["3162", "3205", "3412", "3587"] };
+  const L2 = { zaman: z(20, 5), anahtar: "b", VOLONTE: ["3567", "3569", "3596", "3607"] };
+  // 1. liste (günün tek listesi): sadece kendi sayısı
+  assert.equal(f.gittiMetni(gun, z(19, 30), { BLACKROSE: L1.BLACKROSE }, [], [L1]), "Bugünkü eksik listesi fabrikaya gitti (19:25): Black Rose 4 model.");
+  // 2. liste: bu liste + günün toplamı + liste sayısı
+  const giden = { VOLONTE: L2.VOLONTE, BLACKROSE: L1.BLACKROSE };
+  assert.equal(f.gittiMetni(gun, simdi, giden, [], [L1, L2]), "Bugün 2. eksik listesi fabrikaya gitti (20:05): VOLONTE 4 model. Bugün toplam: VOLONTE 4 model, Black Rose 4 model (2 liste).");
+  // ertesi gün okunursa tarih yazar
+  assert.equal(f.gittiMetni(gun, simdi + 86400, giden, [], [L1, L2]), "12.11.2026 2. eksik listesi fabrikaya gitti (20:05): VOLONTE 4 model. O gün toplam: VOLONTE 4 model, Black Rose 4 model (2 liste).");
+  // sohbet / rapor cevabı: toplam ilk satırda, listeler saatiyle ayrı satırda
+  assert.equal(fabrikaGidenMetni(gun, simdi, giden, [], [L1, L2]), "Bugün (12.11) fabrikaya 8 model gitti (2 listede, toplam).\nVOLONTE (4): 3567, 3569, 3596, 3607\nBlack Rose (4): 3162, 3205, 3412, 3587\n2 ayrı liste: 19:25 Black Rose 4 · 20:05 VOLONTE 4");
+  assert.equal(fabrikaGidenMetni(gun, simdi, { BLACKROSE: L1.BLACKROSE }, [], [L1]), "Bugün (12.11) fabrikaya 4 model gitti.\nVOLONTE: giden yok\nBlack Rose (4): 3162, 3205, 3412, 3587");
 });

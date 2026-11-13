@@ -46,11 +46,16 @@ export function kartSatirlari(o) {
   satirlar.push(f ? `Fabrika: ${gunYaz(f.gonderim)} sipariş · ${ne}${f.hazirGun ? ` (${gunStr(f.hazirGun)} hazır)` : ""}` : "Fabrikada bekleyen sipariş yok");
   satirlar.push(o.sitede ? "Sitede: var" : "Sitede: yok");
   if (o.manken) satirlar.push(mankenSatiri(o.manken, o.bedenler)); // 9 Kasım: hangi manken (tek satır)
-  if (o.fotoYok) satirlar.push("📷 Fotoğraf yok — Selin'in fotoğraf listesine ekledim.");
+  if (o.fotoYok) satirlar.push(stokBitti(o) ? "📷 Fotoğraf yok (stok bittiği için fotoğraf listesine eklenmedi)." : "📷 Fotoğraf yok — Selin'in fotoğraf listesine ekledim.");
   return satirlar.slice(0, 7);
 }
 // Düğmeler (Detay: ofisteki model sayfası hazır olunca açılır — şimdilik gizli)
-export const kartDugmeleri = (kod, onek = "") => [
-  [{ text: `${onek}📣 Kanalda paylaş`, callback_data: `vmk:p:${kod}` }, { text: `${onek}🔁 Repete al`, callback_data: `vmk:r:${kod}` }],
-  [{ text: `${onek}🎬 Pelin video`, callback_data: `vmk:v:${kod}` }],
-];
+// 13 Kasım (Patron): stoğu 0 olan (bitmiş) modelin kartında "Kanalda paylaş" ve "Pelin video" olmaz — sadece "Repete al".
+// Bitmiş = Vegawin'de kaydı var ve bütün mağazalarda adet 0 (kaydı olmayan model "bitmiş" sayılmaz).
+export const stokBitti = (o) => Boolean(o && o.stok) && Object.keys(o.stok).length > 0 && Object.values(o.stok).every((n) => !(Number(n) > 0));
+export const kartDugmeleri = (kod, onek = "", bitmis = false) => (bitmis
+  ? [[{ text: `${onek}🔁 Repete al`, callback_data: `vmk:r:${kod}` }]]
+  : [
+    [{ text: `${onek}📣 Kanalda paylaş`, callback_data: `vmk:p:${kod}` }, { text: `${onek}🔁 Repete al`, callback_data: `vmk:r:${kod}` }],
+    [{ text: `${onek}🎬 Pelin video`, callback_data: `vmk:v:${kod}` }],
+  ]);

@@ -3498,7 +3498,6 @@ export async function sabahIsleri(env, simdi) {
 export async function kemalRaporu(env, simdi) {
   const dun = gunAnahtari(simdi - 86400);
   const kanalda = Number((await env.KAYIT.get(`gun:${dun}`)) || 0);
-  const kemalin = Number((await env.KAYIT.get(`sayac:${dun}`)) || 0);
   const ozet = (await env.KAYIT.get("ozet", "json")) || { sonlar: [] };
   const dunku = ozet.sonlar.filter((p) => gunAnahtari(p.tarih) === dun);
   const tepkiler = await tepkileriOku(env, [...new Set(dunku.flatMap((p) => p.ids))]);
@@ -3512,7 +3511,7 @@ export async function kemalRaporu(env, simdi) {
   const gizli = new Set(await stokGizliler(env));
   const stoksuzSira = kuyruk.filter((o) => gizli.has(o.kod)).map((o) => o.kod);
   const satir = [`🤖 Kemal — ${gunAnahtari(simdi).split("-").reverse().join(".")} sabah raporu`, ""];
-  satir.push(`Dün kanala ${kanalda} paylaşım yapıldı; ${kemalin} tanesi Kemal'in yeniden paylaşımı.`);
+  satir.push(`Dün kanala ${kanalda} paylaşım yapıldı.`); // 13 Kasım (Patron): tek sayı — eski "N tanesi Kemal'in" alt sayacı (tur sayacı) kaldırıldı
   satir.push(enIyi.length ? `En çok tepki: ${enIyi.map((p) => `${kodBul(p.metin || "") || "kodsuz"} ❤️ ${puan(p)}`).join(" · ")}` : "Dün tepki verisi yok.");
   satir.push(bugunTur ? `Bugünün turu: ${Object.keys(bugunTur.ogeler).length} model soruldu, ${bugunTur.onaylar.length} onay, ${Object.values(bugunTur.ogeler).filter((o) => !o.karar).length} cevap bekliyor.` : "Bugünün turu henüz başlamadı.");
   satir.push(`Sırada: ${kuyruk.length} onaylı paylaşım. Müşteri istek defteri: ${istekler.length} bekleyen.`);
@@ -3520,7 +3519,7 @@ export async function kemalRaporu(env, simdi) {
   satir.push("", "🔎 Kontrol:", stoksuzSira.length ? `• ⚠️ ${sorunlar[0]}` : "• ✅ Sıradaki paylaşımların hepsi stokta (ya da Vegawin dışı)");
   return {
     metin: satir.join("\n"),
-    ozet: `Dün ${kanalda} paylaşım (${kemalin} Kemal); bugünkü tur ${bugunTur ? `${bugunTur.onaylar.length} onay` : "başlamadı"}; sırada ${kuyruk.length}.`,
+    ozet: `Dün ${kanalda} paylaşım; bugünkü tur ${bugunTur ? `${bugunTur.onaylar.length} onay` : "başlamadı"}; sırada ${kuyruk.length}.`,
     sorunlar,
     yapilacak: bugunTur && Object.values(bugunTur.ogeler).some((o) => !o.karar) ? ["Kemal'in bugünkü turunda cevap bekleyen modeller var"] : [],
   };

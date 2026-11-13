@@ -31,7 +31,7 @@ import { kisaYaz, isKaydet, isCevap, isHatirlat, bitmeyenIsler, hataAlarmi, hata
 import { durYaz, durDurumu, _durOnbellekSifirla } from "./durdurma.js";
 import { IZINLER, postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, PERSONEL_KARTI, kategori as postaKategori } from "./venom-posta.js";
 import { kopruSustu, haftaIci } from "./magaza-saat.js";
-import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri } from "./venom-model.js";
+import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri, stokBitti } from "./venom-model.js";
 import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
 import { acikRepete, engelMetni } from "./repete-kart.js"; // 11 Kasım: repete kartı + kural 43
@@ -2459,13 +2459,13 @@ export async function modelKarti(env, kodlar, simdi) {
     const f = await botaSor(env, "kemal", "modelFoto", v.kod);
     v.foto = f && f.ok && f.bayt ? f.bayt : null;
     v.fotoKaynak = f && f.kaynak;
-    if (!v.foto) { v.fotoYok = true; if (!v.sitede) await selinFotoIste(env, v.kod, simdi); }
+    if (!v.foto) { v.fotoYok = true; if (!v.sitede && !stokBitti(v)) await selinFotoIste(env, v.kod, simdi); } // 13 Kasım: stoğu 0 olan model fotoğraf listesine eklenmez
   }
   const pm = (x) => ({ posta: { tur: "cevap" }, protect_content: true });
   if (veriler.length === 1) {
     const v = veriler[0];
     const metin = [...temizSatir(kartSatirlari(v)), ...(bilinmeyen.length ? [`(${bilinmeyen.join(", ")} bulunamadı)`] : [])].join("\n");
-    const kl = { inline_keyboard: kartDugmeleri(v.kod) };
+    const kl = { inline_keyboard: kartDugmeleri(v.kod, "", stokBitti(v)) };
     if (v.foto) {
       const f = new FormData();
       f.append("chat_id", patron(env)); f.append("photo", new Blob([v.foto], { type: "image/jpeg" }), `${v.kod}.jpg`); f.append("caption", metin.slice(0, 1000)); f.append("reply_markup", JSON.stringify(kl)); f.append("protect_content", "true");
@@ -2482,8 +2482,8 @@ export async function modelKarti(env, kodlar, simdi) {
     if (medya.length === 1) { f.append("photo", f.get(medya[0].media.slice(9))); f.append("caption", medya[0].caption); await tgForm(env, "sendPhoto", f); }
     else { f.append("media", JSON.stringify(medya)); await tgForm(env, "sendMediaGroup", f); }
   }
-  const metin = [`📦 ${veriler.length} model:`, ...veriler.flatMap((v, i) => temizSatir(kartSatirlari(v)).slice(0, 3).map((x, j) => (j === 0 ? `${i + 1}. ${x.replace(/^📦 /, "")}` : `   ${x}`))), ...(veriler.some((v) => v.fotoYok && !v.sitede) ? ["📷 Fotoğrafı olmayanları Selin'in fotoğraf listesine ekledim."] : []), ...(bilinmeyen.length ? [`(${bilinmeyen.join(", ")} bulunamadı)`] : [])].join("\n");
-  return yaz(env, metin, { reply_markup: { inline_keyboard: veriler.flatMap((v, i) => kartDugmeleri(v.kod, `${i + 1}· `)) }, ...pm() });
+  const metin = [`📦 ${veriler.length} model:`, ...veriler.flatMap((v, i) => temizSatir(kartSatirlari(v)).slice(0, 3).map((x, j) => (j === 0 ? `${i + 1}. ${x.replace(/^📦 /, "")}` : `   ${x}`))), ...(veriler.some((v) => v.fotoYok && !v.sitede && !stokBitti(v)) ? ["📷 Fotoğrafı olmayanları Selin'in fotoğraf listesine ekledim."] : []), ...(bilinmeyen.length ? [`(${bilinmeyen.join(", ")} bulunamadı)`] : [])].join("\n");
+  return yaz(env, metin, { reply_markup: { inline_keyboard: veriler.flatMap((v, i) => kartDugmeleri(v.kod, `${i + 1}· `, stokBitti(v))) }, ...pm() });
 }
 // Kodsuz fotoğraf: ücretsiz yollar (kanaldan iletilmiş, yazısında kod var, kanaldaki aynı dosya) → yoksa maliyeti söyleyip sorar
 export async function fotoModelBul(env, b, simdi) {
@@ -2522,6 +2522,10 @@ async function modelKartDugmesi(env, cq, simdi, cevap) {
     return yaz(env, `🤔 Emin değilim — bu mu?${t.aciklama ? `\n${t.aciklama}` : ""}\n(Doğru modeli seçmeden stok söylemiyorum.)`, { reply_markup: { inline_keyboard: [t.adaylar.slice(0, 3).map((k) => ({ text: `Bu mu? ${k}`, callback_data: `vmk:k:${k}` })), [{ text: "❌ Hiçbiri — kodu yazacağım", callback_data: "vmk:y:0" }]] } });
   }
   const kod = x;
+  if (islem === "p" || islem === "v") { // 13 Kasım (Patron): bitmiş modelde (eski karttaki düğme dahil) paylaşım / Pelin yok — sadece repete
+    const mv = await modelVerisi(env, kod, simdi).catch(() => null);
+    if (stokBitti(mv)) { await cevap("Stok bitti"); return yaz(env, `${kod}: mağazada stok bitti — kanalda paylaşılmaz ve Pelin'e gitmez. İsterseniz "Repete al".`); }
+  }
   if (islem === "p") { await cevap("Kemal'e"); return hizliPaylas(env, { kod }, simdi, `${kod} paylaş`); } // Venom kontrolü + 09–21 kuralı Kemal'de
   if (islem === "v") {
     // 13 Kasım (Patron, kural 7 ve 66): "Pelin video" düğmesi de mesajda "Pelin" yazmadan çalışmaz
@@ -2582,7 +2586,7 @@ export async function postaKomut(env, m, metin, simdi) {
 // ---------- HAZIR CEVAPLAR (11 Kasım, Patron — KÖKTEN DÜZELTME): sık sorular yapay zekâsız, TEK DEFTERDEN; en fazla 5 satır ----------
 async function cozdumYaz(env, ne, simdi) { const k = `venom:cozdum:${gunAnahtari(simdi)}`; const l = await oku(env, k, []); await kaydet(env, k, [...l, ne].slice(-20), 3 * 86400).catch(() => null); }
 const gunSaatKisa = (t) => { const x = tarihSaat(t); return `${x.slice(0, 5)} ${x.slice(11, 16)}`; };
-async function fabrikaGidenCevabi(env, simdi, gun) { const { giden, bekleyen } = await fabrikayaGidenler(env, gun); return fabrikaGidenMetni(gun, simdi, giden || {}, bekleyen || []); }
+async function fabrikaGidenCevabi(env, simdi, gun) { const { giden, bekleyen, listeler } = await fabrikayaGidenler(env, gun); return fabrikaGidenMetni(gun, simdi, giden || {}, bekleyen || [], listeler || []); }
 async function repeteDurumCevabi(env, kod) {
   if (!kod) return "Model kodu yok.";
   const [rk, fs] = await Promise.all([repeteKayitlari(env, kod), stokIste(env, "/fs-ozet", {}).catch(() => [])]);

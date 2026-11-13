@@ -44,11 +44,13 @@ export async function isHatirlat(env, simdi) {
 }
 // 11 Kasım (Patron): biten ya da 3 günden eski iş listeden düşer. Şüpheli iş önce KANITLA kontrol edilir:
 // Kemal'in kanal işi — son kanal taraması o kodlar için temizse ve tarama, kodun son sorunlu paylaşımından SONRA yapıldıysa iş bitmiştir.
+// 13 Kasım (Patron): iptal edilen / kapanan iş de KAPALIDIR — "bitmeyen işler"de görünmez (Pelin 3394 kartı iptal edildiği hâlde listede duruyordu)
+export const KAPALI_IS = ["bitti", "eskidi", "iptal", "kapandi"];
 export async function isleriTemizle(env, simdi) {
   const l = await oku(env, "venom:bot:isler", []);
   let degisti = false, tara, kanal;
   for (const x of l) {
-    if (["bitti", "eskidi"].includes(x.durum)) continue;
+    if (KAPALI_IS.includes(x.durum)) continue;
     if (simdi - x.zaman > IS_ESKI) { x.durum = "eskidi"; degisti = true; continue; }
     const kodlar = [...new Set(String(x.ne).match(/\b\d{4,5}\b/g) || [])];
     if (x.bot !== "kemal" || !kodlar.length || !/payla[sş]|yaz[ıi]|sil|d[üu]zelt|kanal|fiyat/i.test(x.ne)) continue;
@@ -62,7 +64,7 @@ export async function isleriTemizle(env, simdi) {
   return l;
 }
 export async function bitmeyenIsler(env, simdi) {
-  const l = (await isleriTemizle(env, simdi)).filter((x) => !["bitti", "eskidi"].includes(x.durum));
+  const l = (await isleriTemizle(env, simdi)).filter((x) => !KAPALI_IS.includes(x.durum));
   return l.length ? `📌 Bitmeyen işler (${l.length}):\n${l.slice(-10).map((x) => `• ${BOT_AD[x.bot] || x.bot}: ${isBasligi(x.ne)} (${gunA(x.zaman).slice(8)}.${gunA(x.zaman).slice(5, 7)} ${saatA(x.zaman)}${x.durum === "zamanAsimi" ? ", 24 saati geçti" : ""})`).join("\n")}` : "📌 Bitmeyen iş yok.";
 }
 
