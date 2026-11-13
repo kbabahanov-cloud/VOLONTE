@@ -594,10 +594,10 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 30 model sahibe istenir (Celal'i
   assert.equal(istek.length, 1);
   assert.equal(istek[0].govde.chat_id, "777");
   const kodlar = istek[0].govde.text.split("\n")[1].split(", ");
-  assert.equal(kodlar.length, GUNLUK_ISTEK - 1);
+  assert.equal(kodlar.length, GUNLUK_ISTEK); // 13 Kasım (Patron, A4): Celal'in modeli listeye ve sayıma girmez → 30 modelin hepsi normal model
   assert.equal(kodlar[0], "3618"); // öncelikli (karışık 24)
   assert.ok(!kodlar.includes("9100"));
-  assert.match(istek[0].govde.text, /\n\n👤 Celal'in modelleri \(en son\): 9100\n/); // Celal en sonda (30. model)
+  assert.ok(!/Celal|9100/.test(istek[0].govde.text)); // Celal'in modeli hiç istenmez (kural 32)
   assert.match(istek[0].govde.text, /Dosya olarak[\s\S]*3503 Küçük[\s\S]*\/yok 3503/);
   // Tek seferlik TEKRAR (5 Kasım): aynı liste aynı biçimde SADECE /sahip hesabına (0091), durumlar değişmez
   o.depo.set("selin:sahip", "999");
@@ -647,7 +647,7 @@ test("YENİ AKIŞ: 10:00'da Sami'nin stoğundan 30 model sahibe istenir (Celal'i
   Date.now = gercekSaat;
 });
 
-test("LİSTE HEP 30 (5 Kasım): fotoğraf gelen/yok denen modelin yerine gün içinde yeni kod (30 dk'da bir, 0091'e ek mesaj); gelmeyen ertesi gün başta; 3 gün gelmezse 'bulunamıyor' + Patron'a Vegawin stoklu rapor", async () => {
+test("LİSTE HEP 30 (5 Kasım): fotoğraf gelen/yok denen modelin yerine gün içinde yeni kod (30 dk'da bir, 0091'e ek mesaj); gelmeyen ertesi gün başta; gelmeyen model listeden düşmez (13 Kasım: 'bulunamıyor' yok)", async () => {
   const { istekAdimi, gunSonuOzeti, GUNLUK_ISTEK } = await import("./selin.js");
   const o = ortam();
   o.env.SAHIP_IDS = "777"; o.env.MURAT_ID = "555,556";
@@ -693,10 +693,17 @@ test("LİSTE HEP 30 (5 Kasım): fotoğraf gelen/yok denen modelin yerine gün i�
     await gunSonuOzeti(o.env, ist(20, 5) + g * 86400);
   }
   mm = JSON.parse(o.depo.get("selin:modeller"));
-  assert.equal(mm[ilk[5]].durum, "bulunamiyor");
-  const rapor = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "555");
-  assert.match(rapor.govde.text, /3 gün üst üste[\s\S]*Vegawin'de VOLONTE 2 adet/);
-  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "556"));
+  // 13 Kasım (Patron, A4): cevaplanmayan model "bulunamıyor" diye DÜŞMEZ; ertesi günün listesine kalır, Patron'a ayrı rapor gitmez
+  assert.equal(mm[ilk[5]].durum, "bekliyor");
+  assert.equal(mm[ilk[5]].kacirma, 3);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => /3 gün üst üste/.test(x.govde.text || "")));
+  o.g.length = 0;
+  await istekAdimi(o.env, gun1 + 3 * 86400);
+  assert.ok(cagri(o.g, "sendMessage")[0].govde.text.split("\n")[1].split(", ").includes(ilk[5])); // 4. gün de listede
+  // eskiden "bulunamıyor"a düşmüş model de yeniden istenir (/yok denmişse istenmez)
+  const { istekHavuzu } = await import("./selin.js");
+  const md = { 4001: { kaynak: "ozel", durum: "bulunamiyor" }, 4002: { kaynak: "ozel", durum: "bulunamiyor", yokDendi: true }, 4003: { kaynak: "ozel", durum: "bekliyor", kacirma: 1 } };
+  assert.deepEqual(istekHavuzu(md, new Set(), ["4005"], ["4001", "4002", "4003", "4005"]), ["4003", "4005", "4001"]);
 });
 
 test("yazısız dosyalar + ayrı kod mesajı: '3183 Küçük' gelince son yazısız dosyalar bağlanır, tek cevap; eski menü yok; bekleyen yoksa sohbetten geri bulunur", async () => {
@@ -795,10 +802,10 @@ test("bir kerelik ek liste: Celal'in modelleri olmadan, bugün istenmemiş 15 mo
   const ek = cagri(o.g, "sendMessage");
   assert.deepEqual(ek.map((x) => x.govde.chat_id).sort(), ["777", "888"]);
   const kodlar = ek[0].govde.text.split("\n")[1].split(", ");
-  assert.equal(kodlar.length, 11); // 41 aday − 30 sabah (Celal 6100 sabah listesinde, en sonda) = 11 kaldı
-  assert.ok(!kodlar.includes("6100") && !kodlar.some((k) => sabah.includes(k)));
-  assert.match(ek[0].govde.text, /^🌸 Ek liste: 11 model daha/);
-  assert.equal(sabah.length, 29); // 6100 ayrı satırda: "👤 Celal'in modelleri (en son)"
+  assert.equal(kodlar.length, 10); // 13 Kasım (A4): Celal 6100 hiçbir listede yok → 40 aday − 30 sabah = 10 kaldı
+  assert.ok(!kodlar.includes("6100") && !sabah.includes("6100") && !kodlar.some((k) => sabah.includes(k)));
+  assert.match(ek[0].govde.text, /^🌸 Ek liste: 10 model daha/);
+  assert.equal(sabah.length, 30); // 13 Kasım (A4): Celal 6100 listede yok, 30 modelin hepsi normal
   assert.ok(!o.depo.has("venom:selinEkIstek"));
 });
 
@@ -1167,4 +1174,67 @@ test("6 Kasım: GitHub 502 → Selin vazgeçmez; 10 dk sonra yine 502, 30 dk son
   const uyari = yazi().filter((t) => /⚠️ 3618 siteye yüklenemedi: GitHub hâlâ hata veriyor/.test(t));
   assert.equal(uyari.length, 1);
   assert.match(await sorunRaporu(o.env, t0 + 7200), /❌ Selin: 3618 siteye yüklenemedi — GitHub hatası, 10 ve 30 dk sonra da olmadı/);
+});
+
+test("13 Kasım (Patron, A4 + B3) FOTOĞRAF HATIRLATMASI: listeden 1 saat sonra hatırlatma, 1 saat sonra son hatırlatma, 1 saat sonra Hemra'ya — SADECE o saate kadar hiç cevap gelmediyse; cevap geldiyse hiçbiri gitmez; pazar yok; stoğu biten model hatırlatmaya girmez; özet 'stokta var, sitede yok' sayısını verir (Celal hariç)", async () => {
+  const { istekAdimi, fotoHatirlatAdimi, selinOzet, fotoHatirlatmaYazisi, fotoSonHatirlatmaYazisi, fotoHemraYazisi } = await import("./selin.js");
+  assert.equal(fotoHatirlatmaYazisi(["3183", "3186"]), "🔔 Hatırlatma: bugünkü fotoğraf listesinden 2 model bekliyor: 3183, 3186\nFotoğrafı 📎 Dosya olarak gönderin; gönderemeyeceğiniz model için: /yok kod");
+  assert.equal(fotoSonHatirlatmaYazisi(["3183", "3186"]), "⏰ Son hatırlatma: 2 modelin fotoğrafı hâlâ bekleniyor: 3183, 3186");
+  assert.equal(fotoHemraYazisi(["3183", "3186"]), "⏩ Merdan bugünkü fotoğraf listesine 3 saattir cevap vermedi: 2 model bekliyor (3183, 3186) — karar sizde.");
+  const kur = () => {
+    const o = ortam();
+    o.env.SAHIP_IDS = "777";
+    const stok = {};
+    for (let i = 0; i < 6; i++) stok[String(6000 + i)] = { toplam: 1, fiyat: 10 };
+    stok["5068"] = { toplam: 3, fiyat: 10 }; // Celal (Patron'un listesi): listeye de sayıma da girmez
+    stokBagla(o, stok);
+    const stokFetch = o.env.STOK.get().fetch;
+    o.kuyruk = [];
+    o.env.STOK = { idFromName: () => "stok", get: () => ({ fetch: async (url, init) => url.endsWith("/stoktakiler")
+      ? Response.json(Object.entries(o.stok).filter(([, x]) => x.toplam > 0).map(([kod, x]) => ({ kod, toplam: x.toplam, fiyat: x.fiyat, tedarikci: x.tedarikci || null })))
+      : url.endsWith("/kuyruk-ekle") ? (o.kuyruk.push(JSON.parse(init.body)), Response.json({ ok: true })) : stokFetch(url, init) }) };
+    return o;
+  };
+  // 1) hiç cevap yok: 11:05 hatırlatma, 12:05 son hatırlatma, 13:05 Hemra; her biri BİR kez
+  let o = kur();
+  await istekAdimi(o.env, ist(10, 5));
+  const liste = cagri(o.g, "sendMessage")[0].govde.text.split("\n")[1].split(", ");
+  assert.equal(liste.length, 6); assert.ok(!liste.includes("5068"));
+  o.g.length = 0;
+  assert.equal(await fotoHatirlatAdimi(o.env, ist(10, 40)), null); // 1 saat dolmadı
+  o.stok["6005"].toplam = 0; // gün içinde stoğu bitti → hatırlatmaya girmez
+  assert.equal((await fotoHatirlatAdimi(o.env, ist(11, 5))).asama, "hat");
+  await fotoHatirlatAdimi(o.env, ist(11, 10)); // tekrar etmez
+  let m = cagri(o.g, "sendMessage");
+  assert.equal(m.length, 1); assert.equal(m[0].govde.chat_id, "777");
+  assert.match(m[0].govde.text, /^🔔 Hatırlatma: bugünkü fotoğraf listesinden 5 model bekliyor: /);
+  assert.ok(!/6005/.test(m[0].govde.text));
+  assert.equal((await fotoHatirlatAdimi(o.env, ist(12, 5))).asama, "son");
+  assert.match(cagri(o.g, "sendMessage")[1].govde.text, /^⏰ Son hatırlatma: 5 modelin fotoğrafı hâlâ bekleniyor: /);
+  assert.equal(o.kuyruk.length, 0);
+  assert.equal((await fotoHatirlatAdimi(o.env, ist(13, 5))).asama, "hemra");
+  assert.equal(cagri(o.g, "sendMessage").length, 2); // Hemra'ya Selin doğrudan yazmaz: Venom / Sami yolu
+  assert.deepEqual([o.kuyruk[0].ad, o.kuyruk[0].kayit.kime, o.kuyruk[0].kayit.tur], ["giden", "hemra", "mesaj"]);
+  assert.match(o.kuyruk[0].kayit.metin, /^⏩ Merdan bugünkü fotoğraf listesine 3 saattir cevap vermedi: 5 model bekliyor \(.*\) — karar sizde\.$/);
+  assert.equal(await fotoHatirlatAdimi(o.env, ist(14, 5)), null); // bitti
+  // özet: stokta var, sitede yok (Celal ve stoğu biten hariç)
+  const oz = await selinOzet(o.env, ist(14, 10));
+  assert.equal(oz.stoktaSitedeYok, 5);
+  assert.deepEqual([oz.bugunListe.n, oz.bugunListe.gelen], [6, 0]);
+  // 2) bir modele cevap geldiyse (fotoğraf ya da /yok): gün boyu hatırlatma YOK
+  o = kur();
+  await istekAdimi(o.env, ist(10, 5));
+  const mm = JSON.parse(o.depo.get("selin:modeller"));
+  mm["6000"] = { ...mm["6000"], durum: "geldi" };
+  o.depo.set("selin:modeller", JSON.stringify(mm));
+  o.g.length = 0;
+  for (const h of [11, 12, 13, 14]) assert.equal(await fotoHatirlatAdimi(o.env, ist(h, 5)), null);
+  assert.equal(cagri(o.g, "sendMessage").length, 0); assert.equal(o.kuyruk.length, 0);
+  // 3) pazar günü hatırlatma yok (22 Ekim 2026 perşembe → +3 gün pazar)
+  o = kur();
+  await istekAdimi(o.env, ist(10, 5) + 3 * 86400);
+  o.g.length = 0;
+  assert.equal(new Date((ist(11, 5) + 3 * 86400 + 3 * 3600) * 1000).getUTCDay(), 0);
+  assert.equal(await fotoHatirlatAdimi(o.env, ist(11, 5) + 3 * 86400), null);
+  assert.equal(cagri(o.g, "sendMessage").length, 0);
 });

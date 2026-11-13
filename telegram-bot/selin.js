@@ -16,6 +16,7 @@ import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
+import { celalKoduMu } from "./stok.js"; // 13 Kasım (A4): Celal modelleri fotoğraf listesine ve sayıma girmez (kural 32)
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
 import { renkleriUygula } from "./site-renk.js";
 import { magazaStogu, STOK_KURALI } from "./sil.js";
@@ -240,7 +241,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi, ghTekrarAdimi })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, fotoHatirlatAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi, ghTekrarAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -1330,7 +1331,7 @@ async function sitedekiKodlar(env) {
   return new Set(liste.map((u) => String(u.kod)));
 }
 export async function istekAdaylari(env, modeller, sitede = new Set()) {
-  const stok = await stokIste2(env, "/stoktakiler");
+  const stok = (await stokIste2(env, "/stoktakiler")).filter((r) => !celalMi(r)); // 13 Kasım (Patron, A4): Celal modelleri listeye ve sayıma girmez
   const kodlar = stok.map((r) => String(r.kod));
   const uygun = (k) => !sitede.has(k) && !(modeller[k] && modeller[k].durum === "sitede") && !(ozelMi(modeller[k]) && OZEL_ACIK.includes(modeller[k].durum));
   // 9 Kasım (Patron): Venom'un model kartında "fotoğraf yok" çıkan modeller listenin EN BAŞINA (KV "venom:selinFotoIste", 14 gün)
@@ -1342,6 +1343,7 @@ export async function istekAdaylari(env, modeller, sitede = new Set()) {
   const sirali = [...oncelik, ...diger];
   return { kodlar: sirali, celal, stoktaki: kodlar };
 }
+const celalMi = (r) => Boolean(r) && (r.tedarikci === "CELAL" || celalKoduMu(r.kod)); // köprü işareti + Patron'un listesi
 async function stokIste2(env, yol, govde = {}) {
   if (!env.STOK) return [];
   try {
@@ -1357,7 +1359,9 @@ export function istekHavuzu(modeller, sitede, yeni, stoktaki, haric = new Set())
   const ac = (k, d) => !sitede.has(k) && !haric.has(k) && modeller[k] && ozelMi(modeller[k]) && modeller[k].durum === d;
   const bekliyor = stoktaki.filter((k) => ac(k, "bekliyor")).sort((a, b) => (modeller[b].kacirma || 0) - (modeller[a].kacirma || 0) || Number(b) - Number(a));
   const eski = stoktaki.filter((k) => ac(k, "gonderilemedi") && !modeller[k].yokDendi).sort((a, b) => Number(b) - Number(a));
-  return [...new Set([...bekliyor, ...yeni.filter((k) => !haric.has(k)), ...eski])];
+  // 13 Kasım (Patron, A4): cevaplanmayan model listeden DÜŞMEZ — eskiden "bulunamıyor" olanlar da yeniden istenir (/yok denenler hariç)
+  const takili = stoktaki.filter((k) => ac(k, "bulunamiyor") && !modeller[k].yokDendi).sort((a, b) => Number(b) - Number(a));
+  return [...new Set([...bekliyor, ...yeni.filter((k) => !haric.has(k)), ...eski, ...takili])];
 }
 const listeKisileri = async (env) => { const s = kimlikler(await env.KAYIT.get("selin:sahip")); return s.length ? s : sahipler(env); }; // 0091
 // Gün içi tamamlama: açık ("istendi") model sayısı 30'un altına düşünce havuzdan eklenir
@@ -1400,7 +1404,10 @@ export async function selinOzet(env, simdi) {
   const fotoBekleyen = Object.entries(modeller).filter(([, m]) => m && ["istendi", "bekliyor"].includes(m.durum)).map(([kod]) => kod).slice(0, 60);
   // 13 Kasım (iş bekçisi): bugünkü liste gitti mi, kaç modelin fotoğrafı geldi (cevapsız kalan sorun değildir — kural 59)
   const bugunListe = ist ? { n: (ist.kodlar || []).length, zaman: ist.zaman || null, gelen: (ist.kodlar || []).filter((k) => modeller[k] && !["istendi", "bekliyor"].includes(modeller[k].durum)).length } : null;
-  return { bugunListe, bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan, fotoBekleyen };
+  // 13 Kasım (Patron): 20:00 raporu — "Stokta var, sitede yok: X model" (Celal hariç)
+  let stoktaSitedeYok = null;
+  try { const sitede = await sitedekiKodlar(env); stoktaSitedeYok = (await stokIste2(env, "/stoktakiler")).filter((r) => !celalMi(r) && !sitede.has(String(r.kod))).length; } catch { stoktaSitedeYok = null; }
+  return { stoktaSitedeYok, bugunListe, bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan, fotoBekleyen };
 }
 export async function venomModelDurumu(env, kod, simdi) {
   kod = String(kod || "").replace(/\D/g, "");
@@ -1498,6 +1505,33 @@ async function listeTeshisi(env, simdi) {
   }
   const ok = await env.KAYIT.put("venom:selinListeTeshis", JSON.stringify({ zaman: simdi, gunler }), { expirationTtl: 14 * 86400 }).then(() => true).catch(() => false);
   if (ok) await yazKV(env, "selin:listeTeshisYapildi", simdi, 30 * 86400);
+}
+// 13 Kasım (Patron, A4 + B3): cevaplanmayan fotoğraf isteği hatırlatma kuralına girer — listeden 1 saat sonra hatırlatma, 1 saat sonra son
+// hatırlatma, 1 saat sonra Hemra'ya. SADECE o saate kadar bugünkü listeden HİÇ cevap (fotoğraf ya da /yok) gelmediyse; Merdan çalışıyorsa
+// rahatsız edilmez. Pazar günü yok. Stoğu gün içinde biten model hatırlatmaya girmez. Cevaplanmayan model ertesi günün listesine kalır.
+export const fotoHatirlatmaYazisi = (kodlar) => `🔔 Hatırlatma: bugünkü fotoğraf listesinden ${kodlar.length} model bekliyor: ${kodlar.join(", ")}\nFotoğrafı 📎 Dosya olarak gönderin; gönderemeyeceğiniz model için: /yok kod`;
+export const fotoSonHatirlatmaYazisi = (kodlar) => `⏰ Son hatırlatma: ${kodlar.length} modelin fotoğrafı hâlâ bekleniyor: ${kodlar.join(", ")}`;
+export const fotoHemraYazisi = (kodlar) => `⏩ Merdan bugünkü fotoğraf listesine 3 saattir cevap vermedi: ${kodlar.length} model bekliyor (${kodlar.join(", ")}) — karar sizde.`;
+export async function fotoHatirlatAdimi(env, simdi) {
+  if (new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() === 0) return null;
+  const s = saat(simdi);
+  if (s < ISTEK_SAATI + 1 || s >= GUN_SONU_SAATI) return null;
+  const gun = gunAnahtari(simdi);
+  const ist = await oku(env, `selin:istek:${gun}`, null);
+  if (!ist || !(ist.kodlar || []).length || !ist.zaman || ist.hemra) return null;
+  const sira = [["hat", 3600], ["son", 7200], ["hemra", 10800]];
+  const asama = sira.find(([a, sn], i) => !ist[a] && simdi - ist.zaman >= sn && (i === 0 || (ist[sira[i - 1][0]] && simdi - ist[sira[i - 1][0]] >= 3300)));
+  if (!asama || sira.slice(0, sira.indexOf(asama)).some(([a]) => !ist[a])) return null;
+  const modeller = await oku(env, "selin:modeller", {});
+  if (ist.kodlar.some((k) => modeller[k] && modeller[k].durum !== "istendi")) return null; // bugün cevap gelmiş: hatırlatma yok
+  let stokta = null; try { stokta = new Set((await stokIste2(env, "/stoktakiler")).map((r) => String(r.kod))); } catch { /* okunamazsa hepsi */ }
+  const kodlar = ist.kodlar.filter((k) => modeller[k] && modeller[k].durum === "istendi" && (!stokta || stokta.has(k)));
+  if (!kodlar.length) return null;
+  ist[asama[0]] = simdi;
+  await yazKV(env, `selin:istek:${gun}`, ist, 30 * 86400);
+  if (asama[0] === "hemra") await stokIste2(env, "/kuyruk-ekle", { ad: "giden", kayit: { id: `sf-h:${gun}`, kime: "hemra", tur: "mesaj", metin: fotoHemraYazisi(kodlar) } });
+  else for (const k of await listeKisileri(env)) await tg(env, "sendMessage", { chat_id: k, text: (asama[0] === "hat" ? fotoHatirlatmaYazisi : fotoSonHatirlatmaYazisi)(kodlar) });
+  return { asama: asama[0], kodlar };
 }
 export async function istekAdimi(env, simdi) {
   try { await listeTeshisi(env, simdi); } catch { /* sonraki turda */ }
@@ -2095,8 +2129,8 @@ export async function gunSonuOzeti(env, simdi) {
   const yarin = [], bulunamiyor = [];
   for (const k of gelmeyen) {
     const n = (modeller[k].kacirma || 0) + 1;
-    modeller[k] = { ...modeller[k], kacirma: n, durum: n >= KACIRMA_SINIRI ? "bulunamiyor" : "bekliyor", ...(n >= KACIRMA_SINIRI ? { bulunamiyorZaman: simdi } : {}) };
-    (n >= KACIRMA_SINIRI ? bulunamiyor : yarin).push(k);
+    modeller[k] = { ...modeller[k], kacirma: n, durum: "bekliyor" }; // 13 Kasım (Patron, A4): cevaplanmayan model ertesi günün listesine kalır ("bulunamıyor" diye düşmez)
+    yarin.push(k);
   }
   await yazKV(env, "selin:modeller", modeller);
   if (bulunamiyor.length) await bulunamiyorRaporu(env, bulunamiyor, simdi).catch(() => null);
