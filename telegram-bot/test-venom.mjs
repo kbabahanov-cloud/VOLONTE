@@ -2505,6 +2505,10 @@ test("13 Kasım (Patron, B2) TASARIM ÖRNEĞİ — tek seferlik: gece gitmez; 09
   await v.guncelleme({ callback_query: { id: "c1", from: { id: Number(PATRON) }, data: onayla, message: { chat: { id: Number(PATRON) }, message_id: m[1].govde.message_id || 5 } } }, o.env);
   assert.deepEqual(cagri, [{ acik: true }]);
   assert.ok(patronaGiden(o).some((x) => /^✅ Yeni kanal tasarımı açıldı/.test(x.govde.text || "")));
+  // 13 Kasım (TEK DEFTER): Venom'un kendi kartının açılışı ve Patron'un kararı deftere ayrı satır
+  const isd = await (await o.env.STOK.get().fetch("https://stok/isd-oku", { method: "POST", body: JSON.stringify({ basla: 0, bitis: 4e9, bot: "venom" }) })).json();
+  assert.ok(isd.some((x) => x.tur === "kart" && /^Patron kartı açıldı \(tasarim\): 🎨 Yeni kanal paylaşım tasarımının örneği/.test(x.ozet)), JSON.stringify(isd.map((x) => [x.tur, x.ozet])).slice(0, 300));
+  assert.ok(isd.some((x) => x.tur === "karar" && /^Patron kartı ONAYLADI \(tasarim\)/.test(x.ozet)));
 });
 
 test("13 Kasım (Patron, B1) HAFTALIK LİSTE: pazartesi 10:00'da Hemra'ya 🔥 hızlı satan 5 (7 günlük satış + kalan; açık isteği olan girmez) BİR kez; 🧊 hiç satmayanlar Patron onayına kadar KAPALI, açılınca aynı mesajda (Celal ayrı başlık, yeni gelen model yok); akşam raporunda tek satır", async () => {

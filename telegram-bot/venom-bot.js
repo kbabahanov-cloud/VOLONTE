@@ -338,6 +338,7 @@ const ARACLAR = [
   { name: "bekleyenler", description: "Bütün botlarda Patron onayı bekleyen işleri (Pelin, Kemal SON YAYIN kartları, Selin taslakları, Venom kartları) ve bugünkü Selin listesini tek listede verir. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "kemal_calistir", description: "Patron 'Kemal'i çalıştır', 'Kemal çalışsın', 'kanala model öner', 'paylaşım yap' gibi bir şey yazarsa: Kemal stokta olan ve fotoğrafı olan modellerden EN UZUN SÜREDİR paylaşılmayanları (hiç paylaşılmamışlar önde) bulur, öneri kartlarını Hemra ve Merdan'ın onayına gönderir; onaylananlar 09:00–21:00 arasında en az 60 dk arayla, günde en fazla 12 paylaşılır. Patron süre verirse (ör. '1 aydan beri paylaşılmayanları getir') en_az_gun ver (1 ay = 30, 2 hafta = 14). Aracın verdiği TEK satırı aynen yaz.", input_schema: { type: "object", additionalProperties: false, properties: { en_az_gun: { type: "integer" } } } },
   { name: "eksik_listesi_karti", description: "Patron 'eksik listesi kartını göster' derse: Sami'nin fabrikaya gönderdiği SON eksik listesi kartının AYNISINI (tam yazı + düğmeler; düğmeler sadece görüntü) Patron'a gönderir. gun: 'bugun', 'dun', YYYY-AA-GG ya da boş (son kart). Kart gidince sadece aracın verdiği tek satırı yaz.", input_schema: { type: "object", additionalProperties: false, properties: { gun: { type: "string" } } } },
+  { name: "biten_modeller", description: "Patron 'stoksuz kaç model var', 'hangi modeller bitti', 'son zamanlarda biten modeller' diye sorarsa: SON 30 GÜNDE stoğu biten ve hâlâ stoksuz olan modelleri (kod + bittiği gün) verir. Eski pasif kartlar sayılmaz. Çıkan metni aynen yaz.", input_schema: { type: "object", properties: {} } },
   { name: "is_kontrolu", description: "Patron 'işler yapıldı mı', 'bugün herkes işini yaptı mı', 'botlar çalıştı mı', 'Kemal bugün kaç paylaştı, yeterli mi', 'iş kontrolü' gibi bir şey sorarsa: Kemal (o saate kadar beklenen paylaşım çıktı mı, çıkmadıysa sebep), Selin (fotoğraf listesi gitti mi, cevap geldi mi) ve Sami (eksik listesi fabrikaya gitti mi) için ŞU ANKİ gerçek durumu tek tek yazar. Sadece okur; kimseye mesaj göndermez. Çıkan metni AYNEN yaz.", input_schema: { type: "object", properties: {} } },
   { name: "magaza_stok_ozeti", description: "Patron 'iki mağazanın stoğunu ver', 'stok özeti', 'mağazalarda ne var' derse: Vegawin'den mağaza mağaza (VOLONTE / Black Rose ayrı) stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu SORMA. Sonucu AYNEN yaz (en fazla 8 satır).", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "celal_modelleri", description: "Celal'in Vegawin'deki bütün modelleri (kod + stok). Celal'in satışı / stoğu / modelleri sorulunca ÖNCE bunu çağır; liste TAMDIR — 'başka Celal modeli olabilir', 'bu sayıya girmedi' gibi tahmin cümlesi yazma.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
@@ -464,6 +465,7 @@ async function kartAc(env, is, metin, simdi) {
   if (acik) return acik;
   const id = kisaId();
   await kaydet(env, `venom:bot:is:${id}`, { id, ...is, metin, durum: "bekliyor", zaman: simdi }, 7 * 86400);
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "kart", ozet: `Patron kartı açıldı (${is.tur || "iş"}): ${String(metin || "").split("\n")[0].slice(0, 140)}`, kod: is.kod || null, kime: "Patron" }).catch(() => null); // 13 Kasım (TEK DEFTER): Venom'un kendi kartı
   if (is.patronIstedi || env.__sohbette) await yaz(env, metin, { reply_markup: kartKlavye(id), posta: { tur: "cevap" } }); // Patron'un kendi isteğinin kartı: hemen
   else await bildir(env, metin, { simdi, tur: "kart", ek: { reply_markup: kartKlavye(id) } });
   return id;
@@ -701,6 +703,12 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (r.ok && r.n) await isKaydet(env, "kemal", `Kemal'i çalıştır: ${r.n} model Hemra'nın onayında (${(r.kodlar || []).join(", ")})`, simdi).catch(() => null);
     return calistirSatiri(r);
   }
+  if (ad === "biten_modeller") { // 13 Kasım (Patron): "stoksuz 886" yerine son 30 günde biten modeller
+    const l = await stokIste(env, "/biten30", { simdi }).catch(() => null);
+    if (!Array.isArray(l)) return "Biten modeller okunamadı (stok kaydına ulaşılamadı).";
+    const gun = (t) => tarihSaat(t).slice(0, 5);
+    return l.length ? `Son 30 günde biten modeller: ${l.length} model\n${l.map((x) => `${x.kod} (${gun(x.zaman)})`).join(", ")}` : "Son 30 günde biten model yok.";
+  }
   if (ad === "is_kontrolu") return bekciMetni(await isBekcisi(env, simdi, { kuru: true }), tarihSaat(simdi).slice(-5)); // 13 Kasım (Patron): iş bekçisinin canlı cevabı
   if (ad === "magaza_stok_ozeti") { // 13 Kasım (Patron): model kodu sormadan, mağaza mağaza tek özet
     const gb = simdi - ((simdi + SAAT_FARKI) % 86400);
@@ -924,7 +932,7 @@ export async function dugme(env, cq, simdi) {
   const is = await oku(env, `venom:bot:is:${id}`, null);
   if (!is || !["bekliyor", "emin"].includes(is.durum)) return cevap("Bu iş artık beklemiyor.");
   const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "vb:-" }]] } });
-  if (islem === "x") { is.durum = "iptal"; await kaydet(env, `venom:bot:is:${id}`, is, 7 * 86400); await cevap("İptal"); return kapat("❌ İptal edildi"); }
+  if (islem === "x") { is.durum = "iptal"; await kaydet(env, `venom:bot:is:${id}`, is, 7 * 86400); await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `Patron kartı İPTAL etti (${is.tur || "iş"})`, kod: is.kod || null, kime: "Patron" }).catch(() => null); await cevap("İptal"); return kapat("❌ İptal edildi"); }
   if (islem === "d") {
     await kaydet(env, "venom:bot:duzelt", { id, zaman: simdi }, 3600);
     await cevap("Düzelt"); await kapat("✏️ Düzeltiliyor");
@@ -943,6 +951,7 @@ export async function dugme(env, cq, simdi) {
   }
   if ((islem === "E" || eminsiz) && is.durum === "emin") {
     is.durum = "yapiliyor"; is.onayZaman = simdi; await kaydet(env, `venom:bot:is:${id}`, is, 7 * 86400);
+    await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `Patron kartı ONAYLADI (${is.tur || "iş"}) → iş başladı`, kod: is.kod || null, kime: "Patron" }).catch(() => null); // 13 Kasım (TEK DEFTER)
     await cevap("Tamam");
     await isCalistir(env, is, simdi);
     await kapat("✅ Onaylandı");
@@ -2130,6 +2139,7 @@ export async function sabahOzeti(env, simdi) {
   // /detay için eski ayrıntılar (Patron'a gitmez)
   const ayr = await Promise.all([topluRaporMetni(env, simdi).catch(() => ""), bekleyenlerMetni(env, simdi).catch(() => ""), birikenler(env, simdi).then(ozetDetay).catch(() => "")]);
   await ozetKaydet(env, "sabah", [metin, ...ayr], simdi);
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `sabah raporu hazırlandı (${metin.split("\n").length} satır)` }).catch(() => null); // 13 Kasım (TEK DEFTER): Venom'un raporları
   return metin;
 }
 export async function aksamOzeti(env, simdi) {
@@ -2137,6 +2147,7 @@ export async function aksamOzeti(env, simdi) {
   const cuma = new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() === 5;
   const ayr = await Promise.all([gunOzeti(env, simdi).catch(() => ""), merdivenSatirlari(env, simdi).then((l) => l.join("\n")).catch(() => ""), cuma ? saglikSatiri(env, simdi).catch(() => "") : "", cuma ? mudurSatiri(env, simdi).catch(() => "") : "", birikenler(env, simdi).then(ozetDetay).catch(() => "")]);
   await ozetKaydet(env, "aksam", [metin, ...ayr], simdi);
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `akşam raporu hazırlandı (${metin.split("\n").length} satır)` }).catch(() => null); // 13 Kasım (TEK DEFTER): Venom'un raporları
   return metin;
 }
 // 9 Kasım (sert müdür F): cuma — Venom'un kendi çözdüğü / Hemra-Merdan'a verilen / Patron'a gelen iş (hedef: Patron'a gelen en aza)

@@ -12,7 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
-import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterSatir, defterYaz } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
@@ -836,6 +836,10 @@ export async function siteyeYaz(env, dosyalar, liste, mesaj) {
   await gh(env, "/git/refs/heads/main", { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
   try { await siteDefteriYenile(env, Math.floor(Date.now() / 1000), { liste }); } catch { /* gece yeniden sayılır */ } // 6 Kasım: defter anında
   await defterIs(env, "selin", `site: ${String(mesaj).replace(/^Selin: /, "").slice(0, 160)}`); // 9 Kasım: iş defteri
+  { // 13 Kasım (TEK DEFTER): ekleme / kaldırma / gizleme ayrı türlerde de yazılır (özet satırı aynen kalır)
+    const mm = String(mesaj), tur = /kald[ıi]r[ıi]ld[ıi]/i.test(mm) ? "site-kaldirma" : /stok güncellemesi|gizlen/i.test(mm) ? "site-gizleme" : /eklendi|siteye geri|yüklendi/i.test(mm) ? "site-ekleme" : null;
+    if (tur) await defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot: "selin", tur, ozet: mm.replace(/^Selin: /, "").slice(0, 200), kod: (mm.match(/(?<![\d.,:])\d{3,5}(?![\d.,:])/) || [])[0] || null }).catch(() => null);
+  }
   return commit.sha;
 }
 

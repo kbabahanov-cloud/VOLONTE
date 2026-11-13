@@ -206,7 +206,10 @@ const gunAnahtar = (simdi) => new Date((simdi + SAAT_FARKI) * 1000).toISOString(
 // Günlük sınır: varsayılan 10 $; Patron isterse (Claude Code) KV "pelin:gunlukSinir:<gün>" (sadece o gün) ya da "pelin:gunlukSinir"
 export const gunlukSinir = async (env, simdi) => Number((await env.KAYIT.get(`pelin:gunlukSinir:${gunAnahtar(simdi)}`)) || (await env.KAYIT.get("pelin:gunlukSinir")) || GUNLUK_SINIR_USD);
 export const bugunHarcanan = async (env, simdi) => Number((await env.KAYIT.get(`pelin-gun:${gunAnahtar(simdi)}`)) || 0);
-async function harcamaYaz(env, usd, simdi, tur = "fal") {
+const ARAC_AD = { fal: "fal.ai", hf: "Higgsfield", openai: "ChatGPT" };
+async function harcamaYaz(env, usd, simdi, tur = "fal", kod = null) {
+  // 13 Kasım (TEK DEFTER): Pelin'in HER ücretli üretimi deftere ayrı satır — araç + tutar (iade eksi yazılır); yapay zekâ kontrol harcaması hariç
+  if (ARAC_AD[tur] && Math.abs(Number(usd) || 0) >= 0.005) await defterIs(env, "pelin", `${usd > 0 ? "ücretli üretim" : "üretim iadesi"}: ${ARAC_AD[tur]} · ${para(Math.abs(usd))}`, { kod: kod ? String(kod) : null }).catch(() => null);
   const k = tur === "fal" ? `uretim-harcama:${ay(simdi)}` : tur === "hf" ? `pelin-hf:${ay(simdi)}` : tur === "openai" ? `pelin-openai:${ay(simdi)}` : `pelin-claude:${ay(simdi)}`;
   const once = Number((await env.KAYIT.get(k)) || 0);
   await env.KAYIT.put(k, String(yuvarla(once + usd)), { expirationTtl: 400 * 86400 });
@@ -1985,7 +1988,7 @@ export async function askiDetayBaslat(env, is, simdi) {
   for (const [ad, anahtar] of [["kesOn", k.on], ["kesArka", k.arka]]) if (anahtar) istek[ad] = await falGonder(env, KESIM.uc, { image_url: dosyaAdresi(env, anahtar), prompt: KESIM.istem, autocrop: KESIM.autocrop });
   for (const y of DETAY_YERLERI) { const a = y.foto === "on" ? k.on : k.arka; if (a) istek[`yer_${y.k}`] = await falGonder(env, BUL.uc, { image_url: dosyaAdresi(env, a), prompt: y.istem, include_boxes: true, include_scores: true, apply_mask: false, return_multiple_masks: false, output_format: "png" }); }
   const fiyat = yuvarla(Object.keys(istek).reduce((t, x) => t + (x.startsWith("kes") ? KESIM.fiyat : BUL.fiyat), 0));
-  is.maliyet = yuvarla((is.maliyet || 0) + fiyat); await harcamaYaz(env, fiyat, simdi);
+  is.maliyet = yuvarla((is.maliyet || 0) + fiyat); await harcamaYaz(env, fiyat, simdi, "fal", is.kod);
   is.ad = { kaynak: k, istek, sonuc: {}, zaman: simdi };
 }
 // Döner: true = bitti (is.adSonuc dolu ya da yok), false = bekliyor
@@ -2110,7 +2113,7 @@ async function paketAdimi(env, is, simdi) {
     const r = await bekle(is.paketFal); if (!r) return;
     if (r.hata || !r.video) throw new Error(`ses izi eklenemedi: ${r.hata || "yok"}`);
     is.paket.video = r.video; is.durum = is.duzeltSonra || "onaylandi";
-    is.maliyet = yuvarla((is.maliyet || 0) + 0.02); await harcamaYaz(env, 0.02, simdi);
+    is.maliyet = yuvarla((is.maliyet || 0) + 0.02); await harcamaYaz(env, 0.02, simdi, "fal", is.kod);
     const vr = await fetch(r.video); if (vr.ok) is.paketKopya = await medyaKaydet(env, await vr.arrayBuffer(), "video/mp4");
     is.gecmis.push([simdi, "video düzeltildi: 1080×1920 + sessiz ses izi (iPhone'a kaydedilebilir), yeniden üretim yok"]);
     if (!is.duzeltKontrol) await tgDosya(env, "sendVideo", "video", is.paketKopya || r.video, { chat_id: murat(env), caption: `🎬 ${is.kod} — aynı video (YENİDEN ÜRETİLMEDİ), iPhone'a kaydedilebilir biçimde: MP4 · H.264 · 1080×1920 · ses izi var`, supports_streaming: true });
@@ -2149,7 +2152,7 @@ async function paketAdimi(env, is, simdi) {
     const r = await bekle(is.paketFal); if (!r) return;
     if (r.hata || !r.video) throw new Error(`videoya ses izi eklenemedi: ${r.hata || "yok"}`);
     is.paket.video = r.video; is.paketSonuc = null;
-    is.maliyet = yuvarla((is.maliyet || 0) + VIDEO_YAZI.fiyat); await harcamaYaz(env, VIDEO_YAZI.fiyat, simdi);
+    is.maliyet = yuvarla((is.maliyet || 0) + VIDEO_YAZI.fiyat); await harcamaYaz(env, VIDEO_YAZI.fiyat, simdi, "fal", is.kod);
     is.gecmis.push([simdi, `paket hazır: ${MARKALAR[marka].ad} · ${is.kod} (fotoğraflar + videonun tamamı, sağ alt)`]);
     if (is.paketKontrol) { // Claude Code kontrolü (tek seferlik): video KV'ye kopyalanır, Patron'a/Kemal'e "paketBitir" komutuyla gider
       const vr = await fetch(r.video); if (vr.ok) is.paketKopya = await medyaKaydet(env, await vr.arrayBuffer(), "video/mp4");
@@ -2232,7 +2235,7 @@ async function falIsle(env, is, uc, girdi, fiyat, simdi, hf = false) {
   }
   is.fal = hf ? await hfGonder(env, uc, girdi) : await falGonder(env, uc, girdi);
   is.falFiyat = fiyat; is.falTur = hf ? "hf" : "fal"; is.maliyet = yuvarla(is.maliyet + fiyat); is.bekleZaman = simdi;
-  await harcamaYaz(env, fiyat, simdi, is.falTur);
+  await harcamaYaz(env, fiyat, simdi, is.falTur, is.kod);
 }
 // Higgsfield aracı çalışmazsa aynı kareyle fal.ai yedeği (bir kez; deneme sayılmaz)
 // 13 Kasım (Patron, kural 67): araç hatasında otomatik yeniden gönderim / araç değiştirme YOK
@@ -2256,7 +2259,7 @@ async function uretimAdimi(env, is, simdi) {
   const bekle = async () => {
     const s = await falDurum(env, is.fal).catch((e) => ({ bitti: false, hata: String(e.message) }));
     if (!s.bitti) { if (simdi - is.bekleZaman > 3 * 3600) return { hata: "3 saatte bitmedi" }; return null; }
-    if (s.hata) { await harcamaYaz(env, -is.falFiyat, simdi, is.falTur || "fal"); is.maliyet = yuvarla(is.maliyet - is.falFiyat); }
+    if (s.hata) { await harcamaYaz(env, -is.falFiyat, simdi, is.falTur || "fal", is.kod); is.maliyet = yuvarla(is.maliyet - is.falFiyat); }
     return s;
   };
   if (is.durum === "foto_gonder") {
@@ -2303,7 +2306,7 @@ async function uretimAdimi(env, is, simdi) {
       const g = { prompt: aciIstemi(a, is), image_urls: [on, ...urunler], num_images: 1, aspect_ratio: "9:16", resolution: "2K", output_format: "jpeg" };
       const f = await falGonder(env, GORSEL.duzenle, g);
       is.setFal.push({ k: a.k, f });
-      is.maliyet = yuvarla(is.maliyet + GORSEL.fiyat); await harcamaYaz(env, GORSEL.fiyat, simdi);
+      is.maliyet = yuvarla(is.maliyet + GORSEL.fiyat); await harcamaYaz(env, GORSEL.fiyat, simdi, "fal", is.kod);
     }
     is.durum = "set_bekle"; is.bekleZaman = simdi; return;
   }
@@ -2340,6 +2343,7 @@ async function uretimAdimi(env, is, simdi) {
   if (is.durum === "video_gonder" && is.sahneAyar && !is.senaryo) { is.durum = "senaryo_yaz"; return; }
   if (is.durum === "senaryo_yaz") {
     is.senaryo = await noraYaz(env, is, simdi);
+    await defterIs(env, "nora", `senaryo (${is.kod}) — tam metin: ${(typeof is.senaryo === "string" ? is.senaryo : JSON.stringify(is.senaryo)).slice(0, 3500)}`, { kod: String(is.kod) }).catch(() => null); // 13 Kasım (TEK DEFTER): Nora'nın senaryosu tam metin
     is.durum = "senaryo_onay";
     await noraKarti(env, is.id, [is], simdi);
     return;

@@ -3161,6 +3161,7 @@ export async function soldOutAdimi(env, simdi, { zorla = false } = {}) {
     const r = await soldOutYaz(env, kod);
     yapilan[kod] = simdi; delete bekleyen[kod]; delete yeniGorulen[kod];
     sonuc.yapilan.push({ kod, ...r });
+    await defterIs(env, "kemal", `${kod} mağazada bitti → kanalda ${r.duzenlenen} paylaşımın yazısı "SOLD OUT" yapıldı (silinmedi)`, { kod }).catch(() => null); // 13 Kasım (TEK DEFTER)
     if (r.duzenlenen) for (const kisi of [hemraId(env)].filter(Boolean)) await telegram(env, "sendMessage", { chat_id: kisi, text: `❌ ${kod} mağazada bitti (Vegawin stok 0) → kanalda ${r.duzenlenen} paylaşımın yazısı "SOLD OUT" yapıldı. Mesajlar silinmedi.`, disable_web_page_preview: true });
   }
   sonuc.donen = [];
