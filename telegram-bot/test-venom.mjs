@@ -2461,3 +2461,33 @@ test("13 Kasım (Patron, kural 77 + B4) — cuma 20:00 mutabakat kontrolü: kapa
   const cmt = (await v.raporSatirlari(o.env, ist(14, 20, 0), "aksam")).split("\n");
   assert.ok(cmt.includes("🏭 Fabrika: hafta sonu eksik listesi yok (cumartesi satışları pazartesi listesinde)"), cmt.join(" | "));
 });
+
+test("13 Kasım (Patron, B2) TASARIM ÖRNEĞİ — tek seferlik: gece gitmez; 09:00'dan sonra Patron'a fotoğraf + yeni yazı, 'Order KOD' + düğmeler ve onay kartı BİR kez gider; onaylayınca Kemal yeni tasarıma geçer; onay yoksa eski tasarım kalır", async () => {
+  const v = await import("./venom-bot.js");
+  const o = ortam();
+  const cagri = [];
+  o.env.KEMAL_W = { ...(o.env.KEMAL_W || {}),
+    tasarimOrnek: async () => ({ ok: true, kod: "3394", marka: "VOLONTE", yazi: "<b>🆕 NEW · VOLONTE 3394</b>\nRobe · Dress\nVOLONTE · Istanbul", not: "<b>Order 3394</b>", dugmeler: { inline_keyboard: [[{ text: "🛒 Order · WhatsApp", url: "https://wa.me/1?text=x" }]] }, foto: "https://x/1.jpg" }),
+    tasarimOnay: async (g) => { cagri.push(g); return { ok: true, acik: true }; } };
+  o.depo.set("venom:tasarimOrnek", JSON.stringify({ durum: "bekliyor" }));
+  assert.equal(await v.tasarimOrnekAdimi(o.env, ist(14, 2, 0)), null); // gece: gitmez
+  assert.equal(o.g.length, 0);
+  await v.tasarimOrnekAdimi(o.env, ist(14, 9, 5));
+  const foto = o.g.find((x) => x.metod === "sendPhoto");
+  assert.equal(String(foto.govde.chat_id), String(PATRON));
+  assert.match(foto.govde.caption, /🆕 NEW · VOLONTE 3394/);
+  const m = patronaGiden(o);
+  assert.equal(m.length, 2);
+  assert.match(m[0].govde.text, /Order 3394/);
+  assert.equal(m[0].govde.reply_markup.inline_keyboard[0][0].text, "🛒 Order · WhatsApp");
+  assert.equal(m[1].govde.text, v.TASARIM_KART);
+  const onayla = m[1].govde.reply_markup.inline_keyboard.flat().find((b) => /Onayla/.test(b.text)).callback_data;
+  // ikinci çalışmada tekrar gitmez
+  const n = o.g.length;
+  await v.tasarimOrnekAdimi(o.env, ist(14, 9, 10));
+  assert.equal(o.g.length, n);
+  assert.deepEqual(cagri, []); // onay gelmeden Kemal'e dokunulmaz
+  await v.guncelleme({ callback_query: { id: "c1", from: { id: Number(PATRON) }, data: onayla, message: { chat: { id: Number(PATRON) }, message_id: m[1].govde.message_id || 5 } } }, o.env);
+  assert.deepEqual(cagri, [{ acik: true }]);
+  assert.ok(patronaGiden(o).some((x) => /^✅ Yeni kanal tasarımı açıldı/.test(x.govde.text || "")));
+});

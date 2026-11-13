@@ -2,7 +2,7 @@
 // (Testler worker.js'i doğrudan kullanır; "cloudflare:workers" sadece burada.)
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { botSagligi, sonHata } from "./saglik.js";
-import { venomDugme, venomMesaj, akisDenemesi, venomModelFoto, venomFotoTani, venomOzet, paylasimSil, paylasimDuzelt, venomCalistir, venomHatirlat } from "./worker.js";
+import { venomDugme, venomMesaj, akisDenemesi, venomModelFoto, venomFotoTani, venomOzet, paylasimSil, paylasimDuzelt, venomCalistir, venomHatirlat, venomTasarim } from "./worker.js";
 export * from "./worker.js";
 export { default } from "./worker.js";
 export class VenomKapisi extends WorkerEntrypoint {
@@ -10,6 +10,8 @@ export class VenomKapisi extends WorkerEntrypoint {
   async mesaj(metin) { return venomMesaj(this.env, metin); }
   async paylasimSil(g) { return paylasimSil(this.env, g || {}); } // 10 Kasım: Patron "sil" → onay kartı YOK
   async paylasimDuzelt(g) { return paylasimDuzelt(this.env, g || {}); } // 10 Kasım: aynı medya, doğru yazı
+  async tasarimOrnek() { return venomTasarim(this.env, "tasarim-ornek"); } // 13 Kasım (B2): yeni kanal tasarımının örneği (kanala gitmez)
+  async tasarimOnay(g) { return venomTasarim(this.env, "tasarim-onay", g || {}); } // Patron onayı → yeni tasarım açılır
   async hatirlat() { return venomHatirlat(this.env); } // 13 Kasım: iş bekçisi — onay bekleyen öneri kartına tek hatırlatma
   async calistir(g) { return venomCalistir(this.env, g || {}); } // 13 Kasım: Patron "Kemal'i çalıştır"
   async ozet() { return venomOzet(this.env); } // 9 Kasım: Venom'un canlı sorusu

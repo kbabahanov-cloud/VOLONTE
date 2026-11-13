@@ -787,7 +787,11 @@ export async function aracCalistir(env, ad, g, simdi) {
 // Onaylanan kartı çalıştır
 async function isCalistir(env, is, simdi) {
   const onaylayan = patron(env);
-  if (is.tur === "mesaj") await kuyrugaEkle(env, "giden", { id: is.id, kime: is.kime, metin: is.govde, tur: "mesaj", onaylayan });
+  if (is.tur === "tasarim") { // 13 Kasım (Patron, B2): yeni kanal tasarımının örneği onaylandı → normal akış yeni tasarımla
+    const r = await botaSor(env, "kemal", "tasarimOnay", { acik: true });
+    await yaz(env, r && r.ok ? "✅ Yeni kanal tasarımı açıldı. Bundan sonraki paylaşımlar bu düzenle çıkar; kartlar Hemra / Merdan'ın onayına gider, size bir daha gelmez." : "⚠️ Yeni tasarım açılamadı: Kemal'e ulaşılamadı. Eski tasarım sürüyor.", { posta: { izin: "cevap" } });
+  }
+  else if (is.tur === "mesaj") await kuyrugaEkle(env, "giden", { id: is.id, kime: is.kime, metin: is.govde, tur: "mesaj", onaylayan });
   else if (is.tur === "mutabakat") await kuyrugaEkle(env, "giden", { id: is.id, kime: "fuat", tur: "mutabakat", icerik: is.icerik, onaylayan });
   else if (is.tur === "sil") { const r = await silKuyrugu(env, is.kod, "Patron (Venom)", simdi); if (r && r.engel) await yaz(env, STOK_KURALI(is.kod, r.engel), { posta: { izin: "cevap" } }); }
   else if (is.tur === "pelin") await kuyrugaEkle(env, "pelinIs", { id: is.id, kodlar: is.kodlar, test: is.test });
@@ -1838,6 +1842,23 @@ async function bekciEksikleri(env, gun) {
   const l = kayit ? Object.entries(kayit).filter(([a]) => /^\d+$/.test(a)).sort((a, b) => Number(a[0]) - Number(b[0])) : [];
   return l.length ? l[l.length - 1][1].eksik || [] : undefined;
 }
+// 13 Kasım (Patron, B2): yeni kanal tasarımı canlıya alınmadan önce TEK SEFERLİK örnek — Venom Patron'a gösterir (fotoğraf + yeni yazı,
+// "Order KOD" mesajı + düğmeler, onay kartı). Patron onaylayınca Kemal yeni tasarıma geçer. Gece gitmez (09:00–21:00).
+export const TASARIM_KART = "🎨 Yeni kanal paylaşım tasarımının örneği yukarıda: fotoğrafın altındaki yazı ve \"Order …\" mesajıyla düğmeler. Onaylarsanız bundan sonraki paylaşımlar böyle çıkar (kartlar yine Hemra / Merdan'ın onayına gider). Onaylamazsanız eski tasarım kalır.";
+export async function tasarimOrnekAdimi(env, simdi) {
+  const d = await oku(env, "venom:tasarimOrnek", null);
+  if (!d || d.durum !== "bekliyor") return null;
+  const s = saat(simdi);
+  if (s < 9 || s >= 21) return null;
+  const r = await botaSor(env, "kemal", "tasarimOrnek");
+  if (!r || !r.ok || !r.foto) { const n = (d.deneme || 0) + 1; await kaydet(env, "venom:tasarimOrnek", { ...d, deneme: n, durum: n >= 6 ? "hata" : "bekliyor", hata: (r && r.hata) || "Kemal'e ulaşılamadı" }, 14 * 86400); return null; }
+  await kaydet(env, "venom:tasarimOrnek", { ...d, durum: "gonderildi", zaman: simdi, kod: r.kod }, 14 * 86400);
+  const p = patron(env);
+  const f = await tg(env, "sendPhoto", { chat_id: p, photo: r.foto, caption: r.yazi, parse_mode: "HTML", izin: "cevap" }).catch(() => null);
+  if (!f || !f.ok) await tg(env, "sendMessage", { chat_id: p, text: r.yazi, parse_mode: "HTML", disable_web_page_preview: true, izin: "cevap" }).catch(() => null);
+  await tg(env, "sendMessage", { chat_id: p, text: r.not, parse_mode: "HTML", reply_markup: r.dugmeler, izin: "cevap" }).catch(() => null);
+  return kartAc({ ...env, __sohbette: true }, { tur: "tasarim", kod: r.kod }, TASARIM_KART, simdi);
+}
 // ---------- 5 dakikalık görev ----------
 export async function venomCron(env, simdi) {
   await webhookKur(env);
@@ -1861,6 +1882,7 @@ export async function venomCron(env, simdi) {
   try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
   try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); }
   try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); }
+  try { await tasarimOrnekAdimi(env, simdi); } catch (e) { await hataYaz(env, "tasarimOrnek", e); } // 13 Kasım (B2): tek seferlik örnek
   try { await isBekcisiAdimi(env, simdi); } catch (e) { await hataYaz(env, "isBekcisi", e); } // 13 Kasım (Patron): 11:00, 15:00, 19:00 — iş yapıldı mı
   if (Math.floor(simdi / 300) % 6 === 0) try { await kartKapanisAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartKapanis", e); } // 13 Kasım: yarım saatte bir — onaylanan kartın kapanışı // 11 Kasım (kural 54) // 11 Kasım: repete kartı (Patron kartı + tek satır sonuç)
   // Diğer botların sonuçları → "✅ yapıldı"

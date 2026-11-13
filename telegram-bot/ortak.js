@@ -54,7 +54,10 @@ export function kodBul(metin) {
     if (/\d/.test(m[1])) return kodNormal(m[1]);
   }
   const m = metin.match(/#([0-9]{3,8})\b/);
-  return m ? kodNormal(m[1]) : null;
+  if (m) return kodNormal(m[1]);
+  // 13 Kasım (yeni kanal tasarımı): ilk satır "[🆕 NEW · ]VOLONTE 3394" / "BLACK ROSE 3394"; ayrı düğme mesajı "Order 3394"
+  const y = String(metin).split("\n")[0].match(/^(?:[^\n]*·\s*)?(?:VOLONTE|BLACK ROSE) ([0-9]{3,8})\s*$/) || String(metin).match(/^Order ([0-9]{3,8})\s*$/);
+  return y ? kodNormal(y[1]) : null;
 }
 
 export function kodNormal(kod) {

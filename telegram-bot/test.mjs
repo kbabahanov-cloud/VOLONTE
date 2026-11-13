@@ -2659,3 +2659,68 @@ test("13 Kasım (Patron) KEMAL'İ ÇALIŞTIR: stokta + fotoğraflı modellerden 
   assert.deepEqual(Object.keys(turS.ogeler), ["3403"]); // süre süzgeci sabah turuna uygulandı
   assert.equal(o5.depo.get("kemal:calistirPlan"), undefined);
 });
+
+test("13 Kasım (Patron, B2) YENİ KANAL TASARIMI: en fazla 5 satır ([etiket ·] MARKA KOD / FR · EN / Colors / Sizes / MARKA · Istanbul), kumaş ve AVAILABLE yok, NEW sadece 48 saat; ayrı mesaj 'Order KOD' + büyük düğmeler (hazır WhatsApp yazısı, modelin site sayfası); anahtar kapalıyken eski tasarım AYNEN; kod dizini ve SOLD OUT yeni yazıyla da çalışır; örnek kanala gitmez", async () => {
+  const d = await import("./duzen.js");
+  const w = await import("./worker.js");
+  const p = { marka: "VOLONTE", kod: "3394", durum: "yeni", renkler: ["black", "bordeaux"], renkEmin: true, kumas: "crêpe", en: "Long crepe dress.", fr: "Robe longue en crêpe.", bedenler: "38-40-42-44", medya: [{ type: "photo", media: "https://x/1.jpg" }, { type: "photo", media: "https://x/2.jpg" }] };
+  // anahtar kapalı: eski tasarım aynen
+  assert.equal(d.tasarimOku(), null);
+  assert.match(d.altYazi(p), /^🆕 NEW \/ NOUVEAU\n<b>✅ CODE: 3394<\/b>\n[\s\S]*VOLONTE – Premium Women's Fashion$/);
+  assert.equal(d.albumNotu("3394"), "👆 <b>CODE: 3394</b>");
+  assert.equal(d.dugmeler().inline_keyboard[0][0].text, "🛒 Order");
+  // yeni tasarım
+  const y = { ...p, tasarim: "yeni" };
+  const duz = (h) => h.replace(/<[^>]+>/g, "").replace(/​/g, "");
+  assert.equal(duz(d.altYazi(y)), "🆕 NEW · VOLONTE 3394\nRobe longue en crêpe · Long crepe dress\nColors: black, bordeaux\nSizes: 38-40-42-44 · series of 4\nVOLONTE · Istanbul");
+  assert.equal(duz(d.altYazi({ ...y, durum: "hazir", marka: "BLACKROSE", renkEmin: false })), "BLACK ROSE 3394\nRobe longue en crêpe · Long crepe dress\nSizes: 38-40-42-44 · series of 4\nBLACK ROSE · Istanbul");
+  assert.equal(duz(d.altYazi({ ...y, durum: "son" })).split("\n")[0], "⚡ LAST SERIES · VOLONTE 3394");
+  assert.ok(d.altYazi(y).split("\n").length <= 5 && !/Fabric|Tissu|AVAILABLE|Premium/.test(d.altYazi(y)));
+  assert.equal(d.albumNotu("3394", y), "<b>Order 3394</b>");
+  const dg = d.dugmeler(y).inline_keyboard;
+  assert.deepEqual(dg.map((s) => s.map((b) => b.text)), [["🛒 Order · WhatsApp", "💬 Ask price"], ["🌐 Catalog"]]);
+  assert.equal(decodeURIComponent(dg[0][0].url.split("?text=")[1]), "Hello / Bonjour, 3394 ?");
+  assert.ok(dg[0][0].url.startsWith(d.SIPARIS_WA) && dg[0][1].url.startsWith(d.BILGI_WA)); // numaralar aynı
+  assert.match(dg[1][0].url, /#model\/3394$/);
+  // NEW sadece ilk 48 saat (yeni tasarım açıkken)
+  const t = 1_800_000_000;
+  d.tasarimAyarla("yeni");
+  try {
+    assert.equal(d.durumSec({ kod: "1", ilkPaylasim: t - 86400, toplam: 40, bedenler: "38-40-42-44", simdi: t }), "yeni");
+    assert.equal(d.durumSec({ kod: "1", ilkPaylasim: t - 3 * 86400, toplam: 40, bedenler: "38-40-42-44", simdi: t }), "hazir");
+  } finally { d.tasarimAyarla(null); }
+  assert.equal(d.durumSec({ kod: "1", ilkPaylasim: t - 3 * 86400, toplam: 40, bedenler: "38-40-42-44", simdi: t }), "yeni"); // eski tasarımda 21 gün
+  // kod dizini: yeni ilk satır ve "Order 3394" mesajı tanınır; imza / başka yazı kod sayılmaz
+  assert.deepEqual(["🆕 NEW · VOLONTE 3394\nRobe…", "BLACK ROSE 3627\nx", "Order 3394", "VOLONTE · Istanbul", "VOLONTE – Premium Women's Fashion", "✅ CODE: 3329"].map(w.kodBul), ["3394", "3627", "3394", null, null, "3329"]);
+  const ayr = w.paylasimlaraAyir([{ id: 10, tarih: 100, yazi: "🆕 NEW · VOLONTE 3394\nRobe", medya: "f" }, { id: 11, tarih: 100, yazi: "", medya: "f" }, { id: 12, tarih: 101, yazi: "Order 3394", medya: null }]);
+  assert.deepEqual(ayr.map((x) => [x.kod, x.ids]), [["3394", [10, 11, 12]]]); // albüm + "Order" mesajı = TEK paylaşım
+  // SOLD OUT / BACK IN STOCK yeni yazıda marka + kod satırını kesmez
+  const so = w.soldOutYazisi("⚡ LAST SERIES · VOLONTE 3394\nRobe · Dress\nVOLONTE · Istanbul", []);
+  assert.equal(so.caption, "❌ SOLD OUT / ÉPUISÉ\n⚡ LAST SERIES · VOLONTE 3394\nRobe · Dress\nVOLONTE · Istanbul");
+  assert.equal(w.backInStockYazisi(so.caption, so.caption_entities).caption, "🔁 BACK IN STOCK / DE RETOUR\n⚡ LAST SERIES · VOLONTE 3394\nRobe · Dress\nVOLONTE · Istanbul");
+  // kanala gönderim: albüm + "Order 3394" (düğmelerle); eski pakette "👆 CODE"
+  const o = await yeniOrtam();
+  o.gonderilen.length = 0;
+  await w.paketGonder(o.env, -100, y, "album");
+  const not = cagrilar(o.gonderilen, "sendMessage").at(-1).govde;
+  assert.equal(not.text, "<b>Order 3394</b>");
+  assert.equal(not.reply_markup.inline_keyboard[0][0].text, "🛒 Order · WhatsApp");
+  assert.match(cagrilar(o.gonderilen, "sendMediaGroup")[0].govde.media[0].caption, /^<b>🆕 NEW · VOLONTE 3394<\/b>\n/);
+  o.gonderilen.length = 0;
+  await w.paketGonder(o.env, -100, { ...p, tasarim: null }, "album");
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").at(-1).govde.text, "👆 <b>CODE: 3394</b>");
+  // tek seferlik örnek: gerçek modelden hazırlanır, KANALA / ekibe hiçbir şey gitmez, anahtar değişmez
+  o.gonderilen.length = 0;
+  const or = await w.tasarimOrnegi(o.env, ist(15, 0));
+  assert.equal(or.ok, true);
+  assert.match(duz(or.yazi), new RegExp(`^(.+ · )?VOLONTE ${or.kod}\\n`));
+  assert.equal(or.not, `<b>Order ${or.kod}</b>`);
+  assert.ok(or.foto && or.dugmeler.inline_keyboard.length === 2);
+  assert.equal(o.gonderilen.filter((m) => /send|copy|edit/.test(m.url)).length, 0);
+  assert.equal(d.tasarimOku(), null); assert.equal(o.depo.has("kemal:tasarim"), false);
+  // onay: anahtar açılır; geri alınabilir
+  assert.deepEqual(await w.tasarimOnayi(o.env, { acik: true }), { ok: true, acik: true });
+  assert.equal(o.depo.get("kemal:tasarim"), "yeni"); assert.equal(d.tasarimOku(), "yeni");
+  await w.tasarimOnayi(o.env, { acik: false });
+  assert.equal(o.depo.has("kemal:tasarim"), false); assert.equal(d.tasarimOku(), null);
+});

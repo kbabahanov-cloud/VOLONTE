@@ -55,7 +55,7 @@ import { kodsuzMu, kodGoster, tarihUzun, modelSecenekleri, kodBul, kodNormal } f
 
 export { kodBul, kodNormal };
 import { altyaziOlustur, ETIKET, BEDEN_GRUPLARI, bedenOnerisi, bedenYaz } from "./altyazi.js";
-import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici, IMZA_MARKA } from "./duzen.js";
+import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, DUZELT_ORNEK, altYazi, dugmeler, albumNotu, tasarimAyarla, tasarimOku, altYaziYeni, siteMedyasi, durumSec, gununModelleri, telegramTarihleri, duzeltmeCoz, yaziHazirla, renkCevir, kisaHata, gecici, IMZA_MARKA } from "./duzen.js";
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
@@ -105,6 +105,31 @@ const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim)
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
+// 13 Kasım (Patron, B2): yeni kanal tasarımının TEK SEFERLİK örneği (Venom Patron'a gösterir; kanala hiçbir şey gitmez) ve onayı
+export async function tasarimOrnegi(env, simdi = Math.floor(Date.now() / 1000)) {
+  const site = await siteUrunleriAl(env);
+  const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
+  const { son } = await telegramTarihleriAl(env);
+  const u = gununModelleri({ site, stok, tg: son, haric: [...INDIRIMLI], simdi, adet: 1 })[0] || site.find((x) => !x.gizli && (x.fotolar || []).length);
+  if (!u) return { ok: false, hata: "sitede fotoğraflı model yok" };
+  const onceki = tasarimOku();
+  let paket;
+  try { tasarimAyarla("yeni"); paket = await paketHazirla(env, u, await durumBaglami(env, [String(u.kod)], simdi), simdi); }
+  catch (e) { return { ok: false, hata: String((e && e.message) || e).slice(0, 200) }; }
+  finally { tasarimAyarla(onceki); }
+  const foto = (paket.medya || []).find((m) => m.type === "photo");
+  return { ok: true, kod: paket.kod, marka: paket.marka, yazi: altYaziYeni(paket), not: albumNotu(paket.kod, paket), dugmeler: dugmeler(paket), foto: foto ? foto.media : null, medya: (paket.medya || []).length };
+}
+export async function tasarimOnayi(env, { acik = true } = {}) {
+  if (acik) await env.KAYIT.put("kemal:tasarim", "yeni"); else await env.KAYIT.delete("kemal:tasarim");
+  tasarimAyarla(acik ? "yeni" : null);
+  await defterIs(env, "kemal", acik ? "Yeni kanal paylaşım tasarımı açıldı (Patron örneği onayladı)" : "Kanal paylaşım tasarımı eski haline döndü", {}).catch(() => null);
+  return { ok: true, acik: Boolean(acik) };
+}
+export async function venomTasarim(env, yol, g = {}) {
+  if (env.KATALOG) return (await kemalNesne(env).fetch(`https://kemal/kemal/${yol}`, { method: "POST", body: JSON.stringify(g) })).json();
+  return yol === "tasarim-ornek" ? tasarimOrnegi(env) : tasarimOnayi(env, g);
+}
 // 13 Kasım: Venom'un "Kemal'i çalıştır" kapısı (durum Kemal'in kendi deposunda)
 export async function venomCalistir(env, g) {
   if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/calistir", { method: "POST", body: JSON.stringify(g || {}) })).json();
@@ -1449,7 +1474,7 @@ export function paylasimlaraAyir(mesajlar) {
     const kod = kodBul(m.yazi) || (String(m.yazi).match(/\b(\d{4,6})\b/) || [])[1] || null;
     const son = l.at(-1);
     if (!m.yazi && m.medya && son && Math.abs(son.tarih - m.tarih) <= 3 && son.ids.at(-1) === m.id - 1) { son.ids.push(m.id); son.medya.push(m.medya); continue; }
-    if (/^👆/.test(m.yazi) && son && son.kod === kod) { son.ids.push(m.id); continue; } // albüm notu
+    if (/^(👆|Order \d)/.test(m.yazi) && son && son.kod === kod) { son.ids.push(m.id); continue; } // albüm notu (yeni tasarımda "Order 3394")
     l.push({ kod, ids: [m.id], tarih: m.tarih, yazi: m.yazi, medya: m.medya ? [m.medya] : [], eski: eskiYaziMi(m.yazi) });
   }
   return l;
@@ -1543,7 +1568,7 @@ export async function paylasimDuzelt(env, { kod, ids = null, yerinde = null, kim
     const yazili = mesajlar.filter((m) => m.yazi && m.medya);
     let n = 0;
     for (const m of yazili.length ? yazili : mesajlar.filter((x) => x.medya).slice(0, 1)) {
-      const r = await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: m.id, caption: altYazi(paket).slice(0, 1024), parse_mode: "HTML", reply_markup: dugmeler() }).catch(() => null);
+      const r = await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: m.id, caption: altYazi(paket).slice(0, 1024), parse_mode: "HTML", reply_markup: dugmeler(paket) }).catch(() => null);
       if (r && r.ok) n++;
     }
     await dizineEkle(env, kod, hedef, Math.min(...mesajlar.map((m) => m.tarih)));
@@ -1984,6 +2009,7 @@ async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null,
   const st = baglam.stok[u.kod] || {};
   const marka = await modelMarkasi(env, String(u.kod)).catch(() => "VOLONTE"); // imza markaya göre (5 Kasım)
   return {
+    tasarim: tasarimOku(), // 13 Kasım: paket hazırlandığı andaki tasarımla (önizlemede görülen ne ise kanala o gider)
     marka,
     kod: String(u.kod),
     baslik: u.baslik || "",
@@ -2011,7 +2037,7 @@ export async function paketGonder(env, hedef, paket, bicim = "album") {
   if (!medya.length) return { ok: false, hata: "medya yok" };
   const tekGonder = async (m) => {
     const metod = m.type === "video" ? "sendVideo" : "sendPhoto";
-    return telegram(env, metod, { chat_id: hedef, [m.type === "video" ? "video" : "photo"]: m.media, caption: altyazi, parse_mode: "HTML", reply_markup: dugmeler() });
+    return telegram(env, metod, { chat_id: hedef, [m.type === "video" ? "video" : "photo"]: m.media, caption: altyazi, parse_mode: "HTML", reply_markup: dugmeler(paket) });
   };
   if (bicim === "tek" || medya.length === 1) {
     const ilkFoto = medya.find((m) => m.type === "photo") || medya[0];
@@ -2031,7 +2057,7 @@ export async function paketGonder(env, hedef, paket, bicim = "album") {
   }
   if (!r.ok) return { ok: false, hata: r.description };
   const ids = r.result.map((x) => x.message_id);
-  const ek = await telegram(env, "sendMessage", { chat_id: hedef, text: paket.kodsuz ? "👆" : albumNotu(paket.kod), parse_mode: "HTML", reply_markup: dugmeler(), disable_web_page_preview: true });
+  const ek = await telegram(env, "sendMessage", { chat_id: hedef, text: paket.kodsuz ? "👆" : albumNotu(paket.kod, paket), parse_mode: "HTML", reply_markup: dugmeler(paket), disable_web_page_preview: true });
   if (ek.ok) ids.push(ek.result.message_id);
   return { ok: true, ids, not };
 }
@@ -3122,7 +3148,7 @@ export function soldOutYazisi(yazi, ents = []) {
   const t = String(yazi || "");
   if (t.startsWith(SOLDOUT_SATIR)) return null;
   const ilk = t.split("\n")[0];
-  const durumMu = /AVAILABLE|DISPONIBLE|BACK IN STOCK|DE RETOUR|NEW COLOR|NOUVEAU|BEST SELLER|LAST SERIES|DERNI/i.test(ilk) && ilk.length < 60;
+  const durumMu = /AVAILABLE|DISPONIBLE|BACK IN STOCK|DE RETOUR|NEW COLOR|NOUVEAU|BEST SELLER|LAST SERIES|DERNI/i.test(ilk) && ilk.length < 60 && !/\d{3,}|VOLONTE|BLACK ROSE/.test(ilk); // yeni tasarımda ilk satır marka + kod taşır: kesilmez
   const kes = durumMu ? Math.min(t.length, ilk.length + 1) : 0;
   const on = `${SOLDOUT_SATIR}\n`;
   const kayma = on.length - kes;
@@ -3674,6 +3700,9 @@ export class KatalogDO {
     await gocBirKez(this.state, this.env.KAYIT, KEMAL_YEREL, "kemal"); // ilk seferde KV'den kopyala + kontrol (silmez)
     const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, KEMAL_YEREL), KEMAL_ICERDE: true };
     const simdi = Math.floor(Date.now() / 1000);
+    tasarimAyarla(await this.env.KAYIT.get("kemal:tasarim").catch(() => null)); // 13 Kasım (B2): Patron örneği onayladıysa yeni kanal tasarımı
+    if (yol === "/kemal/tasarim-ornek") return Response.json(await tasarimOrnegi(env, simdi));
+    if (yol === "/kemal/tasarim-onay") return Response.json(await tasarimOnayi(env, await istek.json().catch(() => ({}))));
     if (yol === "/kemal/ofis-sohbet") return Response.json(await ofisSohbet(env, await istek.json(), simdi));
     if (yol === "/kemal/ozet") return Response.json(await kemalOzet(env, simdi)); // 9 Kasım: Venom'un canlı sorusu
     if (yol === "/kemal/oner") return Response.json(await turEkle(env, (await istek.json()).kodlar || [], simdi)); // 9 Kasım: Venom emri

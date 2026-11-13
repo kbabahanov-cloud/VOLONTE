@@ -56,8 +56,32 @@ export const linksiz = (beden) => String(beden).replace(/-(?=\d)/g, "-\u200B");
 
 const html = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// ---- 13 Kasım (Patron, B2): YENİ KANAL TASARIMI — Patron örneği onaylayınca açılır (Kemal'in kaydında "kemal:tasarim" = "yeni") ----
+// En fazla 5 satır: [etiket ·] MARKA KOD / Fransızca · İngilizce açıklama (tek satır) / Colors / Sizes / MARKA · Istanbul.
+// "🆕 NEW" sadece ilk 48 saat; az stokta "⚡ LAST SERIES"; özel durumu olmayan modelde etiket yok. Kumaş satırı yok.
+// Ayrı mesaj ve büyük düğmeler KALIR: yazısı "Order 3394"; düğmeler WhatsApp'ı "Hello / Bonjour, 3394 ?" hazır yazısıyla açar.
+let TASARIM = null;
+export const tasarimAyarla = (t) => { TASARIM = t === "yeni" ? "yeni" : null; };
+export const tasarimOku = () => TASARIM;
+const yeniMi = (p) => ((p && typeof p === "object" && "tasarim" in p) ? p.tasarim : TASARIM) === "yeni";
+export const ETIKET_YENI = { yeni: "🆕 NEW", donus: "🔁 BACK IN STOCK", cok: "🔥 BEST SELLER", son: "⚡ LAST SERIES", yenirenk: "🎨 NEW COLOR" };
+export const KANAL_MARKA = { VOLONTE: "VOLONTE", BLACKROSE: "BLACK ROSE" };
+const sonsuzNokta = (x) => String(x || "").trim().replace(/[.!\s]+$/, "");
+export function altYaziYeni(p) {
+  const marka = KANAL_MARKA[p.marka] || KANAL_MARKA.VOLONTE;
+  const seri = seriBilgisi(p.bedenler);
+  const satirlar = [`<b>${[ETIKET_YENI[p.durum] || null, p.kodsuz ? marka : `${marka} ${html(p.kod)}`].filter(Boolean).join(" · ")}</b>`];
+  const aciklama = [sonsuzNokta(p.fr), sonsuzNokta(p.en)].filter(Boolean).join(" · ");
+  if (aciklama) satirlar.push(html(aciklama));
+  if (p.renkler && p.renkler.length && p.renkEmin) satirlar.push(`Colors: ${html(p.renkler.join(", "))}`);
+  if (seri) satirlar.push(`Sizes: ${linksiz(seri.beden)} · series of ${seri.adet}`);
+  satirlar.push(`${marka} · Istanbul`);
+  return satirlar.join("\n");
+}
+export const hazirYazi = (kod) => `Hello / Bonjour, ${kod} ?`;
 // Alt yazı (Telegram HTML). Renk emin değilse (onaylanmamışsa) renk satırı konmaz; kumaş bilinmiyorsa satır yok.
 export function altYazi(p) {
+  if (yeniMi(p)) return altYaziYeni(p);
   const seri = seriBilgisi(p.bedenler);
   const satirlar = [DURUMLAR[p.durum] || DURUMLAR.hazir, ...(p.kodsuz ? [] : [`<b>✅ CODE: ${html(p.kod)}</b>`])]; // 10 Kasım: kodsuz eski paylaşımda kod satırı yok
   if (p.renkler && p.renkler.length && p.renkEmin) satirlar.push(`🎨 Colors / Couleurs: ${html(p.renkler.join(", "))}`);
@@ -70,14 +94,22 @@ export function altYazi(p) {
 }
 
 // Tıklanabilir düğmeler (kanal paylaşımının altında).
-export function dugmeler() {
+export function dugmeler(p = null) {
+  if (yeniMi(p)) { // 13 Kasım (Patron): büyük düğmeler kalır; hazır WhatsApp yazısı + modelin kendi site sayfası
+    const kod = p && !p.kodsuz && p.kod ? String(p.kod) : null;
+    const wa = (no) => (kod ? `${no}?text=${encodeURIComponent(hazirYazi(kod))}` : no);
+    return { inline_keyboard: [
+      [{ text: "🛒 Order · WhatsApp", url: wa(SIPARIS_WA) }, { text: "💬 Ask price", url: wa(BILGI_WA) }],
+      [{ text: "🌐 Catalog", url: kod ? `${SITE}#model/${encodeURIComponent(kod)}` : SITE }],
+    ] };
+  }
   return { inline_keyboard: [
     // "Order / Commande" yan yana iki düğmede telefonda kesiliyordu → kısa ad (kullanıcı kararı 29 Ekim).
     [{ text: "🛒 Order", url: SIPARIS_WA }, { text: "📞 Info", url: BILGI_WA }],
     [{ text: "🌐 All models / Tous les modèles", url: SITE }],
   ] };
 }
-export const albumNotu = (kod) => `👆 <b>CODE: ${html(kod)}</b>`;
+export const albumNotu = (kod, p = null) => (yeniMi(p) ? `<b>Order ${html(kod)}</b>` : `👆 <b>CODE: ${html(kod)}</b>`);
 
 // Sitedeki ürünün medyası: fotoğraflar (galeri/) + Selin videoları (/v2/<kod>/<n>). En fazla 10.
 export function siteMedyasi(u) {
@@ -91,7 +123,7 @@ export function siteMedyasi(u) {
 // Durum etiketi. Öncelik: stoğa döndü > yeni > son seriler > çok satan > mevcut. Stok adedi yazılmaz.
 export function durumSec({ kod, ilkPaylasim, toplam, bedenler, geldiZaman, satislar, simdi }) {
   if (geldiZaman && geldiZaman >= simdi - DONUS_GUN * 86400) return "donus";
-  if (!ilkPaylasim || ilkPaylasim >= simdi - YENI_GUN * 86400) return "yeni";
+  if (!ilkPaylasim || ilkPaylasim >= simdi - (TASARIM === "yeni" ? 2 : YENI_GUN) * 86400) return "yeni"; // yeni tasarımda "NEW" sadece ilk 48 saat
   const seri = seriBilgisi(bedenler);
   if (seri && toplam > 0 && toplam <= SON_SERI_KAT * seri.adet) return "son";
   const sirali = Object.entries(satislar || {}).filter(([, a]) => a >= COK_SATAN_EN_AZ).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k]) => k);
