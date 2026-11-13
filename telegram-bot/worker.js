@@ -2316,12 +2316,12 @@ async function topluGuncelle(env, tur, dalga, simdi) {
 // 7 gün kuralı, 09:00–21:00 ve günde 12 sınırı geçerlidir (kesin kapı). 21:00'den sonra gelen komut sabah 09:00 turuna planlanır.
 // enAzGun verilirse ("1 aydan beri paylaşılmayanlar" → 30) sadece o kadar eski olanlar. Patron'a tek satır: calistirSatiri.
 const enEskiModel = (kodlar, son, simdi) => { const k = kodlar[0]; return k ? { kod: k, gun: son[k] ? Math.floor((simdi - son[k]) / 86400) : null } : null; };
-export async function kemalCalistir(env, { enAzGun = 0 } = {}, simdi = Math.floor(Date.now() / 1000)) {
+export async function kemalCalistir(env, { enAzGun = 0, kuru = false } = {}, simdi = Math.floor(Date.now() / 1000)) { // kuru: sadece hesaplar (deneme sorusu) — kart, kayıt, plan YOK
   enAzGun = Math.max(0, Math.min(365, Math.round(Number(enAzGun) || 0)));
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: "Kemal durdurulmuş (önce \"Kemal'i aç\")" };
   const s = saat(simdi), gun = gunAnahtari(simdi);
   if (s < YAYIN_BAS || s >= YAYIN_BIT) {
-    await env.KAYIT.put("kemal:calistirPlan", JSON.stringify({ enAzGun, zaman: simdi }), { expirationTtl: 2 * 86400 });
+    if (!kuru) await env.KAYIT.put("kemal:calistirPlan", JSON.stringify({ enAzGun, zaman: simdi }), { expirationTtl: 2 * 86400 });
     return { ok: true, planlandi: true, enAzGun };
   }
   let tur = await env.KAYIT.get("tur", "json");
@@ -2342,6 +2342,7 @@ export async function kemalCalistir(env, { enAzGun = 0 } = {}, simdi = Math.floo
   const yer = Math.max(0, Math.min(GUNLUK_SINIR - bugun - kuyruk.length - bekleyen, siganPaylasim(simdi, (await yayinKapisi(env, simdi)).sonraki) - kuyruk.length - bekleyen));
   if (!yer) return { ok: true, n: 0, neden: bekleyen ? `${bekleyen} öneri kartı zaten Hemra / Merdan'ın onayında bekliyor (bugün kanala ${bugun} paylaşım çıktı, sırada ${kuyruk.length})` : `bugün için yer kalmadı (kanala ${bugun} paylaşım çıktı, sırada ${kuyruk.length}; günde en fazla ${GUNLUK_SINIR}, 21:00'e kadar)` };
   const kodlar = adaylar.slice(0, yer);
+  if (kuru) return { ok: true, n: kodlar.length, kodlar, enEski: enEskiModel(kodlar, son, simdi), enAzGun, kuru: true };
   if (!bugunTur) tur = { no: ((tur && tur.no) || 0) + 1, yeni: true, durum: "toplaniyor", basla: simdi, gun, onaylar: [], ogeler: {}, gruplar: [{ baslik: null, kodlar: [] }], karsilastirma: false };
   else if (tur.durum !== "toplaniyor") { tur.durum = "toplaniyor"; delete tur.bitis; }
   delete tur.tukendi;

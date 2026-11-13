@@ -32,7 +32,8 @@ export function selinBak({ ozet, s }) {
   if (!ozet) return { ok: false, sebep: "Selin'e ulaşılamadı", oneri: "Claude Code baksın", cozum: null };
   const l = ozet.bugunListe !== undefined ? ozet.bugunListe : (ozet.bugunIstenen ? { n: ozet.bugunIstenen, gelen: null } : null);
   if (!l) return { ok: false, sebep: "bugünkü liste hazırlanamadı (site listesi okunamadı ya da alıcı tanımlı değil)", oneri: "Claude Code baksın", cozum: null };
-  if (!l.n) return { ok: true, n: 0, bilgi: "istenecek model yok (stokta olup sitede olmayan model kalmadı)" };
+  const takili = ((ozet.durumlar || {}).bulunamiyor || 0) + ((ozet.durumlar || {}).gonderilemedi || 0);
+  if (!l.n) return { ok: true, n: 0, bilgi: `bugün istenecek yeni model çıkmadı${takili ? ` (${takili} modelin fotoğrafı daha önce istenip gelmedi)` : ""}` };
   return { ok: true, n: l.n, gelen: l.gelen, bilgi: `fotoğraf listesi gitti (${l.n} model)${l.gelen == null ? "" : `, ${l.gelen} modelin fotoğrafı geldi`}` };
 }
 // Sami: dünkü eksik listesi fabrikaya gitti mi (listeler akşam çıkar; bugünkü 19:00'da henüz beklenmez), cevapsız kart var mı

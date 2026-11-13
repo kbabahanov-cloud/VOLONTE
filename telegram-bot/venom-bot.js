@@ -510,7 +510,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     return g.bot && g.bot !== "hepsi" ? botCevabi(env, g.bot, satirlar, canlilar[g.bot], { gun }) : herkesCevabi(env, satirlar, canlilar, { gun });
   }
   // 12 Kasım: DENEME modunda (Claude Code'un kabul testi) yazan araçlar ÇALIŞMAZ; ne yapacağı yazılır. Okuyan araçlar gerçek veriyle çalışır.
-  const YAZAN = new Set(["deneme_modu", "kemal_calistir", "sesli_rapor", "bildirim_kurali", "hatirlat", "mesaj_taslagi", "mutabakat_gonder", "kemal_paylas", "geri_al", "kanal_paylasim_duzelt", "hatirlatici", "duraklatma", "pelin_foto_kaydet", "karar_kaydet", "site_duzelt", "selin_taslak", "bota_yaz", "yetenek_istegi", "not_kaydet", "bot_durdur", "repete_tekrar_ac", "hemra_izinli"]);
+  const YAZAN = new Set(["deneme_modu", "sesli_rapor", "bildirim_kurali", "hatirlat", "mesaj_taslagi", "mutabakat_gonder", "kemal_paylas", "geri_al", "kanal_paylasim_duzelt", "hatirlatici", "duraklatma", "pelin_foto_kaydet", "karar_kaydet", "site_duzelt", "selin_taslak", "bota_yaz", "yetenek_istegi", "not_kaydet", "bot_durdur", "repete_tekrar_ac", "hemra_izinli"]);
   if (env.__kuru && YAZAN.has(ad)) return `(DENEME: "${ad}" gerçekte çalışırdı; denemede çalıştırılmadı.)`;
   if (ad === "tek_defter") return tekDefterMetni(env, simdi, { kod: String(g.kod || "").replace(/\D/g, "") || null, kim: g.kim || null, durum: g.durum || null, sayfa: g.sayfa || 1, kuru: Boolean(env.__kuru) });
   if (ad === "kanal_kontrol") return kanalKontrolCevabi(env, (g.kodlar || []).map((k) => String(k).replace(/\D/g, "")).filter(Boolean).slice(0, 5), simdi);
@@ -679,8 +679,9 @@ export async function aracCalistir(env, ad, g, simdi) {
   if (ad === "bekleyenler" && env.__kuru) return aracCalistir(env, "patron_kararlari", {}, simdi);
   if (ad === "bekleyenler") { turKanit(env).sus = true; const n = await bekleyenleriGonder(env, simdi); return n ? `${n} bekleyen karar, düğmeleriyle Patron'a AYRI mesajlar olarak gönderildi. Listeyi tekrar YAZMA; tek kısa cümle yeter.` : "Kararınızı bekleyen iş yok — bunu Patron'a zaten yazdım; tekrar yazma, boş cevap ver."; }
   if (ad === "kemal_calistir") { // 13 Kasım (Patron): "Kemal'i çalıştır"
-    const r = await botaSor(env, "kemal", "calistir", { enAzGun: Number(g.en_az_gun) || 0 });
+    const r = await botaSor(env, "kemal", "calistir", { enAzGun: Number(g.en_az_gun) || 0, kuru: Boolean(env.__kuru) });
     if (!r) return "Kemal çalışamadı: Kemal'e ulaşılamadı.";
+    if (env.__kuru) return `(DENEME: gerçekte kartlar onaya giderdi; denemede hiçbir şey gönderilmedi.) ${calistirSatiri(r)}`; // kuru: Kemal sadece hesaplar
     if (r.ok && r.n) await isKaydet(env, "kemal", `Kemal'i çalıştır: ${r.n} model Hemra'nın onayında (${(r.kodlar || []).join(", ")})`, simdi).catch(() => null);
     return calistirSatiri(r);
   }

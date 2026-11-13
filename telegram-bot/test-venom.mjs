@@ -2295,9 +2295,9 @@ test("13 Kasım (Patron) KEMAL'İ ÇALIŞTIR — Venom tarafı: komut Kemal'e gi
   let cevap = { ok: true, n: 10, kodlar: ["3254", "3360"], enEski: { kod: "3254", gun: 34 }, enAzGun: 0 };
   o.env.KEMAL_W = { ...(o.env.KEMAL_W || {}), calistir: async (g) => { gelen.push(g); return cevap; } };
   assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalıştı: 10 model Hemra'nın onayında (en eskisi 3254, 34 gün önce).");
-  assert.deepEqual(gelen[0], { enAzGun: 0 });
+  assert.deepEqual(gelen[0], { enAzGun: 0, kuru: false });
   await aracCalistir(o.env, "kemal_calistir", { en_az_gun: 30 }, t);
-  assert.deepEqual(gelen[1], { enAzGun: 30 }); // "1 aydan beri paylaşılmayanları getir"
+  assert.deepEqual(gelen[1], { enAzGun: 30, kuru: false }); // "1 aydan beri paylaşılmayanları getir"
   cevap = { ok: true, n: 2, kodlar: ["3501", "3502"], enEski: { kod: "3501", gun: null } };
   assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalıştı: 2 model Hemra'nın onayında (en eskisi 3501, hiç paylaşılmamış).");
   cevap = { ok: true, planlandi: true, enAzGun: 0 };
@@ -2306,6 +2306,12 @@ test("13 Kasım (Patron) KEMAL'İ ÇALIŞTIR — Venom tarafı: komut Kemal'e gi
   assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalıştı ama öneri çıkmadı — sebep: bugün için yer kalmadı.");
   cevap = { ok: false, hata: "Kemal durdurulmuş" };
   assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalışamadı: Kemal durdurulmuş.");
+  // deneme sorusu: Kemal'e "kuru" gider (sadece hesaplar), cevap deneme notuyla döner
+  cevap = { ok: true, n: 3, kodlar: ["3254"], enEski: { kod: "3254", gun: 34 }, kuru: true };
+  o.env.__kuru = true;
+  assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "(DENEME: gerçekte kartlar onaya giderdi; denemede hiçbir şey gönderilmedi.) Kemal çalıştı: 3 model Hemra'nın onayında (en eskisi 3254, 34 gün önce).");
+  assert.equal(gelen.at(-1).kuru, true);
+  o.env.__kuru = false;
   o.env.KEMAL_W = { ...o.env.KEMAL_W, calistir: async () => { throw new Error("yok"); } };
   assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalışamadı: Kemal'e ulaşılamadı.");
 });
@@ -2335,7 +2341,7 @@ test("13 Kasım (Patron) İŞ BEKÇİSİ — saf mantık: Kemal'in beklenen payl
   // Selin
   assert.equal(selinBak({ ozet: { bugunListe: { n: 18, gelen: 0 } }, s: 11 }).ok, true); // cevap gelmemesi sorun değil (kural 59)
   assert.equal(selinBak({ ozet: { bugunListe: { n: 18, gelen: 5 } }, s: 15 }).bilgi, "fotoğraf listesi gitti (18 model), 5 modelin fotoğrafı geldi");
-  assert.equal(selinBak({ ozet: { bugunListe: { n: 0 } }, s: 11 }).ok, true);
+  assert.equal(selinBak({ ozet: { bugunListe: { n: 0 }, durumlar: { bulunamiyor: 20, gonderilemedi: 3, sitede: 160 } }, s: 11 }).bilgi, "bugün istenecek yeni model çıkmadı (23 modelin fotoğrafı daha önce istenip gelmedi)");
   assert.equal(selinBak({ ozet: { bugunListe: null }, s: 11 }).ok, false);
   assert.equal(selinBak({ ozet: { bugunListe: null }, s: 9.5 }).ok, true); // 10:00'dan önce beklenmez
   assert.equal(selinBak({ ozet: null, s: 11 }).sebep, "Selin'e ulaşılamadı");

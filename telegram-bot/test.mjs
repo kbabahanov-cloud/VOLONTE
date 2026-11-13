@@ -2585,6 +2585,9 @@ test("13 Kasım (Patron) KEMAL'İ ÇALIŞTIR: stokta + fotoğraflı modellerden 
   // 1) gündüz, bugünün turu yok: en eski önce (3403: 50 gün, 3520: 30 gün); 3411 (5 gün) 7 gün kuralına takılır; 3999 stoksuz
   const o = await yeniOrtam();
   const t = ist(15, 0);
+  // deneme sorusu (kuru): sadece hesaplar — tur açılmaz, kart gitmez
+  const rk = await kemalCalistir(o.env, { kuru: true }, t);
+  assert.deepEqual([rk.n, rk.kodlar, rk.kuru, o.depo.has("tur"), o.gonderilen.length], [2, ["3403", "3520"], true, false, 0]);
   const r = await kemalCalistir(o.env, {}, t);
   assert.deepEqual([r.ok, r.n, r.kodlar, r.enEski], [true, 2, ["3403", "3520"], { kod: "3403", gun: 50 }]);
   assert.equal(calistirSatiri(r), "Kemal çalıştı: 2 model Hemra'nın onayında (en eskisi 3403, 50 gün önce).");
