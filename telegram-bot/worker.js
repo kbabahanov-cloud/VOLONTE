@@ -37,6 +37,8 @@
 //     5 dakikalık görevle arka planda hazırlanır.
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
+import { calistirSatiri } from "./kemal-satir.js";
+export { calistirSatiri };
 import { kitapOku } from "./kitap.js";
 import { defterTg, defterKarar, defterIs, defterCevap, defterSatir } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
@@ -103,6 +105,11 @@ const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim)
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
+// 13 Kasım: Venom'un "Kemal'i çalıştır" kapısı (durum Kemal'in kendi deposunda)
+export async function venomCalistir(env, g) {
+  if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/calistir", { method: "POST", body: JSON.stringify(g || {}) })).json();
+  return kemalCalistir(env, g || {}, Math.floor(Date.now() / 1000));
+}
 // TEK KAPI: Patron Venom'da Kemal'in düğmesine bastı → aynı yol (sahte callback, Patron'dan). İç giriş: kemal-giris.js
 export async function venomMesaj(env, metin) {
   // 9 Kasım (sert müdür B): Venom emri "öner 3279 3280" → bugünün turuna ek öneri (toplu kart, Merdan + Hemra)
@@ -877,7 +884,18 @@ export async function rotasyon(env, simdi) {
   // Günde tek tur: o günün turu yoksa sabah açılır (yeni düzen: stokta + sitede + 7 gündür paylaşılmamış modeller).
   if ((!tur || turGunu(tur) < gun) && s < AKSAM_SAATI) {
     // ESKI_TUR=1: eski düzen (kanal paylaşımı kopyası; sadece testlerde/geri dönüş için).
-    if (!siliyor) await (env.ESKI_TUR === "1" ? turBaslat(env, tur, simdi) : yeniTurBaslat(env, tur, simdi));
+    if (!siliyor) {
+      // 13 Kasım (Patron): 21:00'den sonra gelen "Kemal'i çalıştır" komutu sabah 09:00 turuna planlanır
+      const plan = env.ESKI_TUR === "1" ? null : await env.KAYIT.get("kemal:calistirPlan", "json").catch(() => null);
+      if (plan) await env.KAYIT.delete("kemal:calistirPlan");
+      await (env.ESKI_TUR === "1" ? turBaslat(env, tur, simdi) : yeniTurBaslat(env, tur, simdi, null, plan ? { enAzGun: Number(plan.enAzGun) || 0 } : {}));
+      if (plan) {
+        const t2 = await env.KAYIT.get("tur", "json");
+        const kodlar = t2 && turGunu(t2) === gun ? Object.keys(t2.ogeler || {}) : [];
+        const { son } = await telegramTarihleriAl(env);
+        await stokIste(env, "/kuyruk-ekle", { ad: "rkSonuc", kayit: { id: `kc:${simdi}`, rid: `kemal-calistir-${simdi}`, metin: calistirSatiri({ ok: true, n: kodlar.length, enEski: enEskiModel(kodlar, son, simdi), neden: kodlar.length ? null : "uygun model yok" }) } }).catch(() => null);
+      }
+    }
     return;
   }
   // 9 Kasım (Patron): günlük hedef 10 onay — "Geç" denenlerin yerine toplu ek öneri (15:00'e kadar)
@@ -1817,6 +1835,9 @@ export async function kemalOzet(env, simdi) {
     kuyruk: kuyruk.map((o) => o.kod), bugunPaylasim: await bugunSayac(env, simdi).catch(() => 0),
     // kanala bugün giden model sayısı (sınır dışı ertelenenler dahil): son paylaşım tarihi bugün olanlar
     bugunKanal: Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).filter((t) => gunAnahtari(Number(t)) === gunAnahtari(simdi)).length,
+    // 13 Kasım (iş bekçisi): son paylaşımın zamanı + öneri havuzu tükendi mi
+    sonPaylasim: Math.max(0, ...Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).map(Number).filter(Boolean)),
+    tukendi: Boolean(tur && tur.tukendi),
   };
 }
 
@@ -2070,14 +2091,14 @@ export function gunlukSecim(sec, son, adet = GUNLUK_SINIR) {
   const normal = sec(adet - iki.length, hic);
   return [...iki.slice(0, 1), ...normal, ...iki.slice(1)];
 }
-export async function yeniTurBaslat(env, onceki, simdi, gruplar = null) {
+export async function yeniTurBaslat(env, onceki, simdi, gruplar = null, { enAzGun = 0 } = {}) {
   const site = await siteUrunleriAl(env);
   const kuyruk = await kuyrukListesi(env);
   const atlananlar = { ...((await env.KAYIT.get("atlananlar", "json")) || {}), ...Object.fromEntries(Object.keys((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {}).map((k) => [k, 4e9])) }; // 12 Kasım: silinmesi onaylanan model sıraya girmez
   const haric = [...kuyruk.map((o) => o.kod), ...Object.entries(atlananlar).filter(([, t]) => t > simdi).map(([k]) => k)];
   const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
   const { son } = await telegramTarihleriAl(env);
-  const sec = (adet, disari = []) => gununModelleri({ site, stok, tg: son, haric: [...haric, ...disari, ...INDIRIMLI], simdi, adet }).map((u) => String(u.kod));
+  const sec = (adet, disari = []) => gununModelleri({ site, stok, tg: son, haric: [...haric, ...disari, ...INDIRIMLI], simdi, adet: enAzGun > 0 ? 999 : adet }).filter((u) => !(enAzGun > 0) || !son[u.kod] || simdi - son[u.kod] >= enAzGun * 86400).slice(0, adet).map((u) => String(u.kod));
   let yerYok = false;
   if (!gruplar) {
     // Kullanıcı kararı (31 Ekim): stokta olup Telegram'da HİÇ paylaşılmamış modeller (sitede medyası olanlar) günde en fazla 2:
@@ -2289,6 +2310,75 @@ async function topluGuncelle(env, tur, dalga, simdi) {
   if (!d) return;
   const k = topluKart(tur, dalga, simdi);
   for (const [kisi, id] of d.mesajlar || []) await telegram(env, "editMessageText", { chat_id: kisi, message_id: id, ...k, disable_web_page_preview: true });
+}
+// 13 Kasım (Patron) — "KEMAL'İ ÇALIŞTIR": stokta olan ve fotoğrafı (sitede medyası) olan modellerden EN UZUN SÜREDİR paylaşılmayanlar
+// (hiç paylaşılmamışlar en önde) öneri kartı olarak Hemra'ya (ve Merdan'a) gider; onaylananlar sırayla, en az 60 dk arayla paylaşılır.
+// 7 gün kuralı, 09:00–21:00 ve günde 12 sınırı geçerlidir (kesin kapı). 21:00'den sonra gelen komut sabah 09:00 turuna planlanır.
+// enAzGun verilirse ("1 aydan beri paylaşılmayanlar" → 30) sadece o kadar eski olanlar. Patron'a tek satır: calistirSatiri.
+const enEskiModel = (kodlar, son, simdi) => { const k = kodlar[0]; return k ? { kod: k, gun: son[k] ? Math.floor((simdi - son[k]) / 86400) : null } : null; };
+export async function kemalCalistir(env, { enAzGun = 0 } = {}, simdi = Math.floor(Date.now() / 1000)) {
+  enAzGun = Math.max(0, Math.min(365, Math.round(Number(enAzGun) || 0)));
+  if (await durdurulduMu(env, "kemal")) return { ok: false, hata: "Kemal durdurulmuş (önce \"Kemal'i aç\")" };
+  const s = saat(simdi), gun = gunAnahtari(simdi);
+  if (s < YAYIN_BAS || s >= YAYIN_BIT) {
+    await env.KAYIT.put("kemal:calistirPlan", JSON.stringify({ enAzGun, zaman: simdi }), { expirationTtl: 2 * 86400 });
+    return { ok: true, planlandi: true, enAzGun };
+  }
+  let tur = await env.KAYIT.get("tur", "json");
+  const bugunTur = tur && tur.yeni && turGunu(tur) === gun;
+  if (bugunTur && tur.durum === "hazirlaniyor") return { ok: false, hata: "sabah turu şu an hazırlanıyor; birkaç dakika sonra kartlar gider" };
+  if (bugunTur && (tur.dalgalar || []).some((d) => d.durum === "hazirlaniyor")) return { ok: false, hata: "bir öneri zaten hazırlanıyor; birkaç dakika sonra kartlar gider" };
+  const site = await siteUrunleriAl(env);
+  const kuyruk = await kuyrukListesi(env);
+  const atlananlar = { ...((await env.KAYIT.get("atlananlar", "json")) || {}), ...Object.fromEntries(Object.keys((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {}).map((k) => [k, 4e9])) };
+  const haric = [...(bugunTur ? Object.keys(tur.ogeler || {}) : []), ...kuyruk.map((o) => o.kod), ...Object.entries(atlananlar).filter(([, t]) => t > simdi).map(([k]) => k), ...INDIRIMLI];
+  const stok = env.STOK ? await stokIste(env, "/toplu", { kodlar: site.map((u) => String(u.kod)) }).catch(() => ({})) : {};
+  const { son } = await telegramTarihleriAl(env);
+  // en uzun süredir paylaşılmayan önce; hiç paylaşılmamış (tarihi yok) en önde
+  const adaylar = gununModelleri({ site, stok, tg: son, haric, simdi, adet: 999 }).filter((u) => !(enAzGun > 0) || !son[u.kod] || simdi - son[u.kod] >= enAzGun * 86400).map((u) => String(u.kod));
+  if (!adaylar.length) return { ok: true, n: 0, neden: `stokta olup fotoğrafı olan ve ${enAzGun > 0 ? `${enAzGun} gündür` : `${PAYLASIM_ARASI_GUN} gündür`} paylaşılmamış model kalmadı` };
+  const bekleyen = bugunTur ? Object.values(tur.ogeler || {}).filter((o) => !o.karar && !o.hata).length : 0;
+  const bugun = await bugunSayac(env, simdi);
+  const yer = Math.max(0, Math.min(GUNLUK_SINIR - bugun - kuyruk.length - bekleyen, siganPaylasim(simdi, (await yayinKapisi(env, simdi)).sonraki) - kuyruk.length - bekleyen));
+  if (!yer) return { ok: true, n: 0, neden: bekleyen ? `${bekleyen} öneri kartı zaten Hemra / Merdan'ın onayında bekliyor (bugün kanala ${bugun} paylaşım çıktı, sırada ${kuyruk.length})` : `bugün için yer kalmadı (kanala ${bugun} paylaşım çıktı, sırada ${kuyruk.length}; günde en fazla ${GUNLUK_SINIR}, 21:00'e kadar)` };
+  const kodlar = adaylar.slice(0, yer);
+  if (!bugunTur) tur = { no: ((tur && tur.no) || 0) + 1, yeni: true, durum: "toplaniyor", basla: simdi, gun, onaylar: [], ogeler: {}, gruplar: [{ baslik: null, kodlar: [] }], karsilastirma: false };
+  else if (tur.durum !== "toplaniyor") { tur.durum = "toplaniyor"; delete tur.bitis; }
+  delete tur.tukendi;
+  tur.dalgalar = tur.dalgalar || [];
+  const d = { no: tur.dalgalar.length + 1, kodlar, durum: "hazirlaniyor", zaman: simdi, mesajlar: [], venom: true, calistir: true };
+  tur.dalgalar.push(d);
+  for (const k of kodlar) tur.ogeler[k] = { paket: null, mesajlar: [], karar: null, kim: null, dalga: d.no };
+  await env.KAYIT.put("tur", JSON.stringify(tur));
+  await defterIs(env, "kemal", `Patron komutu "Kemal'i çalıştır": ${kodlar.length} model öneriye alındı (en uzun süredir paylaşılmayanlar)`, { kod: kodlar.join(",") });
+  return { ok: true, n: kodlar.length, kodlar, enEski: enEskiModel(kodlar, son, simdi), enAzGun };
+}
+// 13 Kasım (Patron) — İŞ BEKÇİSİ: onay bekleyen öneri kartları için kişiye TEK hatırlatma (onaylı hatırlatma cümlesi; kartın altına yanıt olarak).
+export const kemalHatirlatmaYazisi = (kodlar) => `🔔 Hatırlatma: cevap bekleyen kartınız var — kanal paylaşım önerisi${kodlar.length > 8 ? ` (${kodlar.length} model)` : `: ${kodlar.join(", ")}`}. En alttaki karta bakın, düğmeye basın.`;
+export async function kemalHatirlat(env, simdi = Math.floor(Date.now() / 1000)) {
+  const tur = await env.KAYIT.get("tur", "json").catch(() => null);
+  if (!tur || turGunu(tur) !== gunAnahtari(simdi)) return { ok: true, n: 0, kisi: 0 };
+  const kisiler = new Map();
+  for (const [kod, o] of Object.entries(tur.ogeler || {})) {
+    if (o.karar || o.hata || !o.paket) continue;
+    const d = o.dalga ? (tur.dalgalar || []).find((x) => x.no === o.dalga) : null;
+    for (const [kisi, id] of [...(o.mesajlar || []), ...((d && d.mesajlar) || [])]) {
+      const k = kisiler.get(String(kisi)) || { kodlar: new Set(), mesaj: 0 };
+      k.kodlar.add(kod); k.mesaj = Math.max(k.mesaj, Number(id) || 0);
+      kisiler.set(String(kisi), k);
+    }
+  }
+  let kisi = 0; const hepsi = new Set();
+  for (const [chat, k] of kisiler) {
+    const r = await telegram(env, "sendMessage", { chat_id: chat, text: kemalHatirlatmaYazisi([...k.kodlar]), reply_to_message_id: k.mesaj || undefined, allow_sending_without_reply: true }).catch(() => null);
+    if (r && r.ok) { kisi++; for (const x of k.kodlar) hepsi.add(x); }
+  }
+  if (kisi) await defterIs(env, "kemal", `Onay bekleyen ${hepsi.size} öneri kartı için hatırlatma gitti (${kisi} kişi)`, { kod: [...hepsi].join(",") }).catch(() => null);
+  return { ok: true, n: hepsi.size, kisi, kodlar: [...hepsi] };
+}
+export async function venomHatirlat(env) {
+  if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/hatirlat", { method: "POST" })).json();
+  return kemalHatirlat(env);
 }
 // 9 Kasım (sert müdür B): Venom "şu modeli öner" → bugünün turuna ek dalga (sıradaki çalışmada hazırlanır, toplu kartla gider)
 export async function turEkle(env, kodlar, simdi) {
@@ -3562,6 +3652,8 @@ export class KatalogDO {
     if (yol === "/kemal/ofis-sohbet") return Response.json(await ofisSohbet(env, await istek.json(), simdi));
     if (yol === "/kemal/ozet") return Response.json(await kemalOzet(env, simdi)); // 9 Kasım: Venom'un canlı sorusu
     if (yol === "/kemal/oner") return Response.json(await turEkle(env, (await istek.json()).kodlar || [], simdi)); // 9 Kasım: Venom emri
+    if (yol === "/kemal/hatirlat") return Response.json(await kemalHatirlat(env, simdi)); // 13 Kasım: iş bekçisi (Venom)
+    if (yol === "/kemal/calistir") return Response.json(await kemalCalistir(env, await istek.json().catch(() => ({})), simdi)); // 13 Kasım: Patron "Kemal'i çalıştır"
     if (yol === "/kemal/guncelleme") await guncellemeIsle(await istek.json(), env);
     else if (yol === "/kemal/cron") {
       await durumKontrol(env);

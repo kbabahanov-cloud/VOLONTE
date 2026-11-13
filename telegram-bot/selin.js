@@ -1398,7 +1398,9 @@ export async function selinOzet(env, simdi) {
     .map(([kod, m]) => ({ kod, durum: m.durum, sebep: [TAKILAN_SEBEP[m.durum], m.not].filter(Boolean).join(" — ") })).slice(0, 40);
   // 9 Kasım (sert müdür E): fotoğrafı istenip henüz gelmeyen stok modelleri (Venom görevi)
   const fotoBekleyen = Object.entries(modeller).filter(([, m]) => m && ["istendi", "bekliyor"].includes(m.durum)).map(([kod]) => kod).slice(0, 60);
-  return { bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan, fotoBekleyen };
+  // 13 Kasım (iş bekçisi): bugünkü liste gitti mi, kaç modelin fotoğrafı geldi (cevapsız kalan sorun değildir — kural 59)
+  const bugunListe = ist ? { n: (ist.kodlar || []).length, zaman: ist.zaman || null, gelen: (ist.kodlar || []).filter((k) => modeller[k] && !["istendi", "bekliyor"].includes(modeller[k].durum)).length } : null;
+  return { bugunListe, bugunIstenen: ist ? (ist.kodlar || []).length : 0, durumlar: say, onayda: Object.entries(modeller).filter(([, m]) => m && m.durum === "onayda").map(([k]) => k), takilan, fotoBekleyen };
 }
 export async function venomModelDurumu(env, kod, simdi) {
   kod = String(kod || "").replace(/\D/g, "");

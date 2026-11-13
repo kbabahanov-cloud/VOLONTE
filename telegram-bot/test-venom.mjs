@@ -841,7 +841,7 @@ test("11 Kasım RAPOR DÜZENİ: sabah 09:40 en fazla 8 satır, sabit sıra (gene
   assert.ok(s.length <= 8, m);
   assert.equal(new Set(s).size, s.length); // her satır tek kez
   assert.match(s[0], /^☀️ Günaydın Patron — .* \(ayrıntı \/detay\)$/);
-  assert.match(s[1], /^(✅ Her şey çalışıyor|🔴 \d+ sorun var: )/);
+  assert.match(s[1], /^(✅ Botlar çalışıyor \(dün iş kontrolü yapılmadı\)|🔴 \d+ sorun var: )/); // 13 Kasım: "Her şey çalışıyor" sadece iş kontrolü de temizse
   assert.equal(s[2], "🟡 Kararınız bekleniyor: repete 3490");
   assert.match(s[3], /^💰 Satış dün: VOLONTE \S+ adet( · |, )/); // 11 Kasım: adet + (varsa) ciro, markalar ayrı
   assert.match(s[3], /Black Rose \S+ adet/);
@@ -2285,4 +2285,142 @@ test("13 Kasım (Patron) VENOM — iki yeni yetenek: 'iki mağazanın stoğunu v
   const n2 = patronaGiden(o).length;
   assert.match(await aracCalistir(o.env, "eksik_listesi_karti", {}, t), /^\(DENEME: kart Patron'a gösterilirdi\.\) KART YAZISI:\n🟦 VOLONTE\n3607 · Küçük \(38-44\) · kahve 4\nDÜĞMELER: \[✅ Gelecek\] \[🔁 Repete olacak\] \/ \[❌ Bitti, gelmeyecek\]/);
   assert.equal(patronaGiden(o).length, n2);
+});
+
+test("13 Kasım (Patron) KEMAL'İ ÇALIŞTIR — Venom tarafı: komut Kemal'e gider, Patron'a TEK satır döner; süre verilirse Kemal'e iletilir; saat dışı / öneri yok / ulaşılamadı halleri açık yazılır; deneme sorusunda Kemal çalışmaz", async () => {
+  const { aracCalistir } = await import("./venom-bot.js");
+  const o = ortam();
+  const t = ist(13, 15, 0);
+  const gelen = [];
+  let cevap = { ok: true, n: 10, kodlar: ["3254", "3360"], enEski: { kod: "3254", gun: 34 }, enAzGun: 0 };
+  o.env.KEMAL_W = { ...(o.env.KEMAL_W || {}), calistir: async (g) => { gelen.push(g); return cevap; } };
+  assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalıştı: 10 model Hemra'nın onayında (en eskisi 3254, 34 gün önce).");
+  assert.deepEqual(gelen[0], { enAzGun: 0 });
+  await aracCalistir(o.env, "kemal_calistir", { en_az_gun: 30 }, t);
+  assert.deepEqual(gelen[1], { enAzGun: 30 }); // "1 aydan beri paylaşılmayanları getir"
+  cevap = { ok: true, n: 2, kodlar: ["3501", "3502"], enEski: { kod: "3501", gun: null } };
+  assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalıştı: 2 model Hemra'nın onayında (en eskisi 3501, hiç paylaşılmamış).");
+  cevap = { ok: true, planlandi: true, enAzGun: 0 };
+  assert.match(await aracCalistir(o.env, "kemal_calistir", {}, t), /^Kemal şu an paylaşım saati dışında \(09:00–21:00\); istek sabah 09:00 turuna planlandı\.$/);
+  cevap = { ok: true, n: 0, neden: "bugün için yer kalmadı" };
+  assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalıştı ama öneri çıkmadı — sebep: bugün için yer kalmadı.");
+  cevap = { ok: false, hata: "Kemal durdurulmuş" };
+  assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalışamadı: Kemal durdurulmuş.");
+  o.env.KEMAL_W = { ...o.env.KEMAL_W, calistir: async () => { throw new Error("yok"); } };
+  assert.equal(await aracCalistir(o.env, "kemal_calistir", {}, t), "Kemal çalışamadı: Kemal'e ulaşılamadı.");
+});
+
+test("13 Kasım (Patron) İŞ BEKÇİSİ — saf mantık: Kemal'in beklenen paylaşımı (~saatte 1), sebep sırası (sıra / onay / öneri yok), Selin'de cevapsız kalan sorun değil, Sami'de dünkü liste", async () => {
+  const { kemalBeklenen, kemalBak, selinBak, samiBak, patronSatiri, eksikYazi, BEKCI_SAATLERI } = await import("./is-bekcisi.js");
+  assert.deepEqual(BEKCI_SAATLERI, [11, 15, 19]);
+  assert.deepEqual([9, 11, 15, 19, 21].map(kemalBeklenen), [1, 2, 6, 10, 12]);
+  const gun = "2026-11-14", simdi = ist(14, 15, 0);
+  const oz = (x) => ({ tur: { gun, soruldu: 5, bekleyen: [], ...(x.tur || {}) }, kuyruk: [], bugunKanal: 0, sonPaylasim: simdi - 3600, ...x, ...(x.tur ? { tur: { gun, soruldu: 5, bekleyen: [], ...x.tur } } : {}) });
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 5 }), gun, s: 15, simdi }).ok, true); // 6 beklenir, 5 yeter (onay ekibe bağlı)
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 4 }), gun, s: 15, simdi }).ok, true);
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 3 }), gun, s: 15, simdi }).ok, false);
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 0 }), gun, s: 11, simdi }).ok, false);
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 1 }), gun, s: 11, simdi }).ok, true);
+  // sebep sırası
+  assert.deepEqual((({ cozum, sebep }) => ({ cozum, sebep }))(kemalBak({ ozet: oz({ bugunKanal: 2, kuyruk: ["3254", "3360"] }), gun, s: 15, simdi })), { cozum: "bekle", sebep: "onaylanan 2 model sırada, 60 dakika arayla çıkıyor" });
+  assert.match(kemalBak({ ozet: oz({ bugunKanal: 2, kuyruk: ["3254"], sonPaylasim: simdi - 3 * 3600 }), gun, s: 15, simdi }).sebep, /sırada ama 2 saattir kanala çıkmadı/);
+  const onay = kemalBak({ ozet: oz({ bugunKanal: 2, tur: { bekleyen: ["3360", "3477", "3573"] } }), gun, s: 15, simdi });
+  assert.deepEqual([onay.cozum, onay.sebep], ["hatirlat", "3 öneri kartı Hemra / Merdan'ın onayında bekliyor"]);
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 2, tur: { bekleyen: ["3360"] } }), gun, s: 15, simdi, onceHatirlatti: true }).cozum, null); // hatırlatma yapıldı, yine cevap yok → Patron
+  assert.equal(kemalBak({ ozet: oz({ bugunKanal: 2, tur: { bekleyen: ["3360"] } }), gun, s: 15, simdi, mesai: false }).cozum, "bekle"); // pazar: ekibe yazılmaz
+  const yok = kemalBak({ ozet: oz({ bugunKanal: 3 }), gun, s: 15, simdi });
+  assert.deepEqual([yok.cozum, yok.sebep], ["calistir", "öneri kalmadı (bugün 5 model soruldu, hepsi cevaplandı)"]);
+  assert.equal(patronSatiri("kemal", { cikan: 0, beklenen: 6, sebep: "Kemal'e ulaşılamadı", oneri: "Claude Code baksın" }), "Kemal bugün 0 paylaşım (bu saate kadar ~6 beklenirdi) — sebep: Kemal'e ulaşılamadı — önerim: Claude Code baksın.");
+  assert.equal(eksikYazi("kemal", yok), "Kemal 3 paylaşım (beklenen ~6): öneri kalmadı (bugün 5 model soruldu, hepsi cevaplandı)");
+  // Selin
+  assert.equal(selinBak({ ozet: { bugunListe: { n: 18, gelen: 0 } }, s: 11 }).ok, true); // cevap gelmemesi sorun değil (kural 59)
+  assert.equal(selinBak({ ozet: { bugunListe: { n: 18, gelen: 5 } }, s: 15 }).bilgi, "fotoğraf listesi gitti (18 model), 5 modelin fotoğrafı geldi");
+  assert.equal(selinBak({ ozet: { bugunListe: { n: 0 } }, s: 11 }).ok, true);
+  assert.equal(selinBak({ ozet: { bugunListe: null }, s: 11 }).ok, false);
+  assert.equal(selinBak({ ozet: { bugunListe: null }, s: 9.5 }).ok, true); // 10:00'dan önce beklenmez
+  assert.equal(selinBak({ ozet: null, s: 11 }).sebep, "Selin'e ulaşılamadı");
+  // Sami
+  assert.equal(samiBak({ dun: { mesai: true, listeler: [{ ad: "VOLONTE", asama: "gonderildi", model: 4 }], giden: 8, satis: { VOLONTE: 30 } }, s: 11 }).bilgi, "dünkü eksik listesi fabrikaya gitti (8 model)");
+  const bek = samiBak({ dun: { mesai: true, listeler: [{ ad: "Black Rose", asama: "onayda", model: 4 }], giden: 0, satis: {} }, s: 11 });
+  assert.deepEqual([bek.ok, bek.cozum, bek.sebep], [false, "merdiven", "dünkü eksik listesi hâlâ Hemra'da (Black Rose 4 model)"]);
+  assert.equal(samiBak({ dun: { mesai: true, listeler: [], giden: 0, satis: { VOLONTE: 0, BLACKROSE: 0 } }, s: 11 }).sebep, "dün satış girilmedi, eksik listesi çıkmadı");
+  assert.equal(samiBak({ dun: { mesai: true, listeler: [], giden: 0, satis: { VOLONTE: 12 } }, s: 11 }).ok, true);
+});
+
+test("13 Kasım (Patron) İŞ BEKÇİSİ — Venom: 11/15/19'da bakar; önce kendisi çözer (hatırlatma / Kemal'i çalıştırma), çözemezse Patron'a TEK satır (aynı sebep günde bir kez); sessiz günde hiçbir şey gitmez; rapor '✅ Her şey çalışıyor'u sadece iş de tamamsa yazar", async () => {
+  const v = await import("./venom-bot.js");
+  const kur = (kemal, selin = { bugunListe: { n: 18, gelen: 3 } }) => {
+    const o = ortam();
+    const cagri = [];
+    o.cagri = cagri; o.kemal = kemal;
+    o.env.KEMAL_W = { ozet: async () => o.kemal.ozet, hatirlat: async () => { cagri.push("hatirlat"); return o.kemal.hatirlat || { ok: true, n: 0 }; }, calistir: async (g) => { cagri.push("calistir"); return o.kemal.calistir || { ok: true, n: 0, neden: "uygun model yok" }; } };
+    o.env.SELIN_W = { ozet: async () => selin };
+    return o;
+  };
+  const stokYaz = (o, yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  const gun = "2026-11-14"; // cumartesi (mesai var); dün = cuma
+  const ozet = (x = {}) => ({ tur: { gun, soruldu: 6, bekleyen: [] }, kuyruk: [], bugunKanal: 6, sonPaylasim: ist(14, 14, 10), ...x });
+  const dunTamam = async (o) => { await stokYaz(o, "ayar-yaz", { k: "fabrika:2026-11-13", v: JSON.stringify({ asama: "gonderildi", modeller: [{ kod: "3607" }] }) }); await stokYaz(o, "yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 44, fiyat: 30 }], simdi: ist(13, 10) }); };
+  // 1) her şey tamam → kimseye bir şey gitmez; kayıt düşer; rapor "✅ Her şey çalışıyor"
+  let o = kur({ ozet: ozet() });
+  await dunTamam(o);
+  await stokYaz(o, "ayar-yaz", { k: "fabrika:fabrikayaGiden:2026-11-13", v: JSON.stringify({ VOLONTE: ["3607"], BLACKROSE: [] }) });
+  let k = await v.isBekcisi(o.env, ist(14, 15, 2));
+  assert.equal(k.kemal.ok, true); assert.equal(k.selin.ok, true);
+  assert.equal(patronaGiden(o).length, 0); assert.deepEqual(o.cagri, []);
+  assert.ok(JSON.parse(o.depo.get(`venom:isBekcisi:${gun}`))["15"]);
+  // 2) onay bekleyen kart → Venom hatırlatır, Patron'a yazmaz; sonraki kontrolde hâlâ bekliyorsa Patron'a TEK satır; üçüncüde tekrar yazmaz
+  o = kur({ ozet: ozet({ bugunKanal: 0, tur: { gun, soruldu: 3, bekleyen: ["3360", "3477", "3573"] } }), hatirlat: { ok: true, n: 3, kisi: 2 } });
+  k = await v.isBekcisi(o.env, ist(14, 11, 2));
+  assert.deepEqual(o.cagri, ["hatirlat"]); assert.equal(k.kemal.cozuldu, "onay bekleyen 3 karta hatırlatma gitti");
+  assert.equal(patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text)).length, 0);
+  k = await v.isBekcisi(o.env, ist(14, 15, 2));
+  assert.deepEqual(o.cagri, ["hatirlat"]); // ikinci kez hatırlatmaz
+  const p2 = patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text));
+  assert.equal(p2.length, 1);
+  assert.match(p2[0].govde.text, /Kemal bugün 0 paylaşım \(bu saate kadar ~6 beklenirdi\) — sebep: 3 öneri kartı Hemra \/ Merdan'ın onayında bekliyor, hatırlatma yapıldı ama cevap gelmedi — önerim: Hemra'yı arayın\./);
+  await v.isBekcisi(o.env, ist(14, 19, 2));
+  assert.equal(patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text)).length, 1); // aynı sebep günde bir kez
+  // 3) öneri kalmadı → Venom Kemal'i çalıştırır; model çıkarsa Patron'a yazmaz ("Venom kendi çözdü"ye girer)
+  o = kur({ ozet: ozet({ bugunKanal: 3 }), calistir: { ok: true, n: 4, kodlar: ["3254", "3360", "3477", "3573"], enEski: { kod: "3254", gun: 34 } } });
+  k = await v.isBekcisi(o.env, ist(14, 15, 2));
+  assert.deepEqual(o.cagri, ["calistir"]);
+  assert.equal(k.kemal.cozuldu, "Kemal'i çalıştırdım: 4 yeni model Hemra'nın onayına gitti");
+  assert.equal(patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text)).length, 0);
+  assert.match(o.depo.get(`venom:cozdum:${gun}`), /Kemal'in önerisi kalmamıştı, çalıştırdım \(4 model onayda\)/);
+  // 4) çalıştırdı ama model çıkmadı → Patron'a tek satır (sebep + öneri)
+  o = kur({ ozet: ozet({ bugunKanal: 3 }), calistir: { ok: true, n: 0, neden: "stokta olup fotoğrafı olan ve 7 gündür paylaşılmamış model kalmadı" } });
+  await v.isBekcisi(o.env, ist(14, 15, 2));
+  const p4 = patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text));
+  assert.equal(p4.length, 1);
+  assert.match(p4[0].govde.text, /^[^\n]*Kemal bugün 3 paylaşım \(bu saate kadar ~6 beklenirdi\) — sebep: öneri kalmadı \(bugün 6 model soruldu, hepsi cevaplandı\); Kemal'i çalıştırdım, yeni öneri çıkmadı \(stokta olup fotoğrafı olan ve 7 gündür paylaşılmamış model kalmadı\) — önerim: yeni fotoğraf gelmesi gerekiyor \(Merdan'ın fotoğraf listesi\)\./);
+  // rapor: iş eksikse "Her şey çalışıyor" YAZMAZ
+  const r4 = (await v.raporSatirlari(o.env, ist(14, 20, 0), "aksam")).split("\n")[1];
+  assert.match(r4, /^(🟠 Botlar ayakta ama iş eksik: Kemal 3 paylaşım \(beklenen ~6\): öneri kalmadı|🔴 \d+ sorun var: .* · iş eksik: Kemal 3 paylaşım)/);
+  // 5) sessiz gün (yükleme günü): hesaplar, kaydeder; hatırlatma / çalıştırma / Patron mesajı YOK
+  o = kur({ ozet: ozet({ bugunKanal: 0 }) });
+  o.depo.set("venom:isBekcisi:sessiz", JSON.stringify(gun));
+  k = await v.isBekcisi(o.env, ist(14, 15, 2));
+  assert.deepEqual(o.cagri, []); assert.equal(patronaGiden(o).length, 0);
+  assert.equal(k.kemal.ok, false); assert.ok(k.patron);
+  // 6) kuru (sohbet / rapor): hiçbir şey göndermez, kaydetmez; "is_kontrolu" aracı her botu tek satır yazar
+  o = kur({ ozet: ozet({ bugunKanal: 5, tur: { gun, soruldu: 8, bekleyen: ["3360"] }, kuyruk: ["3254"] }) });
+  const m = await v.aracCalistir(o.env, "is_kontrolu", {}, ist(14, 15, 2));
+  assert.match(m, /^🛡 İş kontrolü \(15:02\)\n✅ Kemal: 5 paylaşım \(bu saate kadar ~6 beklenir\), 1 kart onayda, 1 model sırada\n✅ Selin: fotoğraf listesi gitti \(18 model\), 3 modelin fotoğrafı geldi\n/);
+  assert.deepEqual(o.cagri, []); assert.equal(patronaGiden(o).length, 0); assert.equal(o.depo.has(`venom:isBekcisi:${gun}`), false);
+  // 5 dakikalık görev: 11:00–11:30 penceresinde BİR kez çalışır (kayıt varsa tekrar etmez); saat dışında çalışmaz
+  o = kur({ ozet: ozet({ bugunKanal: 2 }) });
+  await dunTamam(o);
+  await v.venomCron(o.env, ist(14, 10, 40));
+  assert.equal(o.depo.has(`venom:isBekcisi:${gun}`), false);
+  await v.venomCron(o.env, ist(14, 11, 5));
+  const ilk = JSON.parse(o.depo.get(`venom:isBekcisi:${gun}`))["11"].zaman;
+  await v.venomCron(o.env, ist(14, 11, 10));
+  assert.equal(JSON.parse(o.depo.get(`venom:isBekcisi:${gun}`))["11"].zaman, ilk);
+  // 7) durdurulan bot için bekçi yazmaz (durdurma Patron'un kendi kararı; raporda zaten "durduruldu" yazar)
+  o = kur({ ozet: ozet({ bugunKanal: 0 }) });
+  o.depo.set("venom:dur", JSON.stringify({ kemal: { zaman: 1 } }));
+  k = await v.isBekcisi(o.env, ist(14, 15, 2));
+  assert.equal(k.kemal.durdu, true); assert.deepEqual(o.cagri, []);
+  assert.equal(patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text)).length, 0);
 });

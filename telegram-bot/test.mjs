@@ -2579,3 +2579,62 @@ test("yeni renk (Patron 10 Kasım): site defterinde modele yeni renk eklenince (
   assert.match(kartYazi(k[0]), /───\n🎨 NEW COLOR \/ NOUVELLE COULEUR/);
   assert.equal(cagrilar(o.gonderilen, "sendMediaGroup").filter((m) => m.govde.chat_id === -100).length, 0); // onaysız kanala yok
 });
+
+test("13 Kasım (Patron) KEMAL'İ ÇALIŞTIR: stokta + fotoğraflı modellerden EN UZUN SÜREDİR paylaşılmayanlar (7 gün kuralı içinde) Hemra / Merdan'ın onayına; Patron'a tek satır; süre verilirse sadece o kadar eskiler; 21:00'den sonra sabah 09:00'a planlanır; günde 12 sınırı", async () => {
+  const { kemalCalistir, calistirSatiri } = await import("./worker.js");
+  // 1) gündüz, bugünün turu yok: en eski önce (3403: 50 gün, 3520: 30 gün); 3411 (5 gün) 7 gün kuralına takılır; 3999 stoksuz
+  const o = await yeniOrtam();
+  const t = ist(15, 0);
+  const r = await kemalCalistir(o.env, {}, t);
+  assert.deepEqual([r.ok, r.n, r.kodlar, r.enEski], [true, 2, ["3403", "3520"], { kod: "3403", gun: 50 }]);
+  assert.equal(calistirSatiri(r), "Kemal çalıştı: 2 model Hemra'nın onayında (en eskisi 3403, 50 gün önce).");
+  const tur = JSON.parse(o.depo.get("tur"));
+  assert.deepEqual([tur.durum, tur.gun, tur.dalgalar.length, tur.dalgalar[0].durum, Object.keys(tur.ogeler)], ["toplaniyor", gunAnahtari(t), 1, "hazirlaniyor", ["3403", "3520"]]);
+  // aynı komut ikinci kez: öneri hazırlanırken yeni öneri açılmaz (tekrar soru yok)
+  assert.equal(calistirSatiri(await kemalCalistir(o.env, {}, t + 60)), "Kemal çalışamadı: bir öneri zaten hazırlanıyor; birkaç dakika sonra kartlar gider.");
+  // sonraki çalışmalarda kartlar hazırlanır ve onaya gider (Hemra: 333)
+  for (let i = 1; i <= 4; i++) await rotasyon(o.env, t + i * 300);
+  const kartlar = o.gonderilen.filter((m) => String(m.govde.chat_id) === "333" && m.govde.reply_markup);
+  assert.ok(kartlar.length >= 1, "Hemra'ya öneri kartı gitmedi");
+  assert.equal(cagrilar(o.gonderilen, "copyMessages").length, 0); // onay olmadan kanala hiçbir şey çıkmaz
+  assert.ok(o.gonderilen.some((m) => /Telegram'da son paylaşım: .*\((49|50) gün önce\)/.test(m.govde.caption || m.govde.text || "")), "kartta 'son paylaşım: X gün önce' yok");
+  // 13 Kasım (iş bekçisi): onay bekleyen kartlar için kişiye TEK hatırlatma (onaylı hatırlatma cümlesi); özet "son paylaşım" ve "tükendi" bilgisini verir
+  const { kemalHatirlat, kemalOzet } = await import("./worker.js");
+  const once = o.gonderilen.length;
+  const h = await kemalHatirlat(o.env, t + 1700);
+  assert.equal(h.n, 2); assert.ok(h.kisi >= 1);
+  const hat = cagrilar(o.gonderilen.slice(once), "sendMessage");
+  assert.equal(hat.length, h.kisi); // kişi başına tek mesaj
+  assert.equal(hat[0].govde.text, "🔔 Hatırlatma: cevap bekleyen kartınız var — kanal paylaşım önerisi: 3403, 3520. En alttaki karta bakın, düğmeye basın.");
+  assert.ok(hat[0].govde.reply_to_message_id);
+  const oz = await kemalOzet(o.env, t + 1700);
+  assert.deepEqual([oz.tur.bekleyen, typeof oz.tukendi, typeof oz.sonPaylasim], [["3403", "3520"], "boolean", "number"]);
+  // kartlar onayda beklerken yeniden çalıştırılırsa: yeni model kalmadı
+  const r2 = await kemalCalistir(o.env, {}, t + 1800);
+  assert.equal(r2.n, 0);
+  assert.match(calistirSatiri(r2), /^Kemal çalıştı ama öneri çıkmadı — sebep: /);
+  // 2) süre: "1 aydan beri paylaşılmayanlar" (en az 40 gün verilirse sadece 3403)
+  const o2 = await yeniOrtam();
+  const r40 = await kemalCalistir(o2.env, { enAzGun: 40 }, t);
+  assert.deepEqual(r40.kodlar, ["3403"]);
+  const o3 = await yeniOrtam();
+  assert.equal(calistirSatiri(await kemalCalistir(o3.env, { enAzGun: 90 }, t)), "Kemal çalıştı ama öneri çıkmadı — sebep: stokta olup fotoğrafı olan ve 90 gündür paylaşılmamış model kalmadı.");
+  // 3) günde 12 sınırı: bugün 12 paylaşım çıktıysa öneri açılmaz
+  const o4 = await yeniOrtam();
+  o4.depo.set("sonpaylasim", JSON.stringify(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(6000 + i), ist(9, 0) + i * 1800]))));
+  const r12 = await kemalCalistir(o4.env, {}, t);
+  assert.equal(r12.n, 0);
+  assert.match(calistirSatiri(r12), /bugün için yer kalmadı \(kanala 12 paylaşım çıktı, sırada 0; günde en fazla 12, 21:00'e kadar\)/);
+  // 4) 21:00'den sonra: sabah 09:00 turuna planlanır; gece kimseye kart gitmez
+  const o5 = await yeniOrtam();
+  const gece = ist(22, 30);
+  const rp = await kemalCalistir(o5.env, { enAzGun: 40 }, gece);
+  assert.deepEqual([rp.ok, rp.planlandi], [true, true]);
+  assert.equal(calistirSatiri(rp), "Kemal şu an paylaşım saati dışında (09:00–21:00); istek sabah 09:00 turuna planlandı (en az 40 gündür paylaşılmayanlar).");
+  await rotasyon(o5.env, gece + 300);
+  assert.equal(o5.gonderilen.filter((m) => m.govde && m.govde.reply_markup).length, 0);
+  await rotasyon(o5.env, ist(9, 0, 1));
+  const turS = JSON.parse(o5.depo.get("tur"));
+  assert.deepEqual(Object.keys(turS.ogeler), ["3403"]); // süre süzgeci sabah turuna uygulandı
+  assert.equal(o5.depo.get("kemal:calistirPlan"), undefined);
+});
