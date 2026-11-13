@@ -1578,7 +1578,22 @@ test("Venom kanal: 'sil' niyeti (kod / link / yanıt); bot yapamadıysa Patron'a
   // 12 Kasım: "sil" kelimesi kestirmesi yok → beyin kanal_paylasim_sil aracını seçer; stok yokken siler, stok VARKEN model kanaldan kaldırılmaz
   assert.equal(await aracla(o, "3512 sil", "kanal_paylasim_sil", { kodlar: ["3512"] }), "Silindi: 3512 (t.me/Volonteroseoffical/15001 +1 mesaj, 10.11 14:35)");
   await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", urunler: [{ kod: "3534", adet: 44, fiyat: 40 }], simdi: 1 }) });
-  assert.match(await aracla(o, "3534 sil", "kanal_paylasim_sil", { kodlar: ["3534"] }), /^SİLİNMEDİ: 3534 mağazada stokta \(BLACK ROSE 44 adet\)/);
+  // 13 Kasım (Patron): stok VARSA silmez, Patron'a tek satır sorar; "evet" (yine_de) gelince siler
+  const soru = await aracla(o, "3534 sil", "kanal_paylasim_sil", { kodlar: ["3534"] });
+  assert.match(soru, /^SİLİNMEDİ — Patron'a AYNEN şu tek satırı yaz ve cevabını bekle: "3534 stokta var \(BLACK ROSE 44 adet\)\. Yine de sileyim mi\?"/);
+  const silCagri = [];
+  o.env.KEMAL_W = { ...o.env.KEMAL_W, paylasimSil: async (x) => { silCagri.push(x); return { ok: true, silinen: [1], ozet: `${x.kod} (1 mesaj)` }; }, soldOut: async (k) => { silCagri.push({ soldOut: k }); return { ok: true, kod: k, duzenlenen: 2 }; } };
+  assert.equal(await aracla(o, "evet sil", "kanal_paylasim_sil", { kodlar: ["3534"], yine_de: true }), "Silindi: 3534 (1 mesaj)");
+  assert.deepEqual(silCagri, [{ kod: "3534" }]);
+  // stok BİTMİŞSE: silinmez, kartsız SOLD OUT (resim ve kod kalır)
+  await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza: "BLACKROSE", urunler: [{ kod: "3534", adet: 0, fiyat: 40 }], simdi: 2 }) });
+  silCagri.length = 0;
+  assert.equal(await aracla(o, "3534 sil", "kanal_paylasim_sil", { kodlar: ["3534"] }), "3534: stoğu bitmiş — kanalda 2 paylaşım SOLD OUT yapıldı (silinmedi).");
+  assert.deepEqual(silCagri, [{ soldOut: "3534" }]);
+  // link / mesaj numarası verilen TEK paylaşım: stok olsa da o paylaşım silinir (eskisi gibi)
+  silCagri.length = 0;
+  await aracla(o, "şu paylaşımı sil", "kanal_paylasim_sil", { kodlar: ["3534"], mesaj_no: [15010] });
+  assert.deepEqual(silCagri, [{ kod: "3534", ids: [15010] }]);
 });
 
 test("TAM ZİNCİR DENEMESİ son halka: Patron'un açıkça istediği zincir denemesi (zincir: true) 🧪 işaretli karar kartı olarak Patron'a gider; Telegram'ın döndürdüğü hali venom:kanit'e; düz deneme yine gitmez", async () => {

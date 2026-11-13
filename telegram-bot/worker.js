@@ -106,6 +106,20 @@ const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim)
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
+// 13 Kasım (Patron): "sil" denen modelin stoğu BİTMİŞSE paylaşım silinmez — kartsız, hemen "SOLD OUT" yazılır (resim ve kod görünür kalır).
+export async function patronSoldOut(env, kod, simdi = Math.floor(Date.now() / 1000)) {
+  if (!kod) return { ok: false, hata: "kod yok" };
+  const r = await soldOutYaz(env, kod);
+  const yapilan = (await env.KAYIT.get("kemal:soldout", "json").catch(() => null)) || {};
+  yapilan[kod] = simdi;
+  await env.KAYIT.put("kemal:soldout", JSON.stringify(yapilan));
+  await defterIs(env, "kemal", `Patron "sil" dedi, stok bitmiş → kanalda ${r.duzenlenen} paylaşım SOLD OUT yapıldı (silinmedi)`, { kod }).catch(() => null);
+  return { ok: true, kod, ...r };
+}
+export async function venomSoldOut(env, kod) {
+  if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/soldout", { method: "POST", body: JSON.stringify({ kod }) })).json();
+  return patronSoldOut(env, kod);
+}
 // 13 Kasım (Patron) — DÖNGÜ SIRASI: stokta + sitede (fotoğraflı) bütün modeller sırayla paylaşılır; sıra "en uzun süredir paylaşılmayan
 // önce (hiç paylaşılmamış en önde)" olduğu için hepsi paylaşılmadan hiçbiri tekrar çıkmaz; biten model sıradan çıkar, yeni model öne geçer.
 // Sayaç: bu döngüde paylaşılan / sıradaki toplam model. Hepsi paylaşılınca döngü biter, yenisi başlar. Kayıt: "kemal:dongu" (ofis okur).
@@ -3721,6 +3735,7 @@ export class KatalogDO {
     const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, KEMAL_YEREL), KEMAL_ICERDE: true };
     const simdi = Math.floor(Date.now() / 1000);
     tasarimAyarla(await this.env.KAYIT.get("kemal:tasarim").catch(() => null)); // 13 Kasım (B2): Patron örneği onayladıysa yeni kanal tasarımı
+    if (yol === "/kemal/soldout") return Response.json(await patronSoldOut(env, String((await istek.json().catch(() => ({}))).kod || ""), simdi)); // 13 Kasım: Patron "sil" + stok bitmiş → kartsız SOLD OUT
     if (yol === "/kemal/tasarim-ornek") return Response.json(await tasarimOrnegi(env, simdi));
     if (yol === "/kemal/tasarim-onay") return Response.json(await tasarimOnayi(env, await istek.json().catch(() => ({}))));
     if (yol === "/kemal/ofis-sohbet") return Response.json(await ofisSohbet(env, await istek.json(), simdi));

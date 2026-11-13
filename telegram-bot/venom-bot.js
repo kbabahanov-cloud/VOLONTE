@@ -330,7 +330,7 @@ const ARACLAR = [
   { name: "model_listesi", description: "Sitedeki modellerden liste (kod listesi döner; çok adımlı işte bir sonraki araca ver): videosuz, fotografsiz, paylasilmayan (stokta + 2 haftadır kanalda yok). Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["filtre"], properties: { filtre: { type: "string", enum: ["videosuz", "fotografsiz", "paylasilmayan"] } } } },
   { name: "satis_sorgu", description: "Sami'nin deposundan verilen kodların son N gün satış adetleri + kalan stok (en çok satandan aza). Sadece Patron'a. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } }, gun_sayisi: { type: "integer" } } } },
   { name: "geri_al", description: "Kanal paylaşımını kanaldan ve siteden birlikte geri alır — önce Patron'a tek onay kartı. HER ZAMAN hatanın görüldüğü mesaj numaralarına bağlı: Patron link/mesaj no verdiyse mesaj_no ile ver (t.me/…/15000 → 15000). Yoksa kodun EN SON paylaşımı. Sadece yanlış paylaşımı silmek için (site değişmeden) kanal_paylasim_sil kullan.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" }, mesaj_no: { type: "array", items: { type: "integer" } } } } },
-  { name: "kanal_paylasim_sil", description: "Patron 'sil' dediğinde (ör. '3512 sil', 'bu paylaşımı sil', 'bugünkü 3512 ve 3629 paylaşımlarını sil', link) Kemal ONAY KARTI İSTEMEDEN hemen siler. mesaj_no verilmezse kodun EN SON paylaşımı silinir. Model siteden kalkmaz (sadece o paylaşım). Sonucu Patron'a tek satır: 'Silindi: …'.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } }, mesaj_no: { type: "array", items: { type: "integer" } } } } },
+  { name: "kanal_paylasim_sil", description: "Patron 'sil' dediğinde (ör. '3512 sil', 'bu paylaşımı sil', 'bugünkü 3512 ve 3629 paylaşımlarını sil', link) çağır; ONAY KARTI YOK. Araç önce stoğa bakar: stok BİTMİŞSE paylaşım silinmez, hemen SOLD OUT yapılır; stok VARSA araç sana Patron'a soracağın tek satırı verir (aynen yaz, cevabı bekle). Link / mesaj_no verilirse sadece o paylaşım silinir. Model siteden kalkmaz (sadece o paylaşım). Sonucu Patron'a tek satır: 'Silindi: …'.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } }, mesaj_no: { type: "array", items: { type: "integer" } }, yine_de: { type: "boolean", description: "SADECE Patron 'stok var, yine de sileyim mi?' sorusuna açıkça evet dediyse true" } } } },
   { name: "kanal_paylasim_duzelt", description: "Kanaldaki paylaşımın YAZISI yanlışsa (eski yazı, fiyat, TEL, marka yok): Kemal aynı fotoğraf/videoyu alır, eskisini siler, doğru yazıyla (EN/FR, fiyatsız, marka imzalı, düğmeli) TEK ALBÜM olarak yeniden paylaşır (09–21, 60 dk aralık). 2 günden eskiyse yazıyı yerinde düzeltir. Patron'a onay kartı YOK; sonuç akşam özetinde.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, mesaj_no: { type: "array", items: { type: "integer" } } } } },
   { name: "hatirlatici", description: "Patron'un istediği zamanda hatırlatma (ör. 'yarın 10'da Merdan'a şunu sor'). zaman: İstanbul saatiyle YYYY-MM-DDTHH:MM. kime verilirse zamanı gelince o kişiye mesaj ONAY KARTI açılır.", input_schema: { type: "object", additionalProperties: false, required: ["zaman", "metin"], properties: { zaman: { type: "string" }, metin: { type: "string" }, kime: { type: "string", enum: ["merdan", "hemra", "fuat", "nuri"] } } } },
   { name: "duraklatma", description: "Sağlamlaştırma haftası anahtarları: Venom üzerinden Kemal paylaşımı (kemal_paylas) ve Pelin'in yeni üretimi (pelin_uretim). SADECE Patron açıkça 'aç/kapat' derse.", input_schema: { type: "object", additionalProperties: false, required: ["is", "acik"], properties: { is: { type: "string", enum: ["kemal_paylas", "pelin_uretim"] }, acik: { type: "boolean" } } } },
@@ -648,11 +648,26 @@ export async function aracCalistir(env, ad, g, simdi) {
     return `Son ${n} gün satış (Sami): ${l.map((x) => `${x.k}: ${x.a} adet (stok ${x.s})`).join("; ")}`;
   }
   if (ad === "kanal_paylasim_sil") {
+    // 13 Kasım (Patron): "sil" → Venom önce stoğa bakar. Stok VARSA tek satır sorar ("stok var, yine de?"); stok BİTMİŞSE paylaşım silinmez,
+    // kartsız ve hemen "SOLD OUT" yapılır (resim + kod görünür kalır). Link / mesaj numarası verilen TEK paylaşım eskisi gibi silinir.
     const kl = (g.kodlar || []).map((k) => String(k).replace(/\D/g, "")).filter(Boolean);
-    if (!(g.mesaj_no || []).length) for (const k of kl) { const st = await magazaStoklari(env, k); if (st.var) return `SİLİNMEDİ: ${k} mağazada stokta (${st.yazi}); stok bitmeden model kanaldan kaldırılmaz. Sadece hatalı TEK paylaşım silinecekse Patron o mesajın linkini / numarasını vermeli.`; }
-    if (env.__kuru) return "(DENEME: kanal paylaşımı silinirdi.)";
+    const ids = g.mesaj_no || [];
+    if (ids.length) { if (env.__kuru) return "(DENEME: o paylaşım silinirdi.)"; return kanalSilYap(env, kl, ids, simdi); }
+    const durum = [];
+    for (const k of kl.slice(0, 6)) durum.push([k, await magazaStoklari(env, k)]);
+    const stoklu = durum.filter(([, st]) => st.var);
+    if (stoklu.length && !g.yine_de) return `SİLİNMEDİ — Patron'a AYNEN şu tek satırı yaz ve cevabını bekle: "${stoklu.map(([k, st]) => `${k} stokta var (${st.yazi})`).join("; ")}. Yine de sileyim mi?" Patron "evet" derse bu aracı yine_de=true ile yeniden çağır; başka bir şey derse hiçbir şey yapma.`;
+    if (env.__kuru) return `(DENEME: ${durum.map(([k, st]) => (st.var ? `${k} silinirdi` : Object.keys(st.magazalar || {}).length ? `${k} stoğu bitmiş, SOLD OUT yapılırdı` : `${k} silinirdi`)).join("; ")}.)`;
+    const satir = [], silinecek = [];
+    for (const [k, st] of durum) {
+      if (st.var || !Object.keys(st.magazalar || {}).length) { silinecek.push(k); continue; } // stok var (Patron "yine de" dedi) ya da Vegawin'de kaydı yok: eski yol
+      const r = await botaSor(env, "kemal", "soldOut", k);
+      const x = !r ? `⚠️ ${k}: Kemal'e ulaşılamadı; SOLD OUT yapılamadı.` : r.duzenlenen ? `${k}: stoğu bitmiş — kanalda ${r.duzenlenen} paylaşım SOLD OUT yapıldı (silinmedi).` : `${k}: stoğu bitmiş; kanalda SOLD OUT yapılacak paylaşım bulunamadı${r.hata ? ` (${r.hata})` : ""}.`;
+      satir.push(x); (/^⚠️|bulunamadı/.test(x) ? turKanit(env).yapamadi : turKanit(env).kanit).push(x.replace(/^⚠️\s*/, ""));
+    }
+    if (silinecek.length) satir.push(await kanalSilYap(env, silinecek, [], simdi));
+    return satir.join("\n");
   }
-  if (ad === "kanal_paylasim_sil") return kanalSilYap(env, (g.kodlar || []).map((k) => String(k).replace(/\D/g, "")).filter(Boolean), g.mesaj_no || [], simdi);
   if (ad === "kanal_paylasim_duzelt") {
     const r = await botaSor(env, "kemal", "paylasimDuzelt", { kod: String(g.kod).replace(/\D/g, ""), ids: g.mesaj_no || null, kim: "Patron (Venom)" });
     if (!r) return "Kemal'e ULAŞILAMADI — 'yapıldı' deme.";
