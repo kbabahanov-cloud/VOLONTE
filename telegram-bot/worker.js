@@ -3080,11 +3080,18 @@ export async function soldOutAdimi(env, simdi, { zorla = false } = {}) {
   const bekleyen = (await env.KAYIT.get("kemal:soldoutBekleyen", "json").catch(() => null)) || {};
   const yapilan = (await env.KAYIT.get("kemal:soldout", "json").catch(() => null)) || {};
   const yeniGorulen = { ...(gorulen || {}) };
+  const donusBekleyen = (await env.KAYIT.get("kemal:donusBekleyen", "json").catch(() => null)) || {};
+  const donenler = [];
   const adaylar = [];
   for (const kod of kodlar) {
     const x = stok[kod];
     if (!x) continue; // Vegawin'de kaydı yok → dokunma
-    if (x.toplam > 0) { yeniGorulen[kod] = 1; delete bekleyen[kod]; if (yapilan[kod]) delete yapilan[kod]; continue; } // stok döndü: yeniden bitince yine SOLD OUT
+    if (x.toplam > 0) { // stok döndü: SOLD OUT yazılmış paylaşımlar "BACK IN STOCK" olur (iki kontrolde de stok varsa); yeniden bitince yine SOLD OUT
+      yeniGorulen[kod] = 1; delete bekleyen[kod];
+      if (yapilan[kod]) { if (!donusBekleyen[kod]) donusBekleyen[kod] = simdi; else if (simdi - donusBekleyen[kod] >= 3300) donenler.push(kod); }
+      continue;
+    }
+    delete donusBekleyen[kod];
     if (!gorulen || !gorulen[kod] || yapilan[kod]) continue; // ilk çalışma / stoğu hiç görülmemiş / zaten yapıldı
     if (!bekleyen[kod]) { bekleyen[kod] = simdi; continue; } // ilk kez 0: bir saat sonra yeniden bakılır
     if (simdi - bekleyen[kod] >= 3300) adaylar.push(kod);
@@ -3096,6 +3103,14 @@ export async function soldOutAdimi(env, simdi, { zorla = false } = {}) {
     sonuc.yapilan.push({ kod, ...r });
     if (r.duzenlenen) for (const kisi of [hemraId(env)].filter(Boolean)) await telegram(env, "sendMessage", { chat_id: kisi, text: `❌ ${kod} mağazada bitti (Vegawin stok 0) → kanalda ${r.duzenlenen} paylaşımın yazısı "SOLD OUT" yapıldı. Mesajlar silinmedi.`, disable_web_page_preview: true });
   }
+  sonuc.donen = [];
+  for (const kod of donenler.slice(0, 3)) {
+    const r = await soldOutYaz(env, kod, backInStockYazisi);
+    delete yapilan[kod]; delete donusBekleyen[kod];
+    sonuc.donen.push({ kod, ...r });
+    await defterIs(env, "kemal", `${kod} stoğa döndü → kanalda ${r.duzenlenen} paylaşımın yazısı "BACK IN STOCK" yapıldı`, { kod }).catch(() => null);
+  }
+  await env.KAYIT.put("kemal:donusBekleyen", JSON.stringify(donusBekleyen), { expirationTtl: 7 * 86400 });
   await env.KAYIT.put("kemal:stokGorulen", JSON.stringify(yeniGorulen));
   await env.KAYIT.put("kemal:soldoutBekleyen", JSON.stringify(bekleyen), { expirationTtl: 7 * 86400 });
   await env.KAYIT.put("kemal:soldout", JSON.stringify(yapilan));
@@ -3114,7 +3129,16 @@ export function soldOutYazisi(yazi, ents = []) {
   const entities = [{ type: "bold", offset: 0, length: SOLDOUT_SATIR.length }, ...(ents || []).filter((e) => e.offset >= kes).map((e) => ({ ...e, offset: e.offset + kayma }))];
   return { caption: (on + t.slice(kes)).slice(0, 1024), caption_entities: entities.filter((e) => e.offset + e.length <= 1024) };
 }
-async function soldOutYaz(env, kod) {
+// 13 Kasım (Patron, A3): stok geri gelince AYNI paylaşımlarda "❌ SOLD OUT / ÉPUISÉ" satırı "🔁 BACK IN STOCK / DE RETOUR" olur (resim, yazı, düğmeler aynı)
+export const BACKINSTOCK_SATIR = DURUMLAR.donus;
+export function backInStockYazisi(yazi, ents = []) {
+  const t = String(yazi || "");
+  if (!t.startsWith(SOLDOUT_SATIR)) return null;
+  const kayma = BACKINSTOCK_SATIR.length - SOLDOUT_SATIR.length;
+  const entities = [{ type: "bold", offset: 0, length: BACKINSTOCK_SATIR.length }, ...(ents || []).filter((e) => e.offset >= SOLDOUT_SATIR.length).map((e) => ({ ...e, offset: e.offset + kayma }))];
+  return { caption: (BACKINSTOCK_SATIR + t.slice(SOLDOUT_SATIR.length)).slice(0, 1024), caption_entities: entities.filter((e) => e.offset + e.length <= 1024) };
+}
+async function soldOutYaz(env, kod, cevir = soldOutYazisi) {
   const kanal = await env.KAYIT.get("kanal", "json");
   const arsiv = await env.KAYIT.get("arsiv", "json");
   const paylasimlar = (((await env.KAYIT.get("kodlar", "json")) || {})[kod] || []).slice().sort((a, b) => (b.tarih || 0) - (a.tarih || 0)).slice(0, 3);
@@ -3127,7 +3151,7 @@ async function soldOutYaz(env, kod) {
       const m = f.result;
       await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: m.message_id }).catch(() => null);
       if (!m.caption || !(m.photo || m.video)) continue; // yazılı medya (albümün başı)
-      const y = soldOutYazisi(m.caption, m.caption_entities);
+      const y = cevir(m.caption, m.caption_entities);
       if (!y) break;
       const g = await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: id, ...y, ...(m.reply_markup ? { reply_markup: m.reply_markup } : {}) });
       if (g && g.ok) duzenlenen++; else hatalar.push(`${id}: ${(g && g.description) || "?"}`);

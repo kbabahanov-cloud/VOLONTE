@@ -2511,7 +2511,7 @@ test("SOLD OUT: mağaza stoğu >0 → 0 olunca (1 saat arayla iki kontrol) kanal
   globalThis.fetch = async (url, istek) => {
     if (String(url).endsWith("/forwardMessage")) {
       const g = JSON.parse(istek.body); o.gonderilen.push({ url: String(url), govde: g });
-      return new Response(JSON.stringify({ ok: true, result: { message_id: 9000 + g.message_id, photo: [{ file_id: "f" }], caption: `✅ AVAILABLE / DISPONIBLE\nCODE: ${g.message_id}`, reply_markup: { inline_keyboard: [[{ text: "Sipariş", url: "https://wa.me/1" }]] } } }));
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 9000 + g.message_id, photo: [{ file_id: "f" }], caption: o.kanalSoldOut ? `❌ SOLD OUT / ÉPUISÉ\nCODE: ${g.message_id}` : `✅ AVAILABLE / DISPONIBLE\nCODE: ${g.message_id}`, reply_markup: { inline_keyboard: [[{ text: "Sipariş", url: "https://wa.me/1" }]] } } }));
     }
     return onceki(url, istek);
   };
@@ -2534,6 +2534,24 @@ test("SOLD OUT: mağaza stoğu >0 → 0 olunca (1 saat arayla iki kontrol) kanal
   assert.ok(!o.gonderilen.some((m) => String(m.govde && m.govde.chat_id) === "111"));
   o.gonderilen.length = 0;
   await w.soldOutAdimi(o.env, t + 7400, { zorla: true }); // ikinci kez yapılmaz
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 0);
+  // 13 Kasım (Patron, A3): stok geri gelince AYNI paylaşımda SOLD OUT → BACK IN STOCK (iki kontrolde de stok varsa); ekibe mesaj gitmez
+  assert.deepEqual(w.backInStockYazisi("❌ SOLD OUT / ÉPUISÉ\nCODE: 1\nVOLONTE", [{ type: "bold", offset: 0, length: 19 }, { type: "bold", offset: 20, length: 7 }]), { caption: "🔁 BACK IN STOCK / DE RETOUR\nCODE: 1\nVOLONTE", caption_entities: [{ type: "bold", offset: 0, length: 28 }, { type: "bold", offset: 29, length: 7 }] });
+  assert.equal(w.backInStockYazisi("✅ AVAILABLE / DISPONIBLE\nCODE: 1"), null);
+  o.kanalSoldOut = true;
+  await kopru(o.env, [{ kod: "3403", adet: 12, fiyat: 44 }, { kod: "3520", adet: 40, fiyat: 52 }, { kod: "3411", adet: 40, fiyat: 55 }]);
+  o.gonderilen.length = 0;
+  await w.soldOutAdimi(o.env, t + 7450, { zorla: true }); // stok ilk kez yeniden görüldü → bekler
+  assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 0);
+  const d2 = await w.soldOutAdimi(o.env, t + 10780, { zorla: true });
+  assert.deepEqual(d2.donen.map((x) => [x.kod, x.duzenlenen]), [["3403", 1]]);
+  const ed2 = cagrilar(o.gonderilen, "editMessageCaption");
+  assert.equal(ed2.length, 1);
+  assert.match(ed2[0].govde.caption, /^🔁 BACK IN STOCK \/ DE RETOUR\nCODE: 700$/);
+  assert.equal(ed2[0].govde.reply_markup.inline_keyboard[0][0].url, "https://wa.me/1");
+  assert.equal(cagrilar(o.gonderilen, "sendMessage").length, 0); // ekibe / Patron'a yeni mesaj yok
+  o.gonderilen.length = 0;
+  await w.soldOutAdimi(o.env, t + 10790, { zorla: true }); // ikinci kez yapılmaz
   assert.equal(cagrilar(o.gonderilen, "editMessageCaption").length, 0);
   // köprü verisi eskiyse hiçbir şey yapılmaz
   assert.equal((await w.soldOutAdimi(o.env, t + 5 * 3600, { zorla: true })).atlandi, "köprü verisi taze değil");
