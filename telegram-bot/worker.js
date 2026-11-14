@@ -3645,7 +3645,20 @@ async function kopruCari(request, env) {
     ozelkod: kisa(x.ozelkod, 80), aciklama: kisa(x.aciklama, 120), evrak: kisa(x.evrakno || x.belgeno, 40), belge: kisa(x.belgeind || x.belgetipi, 20), islem: kisa(x.islemind || x.islemtipi, 20),
   }));
   await stokIste(env, "/ayar-yaz", { k: `cari:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), kartBakiye: g.kartBakiye !== false, birim: "USD", hesaplar, ozel, baglar, hareketler }) });
-  return Response.json({ ok: true, hesap: hesaplar.length });
+  // 14 Kasım (Patron): CELAL MUTABAKATI — köprü "Celal Kayran" (CK) ve "Celal İndirim" (CI) carilerini de gönderir; AYRI kayda yazılır
+  // ("cari:CELAL:<MAĞAZA>"), Black Rose kaydına ve Fuat'ın mutabakatına karışmaz. Sadece Patron ve Celal'e giden mutabakatta kullanılır.
+  const celalMi = (a) => /^C[KI]$/.test(String(a));
+  const cHesap = g.hesaplar.filter((h) => celalMi(h.anahtar)).map((h) => ({
+    anahtar: String(h.anahtar), ad: String(h.ad || "").slice(0, 60), kart: sayi(h.kart),
+    donemler: Object.fromEntries(Object.entries(h.donemler || {}).slice(0, 20).map(([d, x]) => [String(d).slice(0, 60), { n: Number(x.n) || 0, borc: sayi(x.borc), alacak: sayi(x.alacak), ilk: x.ilk || null, son: x.son || null }])),
+  }));
+  if (cHesap.length) {
+    const cHareket = (Array.isArray(g.hareketler) ? g.hareketler : []).slice(0, 2500).filter((x) => celalMi(x.hesap) && /^\d{4}-\d{2}-\d{2}$/.test(String(x.tarih))).map((x) => ({
+      hesap: String(x.hesap), tablo: kisa(x.tablo, 60), ind: kisa(x.ind, 20), tarih: String(x.tarih), borc: sayi(x.borc), alacak: sayi(x.alacak), ozelkod: kisa(x.ozelkod, 80), aciklama: kisa(x.aciklama, 120),
+    }));
+    await stokIste(env, "/ayar-yaz", { k: `cari:CELAL:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), birim: "USD", hesaplar: cHesap, hareketler: cHareket }) });
+  }
+  return Response.json({ ok: true, hesap: hesaplar.length, celal: cHesap.length });
 }
 
 // Stok soruları ve /stok: ortak kod (stokbot.js). "sami:aktif" varsa sorular Sami'nin botundan gider.

@@ -1679,10 +1679,19 @@ test("köprü cari: anahtarlı köprü Black Rose hesap bakiyelerini gönderir; 
   const gonder = (govde, anahtar = "kopru-anahtari-123") => worker.fetch(new Request("https://x/kopru/cari", { method: "POST", headers: { "X-Magaza": "VOLONTE", Authorization: `Bearer ${anahtar}` }, body: JSON.stringify(govde) }), o.env);
   assert.equal((await gonder({ hesaplar: [] }, "yanlis")).status, 401);
   const r = await gonder({ hesaplar: [{ anahtar: "15", ad: "BLACKROSE 15", kart: -1000, donemler: { D0005TBLCARIGENELHAREKET: { n: 2, borc: 0, alacak: 1000, ilk: "2026-01-02", son: "2026-10-30" } } }, { anahtar: "x", ad: "kötü" }], ozel: [{ tablo: "D0001TBLCARIHAREKETLERI", kod: "BLACK ROSE BORC VERDIM", cari: "KASA", n: 5, borc: 5000, alacak: 0 }] });
-  assert.deepEqual(await r.json(), { ok: true, hesap: 1 });
+  assert.deepEqual(await r.json(), { ok: true, hesap: 1, celal: 0 });
   const v = JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "cari:VOLONTE" }) })).json()).v);
   assert.equal(v.hesaplar[0].kart, -1000);
   assert.equal(v.ozel[0].kod, "BLACK ROSE BORC VERDIM");
+  // 14 Kasım (Patron): Celal carileri (CK = Celal Kayran, CI = Celal İndirim) AYRI kayda yazılır; Black Rose kaydına karışmaz
+  const ayarOku = async (k) => { const x = (await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k }) })).json()).v; return x == null ? null : JSON.parse(x); };
+  assert.equal(await ayarOku("cari:CELAL:VOLONTE"), null); // Celal hesabı gelmediyse kayıt açılmaz
+  const r2 = await gonder({ hesaplar: [{ anahtar: "20", ad: "BLACKROSE 20", kart: 0, donemler: {} }, { anahtar: "CK", ad: "CELAL KAYRAN", kart: 0, donemler: { D0005TBLCARIGENELHAREKET: { n: 3, borc: 3000, alacak: 15400 } } }, { anahtar: "CI", ad: "CELAL İNDİRİM", kart: 0, donemler: { D0005TBLCARIGENELHAREKET: { n: 1, borc: 0, alacak: 1250 } } }],
+    hareketler: [{ hesap: "20", tablo: "D0005TBLCARIGENELHAREKET", ind: "1", tarih: "2026-11-13", borc: 22310, alacak: 0 }, { hesap: "CK", tablo: "D0005TBLCARIGENELHAREKET", ind: "2", tarih: "2026-11-13", borc: 3000, alacak: 0 }] });
+  assert.deepEqual(await r2.json(), { ok: true, hesap: 1, celal: 2 });
+  const br = await ayarOku("cari:VOLONTE"), cl = await ayarOku("cari:CELAL:VOLONTE");
+  assert.deepEqual([br.hesaplar.map((h) => h.anahtar), br.hareketler.map((h) => h.hesap)], [["20"], ["20"]]);
+  assert.deepEqual([cl.hesaplar.map((h) => h.anahtar), cl.hareketler.map((h) => [h.hesap, h.borc])], [["CK", "CI"], [["CK", 3000]]]);
 });
 
 test("yeni model (6 Kasım): Selin siteye ekleyince Kemal kartı SADECE Merdan ve Hemra'ya (Patron'a/Venom'a değil); 4 düğme; Venom kontrolü üstte; ✅ → kanala; ⏳ Beklesin → 3 gün sonra yeniden; 2000 yok", async () => {
