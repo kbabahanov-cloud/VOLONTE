@@ -37,9 +37,9 @@ export async function dosyaIndir(env, tg, fileId) {
   return base64(await r.arrayBuffer());
 }
 
-const gorsel = (data) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
+export const gorsel = (data) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
 
-async function jsonIste(env, { system, content, schema, maxTokens = 2000, model: secilenModel }) {
+export async function jsonIste(env, { system, content, schema, maxTokens = 2000, model: secilenModel }) {
   if (await sinirAsildiMi(env)) throw new Error(SINIR_MESAJI);
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 50_000 });
   const model = secilenModel || env.ANTHROPIC_MODEL || VARSAYILAN_MODEL;

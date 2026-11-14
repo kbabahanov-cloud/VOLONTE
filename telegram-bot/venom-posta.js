@@ -95,6 +95,7 @@ export function izinBul(metin, kaynak = null) {
   const t = String(metin || "");
   if (kaynak === "pelin") return "para"; // Pelin'in kartları ücretli üretimin onayı (Patron onaylı iş)
   if (/SON YAYIN ONAYI/.test(t)) return "cevap"; // Patron'un kendi paylaşım isteğinin son onayı
+  if (/MÜŞTERİ PAYLAŞIMI/.test(t)) return "cevap"; // 14 Kasım: Patron'un Venom'a gönderdiği müşteri fotoğrafının onay kartı (kendi isteği)
   for (const [ad, re] of IZIN_KALIP) if (re.test(t)) return ad;
   return null;
 }

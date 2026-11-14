@@ -2754,3 +2754,149 @@ test("13 Kasım (Patron) DÖNGÜ SAYACI: paylaşılan model bu döngüye yazıl�
   assert.deepEqual([d.no, d.x, d.onceki.no], [2, 0, 1]);
   assert.equal((await w.kemalOzet(o.env, t + 400)).dongu.no, 2);
 });
+
+// ---------- 14 Kasım (Patron): MÜŞTERİ TEŞEKKÜR PAYLAŞIMI (Kemal + Nora) ----------
+test("müşteri paylaşımı — kurallar (saf): niyet, not, benzerlik, altyazı denetimi, kanal yazısı, maske kutuları, yayın kapısı (günde 2, 09–21, normal paylaşımla 30 dk)", async () => {
+  const m = await import("./musteri-paylasim.js");
+  assert.equal(m.mpNiyet("müşteri"), true); assert.equal(m.mpNiyet("MÜŞTERİ 3394 Paris"), true); assert.equal(m.mpNiyet("Musteri paylasimi"), true); assert.equal(m.mpNiyet("3394 paylaş"), false);
+  assert.deepEqual(m.mpNot("müşteri 3394 Paris"), { kod: "3394", marka: null, not: "Paris" });
+  assert.deepEqual(m.mpNot("Müşteri paylaşımı black rose Lyon, France"), { kod: null, marka: "BLACKROSE", not: "Lyon, France" });
+  assert.deepEqual(m.mpNot("müşteri"), { kod: null, marka: null, not: "" });
+  // benzerlik: aynı kalıp yakalanır, farklı yazı geçer
+  const a = { fr: "Merci pour votre confiance, votre sourire nous touche.", en: "Thank you for your trust, your smile means a lot." };
+  assert.ok(m.enBenzer({ fr: "Merci pour votre confiance, votre sourire nous touche beaucoup.", en: "x y z" }, [a]) >= m.BENZER_ESIK);
+  assert.ok(m.enBenzer({ fr: "Quelle joie de vous voir porter cette robe à Lyon.", en: "Seeing you wear it made our whole week." }, [a]) < m.BENZER_ESIK);
+  // denetim: fiyat ASLA, 2–4 satır
+  assert.equal(m.altyaziSorunu({ fr: "Merci !", en: "Thank you!" }), null);
+  assert.equal(m.altyaziSorunu({ fr: "Merci, seulement 45 $ !", en: "Thanks" }), "fiyat");
+  assert.equal(m.altyaziSorunu({ fr: "Meilleur prix", en: "Thanks" }), "fiyat");
+  assert.equal(m.altyaziSorunu({ fr: "a\nb\nc", en: "d\ne" }), "satır");
+  assert.equal(m.altyaziSorunu({ fr: "", en: "x" }), "boş");
+  // kanal yazısı: FR · EN · imza · en altta model (kod biliniyorsa); kod yoksa model satırı yok
+  assert.equal(m.altyaziKur({ fr: "Merci Marie… non, merci à vous.", en: "Thank you.", marka: "VOLONTE", kod: "3394" }), "Merci Marie… non, merci à vous.\n\nThank you.\n\n— VOLONTE family 🤍\n\nModel: VOLONTE 3394");
+  assert.equal(m.altyaziKur({ fr: "Merci.", en: "Thank you.", marka: "BLACKROSE", kod: null }), "Merci.\n\nThank you.\n\n— BLACK ROSE family 🖤");
+  assert.equal(kodBul(m.altyaziKur({ fr: "Merci.", en: "Thank you.", marka: "VOLONTE", kod: "3394" })), null); // normal akış bu yazıyı model paylaşımı SAYMAZ (sayaç / SOLD OUT karışmaz)
+  // maske kutuları: oran → piksel (kenar payı, sınır içinde); bozuk kutu atlanır
+  assert.deepEqual(m.kutuPiksel([{ x: 0, y: 0, w: 1, h: 0.08 }, { x: 0.5, y: 0.5, w: 0, h: 0.1 }, { x: "a" }], 1000, 2000), [{ left: 0, top: 0, width: 1000, height: 184 }]);
+  // yayın kapısı
+  const T = (hh, mm = 0) => Date.UTC(2026, 10, 14, hh - 3, mm) / 1000;
+  const kapi = (g) => m.mpYayinKapisi({ simdi: T(12), bugunSayi: 0, sonNormal: T(11, 20), siraVar: false, sonMusteri: 0, ...g });
+  assert.equal(kapi({}).ok, true);
+  assert.equal(kapi({ bugunSayi: 2 }).neden, "gunluk");
+  assert.equal(kapi({ simdi: T(8, 30) }).neden, "saat"); assert.equal(kapi({ simdi: T(21, 5) }).neden, "saat");
+  assert.equal(kapi({ sonNormal: T(11, 45) }).neden, "ara");                        // normal paylaşımdan 15 dk sonra: bekler
+  assert.equal(kapi({ sonMusteri: T(11, 50) }).neden, "ara");                       // iki müşteri paylaşımı arası 30 dk
+  assert.equal(kapi({ sonNormal: T(11, 28), siraVar: true }).ok, true);             // 32 dk sonra, sıradaki normal paylaşım 28 dk uzakta
+  assert.equal(kapi({ sonNormal: T(11, 15), siraVar: true }).neden, "ara");         // 45 dk sonra ve sırada model var: sıradaki 15 dk içinde çıkar → ondan sonraya
+  assert.equal(kapi({ sonNormal: T(11, 15), siraVar: false }).ok, true);
+  assert.deepEqual(m.mpDugmeler("ab1").inline_keyboard.map((r) => r.map((d) => d.text)), [["✅ Paylaş", "✏️ Yeniden yaz"], ["❌ Paylaşma"]]);
+  // Nora: kurala uymayan / benzer yazı yeniden yazdırılır (en fazla 3 deneme)
+  const cevaplar = [{ fr: "Merci, seulement 45 € !", en: "Thanks" }, { fr: a.fr, en: a.en }, { fr: "Vous voir rayonner à Paris, c'est notre plus beau cadeau.", en: "Seeing you glow in Paris is the best gift for us." }];
+  const sorular = [];
+  const y = { json: async (g) => { sorular.push(g); return cevaplar[sorular.length - 1]; }, gorsel: (b) => ({ type: "image", b }) };
+  const r = await m.altyaziUret(y, { mesaj: "merci beaucoup", not: "Paris", marka: "VOLONTE", tur: "ekran" }, [a]);
+  assert.deepEqual([r.deneme, r.sorun, r.fr], [3, null, cevaplar[2].fr]);
+  assert.match(sorular[1].content[0].text, /fiyat \/ para geçti/); assert.match(sorular[2].content[0].text, /çok benziyor/);
+  assert.match(sorular[0].content[0].text, /Önceki yazılar \(bunlara BENZEMESİN\)/); assert.match(sorular[0].system, /Fiyat, indirim, para birimi, sipariş çağrısı ASLA yok/);
+});
+
+test("müşteri paylaşımı — akış: canlı değilken eski yol; Hemra 'müşteri' yazınca kart (kişisel bilgi kapatılır, kod Vegawin'de doğrulanır, Nora yazar); Yeniden yaz; Paylaş → kanala; günde 2; normal sayaca dokunmaz", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  Object.assign(o.env, { ANTHROPIC_API_KEY: "k", MURAT_ID: "111", FABRIKA_SORUMLU: "333", EKIP_IDS: "333,555", BR_SORUMLU: "444", ALLOWED_IDS: "111,444" });
+  await kopru(o.env, [{ kod: "3403", adet: 40, fiyat: 44 }]);
+  const cizilen = [];
+  o.env.IMAGES = { info: async () => ({ width: 1000, height: 2000 }), input: () => ({ transform() { return this; }, draw(e, yer) { cizilen.push(yer); return this; }, async output() { return { response: () => new Response(new Uint8Array([9, 9, 9])) }; } }) };
+  const nora = [{ fr: "Merci pour ce joli message, il nous a fait sourire toute la journée.", en: "Thank you for this lovely note — it made our whole day." }, { fr: "Votre bonheur à Paris, c'est exactement pour cela que nous créons.", en: "Your joy in Paris is exactly why we create." },
+    { fr: "Un mot comme le vôtre vaut plus que tout.", en: "A note like yours means everything to us." }, { fr: "Vous lire nous rend fiers de notre atelier.", en: "Reading you makes our atelier proud." }];
+  let noraNo = 0, mid = 5000; const formlar = [], json = [];
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.startsWith("https://api.anthropic.com")) {
+      const g = JSON.parse(istek.body), sema = g.output_config.format.schema.required;
+      const cevap = sema.includes("tur") ? { tur: "ekran", kutular: [{ x: 0, y: 0, w: 1, h: 0.08, ne: "başlık: isim + numara + profil" }], mesaj: "Merci beaucoup, la robe est magnifique", kiyafet: false } : nora[noraNo++];
+      return new Response(JSON.stringify({ id: "m", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(cevap) }], usage: { input_tokens: 10, output_tokens: 10 } }), { headers: { "content-type": "application/json" } });
+    }
+    if (adres.includes("/file/bot")) return new Response(new Uint8Array([1, 2, 3]));
+    if (istek && istek.body instanceof FormData) { const f = Object.fromEntries([...istek.body.entries()].map(([k, v]) => [k, typeof v === "string" ? v : "(dosya)"])); formlar.push({ url: adres, f }); return new Response(JSON.stringify({ ok: true, result: { message_id: mid++ } })); }
+    const govde = istek && istek.body ? JSON.parse(istek.body) : {};
+    json.push({ url: adres, govde });
+    if (adres.endsWith("/getFile")) return new Response(JSON.stringify({ ok: true, result: { file_path: "p/x.jpg" } }));
+    return new Response(JSON.stringify({ ok: true, result: { message_id: mid++ } }));
+  };
+  const T = (hh, mm = 0) => Date.UTC(2026, 10, 14, hh - 3, mm) / 1000;
+  const foto = (kisi, ad, yazi) => guncellemeIsle({ message: { message_id: 77, date: T(10), chat: { id: kisi, type: "private" }, from: { id: kisi, first_name: ad }, photo: [{ file_id: "kucuk" }, { file_id: "buyuk" }], caption: yazi } }, o.env);
+  const { musteriPaylasimAdimi } = await import("./worker.js");
+  o.env.__simdi = T(10);
+  // 1) iş canlıya alınmadı: Hemra'nın "müşteri" fotoğrafı ESKİ yoluna gider (kuyruk açılmaz)
+  await foto(333, "Hemra", "müşteri 3403 Paris");
+  assert.equal(o.depo.get("kemal:mpGelen"), undefined);
+  // 2) canlı: Hemra → alındı; yetkisiz ekip üyesi (555) → eski yol
+  o.depo.set("kemal:musteriPaylasim", "1");
+  await foto(555, "Aziz", "müşteri");
+  assert.equal(o.depo.get("kemal:mpGelen"), undefined);
+  await foto(333, "Hemra", "müşteri 3403 Paris");
+  assert.equal(JSON.parse(o.depo.get("kemal:mpGelen")).length, 1);
+  assert.match(json.at(-1).govde.text, /Müşteri paylaşımı alındı/);
+  // 3) 5 dakikalık adım: kart SADECE gönderene (Hemra), tek mesaj: görsel + yazı + 3 düğme; kanala hiçbir şey gitmez
+  await musteriPaylasimAdimi(o.env, T(10, 5));
+  assert.equal(formlar.length, 1);
+  const kart = formlar[0].f;
+  assert.equal(kart.chat_id, "333");
+  assert.match(kart.caption, /^👥 MÜŞTERİ PAYLAŞIMI — onayınıza/);
+  assert.match(kart.caption, /🔒 1 kişisel bilgi alanı kapatıldı/);
+  assert.match(kart.caption, /Model: 3403 \(Vegawin'de doğrulandı\)/);
+  assert.ok(kart.caption.includes(`${nora[0].fr}\n\n${nora[0].en}\n\n— VOLONTE family 🤍\n\nModel: VOLONTE 3403`));
+  assert.doesNotMatch(kart.caption, /\$|44/); // fiyat yok
+  assert.deepEqual(cizilen, [{ left: 0, top: 0 }]); // siyah şerit basıldı
+  const dugme = JSON.parse(kart.reply_markup).inline_keyboard.flat().map((d) => d.callback_data);
+  const id = dugme[0].split(":")[2];
+  assert.deepEqual(dugme, [`mp:o:${id}`, `mp:y:${id}`, `mp:x:${id}`]);
+  // başkası basamaz
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 555, first_name: "Aziz" }, data: `mp:o:${id}`, message: { chat: { id: 555 }, message_id: 1 } } }, o.env);
+  assert.equal(JSON.parse(o.depo.get(`kemal:mp:${id}`)).durum, "kart");
+  // 4) ✏️ Yeniden yaz → Nora YENİ yazı; kart yerinde güncellenir
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `mp:y:${id}`, message: { chat: { id: 333 }, message_id: 5000 } } }, o.env);
+  const duzen = json.filter((x) => x.url.endsWith("/editMessageCaption")).at(-1).govde;
+  assert.ok(duzen.caption.includes(nora[1].fr) && !duzen.caption.includes(nora[0].fr));
+  assert.equal(duzen.reply_markup.inline_keyboard.flat().length, 3);
+  // 5) ✅ Paylaş → kanala SADECE altyazıyla (başlık / not yok); günlük müşteri sayacı 1; normal paylaşım kayıtlarına dokunulmaz
+  const onceKodlar = o.depo.get("kodlar"), onceSayac = [...o.depo.keys()].filter((k) => /^sayac:/.test(k)).length;
+  o.env.__simdi = T(10, 10);
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `mp:o:${id}`, message: { chat: { id: 333 }, message_id: 5000 } } }, o.env);
+  assert.equal(formlar.length, 2);
+  assert.equal(formlar[1].f.chat_id, "-100");
+  assert.equal(formlar[1].f.caption, `${nora[1].fr}\n\n${nora[1].en}\n\n— VOLONTE family 🤍\n\nModel: VOLONTE 3403`);
+  assert.equal(formlar[1].f.reply_markup, undefined);
+  assert.equal(o.depo.get("kemal:mpGun:2026-11-14"), "1");
+  assert.equal(JSON.parse(o.depo.get(`kemal:mp:${id}`)).durum, "paylasildi");
+  assert.equal(o.depo.get("kodlar"), onceKodlar); assert.equal([...o.depo.keys()].filter((k) => /^sayac:/.test(k)).length, onceSayac);
+  assert.match(json.filter((x) => x.url.endsWith("/editMessageCaption")).at(-1).govde.caption, /✅ Kanala çıktı \(Hemra\)/);
+  // 6) Merdan (Black Rose) kod yazmadan: imza BLACK ROSE, model satırı YOK; 30 dk dolmadan onaylarsa SIRADA bekler, saati gelince çıkar
+  o.env.__simdi = T(10, 15);
+  await guncellemeIsle({ message: { message_id: 78, date: T(10, 15), chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Merdan" }, photo: [{ file_id: "b2" }], caption: "Müşteri" } }, o.env);
+  await musteriPaylasimAdimi(o.env, T(10, 20));
+  const k2 = formlar[2].f, id2 = JSON.parse(k2.reply_markup).inline_keyboard[0][0].callback_data.split(":")[2];
+  assert.equal(k2.chat_id, "444");
+  assert.ok(k2.caption.includes("— BLACK ROSE family 🖤") && !/Model: (VOLONTE|BLACK ROSE)/.test(k2.caption));
+  assert.match(k2.caption, /Model kodu yazılmadı/);
+  o.env.__simdi = T(10, 25);
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 444, first_name: "Merdan" }, data: `mp:o:${id2}`, message: { chat: { id: 444 }, message_id: 5002 } } }, o.env);
+  assert.equal(formlar.length, 3); // kanala çıkmadı: önceki müşteri paylaşımından 15 dk sonra
+  assert.match(json.filter((x) => x.url.endsWith("/editMessageCaption")).at(-1).govde.caption, /✅ Onaylandı \(Merdan\) — sırada: önceki müşteri paylaşımıyla arada 30 dakika olmalı/);
+  await musteriPaylasimAdimi(o.env, T(10, 30)); assert.equal(formlar.length, 3);
+  await musteriPaylasimAdimi(o.env, T(10, 45));
+  assert.equal(formlar.length, 4); assert.equal(formlar[3].f.chat_id, "-100");
+  assert.equal(o.depo.get("kemal:mpGun:2026-11-14"), "2");
+  // 7) günde en fazla 2: üçüncüsü onaylansa da bugün çıkmaz
+  o.env.__simdi = T(12);
+  await foto(333, "Hemra", "müşteri");
+  await musteriPaylasimAdimi(o.env, T(12, 5));
+  const id3 = JSON.parse(formlar[4].f.reply_markup).inline_keyboard[0][0].callback_data.split(":")[2];
+  o.env.__simdi = T(12, 10);
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `mp:o:${id3}`, message: { chat: { id: 333 }, message_id: 5004 } } }, o.env);
+  assert.equal(formlar.length, 5);
+  assert.match(json.filter((x) => x.url.endsWith("/editMessageCaption")).at(-1).govde.caption, /sırada: bugünkü 2 müşteri paylaşımı doldu/);
+  // son 20 altyazı hafızası tutuluyor
+  assert.equal(JSON.parse(o.depo.get("kemal:mpAltyazi")).length, 4);
+});
