@@ -1687,11 +1687,13 @@ test("köprü cari: anahtarlı köprü Black Rose hesap bakiyelerini gönderir; 
   const ayarOku = async (k) => { const x = (await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k }) })).json()).v; return x == null ? null : JSON.parse(x); };
   assert.equal(await ayarOku("cari:CELAL:VOLONTE"), null); // Celal hesabı gelmediyse kayıt açılmaz
   const r2 = await gonder({ hesaplar: [{ anahtar: "20", ad: "BLACKROSE 20", kart: 0, donemler: {} }, { anahtar: "CK", ad: "CELAL KAYRAN", kart: 0, donemler: { D0005TBLCARIGENELHAREKET: { n: 3, borc: 3000, alacak: 15400 } } }, { anahtar: "CI", ad: "CELAL İNDİRİM", kart: 0, donemler: { D0005TBLCARIGENELHAREKET: { n: 1, borc: 0, alacak: 1250 } } }],
+    celalAdlar: ["CELAL KAYRAN", "CELAL İNDİRİM", "CELAL DİĞER"],
     hareketler: [{ hesap: "20", tablo: "D0005TBLCARIGENELHAREKET", ind: "1", tarih: "2026-11-13", borc: 22310, alacak: 0 }, { hesap: "CK", tablo: "D0005TBLCARIGENELHAREKET", ind: "2", tarih: "2026-11-13", borc: 3000, alacak: 0 }] });
   assert.deepEqual(await r2.json(), { ok: true, hesap: 1, celal: 2 });
   const br = await ayarOku("cari:VOLONTE"), cl = await ayarOku("cari:CELAL:VOLONTE");
   assert.deepEqual([br.hesaplar.map((h) => h.anahtar), br.hareketler.map((h) => h.hesap)], [["20"], ["20"]]);
   assert.deepEqual([cl.hesaplar.map((h) => h.anahtar), cl.hareketler.map((h) => [h.hesap, h.borc])], [["CK", "CI"], [["CK", 3000]]]);
+  assert.deepEqual((await ayarOku("cari:CELALADLAR:VOLONTE")).adlar, ["CELAL KAYRAN", "CELAL İNDİRİM", "CELAL DİĞER"]); // teşhis: bulunan kart adları
 });
 
 test("yeni model (6 Kasım): Selin siteye ekleyince Kemal kartı SADECE Merdan ve Hemra'ya (Patron'a/Venom'a değil); 4 düğme; Venom kontrolü üstte; ✅ → kanala; ⏳ Beklesin → 3 gün sonra yeniden; 2000 yok", async () => {

@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026111402"
+$SURUM = "2026111403"
 
 function Gunluge([string]$m) {
   try {
@@ -228,11 +228,14 @@ function CariBakiyeleri([string]$sifre) {
   }
   # 14 Kasım (Patron): CELAL MUTABAKATI - "Celal Kayran" (CK) ve "Celal Indirim" (CI) cari kartları da aynı yolla okunur (SADECE SELECT).
   # Hata olursa Black Rose okuması etkilenmez; bu kartlar yoksa hiçbir şey değişmez.
+  $celalAdlar = @()
   try {
     # 2026111402: "Celal Kayran" kartı adında CELAL geçmeden de yazılmış olabilir -> KAYRAN da aranır
     $secC = "SELECT [$adSutun] AS AD$ekler" + $(if ($bakiyeVar) { ", BAKIYE" } else { "" }) + " FROM [$T_CARI] WHERE REPLACE([$adSutun], ' ', '') LIKE @b OR REPLACE([$adSutun], ' ', '') LIKE @c"
     foreach ($k in (Sorgu $sifre $secC @{ b = "%CELAL%"; c = "%KAYRAN%" }).Rows) {
       $adC = ([string]$k.AD).Trim()
+      # 2026111403: teşhis - bulunan kart ADLARI (sadece ad) gider; hangisinin Celal Kayran olduğu görülsün
+      if ($celalAdlar.Count -lt 30) { $celalAdlar += $adC }
       $duzC = $adC.ToUpperInvariant() -replace '\s', ''
       $anC = $null
       if ($duzC -match 'KAYRAN') { $anC = "CK" } elseif ($duzC -match 'ND.R.M') { $anC = "CI" }
@@ -322,7 +325,7 @@ function CariBakiyeleri([string]$sifre) {
   }
   $liste = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { @{ anahtar = $_.anahtar; ad = $_.ad; ind = $_.ind; kart = $_.kart; donemler = $_.donemler } })
   $kartlar = @($sonuc.Values | Sort-Object { $_.anahtar } | ForEach-Object { $x = $_; "$($x.ad): " + (($x.anahtarlar.Keys | Sort-Object | ForEach-Object { "$_=$($x.anahtarlar[$_])" }) -join " ") })
-  return @{ hesaplar = $liste; ozel = $ozel; notlar = $notlar; baglar = $baglar; kartlar = $kartlar; adSutun = $adSutun; kartBakiye = $bakiyeVar; hareketler = $hareketler }
+  return @{ hesaplar = $liste; ozel = $ozel; notlar = $notlar; baglar = $baglar; kartlar = $kartlar; adSutun = $adSutun; kartBakiye = $bakiyeVar; hareketler = $hareketler; celalAdlar = $celalAdlar }
 }
 # ---- Yıllık ciro (2 Kasım; Patron: her mağaza AYRI, toplam yok, sadece Patron görür) — SADECE SELECT ----
 # Satış fatura başlıkları (adında SATFAT + BASLIK, tüm dönemler), iptaller hariç: yıl × belge türü × para birimi → adet, TUTAR,
@@ -541,7 +544,7 @@ function CiroGonder([string]$anahtar, $satirlar) {
 }
 
 function CariGonder([string]$anahtar, $c) {
-  $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; baglar = [object[]]$c.baglar; hareketler = [object[]]$c.hareketler; kartBakiye = $c.kartBakiye; birim = "USD" } | ConvertTo-Json -Depth 8 -Compress
+  $govde = @{ zaman = [int]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()); hesaplar = [object[]]$c.hesaplar; ozel = [object[]]$c.ozel; baglar = [object[]]$c.baglar; hareketler = [object[]]$c.hareketler; celalAdlar = [object[]]$c.celalAdlar; kartBakiye = $c.kartBakiye; birim = "USD" } | ConvertTo-Json -Depth 8 -Compress
   Invoke-RestMethod -Method Post -Uri "$($Ayar.venom)/kopru/cari" -TimeoutSec 60 `
     -Headers @{ "X-Magaza" = $Ayar.magaza; "Authorization" = "Bearer $anahtar" } `
     -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($govde)) | Out-Null

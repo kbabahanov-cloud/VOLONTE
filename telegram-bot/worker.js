@@ -3658,6 +3658,9 @@ async function kopruCari(request, env) {
     }));
     await stokIste(env, "/ayar-yaz", { k: `cari:CELAL:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), birim: "USD", hesaplar: cHesap, hareketler: cHareket }) });
   }
+  // Teşhis: köprünün bulduğu Celal / Kayran kart ADLARI (sadece ad; hangi kartın "Celal Kayran" olduğu buradan görülür)
+  const cAdlar = (Array.isArray(g.celalAdlar) ? g.celalAdlar : []).slice(0, 30).map((a) => String(a || "").slice(0, 60)).filter(Boolean);
+  if (cAdlar.length) await stokIste(env, "/ayar-yaz", { k: `cari:CELALADLAR:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), adlar: cAdlar }) });
   return Response.json({ ok: true, hesap: hesaplar.length, celal: cHesap.length });
 }
 
