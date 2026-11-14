@@ -848,7 +848,7 @@ test("11 Kasım RAPOR DÜZENİ: sabah 09:40 en fazla 8 satır, sabit sıra (gene
   assert.match(s[4], /^📣 Kanal dün: \S+ paylaşım$/);
   assert.equal(s[5], "🌐 Site: 2 model, dün 1 eklendi, 1 kaldırıldı");
   assert.match(s[6], /^🏭 Fabrika: /);
-  assert.equal(s[7], "🛡 Venom kendi çözdü: VOLONTE köprüsü (Merdan/Hemra ile)");
+  assert.equal(s[7], "🛡 Venom kendi çözdü: VOLONTE mağaza bilgisayarı sinyal vermiyordu → Aziz ve Hemra'ya sordum, düzeldi"); // 14 Kasım (Patron): "ne oldu → ne yaptım" tek cümle (eski biçimli kayıt da cümleye çevrilir)
   assert.ok(!/<\/?b>|📨|kart/.test(m)); // iç ayrıntı / kart sayısı yok
   o.g.length = 0;
   await yazi(o, PATRON, "/detay");
@@ -2408,7 +2408,7 @@ test("13 Kasım (Patron) İŞ BEKÇİSİ — Venom: 11/15/19'da bakar; önce ken
   assert.deepEqual(o.cagri, ["calistir"]);
   assert.equal(k.kemal.cozuldu, "Kemal'i çalıştırdım: 4 yeni model Hemra'nın onayına gitti");
   assert.equal(patronaGiden(o).filter((x) => /Kemal bugün/.test(x.govde.text)).length, 0);
-  assert.match(o.depo.get(`venom:cozdum:${gun}`), /Kemal'in önerisi kalmamıştı, çalıştırdım \(4 model onayda\)/);
+  assert.match(o.depo.get(`venom:cozdum:${gun}`), /Kemal'in önerisi kalmamıştı → Kemal'i çalıştırdım, 4 yeni model onaya gitti/);
   // 4) çalıştırdı ama model çıkmadı → Patron'a tek satır (sebep + öneri)
   o = kur({ ozet: ozet({ bugunKanal: 3 }), calistir: { ok: true, n: 0, neden: "stokta olup fotoğrafı olan ve 7 gündür paylaşılmamış model kalmadı" } });
   await v.isBekcisi(o.env, ist(14, 15, 2));
@@ -2569,4 +2569,41 @@ test("14 Kasım (Patron) 3448 — ekipten kalan eski 'Sil' kararı kaldırılın
   assert.deepEqual([r.ok, r.eski.kim], [true, "Aziz"]);
   const t = (await stok("toplu", { kodlar: ["3448"] }))["3448"];
   assert.deepEqual([t.gizli, t.silindi], [true, false]); // stoksuz (botlar için gizli) ama silinmiş değil → sitede SOLD OUT
+});
+
+test("14 Kasım (Patron) RAPOR 3 DÜZELTME: fabrika / cari ödemesi günlük gider DEĞİL (ayrı satır); öneri kartı sayısı tek kaynaktan ve 'şu an' diye; 'kendi çözdü' ne oldu → ne yaptım", async () => {
+  const { kasaGideri, kasaCariOdeme } = await import("./ciro.js");
+  const { fabrikaOdemesi } = await import("./cari-takip.js");
+  const { giderNetYazi, fabrikaOdemeSatiri, raporSatisSatiri } = await import("./gunluk-satis.js");
+  const { kemalSayim, sayimYazi, kemalBak } = await import("./is-bekcisi.js");
+  const G = "2026-11-13";
+  const sat = (tablo, tutar, n = 1) => ({ tablo, yil: 2026, tur: "G", doviz: "$", n, tutar });
+  // 1) kasa: toplam 25.222 = cari ödeme (-3) 23.447 + günlük gider 1.775
+  const c = { zaman: 1, satirlar: [sat(`KASA:${G}`, 25222, 6), sat(`KASA:${G}#-3`, 23447, 2), sat(`KASA:${G}#6`, 1200, 3), sat(`KASA:${G}#100`, 575, 1), sat("KASAISLEM:-3", 94882, 16)] };
+  assert.deepEqual(kasaGideri(c, G), [{ birim: "$", tutar: 1775, n: 4 }]);
+  assert.deepEqual(kasaCariOdeme(c, G), [{ birim: "$", tutar: 23447, n: 2 }]);
+  // tür ayrımı gelmemiş gün (eski köprü): gider YAZILMAZ (yanlış sayı yerine hiç); kasa satırı olmayan gün: gider yok
+  assert.equal(kasaGideri({ zaman: 1, satirlar: [sat(`KASA:${G}`, 25222, 6)] }, G), null);
+  assert.deepEqual(kasaGideri(c, "2026-11-12"), []);
+  // fabrika ödemesi: o gün Black Rose carilerine yazılan borç (mutabakattaki ödeme satırıyla aynı kaynak); alacak ve başka gün sayılmaz
+  const defter = { hesaplar: [], hareketler: [{ hesap: "20", tablo: "D0005TBLCARIGENELHAREKET", tarih: G, borc: 22310, alacak: 0 }, { hesap: "00", tablo: "D0005TBLCARIGENELHAREKET", tarih: G, borc: 1137, alacak: 0 }, { hesap: "20", tablo: "D0005TBLCARIGENELHAREKET", tarih: G, borc: 0, alacak: 900 }, { hesap: "20", tablo: "D0005TBLCARIGENELHAREKET", tarih: "2026-11-12", borc: 500, alacak: 0 }] };
+  assert.deepEqual(fabrikaOdemesi(defter, G), { tutar: 23447, n: 2 });
+  assert.equal(fabrikaOdemesi(null, G), null);
+  const ciro = (net) => ({ okuma: 1, satirlar: [{ birim: "$", satis: net, iade: 0, net, fatura: 5, iadeAdet: 0 }] });
+  const v = { gun: G, VOLONTE: { adet: 54, model: 20, ciro: ciro(3403), gider: kasaGideri(c, G), cariOdeme: kasaCariOdeme(c, G), fabrika: fabrikaOdemesi(defter, G) },
+    BLACKROSE: { adet: 56, model: 22, ciro: ciro(3020), gider: [{ birim: "$", tutar: 752, n: 3 }], cariOdeme: [{ birim: "$", tutar: 11000, n: 1 }], fabrika: { tutar: 11000, n: 1 } } };
+  assert.equal(giderNetYazi(v.VOLONTE), "günlük gider 1.775,00 $ · net 1.628,00 $");
+  assert.equal(raporSatisSatiri(v), "Satış: VOLONTE 54 adet, 3.403,00 $ (günlük gider 1.775,00 $ · net 1.628,00 $) · Black Rose 56 adet, 3.020,00 $ (günlük gider 752,00 $ · net 2.268,00 $)");
+  assert.equal(fabrikaOdemeSatiri(v), "🏭 Fabrikaya ödeme: 34.447,00 $ (VOLONTE defteri 23.447,00 $ · Black Rose defteri 11.000,00 $)");
+  assert.equal(fabrikaOdemeSatiri({ gun: G, VOLONTE: { fabrika: { tutar: 0, n: 0 }, cariOdeme: [] }, BLACKROSE: { fabrika: null, cariOdeme: null } }), null); // ödeme yoksa satır yok
+  // kasadan başka cariye de ödeme çıktıysa (ör. Celal) ayrı yazılır, gider sayılmaz
+  assert.equal(fabrikaOdemeSatiri({ gun: G, VOLONTE: { fabrika: { tutar: 1000, n: 1 }, cariOdeme: [{ birim: "$", tutar: 1400, n: 2 }] }, BLACKROSE: {} }), "🏭 Fabrikaya ödeme: 1.000,00 $ (VOLONTE defteri 1.000,00 $) · diğer cari ödemeleri 400,00 $");
+  // 2) kart sayısı tek kaynak: Kemal'in tur kaydı
+  const ozet = { bugunKanal: 1, kuyruk: ["3394", "3395", "3396", "3397", "3398"], tur: { gun: "2026-11-14", soruldu: 12, bekleyen: ["1", "2", "3"] } };
+  const y = kemalSayim(ozet, "2026-11-14");
+  assert.deepEqual(y, { gun: "2026-11-14", soruldu: 12, bekleyen: 3, sira: 5, cikan: 1 });
+  assert.equal(sayimYazi(y), "12 model soruldu, 3 kart onayda, 5 sırada");
+  const kb = kemalBak({ ozet, gun: "2026-11-14", s: 11, simdi: 1 });
+  assert.deepEqual([kb.bekleyen, kb.sira, kb.cikan, kb.soruldu], [y.bekleyen, y.sira, y.cikan, y.soruldu]); // iş bekçisi aynı sayım
+  assert.deepEqual(kemalSayim({ bugunKanal: 0, kuyruk: [], tur: { gun: "2026-11-13", soruldu: 9, bekleyen: ["1", "2", "3", "4"] } }, "2026-11-14"), { gun: "2026-11-14", soruldu: 0, bekleyen: 0, sira: 0, cikan: 0 }); // dünün turu bugünün sayısı olmaz
 });

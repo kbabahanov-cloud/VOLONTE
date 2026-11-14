@@ -38,6 +38,7 @@
 //  Yükleme: npm run build → dist/worker.js (Anthropic kütüphanesi paketlenir).
 
 import { calistirSatiri } from "./kemal-satir.js";
+import { kemalSayim } from "./is-bekcisi.js"; // 14 Kasım: öneri kartı sayısının tek kaynağı (rapor, iş bekçisi, ofis)
 export { calistirSatiri };
 import { kitapOku } from "./kitap.js";
 import { defterTg, defterKarar, defterIs, defterCevap, defterSatir } from "./is-defteri.js";
@@ -3285,7 +3286,17 @@ export async function kagitDenemeAdimi(env, simdi) {
   return sonuc;
 }
 
+// 14 Kasım (Patron): öneri kartı sayısı TEK kaynaktan — Kemal'in tur kaydı. Ofis bu kaydı okur (KV "kemal:sayim"); Venom'un raporu ve
+// iş bekçisi aynı sayımı canlı sorar (kemalOzet → kemalSayim). Sadece sayı değişince yazılır (KV yazma sınırı).
+export async function sayimYaz(env, simdi) {
+  const y = kemalSayim(await kemalOzet(env, simdi), gunAnahtari(simdi));
+  const eski = await env.KAYIT.get("kemal:sayim", "json").catch(() => null);
+  const ayni = eski && ["gun", "soruldu", "bekleyen", "sira", "cikan"].every((k) => eski[k] === y[k]);
+  if (!ayni) await env.KAYIT.put("kemal:sayim", JSON.stringify({ ...y, zaman: simdi }), { expirationTtl: 3 * 86400 });
+  return y;
+}
 export async function fabrikaIsleri(env, simdi) {
+  try { await sayimYaz(env, simdi); } catch { /* sayım yazılamadıysa işler sürer */ }
   try { await soldOutAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:soldoutHata", JSON.stringify({ zaman: simdi, hata: kisaHata(e) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
   try { await yeniRenkAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:yeniRenkHata", JSON.stringify({ zaman: simdi, hata: kisaHata(e) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
   try { await kagitDenemeAdimi(env, simdi); } catch (e) { await env.KAYIT.put("kemal:kagitDenemeSonuc", JSON.stringify({ zaman: simdi, hata: kisaHata(e) }), { expirationTtl: 86400 }).catch(() => null); }

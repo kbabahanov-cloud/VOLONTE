@@ -139,3 +139,12 @@ export async function haftalikOzet(env, simdi, tg, bakiyeOku) {
   await tg(env, "sendMessage", { chat_id: murat(env), text: metin });
   await arsiv(env, "haftalik-ozet", null, metin, simdi);
 }
+
+// 14 Kasım (Patron): FABRİKAYA ÖDEME — o gün Black Rose cari hesaplarına (00 / 15 / 20 / 25) Vegawin'de yazılan ödemeler (borç; devir hariç).
+// Cuma mutabakatındaki "ödemeler" satırıyla AYNI kaynak. null = cari henüz okunmadı.
+export function fabrikaOdemesi(defter, gun) {
+  if (!defter || !Array.isArray(defter.hareketler)) return null;
+  let tutar = 0, n = 0;
+  for (const h of defter.hareketler) if (h.tarih === gun && (Number(h.borc) || 0) > 0 && /^\d{2}$/.test(String(h.hesap)) && !devirMi(h, defter)) { tutar += Number(h.borc); n++; }
+  return { tutar, n };
+}

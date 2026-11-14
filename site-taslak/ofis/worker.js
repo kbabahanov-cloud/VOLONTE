@@ -169,6 +169,7 @@ async function durum(env, simdi) {
   const harcama = { fal: sayi(hFal), claude: sayi(hClaude), openai: sayi(hOpenai), hf: sayi(hHf) };
   harcama.toplam = Math.round((harcama.fal + harcama.claude + harcama.openai + harcama.hf) * 100) / 100;
   // 13 Kasım (Patron): PARA SINIRLARI tek tablo — sınırlar kitaptan (kural 74), harcama her botun aylık sayacından (mikro-dolar)
+  const kemalSayimKaydi = await oku(env, "kemal:sayim").catch(() => null); // 14 Kasım: öneri kartı sayısı — Venom raporu ve iş bekçisiyle AYNI kaynak (Kemal'in tur kaydı)
   const [kitapMetni, donguKaydi, ...botAy] = await Promise.all([okuMetin(env, "kitap:metin"), oku(env, "kemal:dongu"), ...["venom", "kemal", "selin", "sami", "pelin"].map((b) => okuMetin(env, `harcama-ay:${b}:${ay}`))]);
   const paraBolumu = (String(kitapMetni || "").split(/^## PARA SINIRLARI\s*$/m)[1] || "").split(/^## /m)[0];
   const sinirOf = (ad, vars) => { const m = new RegExp(`${ad}\\s+([^·;]+)`).exec(paraBolumu); const a = m && /(\d+(?:[.,]\d+)?)\s*\$\s*\/\s*ay/.exec(m[1]); return a ? Number(a[1].replace(",", ".")) : vars; };
@@ -182,7 +183,7 @@ async function durum(env, simdi) {
     uyarilar: [...(ayna && ayna.bugun >= (ayna.gunlukSinir || 10) * 0.8 ? [`Pelin bugün ${ayna.bugun} $ harcadı (günlük sınır ${ayna.gunlukSinir} $)`] : [])],
     panolar: {
       satis, stok: ozet ? { stokta: ozet.stokta, biten30: ozet.biten30 == null ? null : ozet.biten30, kopruler: (ozet.kopruler || []).map((k) => ({ magaza: k.magaza, son: k.son, adet: k.adet })), uyari: rSami ? rSami.yapilacak || [] : [] } : null,
-      kemal: { dongu: donguKaydi ? { no: donguKaydi.no, x: donguKaydi.x, y: donguKaydi.y } : null, bugunPaylasim: kemalPaylasim.length, turPaylasim: sayi(sayac), onaylayan, siteOnay, son: sonPaylasimlar, rapor: rKemal || null },
+      kemal: { sayim: kemalSayimKaydi && kemalSayimKaydi.gun === bugun ? { soruldu: sayi(kemalSayimKaydi.soruldu), bekleyen: sayi(kemalSayimKaydi.bekleyen), sira: sayi(kemalSayimKaydi.sira) } : null, dongu: donguKaydi ? { no: donguKaydi.no, x: donguKaydi.x, y: donguKaydi.y } : null, bugunPaylasim: kemalPaylasim.length, turPaylasim: sayi(sayac), onaylayan, siteOnay, son: sonPaylasimlar, rapor: rKemal || null },
       selin: { site, rapor: rSelin || null },
       pelin: { isler: pelinIsler.slice(0, 12), kaynakZaman: pelinKaynakZaman, harcama, sinir: sinirlar.pelin, hf, bugun: ayna ? ayna.bugun : null, gunlukSinir: ayna ? ayna.gunlukSinir : 10 },
       venom: { isler: venomIsler, harcama: sayi(venomHarcama), sinir: sinirlar.venom },

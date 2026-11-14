@@ -3,8 +3,11 @@
 // (ciro.js gunlukCiro: satış faturası − satıştan iade = net; para birimi ayrı). İki mağaza ASLA toplanmaz, karşılaştırılmaz.
 // Gider (12 Kasım): Vegawin'de gider sadece KASA DEFTERİNDE ("gider" sütunu) — o günün kasa gideri; net = ciro − kasa gideri
 // (aynı para biriminde; başka para birimi ayrı yazılır, çevrilmez). SADECE Patron'a.
+// 14 Kasım (Patron): fabrika / cari ödemesi borç ödemesidir, günlük gider DEĞİLDİR → giderden ve net'ten HARİÇ; ayrı satır
+// "🏭 Fabrikaya ödeme: …" (o gün Black Rose cari hesaplarına yazılan ödemeler; mutabakattaki ödeme satırıyla aynı kaynak).
 import { stokIste } from "./stokbot.js";
-import { gunlukCiro, kasaGideri, paraYaz } from "./ciro.js";
+import { gunlukCiro, kasaGideri, kasaCariOdeme, paraYaz } from "./ciro.js";
+import { fabrikaOdemesi } from "./cari-takip.js";
 
 const SAAT_FARKI = 3 * 3600;
 const gunA = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
@@ -19,7 +22,7 @@ export async function gunlukSatis(env, simdi, gun = gunA(simdi)) {
     const say = await stokIste(env, "/satis-sayim", { gun, magaza: m }).catch(() => null);
     const kopru = ((ozet && ozet.kopruler) || []).find((k) => String(k.magaza).toUpperCase() === m) || null;
     const c = await ayar(env, `ciro:${m}`);
-    s[m] = { adet: say ? Number(say.toplam) || 0 : null, model: say ? Number(say.model) || 0 : null, indirimli: say ? Number(say.indirimliAdet) || 0 : 0, ciro: gunlukCiro(c, gun), gider: kasaGideri(c, gun), sinyal: kopru ? Math.max(Number(kopru.son) || 0, Number(kopru.kalp) || 0) : null };
+    s[m] = { adet: say ? Number(say.toplam) || 0 : null, model: say ? Number(say.model) || 0 : null, indirimli: say ? Number(say.indirimliAdet) || 0 : 0, ciro: gunlukCiro(c, gun), gider: kasaGideri(c, gun), cariOdeme: kasaCariOdeme(c, gun), fabrika: fabrikaOdemesi(await ayar(env, `cari:${m}`), gun), sinyal: kopru ? Math.max(Number(kopru.son) || 0, Number(kopru.kalp) || 0) : null };
   }
   return s;
 }
@@ -31,17 +34,28 @@ export function ciroYazi(c) {
 // Gider + net: "gider 120,00 $ · net 1.080,00 $"; gider başka para birimindeyse ayrı yazılır (net'e katılmaz). "" = gider kaydı gelmiyor
 export function giderNetYazi(x) {
   if (!x || !x.gider) return "";
-  if (!x.gider.length) return "gider yok";
+  if (!x.gider.length) return "günlük gider yok";
   const g = x.gider.map((y) => `${paraYaz(y.tutar)} ${y.birim}`).join(" + ");
   const c = x.ciro && x.ciro.satirlar.length === 1 ? x.ciro.satirlar[0] : null, ayni = c ? x.gider.find((y) => y.birim === c.birim) : null;
-  return `gider ${g}${c && (ayni || x.gider.length) ? ` · net ${paraYaz(c.net - (ayni ? ayni.tutar : 0))} ${c.birim}${x.gider.some((y) => y.birim !== c.birim) ? " (başka para birimindeki gider düşülmedi)" : ""}` : ""}`;
+  return `günlük gider ${g}${c && (ayni || x.gider.length) ? ` · net ${paraYaz(c.net - (ayni ? ayni.tutar : 0))} ${c.birim}${x.gider.some((y) => y.birim !== c.birim) ? " (başka para birimindeki gider düşülmedi)" : ""}` : ""}`;
+}
+// "🏭 Fabrikaya ödeme: 34.447,00 $ (VOLONTE defteri 23.447,00 $ · Black Rose defteri 11.000,00 $)"; ödeme yoksa null.
+// Kasadan başka carilere de ödeme çıktıysa sonuna "· diğer cari ödemeleri X $" eklenir (bunlar da gider sayılmaz).
+export function fabrikaOdemeSatiri(v) {
+  const p = ["VOLONTE", "BLACKROSE"].map((m) => ({ m, t: v[m] && v[m].fabrika ? v[m].fabrika.tutar : 0 })).filter((x) => x.t > 0.005);
+  const kasaCari = ["VOLONTE", "BLACKROSE"].reduce((a, m) => a + ((v[m] && v[m].cariOdeme) || []).filter((y) => y.birim === "$").reduce((b, y) => b + y.tutar, 0), 0);
+  const top = p.reduce((a, x) => a + x.t, 0), diger = kasaCari - top;
+  if (!p.length && !(diger > 0.5)) return null;
+  const ek = diger > 0.5 ? `${p.length ? " · " : ""}diğer cari ödemeleri ${paraYaz(diger)} $` : "";
+  return `🏭 Fabrikaya ödeme: ${p.length ? `${paraYaz(top)} $ (${p.map((x) => `${AD[x.m]} defteri ${paraYaz(x.t)} $`).join(" · ")})` : ""}${ek}`.replace(": · ", ": ");
 }
 // Tek mağaza satırı: "Black Rose: 6 adet (2 model) · ciro: 1.250,00 $ · 3 fatura"
 export function magazaSatiri(v, m) {
   const x = v[m];
   if (!x || x.adet == null) return `${AD[m]}: satış kaydı okunamadı`;
   const gn = giderNetYazi(x);
-  return `${AD[m]}: ${x.adet} adet (${x.model} model)${x.indirimli ? ` + indirimli ${x.indirimli}` : ""} · ${ciroYazi(x.ciro)}${gn ? ` · ${gn}` : ""}`;
+  const fb = x.fabrika && x.fabrika.tutar > 0.005 ? ` · fabrikaya ödeme ${paraYaz(x.fabrika.tutar)} $ (gider sayılmaz)` : "";
+  return `${AD[m]}: ${x.adet} adet (${x.model} model)${x.indirimli ? ` + indirimli ${x.indirimli}` : ""} · ${ciroYazi(x.ciro)}${gn ? ` · ${gn}` : ""}${fb}`;
 }
 // Patron'un sorusuna cevap (en fazla 4 satır). magaza: "VOLONTE" | "BLACKROSE" | null (ikisi AYRI satır)
 export function gunlukSatisMetni(v, simdi, magaza = null) {

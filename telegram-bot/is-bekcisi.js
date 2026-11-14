@@ -6,14 +6,22 @@ export const BEKCI_SAATLERI = [11, 15, 19];
 export const kemalBeklenen = (s) => Math.max(0, Math.min(12, Math.floor(((s - 9) * 60) / 62) + 1));
 const yeterli = (cikan, beklenen) => cikan >= Math.max(1, Math.floor(beklenen * 0.7)); // onay ekibe bağlıdır: %70'i yeter
 
+// 14 Kasım (Patron): ÖNERİ KARTI SAYISININ TEK KAYNAĞI — Kemal'in tur kaydı (kemalOzet). Rapor, iş bekçisi ve ofis aynı sayıyı
+// buradan verir: soruldu = bugünkü turda sorulan model, bekleyen = şu an onay bekleyen kart, sira = onaylanıp kanala çıkmayı
+// bekleyen model, cikan = bugün kanala çıkan model. Kart = model (aynı kart iki kişiye gitse de BİR sayılır).
+export function kemalSayim(ozet, gun) {
+  if (!ozet) return null;
+  const t = ozet.tur && ozet.tur.gun === gun ? ozet.tur : null;
+  return { gun, soruldu: t ? Number(t.soruldu) || 0 : 0, bekleyen: t ? (t.bekleyen || []).length : 0, sira: (ozet.kuyruk || []).length, cikan: Number(ozet.bugunKanal) || 0 };
+}
+export const sayimYazi = (y) => (y ? `${y.soruldu} model soruldu, ${y.bekleyen} kart onayda, ${y.sira} sırada` : "Kemal'in kaydı okunamadı");
 // Kemal: o saate kadar beklenen paylaşım çıktı mı; çıkmadıysa sebep ne, kim çözer
 export function kemalBak({ ozet, gun, s, simdi, mesai = true, onceHatirlatti = false }) {
   const beklenen = kemalBeklenen(s);
   if (!ozet) return { ok: false, cikan: null, beklenen, sebep: "Kemal'e ulaşılamadı", oneri: "Claude Code baksın", cozum: null };
-  const cikan = Number(ozet.bugunKanal) || 0;
-  const t = ozet.tur && ozet.tur.gun === gun ? ozet.tur : null;
-  const bekleyen = t ? (t.bekleyen || []).length : 0, sira = (ozet.kuyruk || []).length;
-  const taban = { cikan, beklenen, bekleyen, sira };
+  const y = kemalSayim(ozet, gun), t = ozet.tur && ozet.tur.gun === gun ? ozet.tur : null;
+  const { cikan, bekleyen, sira } = y;
+  const taban = { cikan, beklenen, bekleyen, sira, soruldu: y.soruldu };
   if (yeterli(cikan, beklenen) || cikan >= 12) return { ok: true, ...taban };
   if (sira > 0) {
     if (ozet.sonPaylasim && simdi - ozet.sonPaylasim > 2 * 3600 + 600) return { ok: false, ...taban, sebep: `onaylanan ${sira} model sırada ama 2 saattir kanala çıkmadı`, oneri: "Claude Code baksın", cozum: null };
