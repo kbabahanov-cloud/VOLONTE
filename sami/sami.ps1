@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026111401"
+$SURUM = "2026111402"
 
 function Gunluge([string]$m) {
   try {
@@ -229,7 +229,9 @@ function CariBakiyeleri([string]$sifre) {
   # 14 Kasım (Patron): CELAL MUTABAKATI - "Celal Kayran" (CK) ve "Celal Indirim" (CI) cari kartları da aynı yolla okunur (SADECE SELECT).
   # Hata olursa Black Rose okuması etkilenmez; bu kartlar yoksa hiçbir şey değişmez.
   try {
-    foreach ($k in (Sorgu $sifre $sec @{ b = "%CELAL%" }).Rows) {
+    # 2026111402: "Celal Kayran" kartı adında CELAL geçmeden de yazılmış olabilir -> KAYRAN da aranır
+    $secC = "SELECT [$adSutun] AS AD$ekler" + $(if ($bakiyeVar) { ", BAKIYE" } else { "" }) + " FROM [$T_CARI] WHERE REPLACE([$adSutun], ' ', '') LIKE @b OR REPLACE([$adSutun], ' ', '') LIKE @c"
+    foreach ($k in (Sorgu $sifre $secC @{ b = "%CELAL%"; c = "%KAYRAN%" }).Rows) {
       $adC = ([string]$k.AD).Trim()
       $duzC = $adC.ToUpperInvariant() -replace '\s', ''
       $anC = $null
