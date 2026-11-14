@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026111102"
+$SURUM = "2026111401"
 
 function Gunluge([string]$m) {
   try {
@@ -226,6 +226,20 @@ function CariBakiyeleri([string]$sifre) {
     foreach ($s in $kartAnahtar) { $v = Deger $k["K_$s"]; if ($v) { $anahtarlar[$s] = $v } }
     $sonuc[$an] = @{ anahtar = $an; ad = ([string]$k.AD).Trim(); ind = $anahtarlar["IND"]; anahtarlar = $anahtarlar; kart = $(if ($bakiyeVar) { Num $k.BAKIYE } else { $null }); donemler = @{} }
   }
+  # 14 Kasım (Patron): CELAL MUTABAKATI - "Celal Kayran" (CK) ve "Celal Indirim" (CI) cari kartları da aynı yolla okunur (SADECE SELECT).
+  # Hata olursa Black Rose okuması etkilenmez; bu kartlar yoksa hiçbir şey değişmez.
+  try {
+    foreach ($k in (Sorgu $sifre $sec @{ b = "%CELAL%" }).Rows) {
+      $adC = ([string]$k.AD).Trim()
+      $duzC = $adC.ToUpperInvariant() -replace '\s', ''
+      $anC = $null
+      if ($duzC -match 'KAYRAN') { $anC = "CK" } elseif ($duzC -match 'ND.R.M') { $anC = "CI" }
+      if (-not $anC -or $sonuc.ContainsKey($anC)) { continue }
+      $anahtarlarC = @{}
+      foreach ($s in $kartAnahtar) { $v = Deger $k["K_$s"]; if ($v) { $anahtarlarC[$s] = $v } }
+      $sonuc[$anC] = @{ anahtar = $anC; ad = $adC; ind = $anahtarlarC["IND"]; anahtarlar = $anahtarlarC; kart = $(if ($bakiyeVar) { Num $k.BAKIYE } else { $null }); donemler = @{} }
+    }
+  } catch { }
   $tablolar = Sorgu $sifre "SELECT TABLE_NAME AS AD FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE @a ORDER BY TABLE_NAME" @{ a = "$($Ayar.firma)D____TBLCARI%HAREKET%" }
   $notlar = @()
   $hareketler = @()
