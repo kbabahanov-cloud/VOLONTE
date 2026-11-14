@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026111403"
+$SURUM = "2026111404"
 
 function Gunluge([string]$m) {
   try {
@@ -238,7 +238,8 @@ function CariBakiyeleri([string]$sifre) {
       if ($celalAdlar.Count -lt 30) { $celalAdlar += $adC }
       $duzC = $adC.ToUpperInvariant() -replace '\s', ''
       $anC = $null
-      if ($duzC -match 'KAYRAN') { $anC = "CK" } elseif ($duzC -match 'ND.R.M') { $anC = "CI" }
+      # 2026111404: Vegawin'de kart "CELAL KARAYAN" diye yazılı; sade "CELAL" kartı da var (CX: sadece Patron'a bilgi, mutabakata girmez)
+      if ($duzC -match 'KAYRAN|KARAYAN') { $anC = "CK" } elseif ($duzC -match 'ND.R.M') { $anC = "CI" } elseif ($duzC -eq 'CELAL') { $anC = "CX" }
       if (-not $anC -or $sonuc.ContainsKey($anC)) { continue }
       $anahtarlarC = @{}
       foreach ($s in $kartAnahtar) { $v = Deger $k["K_$s"]; if ($v) { $anahtarlarC[$s] = $v } }
@@ -423,6 +424,18 @@ function KasaGiderOku([string]$sifre) {
       $kxGun = ([string]$kx.G).Trim()
       if ($kxGun -notmatch '^\d{4}-\d{2}-\d{2}$') { continue }
       $kgSatir += @{ tablo = "KASA:$kxGun"; yil = [int]$kxGun.Substring(0, 4); tur = "G"; doviz = $(if ($ktDoviz) { ([string]$kx.D).Trim() } else { "" }); n = [int]$kx.N; tutar = (Num $kx.TOPLAMI); aratoplam = $null }
+    }
+    # 2026111404 (Patron, 14 Kasım): gün × para birimi × işlem türü — cari / fabrika ödemesi günlük gider sayılmasın diye
+    # tür türüne ayrı gider. "tablo" = "KASA:yyyy-AA-gg#<tür>" (eski sunucu bu satırı yok sayar). Açıklama / kişi ASLA okunmaz.
+    if ($ktSut -contains "ISLEM") {
+      try {
+        $kdSorgu = "SELECT CONVERT(char(10), TARIH, 23) AS G, CAST(ISLEM AS NVARCHAR(40)) AS I" + $(if ($ktDoviz) { ", [$ktDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(GIDER AS FLOAT)) AS TOPLAMI FROM [$ktAd] WHERE GIDER > 0 AND TARIH >= @bas AND TARIH < @bit GROUP BY CONVERT(char(10), TARIH, 23), CAST(ISLEM AS NVARCHAR(40))" + $(if ($ktDoviz) { ", [$ktDoviz]" } else { "" })
+        foreach ($kd in (Sorgu $sifre $kdSorgu @{ bas = $kgBas; bit = $kgBit }).Rows) {
+          $kdGun = ([string]$kd.G).Trim()
+          if ($kdGun -notmatch '^\d{4}-\d{2}-\d{2}$') { continue }
+          $kgSatir += @{ tablo = ("KASA:$kdGun#" + ([string]$kd.I).Trim()); yil = [int]$kdGun.Substring(0, 4); tur = "G"; doviz = $(if ($ktDoviz) { ([string]$kd.D).Trim() } else { "" }); n = [int]$kd.N; tutar = (Num $kd.TOPLAMI); aratoplam = $null }
+        }
+      } catch { }
     }
     if ($ktSut -contains "ISLEM") {
       try {

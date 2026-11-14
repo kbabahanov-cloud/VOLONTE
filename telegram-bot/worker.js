@@ -3647,7 +3647,7 @@ async function kopruCari(request, env) {
   await stokIste(env, "/ayar-yaz", { k: `cari:${magaza}`, v: JSON.stringify({ zaman: Math.floor(Date.now() / 1000), kartBakiye: g.kartBakiye !== false, birim: "USD", hesaplar, ozel, baglar, hareketler }) });
   // 14 Kasım (Patron): CELAL MUTABAKATI — köprü "Celal Kayran" (CK) ve "Celal İndirim" (CI) carilerini de gönderir; AYRI kayda yazılır
   // ("cari:CELAL:<MAĞAZA>"), Black Rose kaydına ve Fuat'ın mutabakatına karışmaz. Sadece Patron ve Celal'e giden mutabakatta kullanılır.
-  const celalMi = (a) => /^C[KI]$/.test(String(a));
+  const celalMi = (a) => /^C[KIX]$/.test(String(a)); // CX = sade "CELAL" kartı (sadece Patron'a bilgi; mutabakat CK + CI okur)
   const cHesap = g.hesaplar.filter((h) => celalMi(h.anahtar)).map((h) => ({
     anahtar: String(h.anahtar), ad: String(h.ad || "").slice(0, 60), kart: sayi(h.kart),
     donemler: Object.fromEntries(Object.entries(h.donemler || {}).slice(0, 20).map(([d, x]) => [String(d).slice(0, 60), { n: Number(x.n) || 0, borc: sayi(x.borc), alacak: sayi(x.alacak), ilk: x.ilk || null, son: x.son || null }])),
