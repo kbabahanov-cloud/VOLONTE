@@ -1,5 +1,27 @@
 [
  {
+  "kod": "3526",
+  "baslik": "Kimono Top Palazzo Set",
+  "kategori": "sets",
+  "aciklama": {
+   "en": "A two-piece set pairing a plum kimono-style top with high-waisted wide-leg palazzo trousers. The top features a mandarin collar, front button closure, wide draped sleeves and an adjustable tie at the back, while a bold cream geometric print carries through the hem and trousers. Ideal for events, visits and elegant daywear. Made in Istanbul with careful workmanship.",
+   "fr": "Un ensemble deux pièces associant un haut style kimono prune à un pantalon palazzo taille haute et jambes larges. Le haut se distingue par son col officier, son boutonnage devant, ses larges manches drapées et son lien réglable au dos, tandis qu'un imprimé géométrique crème affirmé orne l'ourlet et le pantalon. Parfait pour les cérémonies, les visites et les journées élégantes. Fabriqué à Istanbul avec un savoir-faire soigné.",
+   "pt": "Um conjunto de duas peças que combina uma blusa estilo quimono em ameixa com calça pantalona de cintura alta e pernas largas. A blusa tem gola padre, abotoamento frontal, mangas amplas e drapeadas e laço ajustável nas costas, enquanto um marcante estampado geométrico creme aparece na barra e na calça. Ideal para eventos, visitas e um dia a dia elegante. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/3526/1.jpg",
+   "galeri/3526/2.jpg",
+   "galeri/3526/3.jpg",
+   "galeri/3526/4.jpg"
+  ],
+  "videolar": [
+   "selin/3526/0"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-14"
+ },
+ {
   "kod": "3267",
   "baslik": "Cold-Shoulder Cargo Trouser Set",
   "kategori": "sets",
