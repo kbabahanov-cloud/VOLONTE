@@ -203,6 +203,14 @@ export class StokDeposu {
     return { ok: true, durum, mesajlar: JSON.parse(k.mesajlar || "[]") };
   }
 
+  // 14 Kasım (Patron): ekipten birinin ESKİ "Sil" düğmesiyle verdiği gizleme kararı kaldırılır (silme sadece Patron'undur — kural 25, 41);
+  // model stoğu bittiği için sitede "SOLD OUT" olarak görünür, stok gelince kendiliğinden geri gelir. Sadece "gizli" kararı siler.
+  kararTemizle({ kod }) {
+    const k = this.tek("SELECT * FROM karar WHERE kod = ?", String(kod));
+    if (!k || k.durum !== "gizli") return { ok: false, kod: String(kod), durum: k ? k.durum : null };
+    this.sql.exec("DELETE FROM karar WHERE kod = ?", String(kod));
+    return { ok: true, kod: String(kod), eski: { durum: k.durum, kim: k.kim, zaman: k.zaman } };
+  }
   // Görünmeyen modeller: toplam adedi ≤ 0 olanlar ve "Sil" ile gizlenenler.
   gizliler() {
     const stoksuz = this.hepsi("SELECT kod FROM urun GROUP BY kod HAVING SUM(adet) <= 0").map((r) => r.kod);
@@ -722,6 +730,7 @@ export class StokDO {
     if (yol === "/isd-isaretle") return cevap(d.isdIsaretle(g));
     if (yol === "/isd-kart-kapat") return cevap(d.isdKartKapat(g));
     if (yol === "/karar-kapat") return cevap(d.kararKapat(g));
+    if (yol === "/karar-temizle") return cevap(d.kararTemizle(g)); // 14 Kasım: eski ekip "Sil" kararını kaldır (Claude Code, Patron onayıyla)
     if (yol === "/isd-kod") return cevap(d.hepsi("SELECT * FROM isd WHERE kod = ? AND zaman >= ? AND deneme = 0 ORDER BY zaman LIMIT 400", String(g.kod), Number(g.basla) || 0));
     if (yol === "/isd-onar") return cevap(d.isdOnar(g));
     if (yol === "/is-yaz") return cevap(d.isYaz(g));

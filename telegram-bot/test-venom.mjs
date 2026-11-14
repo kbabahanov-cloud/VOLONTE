@@ -2555,3 +2555,18 @@ test("13 Kasım (Patron, B1) HAFTALIK LİSTE: pazartesi 10:00'da Hemra'ya 🔥 h
   assert.ok(aksam.includes("🔥 Hızlı satan 5: 3394, 3573"), aksam.join(" | "));
   assert.ok(aksam.length <= 10);
 });
+
+test("14 Kasım (Patron) 3448 — ekipten kalan eski 'Sil' kararı kaldırılınca model 'silindi' sayılmaz (sitede SOLD OUT olur); 'gizli' olmayan karara dokunulmaz", async () => {
+  const o = ortam();
+  const stok = async (yol, g) => (await o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) })).json();
+  await stok("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3448", adet: 4, fiyat: 38 }, { kod: "3449", adet: 4, fiyat: 38 }], simdi: 100 });
+  await stok("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3448", adet: 0, fiyat: 38 }, { kod: "3449", adet: 0, fiyat: 38 }], simdi: 200 }); // stok bitti → eski düzende "soru"
+  assert.equal((await stok("karar", { kod: "3448", islem: "s", kim: "Aziz", simdi: 300 })).durum, "gizli"); // Aziz eski "Sil" düğmesine basmıştı
+  assert.equal((await stok("karar", { kod: "3449", islem: "r", kim: "Hemra", simdi: 300 })).durum, "repete");
+  assert.deepEqual([(await stok("toplu", { kodlar: ["3448"] }))["3448"].silindi, (await stok("toplu", { kodlar: ["3449"] }))["3449"].silindi], [true, false]);
+  assert.deepEqual(await stok("karar-temizle", { kod: "3449" }), { ok: false, kod: "3449", durum: "repete" }); // gizli değil: dokunulmaz
+  const r = await stok("karar-temizle", { kod: "3448" });
+  assert.deepEqual([r.ok, r.eski.kim], [true, "Aziz"]);
+  const t = (await stok("toplu", { kodlar: ["3448"] }))["3448"];
+  assert.deepEqual([t.gizli, t.silindi], [true, false]); // stoksuz (botlar için gizli) ama silinmiş değil → sitede SOLD OUT
+});

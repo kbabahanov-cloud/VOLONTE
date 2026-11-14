@@ -2366,6 +2366,7 @@ async function claudeIslemAdimi(env, simdi) {
   for (const is of l.slice(0, 12)) {
     if (is.tur === "kararVer") sonuc.push({ tur: is.tur, kod: is.kod, ...(await kararVerildi(env, is.kod, is.karar || "kapat", simdi, { aciklama: is.aciklama || "" })) }); // model için karar: bütün açık kartlar kapanır
     else if (is.tur === "bekciDene") sonuc.push({ tur: is.tur, ...(await isBekcisi(env, simdi, { kuru: !is.kayit })) }); // 13 Kasım: iş bekçisi kuru çalışma (hiçbir şey göndermez)
+    else if (is.tur === "kararTemizle") { const r = await stokIste(env, "/karar-temizle", { kod: String(is.kod) }).catch((e) => ({ ok: false, hata: String(e.message || e) })); if (r && r.ok) await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `${r.kod}: ekipten kalan eski "Sil" kararı kaldırıldı (${r.eski.kim || "?"}); model stoğu bittiği için SOLD OUT olarak görünür`, kod: r.kod }).catch(() => null); sonuc.push({ tur: is.tur, ...r }); } // 14 Kasım (Patron): 3448
     else if (is.tur === "haftalikOku") { const h = await haftalikListeMesajlari(env, simdi, { hic: true }); sonuc.push({ tur: is.tur, mesajlar: h.mesajlar, hizli: h.v && h.v.hizli, hicSayi: h.v && h.v.hic ? h.v.hic.length : null, ilkGun: h.v && h.v.ilkGun }); } // 13 Kasım (B1): haftalık listenin gerçek hali (göndermez)
     else if (is.tur === "tasarimOrnekOku") sonuc.push({ tur: is.tur, ...(await botaSor(env, "kemal", "tasarimOrnek") || { ok: false, hata: "Kemal'e ulaşılamadı" }) }); // 13 Kasım (B2): örnek (göndermez)
     else if (is.tur === "sozEkle") { await sozEkle(env, is.soz, is.zaman || simdi); sonuc.push({ tur: is.tur, ok: true }); }
@@ -2405,7 +2406,7 @@ async function claudeIslemAdimi(env, simdi) {
       await stokIste(env, "/isd-isaretle", { idler: (is.idler || []).slice(0, 100), alan: "durum", deger: String(is.neden || "kapandi").slice(0, 20) }).catch(() => null);
       sonuc.push({ tur: is.tur, n: (is.idler || []).length });
     } else if (is.tur === "hemraListeOku") { const l = await oku(env, "venom:hemraListe", []); sonuc.push({ tur: is.tur, bekleyen: l.filter((x) => x.durum === "bekliyor").map((x) => ({ ozet: x.ozet, gonderildi: Boolean(x.gonderildi) })), toplam: l.length }); }
-    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
+    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30", "/karar-liste"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
   }
   await kaydet(env, "venom:claudeIslemSonuc", { zaman: simdi, sonuc }, 3 * 86400);
