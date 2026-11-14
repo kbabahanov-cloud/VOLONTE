@@ -45,7 +45,7 @@ $DEPO = if ($null -ne $Ayar.depo) { [int]$Ayar.depo } else { 1 }
 $BAG_ADAYLARI = @("STOKNO", "STOKIND", "STOK_IND", "STOKID", "STOK_ID", "STOK")
 $PARTI = 200   # bir gönderimde en fazla ürün
 # Köprü sürümü (2 Kasım): kendini güncelleme bununla karşılaştırır. sami/yayinla.sh yeni sürümü Cloudflare'e koyar.
-$SURUM = "2026111404"
+$SURUM = "2026111405"
 
 function Gunluge([string]$m) {
   try {
@@ -408,7 +408,7 @@ function GunlukCiroOku([string]$sifre) {
 # ---- Kasa gideri (12 Kasım; Patron: "akşam raporuna toplam gider ve net") — SADECE SELECT ----
 # Vegawin'de gider sadece kasa defterinde (adı TBLKASA ile biten tablolar: TARIH, GELIR, GIDER, PARABIRIMI) duruyor; masraf tabloları boş.
 # DÜN ve BUGÜN: gün × para birimi → kasadan çıkan (GIDER) toplamı ve satır sayısı. Ayrıca son 35 günün işlem türü dağılımı
-# (ISLEM sütunu: tür adı, adet, toplam) — giderin neyden oluştuğunu görmek için. Açıklama, kişi adı, müşteri ASLA okunmaz.
+# (ISLEM sütunu: tür adı, adet, toplam) — giderin neyden oluştuğunu görmek için. 14 Kasım (Patron): kasa AÇIKLAMASI sadece kişisel / ortak ayrımı için okunur (2026111405); müşteri / kişi kartı okunmaz.
 # Ciro satırlarıyla aynı kalıpta gider: "tablo" = "KASA:yyyy-AA-gg" (tur "G") ve "KASAISLEM:<tür>" (tur "G").
 function KasaGiderOku([string]$sifre) {
   $kgSatir = @()
@@ -426,14 +426,35 @@ function KasaGiderOku([string]$sifre) {
       $kgSatir += @{ tablo = "KASA:$kxGun"; yil = [int]$kxGun.Substring(0, 4); tur = "G"; doviz = $(if ($ktDoviz) { ([string]$kx.D).Trim() } else { "" }); n = [int]$kx.N; tutar = (Num $kx.TOPLAMI); aratoplam = $null }
     }
     # 2026111404 (Patron, 14 Kasım): gün × para birimi × işlem türü — cari / fabrika ödemesi günlük gider sayılmasın diye
-    # tür türüne ayrı gider. "tablo" = "KASA:yyyy-AA-gg#<tür>" (eski sunucu bu satırı yok sayar). Açıklama / kişi ASLA okunmaz.
+    # tür türüne ayrı gider. "tablo" = "KASA:yyyy-AA-gg#<tür>" (eski sunucu bu satırı yok sayar).
     if ($ktSut -contains "ISLEM") {
       try {
-        $kdSorgu = "SELECT CONVERT(char(10), TARIH, 23) AS G, CAST(ISLEM AS NVARCHAR(40)) AS I" + $(if ($ktDoviz) { ", [$ktDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(GIDER AS FLOAT)) AS TOPLAMI FROM [$ktAd] WHERE GIDER > 0 AND TARIH >= @bas AND TARIH < @bit GROUP BY CONVERT(char(10), TARIH, 23), CAST(ISLEM AS NVARCHAR(40))" + $(if ($ktDoviz) { ", [$ktDoviz]" } else { "" })
-        foreach ($kd in (Sorgu $sifre $kdSorgu @{ bas = $kgBas; bit = $kgBit }).Rows) {
+        # 2026111405 (Patron, 14 Kasım): açıklamasında "Murat aldı", "ortak", "avans" geçen çıkış KİŞİSEL / ORTAK'tır, günlük gider
+        # sayılmaz -> satırın sonuna "#K" eklenir. Açıklamanın KENDİSİ bu satırlarda gitmez (sadece işaret).
+        $kdKisiAday = @($(if ($ktSut -contains "ACIKLAMA") { "CASE WHEN ACIKLAMA LIKE '%MURAT%ALD%' OR ACIKLAMA LIKE '%ORTAK%' OR ACIKLAMA LIKE '%AVANS%' THEN 'K' ELSE '' END" } else { "''" }), "''")
+        $kdRows = $null
+        foreach ($kdKisi in $kdKisiAday) { # açıklamalı sorgu hata verirse açıklamasız (eski) sorguya düşer; tür ayrımı kaybolmaz
+          try {
+            $kdSorgu = "SELECT CONVERT(char(10), TARIH, 23) AS G, CAST(ISLEM AS NVARCHAR(40)) AS I, $kdKisi AS K" + $(if ($ktDoviz) { ", [$ktDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(GIDER AS FLOAT)) AS TOPLAMI FROM [$ktAd] WHERE GIDER > 0 AND TARIH >= @bas AND TARIH < @bit GROUP BY CONVERT(char(10), TARIH, 23), CAST(ISLEM AS NVARCHAR(40)), $kdKisi" + $(if ($ktDoviz) { ", [$ktDoviz]" } else { "" })
+            $kdRows = (Sorgu $sifre $kdSorgu @{ bas = $kgBas; bit = $kgBit }).Rows
+            break
+          } catch { $kdRows = $null }
+        }
+        foreach ($kd in @($kdRows)) {
+          if (-not $kd) { continue }
           $kdGun = ([string]$kd.G).Trim()
           if ($kdGun -notmatch '^\d{4}-\d{2}-\d{2}$') { continue }
-          $kgSatir += @{ tablo = ("KASA:$kdGun#" + ([string]$kd.I).Trim()); yil = [int]$kdGun.Substring(0, 4); tur = "G"; doviz = $(if ($ktDoviz) { ([string]$kd.D).Trim() } else { "" }); n = [int]$kd.N; tutar = (Num $kd.TOPLAMI); aratoplam = $null }
+          $kgSatir += @{ tablo = ("KASA:$kdGun#" + ([string]$kd.I).Trim() + $(if (([string]$kd.K).Trim() -eq "K") { "#K" } else { "" })); yil = [int]$kdGun.Substring(0, 4); tur = "G"; doviz = $(if ($ktDoviz) { ([string]$kd.D).Trim() } else { "" }); n = [int]$kd.N; tutar = (Num $kd.TOPLAMI); aratoplam = $null }
+        }
+      } catch { }
+    }
+    # 2026111405: keşif — son 35 günün kasa çıkışları işlem türü + açıklama (ilk 40 harf) bazında; hangi hareketlerin kişisel / ortak
+    # sayılacağı Patron'a gösterilsin diye. Sadece Sami'nin gizli deposuna gider.
+    if (($ktSut -contains "ISLEM") -and ($ktSut -contains "ACIKLAMA")) {
+      try {
+        $kaSorgu = "SELECT TOP 60 CAST(ISLEM AS NVARCHAR(40)) AS I, LEFT(LTRIM(RTRIM(CAST(ACIKLAMA AS NVARCHAR(200)))), 40) AS A" + $(if ($ktDoviz) { ", [$ktDoviz] AS D" } else { "" }) + ", COUNT(*) AS N, SUM(CAST(GIDER AS FLOAT)) AS TOPLAMI FROM [$ktAd] WHERE GIDER > 0 AND TARIH >= @bas GROUP BY CAST(ISLEM AS NVARCHAR(40)), LEFT(LTRIM(RTRIM(CAST(ACIKLAMA AS NVARCHAR(200)))), 40)" + $(if ($ktDoviz) { ", [$ktDoviz]" } else { "" }) + " ORDER BY SUM(CAST(GIDER AS FLOAT)) DESC"
+        foreach ($ka in (Sorgu $sifre $kaSorgu @{ bas = (Get-Date).Date.AddDays(-35) }).Rows) {
+          $kgSatir += @{ tablo = ("KASA:AC#" + ([string]$ka.I).Trim() + "#" + ([string]$ka.A).Trim()); yil = [int](Get-Date).Year; tur = "G"; doviz = $(if ($ktDoviz) { ([string]$ka.D).Trim() } else { "" }); n = [int]$ka.N; tutar = (Num $ka.TOPLAMI); aratoplam = $null }
         }
       } catch { }
     }
