@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-14.1
+Sürüm: 2026-11-14.2
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -122,3 +122,4 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 79. Fabrika bir modelin kartına hiç cevap vermemişken aynı model yeniden istenirse ikinci kart gitmez; Hemra'ya "KOD: fabrika hâlâ cevap vermedi, yeniden sorulmadı · bugün N adet daha istendi" yazılır, eski kart ve hatırlatması sürer.
 80. Her pazartesi 10:00'da Hemra'ya haftanın en çok satan 5 modeli gider (7 günlük satış ve kalan stok; adet önerisi yoktur, repetesi açık model listeye girmez); Patron'a akşam raporunda tek satır yazılır. Kararı Hemra verir, para harcayan hiçbir iş bu listeden otomatik başlamaz.
 81. Stoğu biten model silinmez: kanalda ve sitede "SOLD OUT" yazısıyla görünür kalır, stok geri gelince aynı paylaşım "BACK IN STOCK" olur. Patron "sil" deyince Venom önce stoğa bakar: stok bitmişse kartsız SOLD OUT yapar; stok varsa tek satır "stok var, yine de sileyim mi?" diye sorar ve Patron "evet" demeden silmez.
+82. Claude Code mevcut / eski HERHANGİ bir işe (sadece korunan akışlara değil) dokunacaksa önce Patron'a haber verir: "Şu işe dokunuyorum: X — eski hali: … — yeni hali: … — neden: …"; Patron "tamam" demeden o değişikliği yapmaz. Yeni eklenen iş eski işi değiştiremez; değiştirecekse yine önce haber verir.
