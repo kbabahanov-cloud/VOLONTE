@@ -19,6 +19,7 @@ import { MOD_SATIR, modOku, modBasla, modBitir } from "./deneme-modu.js";
 import { kanitKaydet } from "./tg-guvenli.js";
 import { claudeIstemci, claudeVar, claudeTur, openaiFetch, openaiVar } from "./ai-istemci.js";
 import { stokIste } from "./stokbot.js";
+import { modelFiyatMetni } from "./fiyat.js"; // 14 Kasım: model koduyla Vegawin satış fiyatı (sadece Patron'a)
 import { bakiyeOku, mutabakatIcerigi, arsiv, fuatSuzgec, tarihSaat } from "./mutabakat.js";
 import { ciroBolumu } from "./ciro.js";
 import { silKuyrugu, STOK_KURALI } from "./sil.js";
@@ -41,7 +42,7 @@ import { markaKesin } from "./yayin-kontrol.js";
 import { siparisTaslagi } from "./repete-rapor.js";
 import { acikRepete, engelMetni } from "./repete-kart.js"; // 11 Kasım: repete kartı + kural 43
 import { defterOku, defterSatirYazi, fabrikaGidenMetni, repeteDurumMetni, repeteKayitlari } from "./tek-defter.js"; // 11 Kasım: TEK DEFTER
-import { gunlukSatis, gunlukSatisMetni, raporSatisSatiri, fabrikaOdemeSatiri } from "./gunluk-satis.js"; // 11 Kasım: günlük adet + ciro
+import { gunlukSatis, gunlukSatisMetni, raporSatisSatiri, fabrikaOdemeSatiri, kisiselSatiri } from "./gunluk-satis.js"; // 11 Kasım: günlük adet + ciro
 import { fabrikayaGidenler } from "./fabrika.js";
 import { yeniAkisAcik } from "./fabrika.js"; // 11 Kasım: yeni akış gerçek akışa bağlıysa repete SADECE kartla (eski düz yazı yolu kapalı)
 import { kanitGecmisi, kanitMetni, kanitTarih, MAGAZA_BASLIK } from "./fabrika.js";
@@ -299,8 +300,8 @@ export async function emirAdimi(env, simdi) {
       await botaSor(env, e.bot, "mesaj", e.metin);
     } else {
       e.durum = "olmadi";
-      await yetenekNotu(env, `Venom emri yapılmadı (${e.deneme} deneme, iş defterinde iz yok): ${e.bot} ← "${e.metin}"`, simdi);
-      await yaz(env, `⚠️ ${BOT_AD[e.bot] || e.bot} yapamadı: "${e.metin.slice(0, 80)}" (${e.deneme} deneme, iş defterinde iz yok). Claude Code'a not ettim.`, { posta: { izin: "cevap" } }); // 10 Kasım: Patron'a açıkça
+      await eksikAracYaz(env, { bot: e.bot, istek: e.metin, sebep: `${e.deneme} denemede yapılmadı, iş defterinde iz yok` }, simdi);
+      await yaz(env, `⚠️ ${BOT_AD[e.bot] || e.bot} yapamadı: "${e.metin.slice(0, 80)}" (${e.deneme} deneme, iş defterinde iz yok). Eksik araç listesine yazdım.`, { posta: { izin: "cevap" } }); // 10 Kasım: Patron'a açıkça
     }
   }
   await kaydet(env, "venom:emirler", l, 7 * 86400);
@@ -365,7 +366,9 @@ const ARACLAR = [
   { name: "hemra_izinli", description: "Hemra bugün izinliyse koordinasyonu bugünlük Merdan'a verir.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "sesli_rapor", description: "Sesli raporu açar (ücretli: önce Patron'a maliyet onay kartı) ya da kapatır.", input_schema: { type: "object", additionalProperties: false, required: ["ac"], properties: { ac: { type: "boolean" } } } },
   { name: "bildirim_kurali", description: "Patron bir mesaja YANITLA 'bunu bana gönderme' dediğinde: o tür mesajlar için kalıcı bildirim kuralı kaydeder (yanıtlanan mesaja göre).", input_schema: { type: "object", additionalProperties: false, properties: {} } },
-  { name: "yetenek_istegi", description: "Venom'un henüz yapamadığı bir iş için Claude Code'a not bırakır (yeni yetenek isteği).", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string" } } } },
+  { name: "model_fiyati", description: "Model kodunun Vegawin'deki SATIŞ fiyatı (dolar, tek adet; mağaza bazında, yanında stok). Patron 'X'in fiyatı', 'X kaç dolar', 'fiyat getir' derse SADECE bunu kullan ve sonucu aynen ver. Sadece Patron'a; kanala, siteye, ekibe fiyat yazılmaz. Alış / maliyet / kâr vermez. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } } } } },
+  { name: "yetenek_istegi", description: "Patron'un istediği işi yapacak ARACIN YOKSA (ya da görev verdiğin bot 'aracım yok' dediyse) bunu çağır: iş EKSİK ARAÇ LİSTESİ'ne yazılır. Sonra Patron'a AÇIKÇA şunu de: 'Yapamıyorum — sebep: …' ve listeye yazdığını söyle. ASLA 'not ettim', 'sisteme yazıldı', 'ilk iş yapacağım' diye geçiştirme; yapamadığın işi yapılmış ya da yolda gibi gösterme.", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string", description: "Patron ne istedi (kısa)" }, sebep: { type: "string", description: "neden yapılamıyor (tek cümle)" }, arac: { type: "string", description: "hangi araç / veri gerekli (tek cümle)" }, bot: { type: "string", description: "aracı eksik olan bot: venom, sami, kemal, selin, pelin, nora" } } } },
+  { name: "eksik_arac_listesi", description: "EKSİK ARAÇ LİSTESİ: yapılamayan işler ve gereken araçlar (Patron onaylarsa Claude Code ekler). Patron 'eksik araçlar', 'yapamadığın işler' derse bunu kullan. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
 ];
 
 // Onay kartı: [✅ Onayla] [✏️ Düzelt] [❌ İptal] → (sadece para / silme / fabrika: "Emin misiniz?") → çalıştır
@@ -806,7 +809,12 @@ export async function aracCalistir(env, ad, g, simdi) {
     return "Onay kartı Patron'a gösterildi.";
   }
   if (ad === "model_boyu") return `${g.kod} boyu: ${boyYazi(await boyOku(env, String(g.kod)))}`;
-  if (ad === "yetenek_istegi") { await yetenekNotu(env, g.istek, simdi); return "Claude Code için not alındı. Patron'a kısaca \"📝 not ettim\" de; 'aracım yok' deme."; }
+  if (ad === "model_fiyati") return modelFiyatMetni(env, g.kodlar || []);
+  if (ad === "eksik_arac_listesi") return eksikAracMetni(env);
+  if (ad === "yetenek_istegi") { // 14 Kasım (Patron): "not ettim" YOK — yapılamayan iş açıkça söylenir ve EKSİK ARAÇ LİSTESİ'ne yazılır
+    await eksikAracYaz(env, { bot: g.bot || "venom", istek: g.istek, sebep: g.sebep || "", arac: g.arac || "" }, simdi);
+    return `EKSİK ARAÇ LİSTESİ'ne yazıldı. Patron'a AYNEN şu biçimde söyle: "Yapamıyorum — sebep: ${String(g.sebep || "bu iş için aracım yok").slice(0, 200)}. Eksik araç listesine yazdım; onaylarsanız Claude Code ekler." Başka söz verme ("not ettim", "ilk iş yaparım", "sisteme yazıldı" YOK).`;
+  }
   return "Bilinmeyen araç.";
 }
 
@@ -1093,6 +1101,22 @@ async function ilkKezBugun(env, ad) {
     await stokIste(env, "/ayar-yaz", { k: `isaret:${ad}`, v: "1" });
     return true;
   } catch { return false; } // depo okunamazsa rapor tekrar tekrar gitmesin
+}
+// 14 Kasım (Patron): EKSİK ARAÇ LİSTESİ — bir iş araç olmadığı için yapılamadıysa buraya yazılır (KV "venom:eksikArac"); Patron onaylarsa
+// Claude Code aracı ekler. Aynı istek (ilk 60 harf) açıkken ikinci kez yazılmaz, sayısı artar. Claude Code'un eski not kaydı da sürer.
+export async function eksikAracYaz(env, { bot = "venom", istek, sebep = "", arac = "" }, simdi) {
+  const l = await oku(env, "venom:eksikArac", []);
+  const anahtar = (x) => String(x || "").toLocaleLowerCase("tr").replace(/\s+/g, " ").trim().slice(0, 60);
+  const var_ = l.find((x) => x.durum === "bekliyor" && x.bot === bot && anahtar(x.istek) === anahtar(istek));
+  if (var_) { var_.kez = (var_.kez || 1) + 1; var_.son = simdi; }
+  else l.push({ zaman: simdi, son: simdi, bot: String(bot).slice(0, 12), istek: String(istek || "").slice(0, 300), sebep: String(sebep).slice(0, 200), arac: String(arac).slice(0, 200), durum: "bekliyor", kez: 1 });
+  await kaydet(env, "venom:eksikArac", l.slice(-60)).catch(() => null);
+  await yetenekNotu(env, `EKSİK ARAÇ (${bot}): ${istek}${sebep ? ` — sebep: ${sebep}` : ""}${arac ? ` — gereken: ${arac}` : ""}`, simdi);
+}
+export async function eksikAracMetni(env) {
+  const l = (await oku(env, "venom:eksikArac", [])).filter((x) => x.durum === "bekliyor");
+  if (!l.length) return "Eksik araç listesi boş: yapılamayan iş yok.";
+  return [`🧰 Eksik araç listesi (${l.length}):`, ...l.slice(-15).map((x) => `• ${BOT_AD[x.bot] || (x.bot === "venom" ? "Venom" : x.bot === "nora" ? "Nora" : x.bot)}: ${x.istek}${x.sebep ? ` — sebep: ${x.sebep}` : ""}${x.arac ? ` — gereken: ${x.arac}` : ""}${x.kez > 1 ? ` (${x.kez} kez istendi)` : ""}`)].join("\n");
 }
 async function yetenekNotu(env, istek, simdi) {
   const l = await oku(env, "venom:yetenekIstekleri", []);
@@ -2168,7 +2192,8 @@ export async function raporSatirlari(env, simdi, tur) {
   const ky = kemalSayim(await botaSor(env, "kemal", "ozet").catch(() => null), gunAnahtari(simdi));
   const kanal = `📣 Kanal ${ne}: ${payN} paylaşım${ky ? ` · ${tur === "sabah" ? "bugün şu an" : "şu an"}: ${sayimYazi(ky)}` : ""}`;
   const odeme = gs ? fabrikaOdemeSatiri(gs) : null; // 14 Kasım (Patron): fabrika ödemesi gider değildir; ayrı satır
-  const l = [baslik, genel, karar, satisSatiri, odeme, kanal, site, fabrika, venom].filter(Boolean);
+  const kisisel = gs ? kisiselSatiri(gs) : null; // 14 Kasım (Patron): "Murat aldı" / ortak çekişi / avans gider değildir; ayrı satır
+  const l = [baslik, genel, karar, satisSatiri, odeme, kisisel, kanal, site, fabrika, venom].filter(Boolean);
   // 13 Kasım (Patron, B4): akşam raporuna Selin–Merdan fotoğraf akışı satırı; sabah raporu en fazla 8, akşam raporu en fazla 10 satır (kural 13)
   if (tur === "aksam") {
     const so = await botaSor(env, "selin", "ozet").catch(() => null);
@@ -2176,7 +2201,9 @@ export async function raporSatirlari(env, simdi, tur) {
     if (hz) l.splice(l.indexOf(site) + 1, 0, hz);
     if (so && so.stoktaSitedeYok != null) l.splice(l.indexOf(site) + 1, 0, `📷 Stokta var, sitede yok: ${so.stoktaSitedeYok} model · bugün istenen ${so.bugunListe ? so.bugunListe.n : 0} · gelen ${so.bugunListe ? so.bugunListe.gelen : 0}`);
   }
-  return [...new Set(l)].slice(0, tur === "aksam" ? 10 : 8).join("\n");
+  // 14 Kasım (Patron): ödeme / kişisel satırı olan gün rapor o satır kadar uzayabilir (sabah 8 → 9–10, akşam 10 → 11–12); kural 13
+  const ekSatir = (odeme ? 1 : 0) + (kisisel ? 1 : 0);
+  return [...new Set(l)].slice(0, (tur === "aksam" ? 10 : 8) + ekSatir).join("\n");
 }
 export async function sabahOzeti(env, simdi) {
   const metin = await raporSatirlari(env, simdi, "sabah");
@@ -2396,7 +2423,7 @@ async function claudeIslemAdimi(env, simdi) {
   if (!Array.isArray(l) || !l.length) return;
   await env.KAYIT.delete("venom:claudeIslem");
   const sonuc = [];
-  for (const is of l.slice(0, 12)) {
+  for (const is of l.slice(0, 24)) {
     if (is.tur === "kararVer") sonuc.push({ tur: is.tur, kod: is.kod, ...(await kararVerildi(env, is.kod, is.karar || "kapat", simdi, { aciklama: is.aciklama || "" })) }); // model için karar: bütün açık kartlar kapanır
     else if (is.tur === "bekciDene") sonuc.push({ tur: is.tur, ...(await isBekcisi(env, simdi, { kuru: !is.kayit })) }); // 13 Kasım: iş bekçisi kuru çalışma (hiçbir şey göndermez)
     else if (is.tur === "kararTemizle") { const r = await stokIste(env, "/karar-temizle", { kod: String(is.kod) }).catch((e) => ({ ok: false, hata: String(e.message || e) })); if (r && r.ok) await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `${r.kod}: ekipten kalan eski "Sil" kararı kaldırıldı (${r.eski.kim || "?"}); model stoğu bittiği için SOLD OUT olarak görünür`, kod: r.kod }).catch(() => null); sonuc.push({ tur: is.tur, ...r }); } // 14 Kasım (Patron): 3448
@@ -2443,7 +2470,9 @@ async function claudeIslemAdimi(env, simdi) {
       await stokIste(env, "/isd-isaretle", { idler: (is.idler || []).slice(0, 100), alan: "durum", deger: String(is.neden || "kapandi").slice(0, 20) }).catch(() => null);
       sonuc.push({ tur: is.tur, n: (is.idler || []).length });
     } else if (is.tur === "hemraListeOku") { const l = await oku(env, "venom:hemraListe", []); sonuc.push({ tur: is.tur, bekleyen: l.filter((x) => x.durum === "bekliyor").map((x) => ({ ozet: x.ozet, gonderildi: Boolean(x.gonderildi) })), toplam: l.length }); }
-    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30", "/karar-liste", "/tum", "/olaylar", "/tg-hepsi", "/stoktakiler", "/isd-kod", "/model-ozet", "/celal-liste"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
+    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30", "/karar-liste", "/tum", "/olaylar", "/tg-hepsi", "/stoktakiler", "/isd-kod", "/model-ozet", "/celal-liste", "/fs-kod"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
+    else if (is.tur === "selinDurum") { const l = []; for (const k of (is.kodlar || []).slice(0, 25)) l.push(await botaSor(env, "selin", "durum", String(k))); sonuc.push({ tur: is.tur, l }); } // 14 Kasım: Selin'de modelin durumu (sadece okur)
+    else if (is.tur === "fiyatOku") sonuc.push({ tur: is.tur, metin: await modelFiyatMetni(env, is.kodlar || []) }); // 14 Kasım: fiyat aracının çıktısı (sadece okur)
     else if (is.tur === "raporOku") sonuc.push({ tur: is.tur, metin: await raporSatirlari(env, simdi, is.rapor === "aksam" ? "aksam" : "sabah").catch((e) => `HATA: ${String(e.message || e)}`) }); // 14 Kasım: raporun örneği (GÖNDERMEZ; sadece okur)
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
   }

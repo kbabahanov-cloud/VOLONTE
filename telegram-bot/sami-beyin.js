@@ -14,6 +14,7 @@ import { claudeTur } from "./ai-istemci.js";
 import { markaKarari } from "./yayin-kontrol.js";
 import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
+import { modelFiyatlari } from "./fiyat.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
 
 export const BEYIN_MODEL = "claude-opus-5-5"; // 11 Kasım (Patron onayı, kalıcı): Haiku → Opus
@@ -47,7 +48,7 @@ const TALIMAT = `Sen Sayım Sami'sin: VOLONTE'nin (İstanbul Laleli, kaliteli ka
 Kurallar:
 - Kısa, net, sade Türkçe (Rusça yazılırsa Rusça). Telegram'da düz metin; tablo ve başlık kullanma, gerekirse "- " ile kısa madde.
 - Bilgiyi SADECE araçlardan al. Sayı, kod, tarih uydurma. Bulamazsan "bulamadım" de.
-- Fiyat, satış fiyatı, alış fiyatı, maliyet ve kâr ASLA yazma (sorulsa da: "fiyat bilgisini burada vermiyorum" de).
+- Fiyat, satış fiyatı, alış fiyatı, maliyet ve kâr ASLA yazma (sorulsa da: "fiyat bilgisini burada vermiyorum" de). TEK İSTİSNA (14 Kasım, Patron): konuşan Murat (sahip) ise ve bir modelin SATIŞ fiyatını sorarsa model_fiyati aracıyla Vegawin'deki satış fiyatını (dolar, tek adet) ver. Alış, maliyet ve kâr yine yok; ekipten kimseye fiyat yok.
 - Vegawin'e hiçbir şey yazamaz, silemezsin. Silme, sipariş verme, fabrikaya gönderme, kanalda paylaşma araçların YOK. Bunlar istenirse ne yapılacağını söyle (ör. eksik listesinde ✅ Onayla düğmesi, /eksik komutu; silme sadece Patron ve Venom'dadır).
 - Mesaj belirsizse (hangi model, kaç adet, hangi renk) tahminle iş yapma; "şunu mu demek istedin: …?" diye kısa sor.
 - Aziz ve Merdan KENDİ kontrol kartlarındaki modellere renk/adeti doğrudan yazar (örnek: "3394 büyük pudra 12, küçük pudra 4"); Sami teyit sorar. Onlara ASLA "sadece Hemra ya da Murat girebilir" deme; kodla birlikte doğrudan yazmalarını söyle.
@@ -57,6 +58,7 @@ Kurallar:
 
 const nesne = (props) => ({ type: "object", properties: props, required: Object.keys(props), additionalProperties: false });
 const ARACLAR = [
+  { name: "model_fiyati", description: "SADECE Murat (sahip) sorarsa: model kodlarının Vegawin'deki SATIŞ fiyatı (dolar, tek adet), mağaza bazında. Ekipten biri sorarsa kullanma.", strict: true, input_schema: nesne({ kodlar: { type: "array", items: { type: "string" } } }) },
   { name: "stok_bilgisi", description: "Bir model kodunun Vegawin stok adedi (mağaza bazında) ve durumu (stokta / bitti / gizli). Fiyat vermez.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
   { name: "satislar", description: "Bir günün satılan modelleri (çok satandan aza): kod, satılan adet, kalan stok. gun: 'bugun', 'dun' ya da YYYY-AA-GG.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
   { name: "magaza_stok_ozeti", description: "İki mağazanın (VOLONTE / Black Rose) stok özeti Vegawin'den: stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu gerekmez. \"iki mağazanın stoğunu ver\", \"stok özeti\" denince kullan; sonucu AYNEN yaz.", strict: true, input_schema: nesne({}) },
@@ -83,6 +85,10 @@ const ARACLAR = [
 ];
 
 async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
+  if (ad === "model_fiyati") { // 14 Kasım (Patron): satış fiyatı SADECE Patron'un kişisel hesabına
+    if (String(kim) !== String(murat(env))) return { sonuc: "Fiyat bilgisi sadece Patron'a verilir." };
+    return { fiyatlar: (await modelFiyatlari(env, girdi.kodlar || [])).map((x) => x.satir) };
+  }
   if (ad === "stok_bilgisi") {
     if (indirimliMi(girdi.kod) && !muratMi(env, kim)) return { kod: girdi.kod, sonuc: "İndirimli mal kodu (gerçek model değil, tekrar alınmaz). Bilgisi sadece Murat'ta." };
     const b = await stokIste(env, "/bilgi", { kod: girdi.kod });
@@ -152,7 +158,7 @@ export async function beyinCevapla(env, m, tg, simdi, { cikti = false } = {}) {
   let cevap = "";
   try {
     for (let t = 0; t < EN_FAZLA_TUR; t++) {
-      const r = await claudeTur(client, { model: env.SAMI_MODEL || BEYIN_MODEL, max_tokens: 2000, system: sistem, tools: ARACLAR, output_config: { effort: "low" }, messages: mesajlar });
+      const r = await claudeTur(client, { model: env.SAMI_MODEL || BEYIN_MODEL, max_tokens: 2000, system: sistem, tools: ARACLAR.filter((a) => a.name !== "model_fiyati" || String(kim) === String(murat(env))), output_config: { effort: "low" }, messages: mesajlar });
       await harcamaEkle(env, r.usage || {}, simdi, tg);
       if (r.stop_reason === "refusal") { cevap = "Bunu yapamıyorum."; break; }
       const metin = r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();

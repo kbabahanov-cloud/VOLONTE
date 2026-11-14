@@ -6,7 +6,7 @@
 // 14 Kasım (Patron): fabrika / cari ödemesi borç ödemesidir, günlük gider DEĞİLDİR → giderden ve net'ten HARİÇ; ayrı satır
 // "🏭 Fabrikaya ödeme: …" (o gün Black Rose cari hesaplarına yazılan ödemeler; mutabakattaki ödeme satırıyla aynı kaynak).
 import { stokIste } from "./stokbot.js";
-import { gunlukCiro, kasaGideri, kasaCariOdeme, paraYaz } from "./ciro.js";
+import { gunlukCiro, kasaGideri, kasaCariOdeme, kasaKisisel, paraYaz } from "./ciro.js";
 import { fabrikaOdemesi } from "./cari-takip.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -22,7 +22,7 @@ export async function gunlukSatis(env, simdi, gun = gunA(simdi)) {
     const say = await stokIste(env, "/satis-sayim", { gun, magaza: m }).catch(() => null);
     const kopru = ((ozet && ozet.kopruler) || []).find((k) => String(k.magaza).toUpperCase() === m) || null;
     const c = await ayar(env, `ciro:${m}`);
-    s[m] = { adet: say ? Number(say.toplam) || 0 : null, model: say ? Number(say.model) || 0 : null, indirimli: say ? Number(say.indirimliAdet) || 0 : 0, ciro: gunlukCiro(c, gun), gider: kasaGideri(c, gun), cariOdeme: kasaCariOdeme(c, gun), fabrika: fabrikaOdemesi(await ayar(env, `cari:${m}`), gun), sinyal: kopru ? Math.max(Number(kopru.son) || 0, Number(kopru.kalp) || 0) : null };
+    s[m] = { adet: say ? Number(say.toplam) || 0 : null, model: say ? Number(say.model) || 0 : null, indirimli: say ? Number(say.indirimliAdet) || 0 : 0, ciro: gunlukCiro(c, gun), gider: kasaGideri(c, gun), cariOdeme: kasaCariOdeme(c, gun), kisisel: kasaKisisel(c, gun), fabrika: fabrikaOdemesi(await ayar(env, `cari:${m}`), gun), sinyal: kopru ? Math.max(Number(kopru.son) || 0, Number(kopru.kalp) || 0) : null };
   }
   return s;
 }
@@ -49,12 +49,20 @@ export function fabrikaOdemeSatiri(v) {
   const ek = diger > 0.5 ? `${p.length ? " · " : ""}diğer cari ödemeleri ${paraYaz(diger)} $` : "";
   return `🏭 Fabrikaya ödeme: ${p.length ? `${paraYaz(top)} $ (${p.map((x) => `${AD[x.m]} defteri ${paraYaz(x.t)} $`).join(" · ")})` : ""}${ek}`.replace(": · ", ": ");
 }
+// 14 Kasım (Patron): "👤 Kişisel/ortak: 1.850,00 $ (VOLONTE kasası 1.850,00 $)" — açıklamasında "Murat aldı" yazan kişisel harcama,
+// ortak çekişi, avans; günlük gider SAYILMAZ. Yoksa null.
+export function kisiselSatiri(v) {
+  const p = ["VOLONTE", "BLACKROSE"].map((m) => ({ m, t: ((v[m] && v[m].kisisel) || []).filter((y) => y.birim === "$").reduce((a, y) => a + y.tutar, 0) })).filter((x) => x.t > 0.005);
+  if (!p.length) return null;
+  return `👤 Kişisel/ortak: ${paraYaz(p.reduce((a, x) => a + x.t, 0))} $ (${p.map((x) => `${AD[x.m]} kasası ${paraYaz(x.t)} $`).join(" · ")})`;
+}
 // Tek mağaza satırı: "Black Rose: 6 adet (2 model) · ciro: 1.250,00 $ · 3 fatura"
 export function magazaSatiri(v, m) {
   const x = v[m];
   if (!x || x.adet == null) return `${AD[m]}: satış kaydı okunamadı`;
   const gn = giderNetYazi(x);
-  const fb = x.fabrika && x.fabrika.tutar > 0.005 ? ` · fabrikaya ödeme ${paraYaz(x.fabrika.tutar)} $ (gider sayılmaz)` : "";
+  const ks = ((x.kisisel || []).filter((y) => y.birim === "$").reduce((a, y) => a + y.tutar, 0));
+  const fb = `${x.fabrika && x.fabrika.tutar > 0.005 ? ` · fabrikaya ödeme ${paraYaz(x.fabrika.tutar)} $ (gider sayılmaz)` : ""}${ks > 0.005 ? ` · kişisel/ortak ${paraYaz(ks)} $ (gider sayılmaz)` : ""}`;
   return `${AD[m]}: ${x.adet} adet (${x.model} model)${x.indirimli ? ` + indirimli ${x.indirimli}` : ""} · ${ciroYazi(x.ciro)}${gn ? ` · ${gn}` : ""}${fb}`;
 }
 // Patron'un sorusuna cevap (en fazla 4 satır). magaza: "VOLONTE" | "BLACKROSE" | null (ikisi AYRI satır)

@@ -15,17 +15,25 @@ const gunlukMu = (s) => /^(GUN:\d{4}-\d{2}-\d{2}$|KASA:|KASAISLEM:)/.test(String
 // gönderir ("KASA:<gün>#<tür>"); Vegawin kasa defterinde cari hesaba ödeme türü "-3"tür (cari hareketleriyle karşılaştırılıp doğrulandı).
 // Tür ayrımı gelmeyen gün için gider YAZILMAZ (null): yanlış sayı yazmaktansa hiç yazılmaz.
 export const KASA_CARI_TUR = "-3";
-function kasaTur(c, gun, cariMi) {
+// 14 Kasım (Patron): açıklamasında "Murat aldı" yazan kişisel harcama, ortak çekişi ve avans da günlük gider DEĞİLDİR; köprü bu
+// satırları "#K" işaretiyle gönderir ("KASA:<gün>#<tür>#K"). Üç sınıf: "kisisel" (#K) · "cari" (tür -3) · "gider" (kalan).
+function kasaTur(c, gun, sinif) {
   if (!c || !(c.satirlar || []).some((s) => /^KASA(ISLEM)?:/.test(String(s.tablo || "")))) return null;
   const on = `KASA:${gun}#`;
   const ayri = c.satirlar.filter((s) => String(s.tablo || "").startsWith(on));
   if (!ayri.length) return c.satirlar.some((s) => String(s.tablo) === `KASA:${gun}`) ? null : [];
   const b = {};
-  for (const s of ayri) { if ((String(s.tablo).slice(on.length) === KASA_CARI_TUR) !== cariMi) continue; const k = birim(s.doviz); b[k] = b[k] || { birim: k, tutar: 0, n: 0 }; b[k].tutar += Number(s.tutar) || 0; b[k].n += s.n || 0; }
+  for (const s of ayri) {
+    const t = String(s.tablo).slice(on.length);
+    const bu = /#K$/.test(t) ? "kisisel" : t === KASA_CARI_TUR ? "cari" : "gider";
+    if (bu !== sinif) continue;
+    const k = birim(s.doviz); b[k] = b[k] || { birim: k, tutar: 0, n: 0 }; b[k].tutar += Number(s.tutar) || 0; b[k].n += s.n || 0;
+  }
   return Object.values(b).sort((x, y) => x.birim.localeCompare(y.birim));
 }
-export const kasaGideri = (c, gun) => kasaTur(c, gun, false);   // günlük gider: cari / fabrika ödemeleri HARİÇ
-export const kasaCariOdeme = (c, gun) => kasaTur(c, gun, true); // kasadan cari hesaplara ödenen (borç ödemesi)
+export const kasaGideri = (c, gun) => kasaTur(c, gun, "gider");     // günlük gider: cari / fabrika ödemeleri ve kişisel / ortak HARİÇ
+export const kasaCariOdeme = (c, gun) => kasaTur(c, gun, "cari");   // kasadan cari hesaplara ödenen (borç ödemesi)
+export const kasaKisisel = (c, gun) => kasaTur(c, gun, "kisisel");  // "Murat aldı" / ortak çekişi / avans
 export const kasaIslemleri = (c) => ((c && c.satirlar) || []).filter((s) => /^KASAISLEM:/.test(String(s.tablo || ""))).map((s) => ({ islem: String(s.tablo).slice(10), birim: birim(s.doviz), n: s.n || 0, tutar: Number(s.tutar) || 0 })).sort((a, b) => b.tutar - a.tutar);
 // 11 Kasım (Patron): GÜNLÜK ciro — köprünün gönderdiği "GUN:<gün>" satırları (satış faturası 21, satıştan iade 22), para birimi ayrı.
 // Dönen: null = o gün için köprüden günlük satır hiç gelmemiş; yoksa { okuma, satirlar: [{ birim, satis, iade, net, fatura, iadeAdet }] }

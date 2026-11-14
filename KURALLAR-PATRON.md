@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-14.3
+Sürüm: 2026-11-14.4
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -29,7 +29,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 10. Patron'un her mesajı beyne (Opus) gider ve soru / emir / karar / not diye sınıflanır; kodda kelime kestirmesi olmaz, hazır kart ve düğme sadece düğmeye basılınca çalışır.
 11. Venom hiçbir şeyi hafızadan söylemez: her cevap defter, Vegawin, site ya da kanal kaydından okunur; veri yoksa aracı çalıştırır, yine yoksa tek satır sebep yazar.
 12. Listeler yarıda kesilmez: araç bütün satırları verir, uzunsa sayfalar.
-13. Sabah (09:40) raporu en fazla 8, akşam (20:00) raporu en fazla 10 satırdır; ikisi de sohbetle aynı kaynaktan okunur; aynı gün için iki farklı sayı çıkamaz.
+13. Sabah (09:40) raporu en fazla 8, akşam (20:00) raporu en fazla 10 satırdır (fabrika ödemesi ya da kişisel / ortak satırı olan gün o satır kadar uzayabilir); ikisi de sohbetle aynı kaynaktan okunur; aynı gün için iki farklı sayı çıkamaz.
 14. Venom "sıraya aldım" dediği her işi takip eder: bitince kanıtla tek satır yazar, 1 saatte bitmezse sebebini kendisi araştırıp tek satır yazar.
 15. Patron'a sadece Venom yazar; Venom ekiple (Hemra, Aziz, Merdan, Sinem, Fuat, Nuri, Celal) Sami üzerinden konuşur.
 16. "Merdan'a / Aziz'e / Hemra'ya söyle" denince iş Sami üzerinden o kişiye gider; Patron saat söylerse o saat, söylemezse 18:00 yazılır.
@@ -123,4 +123,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 80. Her pazartesi 10:00'da Hemra'ya haftanın en çok satan 5 modeli gider (7 günlük satış ve kalan stok; adet önerisi yoktur, repetesi açık model listeye girmez); Patron'a akşam raporunda tek satır yazılır. Kararı Hemra verir, para harcayan hiçbir iş bu listeden otomatik başlamaz.
 81. Stoğu biten model silinmez: kanalda ve sitede "SOLD OUT" yazısıyla görünür kalır, stok geri gelince aynı paylaşım "BACK IN STOCK" olur. Patron "sil" deyince Venom önce stoğa bakar: stok bitmişse kartsız SOLD OUT yapar; stok varsa tek satır "stok var, yine de sileyim mi?" diye sorar ve Patron "evet" demeden silmez.
 82. Claude Code mevcut / eski HERHANGİ bir işe (sadece korunan akışlara değil) dokunacaksa önce Patron'a haber verir: "Şu işe dokunuyorum: X — eski hali: … — yeni hali: … — neden: …"; Patron "tamam" demeden o değişikliği yapmaz. Yeni eklenen iş eski işi değiştiremez; değiştirecekse yine önce haber verir.
-83. Rapor ciro · günlük gider · net gösterir; günlük gidere fabrika / cari ödemeleri GİRMEZ (borç ödemesidir, gider değildir). Fabrikaya yapılan ödeme raporda ayrı satırda yazılır: "🏭 Fabrikaya ödeme: …".
+83. Rapor ciro · günlük gider · net gösterir; günlük gidere fabrika / cari ödemeleri GİRMEZ (borç ödemesidir, gider değildir). Fabrikaya yapılan ödeme raporda ayrı satırda yazılır: "🏭 Fabrikaya ödeme: …". Açıklamasında "Murat aldı" yazan kişisel harcama, ortak çekişi ve avans da günlük gider sayılmaz; ayrı satırda yazılır: "👤 Kişisel/ortak: …".
+84. Venom yapamadığı işi "not ettim" diye geçiştirmez: "Yapamıyorum — sebep: …" der ve işi eksik araç listesine yazar. Patron onaylarsa aracı Claude Code ekler; bot kendi kendine araç ekleyemez.

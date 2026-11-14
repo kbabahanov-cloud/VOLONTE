@@ -1294,7 +1294,9 @@ test("bota emir: 10 dk sonra iş defterinden kontrol; iz yoksa bir kez tekrar, o
   e = JSON.parse(o.depo.get("venom:emirler"));
   assert.equal(e[0].durum, "olmadi");
   const not = JSON.parse(o.depo.get("venom:yetenekIstekleri"));
-  assert.ok(not.some((x) => /Venom emri yapılmadı \(2 deneme.*kemal ← "3279 alt yazısını düzelt/.test(x.istek)));
+  assert.ok(not.some((x) => /EKSİK ARAÇ \(kemal\): 3279 alt yazısını düzelt.*2 denemede yapılmadı/.test(x.istek)));
+  // 14 Kasım (Patron): yapılamayan iş EKSİK ARAÇ LİSTESİ'ne yazılır ("not ettim" yok)
+  assert.ok(JSON.parse(o.depo.get("venom:eksikArac")).some((x) => x.bot === "kemal" && x.durum === "bekliyor" && /3279 alt yazısını düzelt/.test(x.istek)));
   // E) ilk görevler: Selin gönderilemeyen + fotoğrafsız stok + Merdan videoları
   o.env.SELIN_W = { ozet: async () => ({ takilan: [{ kod: "3047", sebep: "gönderilemedi" }, { kod: "3050", sebep: "bulunamıyor" }], fotoBekleyen: ["3189", "3047"] }) };
   const sonuc = await v.ilkGorevler(o.env, ist(10, 10));
@@ -2606,4 +2608,46 @@ test("14 Kasım (Patron) RAPOR 3 DÜZELTME: fabrika / cari ödemesi günlük gid
   const kb = kemalBak({ ozet, gun: "2026-11-14", s: 11, simdi: 1 });
   assert.deepEqual([kb.bekleyen, kb.sira, kb.cikan, kb.soruldu], [y.bekleyen, y.sira, y.cikan, y.soruldu]); // iş bekçisi aynı sayım
   assert.deepEqual(kemalSayim({ bugunKanal: 0, kuyruk: [], tur: { gun: "2026-11-13", soruldu: 9, bekleyen: ["1", "2", "3", "4"] } }, "2026-11-14"), { gun: "2026-11-14", soruldu: 0, bekleyen: 0, sira: 0, cikan: 0 }); // dünün turu bugünün sayısı olmaz
+});
+
+test("14 Kasım (Patron) FİYAT + 'NOT ETTİM' YOK: model_fiyati Vegawin satış fiyatını verir (mağaza bazında, dolar); yapılamayan iş 'Yapamıyorum — sebep' + EKSİK ARAÇ LİSTESİ; aynı istek iki kez yazılmaz", async () => {
+  const { modelFiyatlari, modelFiyatMetni, fiyatKodlari } = await import("./fiyat.js");
+  const bilgi = { 3427: { satirlar: [{ magaza: "BLACKROSE", ad: "3427 B 20", adet: 40, fiyat: 65 }] }, 3394: { satirlar: [{ magaza: "VOLONTE", ad: "3394 B 20", adet: 10, fiyat: 44 }, { magaza: "VOLONTE", ad: "3394 K 20", adet: 6, fiyat: 44 }, { magaza: "BLACKROSE", ad: "3394 B", adet: 2, fiyat: 46.5 }] }, 3999: { satirlar: [{ magaza: "VOLONTE", ad: "3999", adet: 0, fiyat: null }] } };
+  const env = { STOK: { idFromName: () => "s", get: () => ({ fetch: async (u, i) => { const g = JSON.parse(i.body); return new Response(JSON.stringify(String(u).endsWith("/bilgi") ? (bilgi[g.kod] || { satirlar: [] }) : {})); } }) } };
+  assert.deepEqual(fiyatKodlari(["3427", "34 27", "x", "3394 ve 3427"]), ["3427", "3394"]);
+  assert.equal(await modelFiyatMetni(env, ["3427"]), "3427 · satış fiyatı (Vegawin, tek adet): Black Rose 65,00 $ (stok 40)");
+  assert.equal(await modelFiyatMetni(env, ["3394"]), "3394 · satış fiyatı (Vegawin, tek adet): VOLONTE 44,00 $ (stok 16) · Black Rose 46,50 $ (stok 2)");
+  assert.equal((await modelFiyatlari(env, ["3999", "1234"])).map((x) => x.satir).join(" | "), "3999: Vegawin'de satış fiyatı kayıtlı değil (kart var, fiyat boş) | 1234: Vegawin'de satış fiyatı kayıtlı değil (bu kod yok)");
+  assert.equal(await modelFiyatMetni(env, []), "Geçerli model kodu yok.");
+  // Venom'un araçları: tanım + "not ettim" cümlesi kalmadı
+  const v = await import("./venom-bot.js");
+  const kaynak = (await import("node:fs")).readFileSync(new URL("./venom-bot.js", import.meta.url), "utf8");
+  assert.match(kaynak, /name: "model_fiyati"/); assert.match(kaynak, /name: "eksik_arac_listesi"/);
+  assert.doesNotMatch(kaynak, /Patron'a kısaca \\"📝 not ettim\\" de/);
+  assert.doesNotMatch(kaynak, /Claude Code'a not ettim/);
+  // eksik araç listesi
+  const depo = new Map();
+  const e2 = { KAYIT: { get: async (k, t) => { const x = depo.get(k); return x == null ? null : t === "json" ? JSON.parse(x) : x; }, put: async (k, x) => { depo.set(k, x); }, delete: async (k) => { depo.delete(k); } } };
+  assert.equal(await v.eksikAracMetni(e2), "Eksik araç listesi boş: yapılamayan iş yok.");
+  await v.eksikAracYaz(e2, { bot: "sami", istek: "3427 fiyatını getir", sebep: "stok aracı fiyat vermiyor", arac: "Vegawin satış fiyatı okuma" }, 100);
+  await v.eksikAracYaz(e2, { bot: "sami", istek: "3427 fiyatını getir", sebep: "stok aracı fiyat vermiyor" }, 200);
+  await v.eksikAracYaz(e2, { bot: "venom", istek: "Müşteri listesini Excel yap", sebep: "tablo aracı yok" }, 300);
+  const l = JSON.parse(depo.get("venom:eksikArac"));
+  assert.deepEqual(l.map((x) => [x.bot, x.kez, x.durum]), [["sami", 2, "bekliyor"], ["venom", 1, "bekliyor"]]);
+  assert.equal(await v.eksikAracMetni(e2), "🧰 Eksik araç listesi (2):\n• Sami: 3427 fiyatını getir — sebep: stok aracı fiyat vermiyor — gereken: Vegawin satış fiyatı okuma (2 kez istendi)\n• Venom: Müşteri listesini Excel yap — sebep: tablo aracı yok");
+});
+
+test("14 Kasım (Patron) KİŞİSEL / ORTAK: köprünün '#K' işaretli kasa çıkışı günlük gidere girmez, ayrı satırda yazar; ödeme / kişisel satırı olan gün rapor o kadar uzar", async () => {
+  const { kasaGideri, kasaCariOdeme, kasaKisisel } = await import("./ciro.js");
+  const { kisiselSatiri, giderNetYazi } = await import("./gunluk-satis.js");
+  const G = "2026-11-13";
+  const sat = (tablo, tutar, n = 1) => ({ tablo, yil: 2026, tur: "G", doviz: "$", n, tutar });
+  const c = { zaman: 1, satirlar: [sat(`KASA:${G}`, 27072, 6), sat(`KASA:${G}#-3`, 24447, 3), sat(`KASA:${G}#6#K`, 1850, 1), sat(`KASA:${G}#6`, 620, 1), sat(`KASA:${G}#100`, 155, 1), sat("KASA:AC#6#MURAT ALDI", 5000, 4)] };
+  assert.deepEqual(kasaKisisel(c, G), [{ birim: "$", tutar: 1850, n: 1 }]);
+  assert.deepEqual(kasaGideri(c, G), [{ birim: "$", tutar: 775, n: 2 }]);      // 620 + 155; kişisel ve cari hariç; keşif satırı ("KASA:AC#…") sayılmaz
+  assert.deepEqual(kasaCariOdeme(c, G), [{ birim: "$", tutar: 24447, n: 3 }]);
+  const v = { gun: G, VOLONTE: { adet: 54, model: 20, ciro: { okuma: 1, satirlar: [{ birim: "$", satis: 3403, iade: 0, net: 3403, fatura: 5, iadeAdet: 0 }] }, gider: kasaGideri(c, G), kisisel: kasaKisisel(c, G) }, BLACKROSE: { kisisel: [] } };
+  assert.equal(giderNetYazi(v.VOLONTE), "günlük gider 775,00 $ · net 2.628,00 $");
+  assert.equal(kisiselSatiri(v), "👤 Kişisel/ortak: 1.850,00 $ (VOLONTE kasası 1.850,00 $)");
+  assert.equal(kisiselSatiri({ gun: G, VOLONTE: { kisisel: [] }, BLACKROSE: { kisisel: null } }), null);
 });
