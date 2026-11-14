@@ -2444,6 +2444,7 @@ async function claudeIslemAdimi(env, simdi) {
       sonuc.push({ tur: is.tur, n: (is.idler || []).length });
     } else if (is.tur === "hemraListeOku") { const l = await oku(env, "venom:hemraListe", []); sonuc.push({ tur: is.tur, bekleyen: l.filter((x) => x.durum === "bekliyor").map((x) => ({ ozet: x.ozet, gonderildi: Boolean(x.gonderildi) })), toplam: l.length }); }
     else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30", "/karar-liste"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
+    else if (is.tur === "raporOku") sonuc.push({ tur: is.tur, metin: await raporSatirlari(env, simdi, is.rapor === "aksam" ? "aksam" : "sabah").catch((e) => `HATA: ${String(e.message || e)}`) }); // 14 Kasım: raporun örneği (GÖNDERMEZ; sadece okur)
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
   }
   await kaydet(env, "venom:claudeIslemSonuc", { zaman: simdi, sonuc }, 3 * 86400);
