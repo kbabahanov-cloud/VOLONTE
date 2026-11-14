@@ -13,10 +13,10 @@
 //  • /odeme 5000$ [hesap] [not] + dekont fotoğrafı (sadece Patron) → kayıt; mutabakatta "son ödemeler" sadece Patron'da.
 import { patronaGider, formAktar } from "./tek-kapi.js";
 import { stokIste } from "./stokbot.js";
-import { murat, muratMi } from "./fabrika.js";
+import { murat, muratMi, fabrikaKisileri } from "./fabrika.js";
 import { pdfOlustur } from "./pdf.js";
 import { hizmetHesabi, tabloKimligi, sekmeHazirla, sayfayaYaz } from "./google.js";
-import { odemeler as vegawinOdemeleri, tutarOf, odemeTakip, borcLimitKontrol, haftalikOzet } from "./cari-takip.js";
+import { odemeler as vegawinOdemeleri, tutarOf, odemeTakip, borcLimitKontrol, haftalikOzet, devirMi } from "./cari-takip.js";
 
 const SAAT_FARKI = 3 * 3600;
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
@@ -26,6 +26,16 @@ const tarihYaz = (g) => g.split("-").reverse().join(".");
 const ayarOku = async (env, k, bos) => { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? bos : JSON.parse(v); };
 const ayarYaz = (env, k, v) => stokIste(env, "/ayar-yaz", { k, v: JSON.stringify(v) });
 export const fuat = (env) => String(env.FUAT_ID || "");
+// 14 Kasım (Patron): mutabakat iki kişiye gider — Fuat (Black Rose carileri) ve Celal ("Celal Kayran" + "Celal İndirim" carileri).
+// Her biri AYRI kayıt, AYRI Patron onayı; biri diğerini geçersiz kılmaz. Kayıtta kisi yoksa Fuat'tır (eski kayıtlar).
+const KISI = { fuat: { ad: "Fuat", e: "Fuat'a", ta: "Fuat'ta" }, celal: { ad: "Celal", e: "Celal'e", ta: "Celal'de" } };
+const kisiOf = (r) => (r && r.kisi === "celal" ? "celal" : "fuat");
+export async function celalChat(env) {
+  const l = await fabrikaKisileri(env, "celal").catch(() => []);
+  const k = l.find((x) => /celal/i.test(String(x.ad || ""))) || l[0];
+  return k ? String(k.id) : "";
+}
+const mtAlici = async (env, r) => (kisiOf(r) === "celal" ? celalChat(env) : fuat(env));
 // Hesaplar (Patron eşleştirmesi 31 Ekim): Black Rose Vegawin "BLACK ROSE 00/15/20/25" ↔ VOLONTE Vegawin "BLACK ROSE 000 /
 // BLACKROSE 15 / BLACKROSE 20 / BLACK ROSE 25" — köprü sondaki sayıyla eşler (000 → 00).
 const HESAPLAR = ["15", "20", "25", "00"];
@@ -148,15 +158,30 @@ const odemeYazi = (o) => `${tarihSaat(o.zaman).slice(0, 10)} · ${dolar(o.tutar)
 // SON DÜZEN (Patron kararı 2 Kasım, değişmeyecek): mesaj birebir; iki ayrı bölüm, karşılaştırma/fark/uyarı YOK.
 // Fuat'a ve Patron önizlemesine AYNI mesaj gider (Patron'a ayrıca sadece kendisinin gördüğü üst bilgi).
 const MT_HESAPLAR = ["00", "15", "20", "25"];
-export function bakiyeSatirlari(c, yontem) {
+// [anahtar, kartta yazan ad] — SIRA korunur (nesne anahtarı kullanılmaz: "15" gibi sayı görünümlü anahtarlar öne geçer)
+const BR_ADLAR = MT_HESAPLAR.map((a) => [a, `Black Rose ${a}`]);
+const CELAL_ADLAR = [["CK", "Celal Kayran"], ["CI", "Celal İndirim"]];
+const AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+export const gunUzun = (g) => `${Number(String(g).slice(8, 10))} ${AYLAR[Number(String(g).slice(5, 7)) - 1]}`;
+// 14 Kasım (Patron, KALICI): bakiyelerin altında o günün ödemeleri — cari bazında, Vegawin'den (o gün o cariye girilen borç hareketleri;
+// dönem devri hariç). Ödeme yoksa "yok" yazar.
+export function odemeSatiri(defter, gun, adlar = BR_ADLAR) {
+  const top = {}, var_ = new Set(adlar.map(([a]) => a));
+  for (const h of (defter && defter.hareketler) || []) if (h.tarih === gun && (Number(h.borc) || 0) > 0 && var_.has(h.hesap) && !devirMi(h, defter)) top[h.hesap] = (top[h.hesap] || 0) + Number(h.borc);
+  const l = adlar.filter(([a]) => top[a] > 0).map(([a, ad]) => `${ad}: ${dolar(top[a])}`);
+  return `${gunUzun(gun)} ödemeleri: ${l.length ? l.join(" · ") : "yok"}`;
+}
+// Güvenlik süzgecinden önce: Patron'un onayladığı tek "… ödemeleri: …" satırı çıkarılır (başka hiçbir ödeme / fiyat bilgisi geçemez)
+const odemeSatirsiz = (duz) => String(duz || "").replace(/^\d{1,2} \p{L}+ ödemeleri: [^\n]*$/gmu, "");
+export function bakiyeSatirlari(c, yontem, adlar = BR_ADLAR) {
   if (!c) return ["(bakiye henüz okunamadı)"];
   const bul = (a) => (c.hesaplar || []).find((h) => h.anahtar === a);
-  const l = MT_HESAPLAR.map((a) => ({ a, v: bul(a) ? bakiyeDegeri(bul(a), yontem) : 0 }));
+  const l = adlar.map(([a, ad]) => ({ a, ad, v: bul(a) ? bakiyeDegeri(bul(a), yontem) : 0 }));
   const top = l.reduce((s, x) => s + (x.v || 0), 0);
   const yaz = (v) => (v == null ? "—" : dolar(Math.abs(v)));
   // Toplamla ters yöndeki hesaba (B)/(A) işareti eklenir; yoksa satırların toplamı "Toplam"ı tutmuyor gibi görünür
   const ters = (v) => (v != null && Math.abs(v) >= 0.005 && Math.abs(top) >= 0.005 && Math.sign(v) !== Math.sign(top) ? (v > 0 ? " (B)" : " (A)") : "");
-  return [...l.map((x) => `Black Rose ${x.a}: ${yaz(x.v)}${ters(x.v)}`), `Toplam: ${yaz(top)}`];
+  return [...l.map((x) => `${x.ad}: ${yaz(x.v)}${ters(x.v)}`), `Toplam: ${yaz(top)}`];
 }
 // Tek mesaj: başlık + eş aralıklı liste + alt satırlar; sığmazsa liste "(devam)" mesajlarına bölünür, alt satırlar sonda
 export function mesajKur(ust, listeBaslik, liste, alt, sinir = 3800) {
@@ -187,8 +212,8 @@ export function adetMesajlari(s, hitap = "Fuat Bey,") {
 export async function mutabakatMetni(env, gun) {
   const s = await stokIste(env, "/br-stoklar");
   const [b, odemeler, yontem] = await Promise.all([bakiyeOku(env), ayarOku(env, "odeme:liste", []), ayarOku(env, "cari:yontem", { tur: "kart" })]);
-  const m1 = ["📊 BLACK ROSE – Sami", "Fuat Bey,", "💰 Bakiyeler:", ...bakiyeSatirlari(b.br, yontem)].map(kacis).join("\n");
-  const m2 = ["📊 VOLONTE – Sami", "Fuat Bey,", "💰 Bakiyeler:", ...bakiyeSatirlari(b.vl, yontem), "", "Bundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.", "İyi çalışmalar.", "– Sami"].map(kacis).join("\n");
+  const m1 = ["📊 BLACK ROSE – Sami", "Fuat Bey,", "💰 Bakiyeler:", ...bakiyeSatirlari(b.br, yontem), odemeSatiri(b.br, gun)].map(kacis).join("\n");
+  const m2 = ["📊 VOLONTE – Sami", "Fuat Bey,", "💰 Bakiyeler:", ...bakiyeSatirlari(b.vl, yontem), odemeSatiri(b.vl, gun), "", "Bundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.", "İyi çalışmalar.", "– Sami"].map(kacis).join("\n");
   const mesaj = [m1, m2];
   // Patron'a özel (Fuat görmez): okuma saatleri, son /odeme kayıtları ve adet listeleri
   const okuma = (c, ad) => `${ad}: ${c && c.zaman ? `son okuma ${tarihSaat(c.zaman)}` : "köprü bakiyeyi henüz göndermedi"}`;
@@ -206,6 +231,25 @@ export async function mutabakatMetni(env, gun) {
     brToplam: b.brToplam, brToplamYazi: b.brToplamYazi,
   };
 }
+
+// 14 Kasım (Patron): CELAL MUTABAKATI — "Celal Kayran" ve "Celal İndirim" carileri ayrı ayrı + toplam + o günün ödemeleri.
+// Veri: köprünün gönderdiği "cari:CELAL:<MAĞAZA>" (Black Rose kaydından ayrı). Celal carisi okunmadıysa null.
+export async function celalMutabakatMetni(env, gun) {
+  const yontem = await ayarOku(env, "cari:yontem", { tur: "kart" });
+  const mesaj = [], okuma = [];
+  let toplam = null;
+  for (const [mg, ad] of [["VOLONTE", "VOLONTE"], ["BLACKROSE", "BLACK ROSE"]]) {
+    const c = await ayarOku(env, `cari:CELAL:${mg}`, null);
+    if (!c || !(c.hesaplar || []).length) continue;
+    okuma.push(`${ad} Vegawin: son okuma ${tarihSaat(c.zaman)}`);
+    const satirlar = bakiyeSatirlari(c, yontem, CELAL_ADLAR);
+    if (toplam == null) toplam = satirlar.at(-1).replace(/^Toplam: /, "");
+    mesaj.push([`📊 ${ad} – Sami`, "Celal Bey,", "💰 Bakiyeler:", ...satirlar, odemeSatiri(c, gun, CELAL_ADLAR)].map(kacis).join("\n"));
+  }
+  if (!mesaj.length) return null;
+  return { fuat: mesaj, patron: mesaj, patronBilgi: okuma, patronAdet: [], duzFuat: mesaj.map(duzYazi).join("\n\n— — —\n\n"), duzPatronBakiye: okuma.join("\n"), brToplam: null, brToplamYazi: toplam };
+}
+const metinOf = (env, kisi, gun) => (kisi === "celal" ? celalMutabakatMetni(env, gun) : mutabakatMetni(env, gun));
 
 // ---- Arşiv (değiştirilemez) ----
 export const arsiv = (env, tur, mt, icerik, zaman) => stokIste(env, "/arsiv-ekle", { tur, mt, icerik, zaman });
@@ -249,7 +293,7 @@ async function pdfArsivle(env, r, tur, simdi) {
 }
 
 // Tek düğme (Patron düzeltmesi 2 Kasım): fark kontrolü yok; Patron basmadan hiçbir şey gitmez
-const onizlemeKlavye = (id) => ({ inline_keyboard: [[{ text: "✅ Fuat'a gönder", callback_data: `mt:g:${id}` }]] });
+const onizlemeKlavye = (id, kisi = "fuat") => ({ inline_keyboard: [[{ text: `✅ ${KISI[kisi].e} gönder`, callback_data: `mt:g:${id}` }]] });
 const fuatKlavye = (id) => ({ inline_keyboard: [[{ text: "✅ Mutabıkım", callback_data: `mt:m:${id}` }, { text: "❌ Uyuşmuyor", callback_data: `mt:u:${id}` }], [{ text: "⏳ Sonra kontrol edeceğim", callback_data: `mt:s:${id}` }]] });
 const kayitYaz = async (env, r) => {
   await ayarYaz(env, `mt:${r.id}`, r);
@@ -267,25 +311,32 @@ async function gonder(env, tg, chat, mesajlar, klavye, html = true) {
 }
 const fuatMesajlari = (r) => (r.fuatMesajlar ? [r.fuatMesajlar, true] : [[r.metin], false]);
 
-const onizlemeUst = (m, ek = "") => [`👁 <b>ÖNİZLEME${ek ? ` (${ek})` : ""}</b> — sadece siz görüyorsunuz. Siz onaylamadan Fuat'a hiçbir şey gitmez.`,
-  "Fuat'a SADECE en alttaki iki bakiye mesajı (1: BLACK ROSE, 2: VOLONTE) BİREBİR böyle gider; adet listeleri gitmez.", ...(m.patronBilgi || []).map(kacis)].join("\n");
+// 14 Kasım: önizleme TEK kart (üst bilgi + gidecek bakiye mesajları + düğme) — Patron'a tek kapıdan eksiksiz ulaşsın diye
+const onizlemeUst = (m, ek = "", kisi = "fuat", gun = null) => [`👁 <b>ÖNİZLEME — ${KISI[kisi].ad}${gun ? ` (${tarihYaz(gun)})` : ""}${ek ? ` · ${ek}` : ""}</b>: sadece siz görüyorsunuz. Siz onaylamadan ${KISI[kisi].e} hiçbir şey gitmez.`,
+  `Aşağıdaki bakiye mesajları ${KISI[kisi].e} BİREBİR böyle gider; adet listeleri gitmez.`, ...(m.patronBilgi || []).map(kacis)].join("\n");
+const onizlemeKarti = (m, ek, kisi, gun) => [onizlemeUst(m, ek, kisi, gun), ...m.patron].join("\n\n— — —\n\n");
 
 const icerikAl = (m) => ({ fuatMesajlar: m.fuat, patronMesajlar: m.patron, duzFuat: m.duzFuat, duzPatronBakiye: m.duzPatronBakiye, brToplam: m.brToplam, brToplamYazi: m.brToplamYazi });
 
-export async function onizlemeGonder(env, tg, simdi, kaynak = "cuma") {
-  const gun = gunAnahtari(simdi);
-  const id = `${gun}-${simdi.toString(36)}`;
-  const m = await mutabakatMetni(env, gun);
-  // Yeni önizleme eskileri geçersiz kılar: Patron sadece en son gördüğünü onaylayabilir
+export async function onizlemeGonder(env, tg, simdi, kaynak = "cuma", { gun = null, kisi = "fuat" } = {}) {
+  gun = gun || gunAnahtari(simdi);
+  kisi = kisi === "celal" ? "celal" : "fuat";
+  const id = `${gun}-${simdi.toString(36)}${kisi === "celal" ? "c" : ""}`;
+  const m = await metinOf(env, kisi, gun);
+  if (!m) { // Celal'in carileri köprüden henüz gelmedi
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `⚠️ ${KISI[kisi].ad} mutabakatı hazırlanamadı: ${KISI[kisi].ad} carileri Vegawin'den henüz okunmadı (mağaza bilgisayarı köprüsü).` });
+    return null;
+  }
+  // Yeni önizleme AYNI KİŞİNİN eski önizlemelerini geçersiz kılar: Patron sadece en son gördüğünü onaylayabilir
   for (const eskiId of (await ayarOku(env, "mt:liste", [])).slice(-10)) {
     const e = await ayarOku(env, `mt:${eskiId}`, null);
-    if (e && e.durum === "onizleme") { e.durum = "eskidi"; e.gecmis.push([simdi, "yeni önizleme geldi, geçersiz"]); await kayitYaz(env, e); }
+    if (e && e.durum === "onizleme" && kisiOf(e) === kisi) { e.durum = "eskidi"; e.gecmis.push([simdi, "yeni önizleme geldi, geçersiz"]); await kayitYaz(env, e); }
   }
-  const r = { id, gun, kaynak, olusturma: simdi, ...icerikAl(m), durum: "onizleme", gecmis: [[simdi, `önizleme (${kaynak})`]] };
-  await gonder(env, tg, murat(env), [onizlemeUst(m), ...(m.patronAdet || [])], null);
-  r.onizlemeMesaj = await gonder(env, tg, murat(env), m.patron, onizlemeKlavye(id));
+  const r = { id, gun, kaynak, ...(kisi === "celal" ? { kisi } : {}), olusturma: simdi, ...icerikAl(m), durum: "onizleme", gecmis: [[simdi, `önizleme (${kaynak})`]] };
+  if ((m.patronAdet || []).length) await gonder(env, tg, murat(env), m.patronAdet, null);
+  r.onizlemeMesaj = await gonder(env, tg, murat(env), [onizlemeKarti(m, "", kisi, gun)], onizlemeKlavye(id, kisi));
   await kayitYaz(env, r);
-  await arsiv(env, "onizleme", id, { kaynak, fuat: m.duzFuat, patron: m.duzPatronBakiye }, simdi);
+  await arsiv(env, "onizleme", id, { kaynak, kisi, fuat: m.duzFuat, patron: m.duzPatronBakiye }, simdi);
   return r;
 }
 
@@ -297,20 +348,24 @@ export async function mutabakatKomutu(env, m, tg, simdi) {
 }
 
 async function fuataGonder(env, tg, r, kim, simdi) {
+  const kisi = kisiOf(r), K = KISI[kisi];
   const [mesajlar, html] = fuatMesajlari(r);
-  const yasak = fuatSuzgec(html ? mesajlar.map(duzYazi).join("\n") : mesajlar.join("\n"));
-  if (yasak) { // son kapı: Fuat'a VOLONTE/ödeme/fark bilgisi gidemez
+  // son kapı: Patron'un onayladığı "… ödemeleri" satırı dışında ödeme / fark / fiyat bilgisi gidemez
+  const yasak = fuatSuzgec(odemeSatirsiz(html ? mesajlar.map(duzYazi).join("\n") : mesajlar.join("\n")));
+  if (yasak) {
     await arsiv(env, "engel", r.id, { neden: yasak }, simdi);
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `⛔ Mutabakat Fuat'a GÖNDERİLMEDİ: mesajda Fuat'ın görmemesi gereken bilgi var (${yasak.join(", ")}). Claude'a bildirin.` });
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `⛔ Mutabakat ${K.e} GÖNDERİLMEDİ: mesajda ${K.ad}'in görmemesi gereken bilgi var (${yasak.join(", ")}). Claude'a bildirin.` });
     return false;
   }
-  r.fuatMesaj = await gonder(env, tg, fuat(env), mesajlar, fuatKlavye(r.id), html);
+  const chat = await mtAlici(env, r);
+  if (!chat) return null;
+  r.fuatMesaj = await gonder(env, tg, chat, mesajlar, fuatKlavye(r.id), html);
   if (!r.fuatMesaj) return null;
-  await eskileriGecersizKil(env, tg, r.id, simdi); // 2 Kasım: Fuat sadece en son mutabakat mesajına cevap verebilir
-  Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(kim) }); r.gecmis.push([simdi, "Patron onayladı → Fuat'a gönderildi"]);
+  await eskileriGecersizKil(env, tg, r.id, simdi, kisi); // o kişi sadece en son mutabakat mesajına cevap verebilir
+  Object.assign(r, { durum: "gonderildi", gonderim: simdi, onaylayan: String(kim) }); r.gecmis.push([simdi, `Patron onayladı → ${K.e} gönderildi`]);
   await kayitYaz(env, r);
-  await arsiv(env, "gonderim", r.id, { onaylayan: String(kim), zaman: tarihSaat(simdi), fuatMesaji: r.duzFuat || mesajlar.join("\n") }, simdi);
-  try { await pdfArsivle(env, r, "Fuat'a gönderilen", simdi); } catch (e) { await arsiv(env, "pdf-hata", r.id, String(e && e.message), simdi); }
+  await arsiv(env, "gonderim", r.id, { onaylayan: String(kim), kisi, zaman: tarihSaat(simdi), fuatMesaji: r.duzFuat || mesajlar.join("\n") }, simdi);
+  try { await pdfArsivle(env, r, `${K.e} gönderilen`, simdi); } catch (e) { await arsiv(env, "pdf-hata", r.id, String(e && e.message), simdi); }
   return true;
 }
 
@@ -323,7 +378,7 @@ export async function venomMutabakatGonder(env, tg, icerik, kim, simdi) {
   const id = `${gun}-${simdi.toString(36)}`;
   for (const eskiId of (await ayarOku(env, "mt:liste", [])).slice(-10)) {
     const e = await ayarOku(env, `mt:${eskiId}`, null);
-    if (e && e.durum === "onizleme") { e.durum = "eskidi"; e.gecmis.push([simdi, "Venom'dan yeni mutabakat, geçersiz"]); await kayitYaz(env, e); }
+    if (e && e.durum === "onizleme" && kisiOf(e) === "fuat") { e.durum = "eskidi"; e.gecmis.push([simdi, "Venom'dan yeni mutabakat, geçersiz"]); await kayitYaz(env, e); }
   }
   const { gun: _g, ...alanlar } = icerik;
   const r = { id, gun, kaynak: "venom", olusturma: simdi, ...alanlar, durum: "onizleme", gecmis: [[simdi, "Venom kartı (Patron onayı + Emin misiniz)"]] };
@@ -333,15 +388,15 @@ export async function venomMutabakatGonder(env, tg, icerik, kim, simdi) {
 }
 
 // Fuat'a gitmiş ama cevaplanmamış eski mutabakatlar geçersiz olur (düğmeleri kaldırılır, arşive yazılır); dışarıda tutulan hariç.
-export async function eskileriGecersizKil(env, tg, haric, simdi) {
+export async function eskileriGecersizKil(env, tg, haric, simdi, kisi = "fuat") {
   const kapanan = [];
   for (const id of (await ayarOku(env, "mt:liste", [])).slice(-20)) {
     if (id === haric) continue;
     const e = await ayarOku(env, `mt:${id}`, null);
-    if (!e || !["gonderildi", "sonra"].includes(e.durum)) continue;
+    if (!e || !["gonderildi", "sonra"].includes(e.durum) || kisiOf(e) !== kisi) continue; // Fuat'ın mutabakatı Celal'inkini (ya da tersi) geçersiz kılmaz
     e.durum = "gecersiz"; e.gecmis.push([simdi, `geçersiz: yerine ${haric || "yeni mutabakat"} geçerli`]);
     await kayitYaz(env, e);
-    if (e.fuatMesaj) await tg(env, "editMessageReplyMarkup", { chat_id: fuat(env), message_id: e.fuatMesaj, reply_markup: { inline_keyboard: [] } }).catch(() => null);
+    if (e.fuatMesaj) await tg(env, "editMessageReplyMarkup", { chat_id: await mtAlici(env, e), message_id: e.fuatMesaj, reply_markup: { inline_keyboard: [] } }).catch(() => null);
     await arsiv(env, "gecersiz", id, { yerine: haric, tarihSaat: tarihSaat(simdi), gonderim: e.gonderim ? tarihSaat(e.gonderim) : null }, simdi);
     kapanan.push({ id, gonderim: e.gonderim });
   }
@@ -354,13 +409,14 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
   const r = await ayarOku(env, `mt:${id}`, null);
   if (!r) return cevapla("Bu mutabakat bulunamadı.");
   const kim = String(cq.from.id);
+  const kisi = kisiOf(r), K = KISI[kisi];
   const dugmeYaz = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "mt:-" }]] } });
   if ("gGyxfv".includes(islem)) { // Patron düğmeleri
     if (!muratMi(env, kim)) return cevapla("Bu düğme Patron'da.");
     if (islem === "f") { // Fuat'a gidecek mesajın birebir aynısı (sadece Patron'a)
       const [mesajlar, html] = fuatMesajlari(r);
-      await cevapla("Fuat'ın göreceği mesaj");
-      await gonder(env, tg, cq.message.chat.id, ["👁 <b>Fuat'a gidecek mesaj (birebir):</b>"], null);
+      await cevapla(`${K.ad}'in göreceği mesaj`);
+      await gonder(env, tg, cq.message.chat.id, [`👁 <b>${K.e} gidecek mesaj (birebir):</b>`], null);
       return gonder(env, tg, cq.message.chat.id, mesajlar, null, html);
     }
     if (r.durum !== "onizleme") return cevapla("Bu önizleme artık geçerli değil.");
@@ -371,70 +427,72 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
       return dugmeYaz("❌ İptal edildi");
     }
     if (islem === "y") {
-      const m = await mutabakatMetni(env, r.gun);
+      const m = await metinOf(env, kisi, r.gun);
+      if (!m) return cevapla("Yenilenemedi (cari okunamadı).");
       Object.assign(r, icerikAl(m)); r.gecmis.push([simdi, "yenilendi"]);
       await kayitYaz(env, r); await arsiv(env, "yenile", id, { fuat: m.duzFuat, patron: m.duzPatronBakiye }, simdi);
       await cevapla("Yenilendi");
-      await gonder(env, tg, cq.message.chat.id, [onizlemeUst(m, "yenilendi"), ...(m.patronAdet || [])], null);
-      return gonder(env, tg, cq.message.chat.id, m.patron, onizlemeKlavye(id));
+      return gonder(env, tg, cq.message.chat.id, [onizlemeKarti(m, "yenilendi", kisi, r.gun)], onizlemeKlavye(id, kisi));
     }
     // g: önce "Emin misiniz?" (Patron 2 Kasım: yanlışlıkla gönderim olmasın); G: onaylandı → gönder
     if (islem === "g") {
       await cevapla("Emin misiniz?");
-      return gonder(env, tg, cq.message.chat.id, ["⚠️ <b>Emin misiniz?</b> Bakiye mesajları şimdi Fuat'a gidecek."], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `mt:G:${id}` }, { text: "Vazgeç", callback_data: `mt:v:${id}` }]] });
+      return gonder(env, tg, cq.message.chat.id, [`⚠️ <b>Emin misiniz?</b> Bakiye mesajları şimdi ${K.e} gidecek.`], { inline_keyboard: [[{ text: "✅ Evet, gönder", callback_data: `mt:G:${id}` }, { text: "Vazgeç", callback_data: `mt:v:${id}` }]] });
     }
     const sonuc = await fuataGonder(env, tg, r, kim, simdi);
-    if (sonuc === null) return cevapla("Fuat'a gönderilemedi (Sami'ye /start yazmamış olabilir).");
+    if (sonuc === null) return cevapla(`${K.e} gönderilemedi (Sami'ye /start yazmamış olabilir).`);
     if (sonuc === false) return cevapla("Gönderilmedi (güvenlik).");
-    await cevapla("Fuat'a gönderildi");
-    return dugmeYaz("✅ Fuat'a gönderildi");
+    await cevapla(`${K.e} gönderildi`);
+    return dugmeYaz(`✅ ${K.e} gönderildi`);
   }
-  // Fuat'ın düğmeleri
-  if (kim !== fuat(env)) return cevapla("Bu düğme Fuat'ta.");
+  // Karşı tarafın (Fuat / Celal) düğmeleri
+  const alici = await mtAlici(env, r);
+  if (!alici || kim !== alici) return cevapla(`Bu düğme ${K.ta}.`);
   if (r.durum === "gecersiz") return cevapla("Bu mesaj geçersiz; lütfen en son gelen mutabakat mesajına cevap verin.");
   if (!["gonderildi", "sonra", "fark"].includes(r.durum)) return cevapla("Bu mutabakat kapandı.");
   const kapat = () => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
   if (islem === "m") {
-    Object.assign(r, { durum: "mutabik", cevapZaman: simdi }); r.gecmis.push([simdi, `Fuat: mutabıkım (toplam bakiye ${r.brToplamYazi || "—"})`]);
+    Object.assign(r, { durum: "mutabik", cevapZaman: simdi }); r.gecmis.push([simdi, `${K.ad}: mutabıkım (toplam bakiye ${r.brToplamYazi || "—"})`]);
     await kayitYaz(env, r);
     const k = await arsiv(env, "mutabik", id, { fuat: kim, tarihSaat: tarihSaat(simdi), toplamBakiye: r.brToplam ?? null, toplamBakiyeYazi: r.brToplamYazi || null, mesaj: r.duzFuat || r.metin }, simdi);
     await cevapla("Teşekkürler"); await kapat();
-    await tg(env, "sendMessage", { chat_id: fuat(env), text: "✅ Teşekkürler, mutabakat kaydedildi." });
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `✅ Fuat ${r.brToplamYazi || "—"} bakiyeyi onayladı — ${tarihSaat(simdi)} (${tarihYaz(r.gun)} mutabakatı). Arşiv kaydı #${k && k.sira} mühürlendi.` });
-    try { await pdfArsivle(env, r, "Fuat mutabık", simdi); } catch (e) { await arsiv(env, "pdf-hata", id, String(e && e.message), simdi); }
+    await tg(env, "sendMessage", { chat_id: alici, text: "✅ Teşekkürler, mutabakat kaydedildi." });
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `✅ ${K.ad} ${r.brToplamYazi || "—"} bakiyeyi onayladı — ${tarihSaat(simdi)} (${tarihYaz(r.gun)} mutabakatı). Arşiv kaydı #${k && k.sira} mühürlendi.` });
+    try { await pdfArsivle(env, r, `${K.ad} mutabık`, simdi); } catch (e) { await arsiv(env, "pdf-hata", id, String(e && e.message), simdi); }
     return;
   }
   if (islem === "u") {
-    Object.assign(r, { durum: "fark", cevapZaman: simdi }); r.gecmis.push([simdi, "Fuat: uyuşmuyor"]);
+    Object.assign(r, { durum: "fark", cevapZaman: simdi }); r.gecmis.push([simdi, `${K.ad}: uyuşmuyor`]);
     await kayitYaz(env, r); await ayarYaz(env, `mt:fark:${kim}`, id);
     await arsiv(env, "uyusmuyor", id, { fuat: kim, tarihSaat: tarihSaat(simdi) }, simdi);
     await cevapla("Farkı yazın"); await kapat();
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `❌ Fuat ${tarihYaz(r.gun)} mutabakatında "Uyuşmuyor" dedi (${tarihSaat(simdi)}). Açıklamasını yazınca iletirim.` });
-    return tg(env, "sendMessage", { chat_id: fuat(env), text: "Ne uyuşmuyor? Lütfen kısaca yazın (model kodu ve adet, ya da bakiye)." });
+    await tg(env, "sendMessage", { chat_id: murat(env), text: `❌ ${K.ad} ${tarihYaz(r.gun)} mutabakatında "Uyuşmuyor" dedi (${tarihSaat(simdi)}). Açıklamasını yazınca iletirim.` });
+    return tg(env, "sendMessage", { chat_id: alici, text: "Ne uyuşmuyor? Lütfen kısaca yazın (model kodu ve adet, ya da bakiye)." });
   }
   if (islem === "s") {
-    Object.assign(r, { durum: "sonra", sonraBas: r.sonraBas || simdi, sorulanGun: gunAnahtari(simdi) }); r.gecmis.push([simdi, "Fuat: sonra kontrol edeceğim"]);
+    Object.assign(r, { durum: "sonra", sonraBas: r.sonraBas || simdi, sorulanGun: gunAnahtari(simdi) }); r.gecmis.push([simdi, `${K.ad}: sonra kontrol edeceğim`]);
     await kayitYaz(env, r); await arsiv(env, "sonra", id, { fuat: kim, tarihSaat: tarihSaat(simdi) }, simdi);
     await cevapla("Tamam"); await kapat();
-    return tg(env, "sendMessage", { chat_id: fuat(env), text: "Tamam. Yarın 12:00'de tekrar soracağım." });
+    return tg(env, "sendMessage", { chat_id: alici, text: "Tamam. Yarın 12:00'de tekrar soracağım." });
   }
 }
 
 // Fuat "Uyuşmuyor" dedikten sonra yazdığı açıklama → arşiv + Patron
 export async function mutabakatFarkMesaji(env, m, tg, simdi) {
   const kim = String(m.from.id);
-  if (kim !== fuat(env) || !m.text || m.text.startsWith("/")) return false;
+  if (!m.text || m.text.startsWith("/") || (kim !== fuat(env) && kim !== (await celalChat(env)))) return false;
   const id = await ayarOku(env, `mt:fark:${kim}`, null);
   if (!id) return false;
   const r = await ayarOku(env, `mt:${id}`, null);
   await stokIste(env, "/ayar-yaz", { k: `mt:fark:${kim}`, v: "null" });
   if (!r) return false;
-  Object.assign(r, { fark: String(m.text).slice(0, 2000), farkZaman: simdi }); r.gecmis.push([simdi, "Fuat açıklama yazdı"]);
+  const KF = KISI[kisiOf(r)];
+  Object.assign(r, { fark: String(m.text).slice(0, 2000), farkZaman: simdi }); r.gecmis.push([simdi, `${KF.ad} açıklama yazdı`]);
   await kayitYaz(env, r);
   await arsiv(env, "fark-aciklama", id, { fuat: kim, tarihSaat: tarihSaat(simdi), aciklama: r.fark }, simdi);
-  await tg(env, "sendMessage", { chat_id: fuat(env), text: "Teşekkürler, açıklamanız iletildi." });
-  await tg(env, "sendMessage", { chat_id: murat(env), text: `❌ Fuat mutabakatta uyuşmuyor (${tarihYaz(r.gun)}, ${tarihSaat(simdi)}):\n${r.fark}` });
-  try { await pdfArsivle(env, r, "Fuat uyuşmuyor", simdi); } catch (e) { await arsiv(env, "pdf-hata", id, String(e && e.message), simdi); }
+  await tg(env, "sendMessage", { chat_id: kim, text: "Teşekkürler, açıklamanız iletildi." });
+  await tg(env, "sendMessage", { chat_id: murat(env), text: `❌ ${KF.ad} mutabakatta uyuşmuyor (${tarihYaz(r.gun)}, ${tarihSaat(simdi)}):\n${r.fark}` });
+  try { await pdfArsivle(env, r, `${KF.ad} uyuşmuyor`, simdi); } catch (e) { await arsiv(env, "pdf-hata", id, String(e && e.message), simdi); }
   return true;
 }
 
@@ -542,6 +600,8 @@ export async function mutabakatAdimi(env, simdi, tg) {
   if (haftaGunu(simdi) === 5 && s >= 17 && !(await ayarOku(env, `mt:cuma:${gun}`, null))) {
     await ayarYaz(env, `mt:cuma:${gun}`, 1);
     await onizlemeGonder(env, tg, simdi, "cuma");
+    // 14 Kasım (Patron): her cuma Fuat'la birlikte Celal mutabakatı da hazırlanır (ayrı kart, ayrı onay)
+    try { await onizlemeGonder(env, tg, simdi + 1, "cuma", { kisi: "celal" }); } catch (e) { await arsiv(env, "takip-hata", null, `celal: ${String(e && e.message).slice(0, 200)}`, simdi).catch(() => {}); }
     return;
   }
   if (haftaGunu(simdi) === 0 || s < 12) return;
@@ -550,12 +610,14 @@ export async function mutabakatAdimi(env, simdi, tg) {
     if (!r || r.durum !== "sonra" || r.sorulanGun === gun) continue;
     r.sorulanGun = gun;
     r.hatirlatma = (r.hatirlatma || 0) + 1;
-    await gonder(env, tg, fuat(env), [`⏳ Mutabakatı kontrol ettiniz mi? (${tarihYaz(r.gun)})`], fuatKlavye(id), false);
+    const hAlici = await mtAlici(env, r);
+    if (!hAlici) continue;
+    await gonder(env, tg, hAlici, [`⏳ Mutabakatı kontrol ettiniz mi? (${tarihYaz(r.gun)})`], fuatKlavye(id), false);
     r.gecmis.push([simdi, `hatırlatma ${r.hatirlatma}`]);
     await arsiv(env, "hatirlatma", id, { sayi: r.hatirlatma }, simdi);
     if (r.hatirlatma >= 3 && !r.patronBilgi) {
       r.patronBilgi = true;
-      await tg(env, "sendMessage", { chat_id: murat(env), text: `ℹ️ Fuat ${tarihYaz(r.gun)} mutabakatına 3 gündür cevap vermedi.` });
+      await tg(env, "sendMessage", { chat_id: murat(env), text: `ℹ️ ${KISI[kisiOf(r)].ad} ${tarihYaz(r.gun)} mutabakatına 3 gündür cevap vermedi.` });
     }
     await kayitYaz(env, r);
   }

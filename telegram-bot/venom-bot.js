@@ -1824,24 +1824,36 @@ export async function isBekcisi(env, simdi, { kuru = false } = {}) {
 }
 // 13 Kasım (Patron, kural 77): her cuma 20:00 — "mutabakat gitti mi?". Sadece okur (mutabakat akışına dokunmaz). Önce sebebi kendisi bulur;
 // çözemezse Patron'a TEK satır. Kayıt: venom:isBekcisi:<gün>.mutabakat
-export async function mutabakatBak(env, simdi) {
+export async function mutabakatBak(env, simdi, { kuru = false } = {}) {
   const gun = gunAnahtari(simdi);
   const ayar = async (k) => { try { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v == null ? null : JSON.parse(v); } catch { return undefined; } };
   const calisti = await ayar(`mt:cuma:${gun}`);
   if (calisti === undefined) return { ok: false, sebep: "mutabakat kaydı okunamadı", oneri: "Claude Code baksın" };
   if (!calisti) {
     const ac = await env.KAYIT.get("kagit:ac", "json").catch(() => null);
-    const kapali = !(Array.isArray(ac) && ac.includes("sami:mutabakat"));
-    return { ok: false, sebep: kapali ? "mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı)" : "mutabakat adımı açık ama bugün çalışmadı", oneri: kapali ? "\"mutabakatı aç\" derseniz açarım" : "Claude Code baksın" };
+    if (!(Array.isArray(ac) && ac.includes("sami:mutabakat"))) return { ok: false, sebep: "mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı)", oneri: "\"mutabakatı aç\" derseniz açarım" };
+    // adım açık ama bugün çalışmamış → Venom önce kendisi çözer: Sami'ye iki kartı (Fuat + Celal) şimdi hazırlatır; kartlar Patron'un onayına gelir
+    if (!kuru) {
+      const bekleyen = (await env.KAYIT.get("sami:islemler", "json").catch(() => null)) || [];
+      await env.KAYIT.put("sami:islemler", JSON.stringify([...(Array.isArray(bekleyen) ? bekleyen : []), { tur: "mutabakatHazirla", gun, kisi: "fuat", kaynak: "cuma" }, { tur: "mutabakatHazirla", gun, kisi: "celal", kaynak: "cuma" }]), { expirationTtl: 3600 });
+      await cozdumYaz(env, "Cuma mutabakatı çalışmamıştı: Fuat ve Celal kartlarını hazırlattım (onayınıza geliyor)", simdi);
+    }
+    return { ok: false, cozuldu: "mutabakat bugün çalışmamıştı; Fuat ve Celal kartlarını hazırlattım, onayınıza geliyor" };
   }
-  const liste = (await ayar("mt:liste")) || [];
-  const son = liste.length ? await ayar(`mt:${liste[liste.length - 1]}`) : null;
-  if (!son || son.gun !== gun) return { ok: false, sebep: "bugünün mutabakat kaydı bulunamadı", oneri: "Claude Code baksın" };
-  if (son.durum === "onizleme") return { ok: false, sebep: "onay kartı sizde bekliyor (Fuat'a henüz gitmedi)", oneri: "karttaki \"✅ Fuat'a gönder\" düğmesine basın" };
-  if (son.durum === "eskidi") return { ok: false, sebep: "önizleme geçersiz kaldı (yenisi istenmiş)", oneri: "Venom'a \"Fuat'a mutabakatı gönder\" yazın" };
-  return { ok: true, durum: son.durum, bilgi: "mutabakat Fuat'a gitti" };
+  // 14 Kasım (Patron): Fuat + Celal — her birinin bugünkü son kaydı
+  const son = {};
+  for (const id of ((await ayar("mt:liste")) || []).slice(-12)) { const r = await ayar(`mt:${id}`); if (r && r.gun === gun) son[r.kisi === "celal" ? "celal" : "fuat"] = r; }
+  const AD = { fuat: "Fuat", celal: "Celal" }, eksik = [];
+  for (const k of ["fuat", "celal"]) {
+    const r = son[k];
+    if (!r) eksik.push(`${AD[k]}: ${k === "celal" ? "kart hazırlanamadı (Celal carileri Vegawin'den okunmamış olabilir)" : "bugünün kaydı bulunamadı"}`);
+    else if (r.durum === "onizleme") eksik.push(`${AD[k]}: onay kartı sizde bekliyor`);
+    else if (["eskidi", "iptal"].includes(r.durum)) eksik.push(`${AD[k]}: önizleme ${r.durum === "iptal" ? "iptal edilmiş" : "geçersiz kalmış"}`);
+  }
+  if (!eksik.length) return { ok: true, bilgi: "mutabakat Fuat'a ve Celal'e gitti" };
+  return { ok: false, sebep: eksik.join(" · "), oneri: eksik.some((x) => /sizde bekliyor/.test(x)) ? "karttaki \"✅ … gönder\" düğmesine basın" : "Claude Code baksın" };
 }
-export const mutabakatSatiri = (r) => `Cuma mutabakatı Fuat'a gitmedi — sebep: ${r.sebep} — önerim: ${r.oneri}.`;
+export const mutabakatSatiri = (r) => `Cuma mutabakatı (Fuat + Celal) tamamlanmadı — sebep: ${r.sebep} — önerim: ${r.oneri}.`;
 async function mutabakatBekcisi(env, simdi) {
   const s = saat(simdi);
   if (new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() !== 5 || s < 20 || s >= 20.5) return;
@@ -1851,7 +1863,7 @@ async function mutabakatBekcisi(env, simdi) {
   const r = await mutabakatBak(env, simdi);
   kayit.mutabakat = { zaman: simdi, ...r };
   await kaydet(env, `venom:isBekcisi:${gun}`, kayit, 14 * 86400);
-  if (!r.ok && (await oku(env, "venom:isBekcisi:sessiz", null)) !== gun) await bildir(env, mutabakatSatiri(r), { simdi, kaynak: "venom", tur: "kritik" });
+  if (!r.ok && !r.cozuldu && (await oku(env, "venom:isBekcisi:sessiz", null)) !== gun) await bildir(env, mutabakatSatiri(r), { simdi, kaynak: "venom", tur: "kritik" });
 }
 async function isBekcisiAdimi(env, simdi) {
   if (env[BOT_BAG.kemal] && env[BOT_BAG.selin]) await mutabakatBekcisi(env, simdi).catch((e) => hataYaz(env, "mutabakatBekcisi", e));
@@ -2393,7 +2405,7 @@ async function claudeIslemAdimi(env, simdi) {
       await stokIste(env, "/isd-isaretle", { idler: (is.idler || []).slice(0, 100), alan: "durum", deger: String(is.neden || "kapandi").slice(0, 20) }).catch(() => null);
       sonuc.push({ tur: is.tur, n: (is.idler || []).length });
     } else if (is.tur === "hemraListeOku") { const l = await oku(env, "venom:hemraListe", []); sonuc.push({ tur: is.tur, bekleyen: l.filter((x) => x.durum === "bekliyor").map((x) => ({ ozet: x.ozet, gonderildi: Boolean(x.gonderildi) })), toplam: l.length }); }
-    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
+    else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
   }
   await kaydet(env, "venom:claudeIslemSonuc", { zaman: simdi, sonuc }, 3 * 86400);

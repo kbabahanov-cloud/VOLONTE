@@ -1189,23 +1189,27 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   assert.equal(g.length, 0); // 16:01: henüz değil
   await mutabakatAdimi(o.env, cuma, tg);
   assert.ok(g.length >= 2 && g.every((x) => x.govde.chat_id === "999")); // sadece Patron
-  assert.match(g[0].govde.text, /ÖNİZLEME.*sadece siz görüyorsunuz\. Siz onaylamadan Fuat'a hiçbir şey gitmez/);
-  const on = g.at(-1).govde;
+  // 14 Kasım (Patron): önizleme TEK kart (üst bilgi + gidecek iki bakiye mesajı + düğme); bakiyelerin altında o günün ödemeleri satırı (kalıcı)
+  const on = g.find((x) => x.govde.reply_markup).govde;
+  assert.match(on.text, /^👁 <b>ÖNİZLEME — Fuat \(\d\d\.\d\d\.2026\)<\/b>: sadece siz görüyorsunuz\. Siz onaylamadan Fuat'a hiçbir şey gitmez\./);
   assert.equal(on.parse_mode, "HTML");
-  const BEKLENEN1 = "📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $";
-  const BEKLENEN = "📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $\n\nBundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.\nİyi çalışmalar.\n– Sami";
+  const OD = on.text.match(/\n(\d{1,2} \p{L}+ ödemeleri: yok)/u)[1];
+  const BEKLENEN1 = `📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $\n${OD}`;
+  const BEKLENEN = `📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 $\nBlack Rose 15: 100,00 $\nBlack Rose 20: 200,00 $\nBlack Rose 25: 0,00 $\nToplam: 350,00 $\n${OD}\n\nBundan sonra tüm hesaplar sistem üzerinden, şeffaf ve kayıt altında yürüyecek.\nİyi çalışmalar.\n– Sami`;
   // Patron önizlemesinde adetler görünür (sadece Patron); Fuat'ın mesajlarında adet listesi YOK
   const patronMetni = g.map((x) => x.govde.text).join("\n");
   assert.match(patronMetni, /📦 Adetler — SADECE SİZ görüyorsunuz[\s\S]*📦 BLACK ROSE MAĞAZASI – 4 model · 239 adet\n<pre>3557 · 200 adet   3601 ·   7 adet   3602 ·  12 adet\n3634 ·  20 adet<\/pre>/);
   assert.match(patronMetni, /📦 VOLONTE MAĞAZASI – 1 model · 4 adet\n<pre>3634 · 4 adet<\/pre>/);
-  assert.equal(g.at(-2).govde.text, BEKLENEN1); // MESAJ 1: BLACK ROSE (birebir)
-  assert.equal(on.text, BEKLENEN); // MESAJ 2: VOLONTE (birebir) — iki ayrı mesaj, düğme sonda
-  assert.ok(!g.at(-2).govde.reply_markup);
-  assert.match(g[0].govde.text, /Fuat'a SADECE en alttaki iki bakiye mesajı \(1: BLACK ROSE, 2: VOLONTE\) BİREBİR böyle gider; adet listeleri gitmez/);
-  assert.match(g[0].govde.text, /💵 Son ödemeler \(sadece siz\):\n.*5\.000,00 \$ · Black Rose 20 · elle · nakit · 📎 dekont/);
+  const kartParca = on.text.split("\n\n— — —\n\n");
+  assert.deepEqual(kartParca.slice(1), [BEKLENEN1, BEKLENEN]); // kartta Fuat'a gidecek İKİ mesaj birebir (BLACK ROSE, VOLONTE)
+  assert.match(kartParca[0], /Aşağıdaki bakiye mesajları Fuat'a BİREBİR böyle gider; adet listeleri gitmez/);
+  assert.match(kartParca[0], /💵 Son ödemeler \(sadece siz\):\n.*5\.000,00 \$ · Black Rose 20 · elle · nakit · 📎 dekont/);
   assert.deepEqual(on.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Fuat'a gönder"]); // tek düğme
-  assert.ok(!/fark|FARK|karşılaştır|ödeme|ÖDEME/.test(on.text)); // karşılaştırma ve ödeme yok
-  assert.ok(!/3194|fiyat|📦|adet/i.test(on.text + g.at(-2).govde.text)); // Fuat mesajlarında adet/model yok
+  const fuataGidecek = `${BEKLENEN1}\n${BEKLENEN}`.replace(OD, "").replace(OD, "");
+  assert.ok(!/fark|FARK|karşılaştır|ödeme|ÖDEME/.test(fuataGidecek)); // onaylı "… ödemeleri" satırı dışında karşılaştırma ve ödeme yok
+  assert.ok(!/3194|fiyat|📦|adet/i.test(`${BEKLENEN1}\n${BEKLENEN}`)); // Fuat mesajlarında adet/model yok
+  // Celal carileri henüz okunmadıysa Celal kartı açılmaz; Patron'a tek uyarı gider
+  assert.equal(g.filter((x) => /Celal mutabakatı hazırlanamadı/.test(x.govde.text)).length, 1);
   const id = on.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
   await mutabakatAdimi(o.env, cuma + 600, tg);
   assert.equal(g.filter((x) => /ÖNİZLEME/.test(x.govde.text)).length, 1); // cuma günü bir kez
@@ -1216,7 +1220,7 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   assert.equal(fGor.chat_id, 999);
   assert.equal(fGor.text, BEKLENEN);
   assert.equal(cagri(o.g, "sendMessage").at(-2).govde.text, BEKLENEN1);
-  assert.ok(!/VOLONTE kaydı|fark|ödeme|ÖDEME|5\.000/i.test(fGor.text)); // Fuat'a VOLONTE defteri, fark, ödeme yok
+  assert.ok(!/VOLONTE kaydı|fark|ödeme|ÖDEME|5\.000/i.test(fGor.text.replace(OD, ""))); // Fuat'a VOLONTE defteri, fark, (onaylı satır dışında) ödeme yok
   assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "501")); // hâlâ Fuat'a hiçbir şey yok
   // Hemra basamaz; Patron gönderir (eski hesap da yetkili)
   await g2({ callback_query: { id: "c", from: { id: 333 }, data: `mt:g:${id}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
@@ -1230,7 +1234,7 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   const fuatlar = cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501");
   assert.deepEqual(fuatlar.map((x) => x.govde.text), [BEKLENEN1, BEKLENEN]); // iki ayrı mesaj, birebir
   const fuatMsj = fuatlar[1];
-  assert.ok(!/VOLONTE kaydı|ödeme|fark/i.test(fuatMsj.govde.text));
+  assert.ok(!/VOLONTE kaydı|ödeme|fark/i.test(fuatMsj.govde.text.replace(OD, ""))); // onaylı "… ödemeleri" satırı dışında
   assert.deepEqual(fuatMsj.govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Mutabıkım", "❌ Uyuşmuyor", "⏳ Sonra kontrol edeceğim"]);
   const pdf = cagri(o.g, "sendDocument");
   assert.equal(pdf.length, 1);
@@ -1287,8 +1291,9 @@ test("mutabakat güvenliği: iki mağaza ayrı bakiye, tek düğme; Mutabıkım 
   const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 1 } }; };
   const r = await onizlemeGonder(o.env, tg, Date.UTC(2026, 10, 6, 14, 1) / 1000, "elle");
   assert.ok(!/FARK|fark/.test(g.map((x) => x.govde.text).join("\n")));
-  assert.match(g.at(-2).govde.text, /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 250,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 350,00 \$$/);
-  assert.match(g.at(-1).govde.text, /^📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 200,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 300,00 \$\n\nBundan sonra/);
+  const kp = g.at(-1).govde.text.split("\n\n— — —\n\n"); // 14 Kasım: tek kart = üst bilgi + iki bakiye mesajı
+  assert.match(kp[1], /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 250,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 350,00 \$\n6 Kasım ödemeleri: yok$/);
+  assert.match(kp[2], /^📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 0,00 \$\nBlack Rose 15: 100,00 \$\nBlack Rose 20: 200,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 300,00 \$\n6 Kasım ödemeleri: yok\n\nBundan sonra/);
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:g:${r.id}`, message: { chat: { id: 999 }, message_id: 1 } } }, o.env);
   assert.equal(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501").length, 0); // "Emin misiniz?" önce
@@ -1297,7 +1302,7 @@ test("mutabakat güvenliği: iki mağaza ayrı bakiye, tek düğme; Mutabıkım 
   await g2({ callback_query: { id: "c", from: { id: 999 }, data: `mt:G:${r.id}`, message: { chat: { id: 999 }, message_id: 3 } } }, o.env);
   const fuata = cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "501");
   assert.equal(fuata.length, 2); // onayla iki ayrı mesaj gider
-  assert.deepEqual(fuata.map((x) => x.govde.text), [g.at(-2).govde.text, g.at(-1).govde.text]); // Fuat'a önizlemedekinin birebir aynısı
+  assert.deepEqual(fuata.map((x) => x.govde.text), kp.slice(1)); // Fuat'a önizleme kartındaki iki mesajın birebir aynısı
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:m:${r.id}`, message: { chat: { id: 501 }, message_id: 3 } } }, o.env);
   const p = cagri(o.g, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text;
@@ -1357,8 +1362,8 @@ test("mutabakat bakiyeleri: iki mağaza AYRI (karşılaştırma yok); Black Rose
   const m = await mutabakatMetni(o.env, "2026-11-06");
   const metin = m.fuat.join("\n");
   assert.equal(m.fuat.length, 2); // iki ayrı mesaj
-  assert.match(m.fuat[0], /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 1\.000,00 \$\nBlack Rose 20: 2\.500,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 3\.800,00 \$$/);
-  assert.match(m.fuat[1], /^📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 61,85 \$ \(B\)\nBlack Rose 20: 2\.400,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 2\.638,15 \$\n\nBundan sonra/);
+  assert.match(m.fuat[0], /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 1\.000,00 \$\nBlack Rose 20: 2\.500,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 3\.800,00 \$\n6 Kasım ödemeleri: yok$/);
+  assert.match(m.fuat[1], /^📊 VOLONTE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 300,00 \$\nBlack Rose 15: 61,85 \$ \(B\)\nBlack Rose 20: 2\.400,00 \$\nBlack Rose 25: 0,00 \$\nToplam: 2\.638,15 \$\n6 Kasım ödemeleri: yok\n\nBundan sonra/);
   assert.deepEqual(m.patron, m.fuat); // Patron önizlemesi = Fuat'ın göreceği
   assert.ok(!/fark|FARK|uyarı|⚠️|✅|GENEL TOPLAM/.test(metin));
   assert.deepEqual(bakiyeSatirlari(null, { tur: "kart" }), ["(bakiye henüz okunamadı)"]);
@@ -3753,4 +3758,62 @@ test("13 Kasım (Patron, B1) — Hemra'ya haftalık liste satış ADEDİ taşıy
   const hemra = g.filter((x) => String(x.govde.chat_id) === "333").map((x) => x.govde.text);
   assert.equal(hemra.filter((t) => t.includes("7 günde 42 satış")).length, 1); // sadece izinli liste gitti
   assert.ok(!hemra.some((t) => /Dün 42 satış|fiyat 30/.test(t)));
+});
+
+test("14 Kasım (Patron) MUTABAKAT — ödeme satırı kalıcı (cari bazında, o günün borç hareketleri); CELAL mutabakatı ayrı kart + ayrı Patron onayı (Celal Kayran / Celal İndirim ayrı + toplam + ödemeler); biri diğerini geçersiz kılmaz; Patron onaylamadan kimseye gitmez; süzgeç onaylı satır dışında ödeme bilgisini yine durdurur", async () => {
+  const { mutabakatMetni, celalMutabakatMetni, onizlemeGonder, odemeSatiri, fuatSuzgec } = await import("./mutabakat.js");
+  const { guncelleme: g2 } = await import("./sami.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "999", FUAT_ID: "501" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 601, ad: "Celal", grup: "celal" }, { id: 555, ad: "Sinem" }]));
+  const ayar = (k, v) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k, v: JSON.stringify(v) }) });
+  const ayarOku = async (k) => { const x = (await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k }) })).json()).v; return x == null ? null : JSON.parse(x); };
+  const h = (a, kart, ad) => ({ anahtar: a, ad: ad || a, kart, donemler: {} });
+  await ayar("cari:BLACKROSE", { zaman: 1, hesaplar: [h("00", -4305), h("15", -3366.85), h("20", -110896.4), h("25", -1920.5)], hareketler: [{ hesap: "20", tablo: "T", ind: "1", tarih: "2026-11-13", borc: 11000, alacak: 0 }, { hesap: "20", tablo: "T", ind: "2", tarih: "2026-11-13", borc: 0, alacak: 352 }] });
+  await ayar("cari:VOLONTE", { zaman: 1, hesaplar: [h("00", -3385), h("15", 61.85), h("20", -65372.92), h("25", 0)], hareketler: [{ hesap: "20", tablo: "T", ind: "3", tarih: "2026-11-13", borc: 22310, alacak: 0 }, { hesap: "00", tablo: "T", ind: "4", tarih: "2026-11-13", borc: 1137, alacak: 0 }, { hesap: "20", tablo: "T", ind: "5", tarih: "2026-11-12", borc: 500, alacak: 0 }, { hesap: "20", tablo: "T", ind: "6", tarih: "2026-11-13", borc: 0, alacak: 880 }] });
+  // 1) Fuat'ın mesajları: bakiyeler eski biçimde, altında "13 Kasım ödemeleri" (sadece o günün borç hareketleri; alacak ve başka gün yok)
+  const m = await mutabakatMetni(o.env, "2026-11-13");
+  assert.equal(m.fuat[0], "📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 4.305,00 $\nBlack Rose 15: 3.366,85 $\nBlack Rose 20: 110.896,40 $\nBlack Rose 25: 1.920,50 $\nToplam: 120.488,75 $\n13 Kasım ödemeleri: Black Rose 20: 11.000,00 $");
+  assert.match(m.fuat[1], /\nToplam: 68\.696,07 \$\n13 Kasım ödemeleri: Black Rose 00: 1\.137,00 \$ · Black Rose 20: 22\.310,00 \$\n\nBundan sonra/);
+  assert.equal(odemeSatiri({ hareketler: [] }, "2026-11-20"), "20 Kasım ödemeleri: yok");
+  assert.ok(fuatSuzgec("Bugün ödeme yapıldı")); // genel süzgeç aynen: serbest "ödeme" yazısı fabrikaya gidemez
+  // 2) Celal: cari gelmediyse kart yok
+  assert.equal(await celalMutabakatMetni(o.env, "2026-11-13"), null);
+  await ayar("cari:CELAL:VOLONTE", { zaman: 1, hesaplar: [h("CK", -12400, "CELAL KAYRAN"), h("CI", -1250, "CELAL İNDİRİM")], hareketler: [{ hesap: "CK", tablo: "T", ind: "9", tarih: "2026-11-13", borc: 3000, alacak: 0 }] });
+  const c = await celalMutabakatMetni(o.env, "2026-11-13");
+  assert.deepEqual(c.fuat, ["📊 VOLONTE – Sami\nCelal Bey,\n💰 Bakiyeler:\nCelal Kayran: 12.400,00 $\nCelal İndirim: 1.250,00 $\nToplam: 13.650,00 $\n13 Kasım ödemeleri: Celal Kayran: 3.000,00 $"]);
+  // 3) iki önizleme: ikisi de SADECE Patron'a, ayrı kart, ayrı düğme; biri diğerini geçersiz kılmaz
+  const g = [];
+  const tg = async (env, metod, govde) => { g.push({ metod, govde }); return { ok: true, result: { message_id: 100 + g.length } }; };
+  const t = Date.UTC(2026, 10, 14, 8, 30) / 1000;
+  const rf = await onizlemeGonder(o.env, tg, t, "elle", { gun: "2026-11-13" });
+  const rc = await onizlemeGonder(o.env, tg, t + 1, "elle", { gun: "2026-11-13", kisi: "celal" });
+  assert.ok(g.every((x) => String(x.govde.chat_id) === "999"));
+  const kartlar = g.filter((x) => x.govde.reply_markup);
+  assert.deepEqual(kartlar.map((x) => x.govde.reply_markup.inline_keyboard[0][0].text), ["✅ Fuat'a gönder", "✅ Celal'e gönder"]);
+  assert.match(kartlar[0].govde.text, /^👁 <b>ÖNİZLEME — Fuat \(13\.11\.2026\)<\/b>/);
+  assert.match(kartlar[1].govde.text, /^👁 <b>ÖNİZLEME — Celal \(13\.11\.2026\)<\/b>: sadece siz görüyorsunuz\. Siz onaylamadan Celal'e hiçbir şey gitmez\.[\s\S]*Celal Kayran: 12\.400,00 \$/);
+  assert.notEqual(kartlar[0].govde.text.split("\n")[0], kartlar[1].govde.text.split("\n")[0]); // ilk satırlar farklı (Venom ikinci kartı "tekrar" saymasın)
+  assert.deepEqual([(await ayarOku(`mt:${rf.id}`)).durum, (await ayarOku(`mt:${rc.id}`)).durum], ["onizleme", "onizleme"]);
+  // 4) Patron Celal kartını onaylar → "Emin misiniz?" → sadece Celal'e gider; Fuat'a hiçbir şey gitmez, Fuat kaydı önizlemede kalır
+  o.g.length = 0;
+  const bas = (kim, data) => g2({ callback_query: { id: "c", from: { id: kim }, data, message: { chat: { id: kim }, message_id: 1 } } }, o.env);
+  await bas(999, `mt:g:${rc.id}`);
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Emin misiniz\?<\/b> Bakiye mesajları şimdi Celal'e gidecek\./);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => ["601", "501"].includes(String(x.govde.chat_id))));
+  await bas(999, `mt:G:${rc.id}`);
+  const celale = cagri(o.g, "sendMessage").filter((x) => String(x.govde.chat_id) === "601");
+  assert.deepEqual(celale.map((x) => x.govde.text), c.fuat);
+  assert.deepEqual(celale[0].govde.reply_markup.inline_keyboard.flat().map((d) => d.text), ["✅ Mutabıkım", "❌ Uyuşmuyor", "⏳ Sonra kontrol edeceğim"]);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => String(x.govde.chat_id) === "501"));
+  assert.deepEqual([(await ayarOku(`mt:${rf.id}`)).durum, (await ayarOku(`mt:${rc.id}`)).durum], ["onizleme", "gonderildi"]);
+  // 5) Fuat Celal'in kartına basamaz; Celal "Mutabıkım" → Patron'a "Celal … bakiyeyi onayladı"
+  await bas(501, `mt:m:${rc.id}`);
+  assert.match(cagri(o.g, "answerCallbackQuery").at(-1).govde.text, /Bu düğme Celal'de\./);
+  await bas(601, `mt:m:${rc.id}`);
+  assert.ok(cagri(o.g, "sendMessage").some((x) => String(x.govde.chat_id) === "999" && /^✅ Celal 13\.650,00 \$ bakiyeyi onayladı/.test(x.govde.text)));
+  // 6) Patron Fuat kartını onaylar → Fuat'a iki mesaj (ödeme satırıyla); Celal'in onaylı kaydı bozulmaz
+  await bas(999, `mt:g:${rf.id}`); await bas(999, `mt:G:${rf.id}`);
+  assert.deepEqual(cagri(o.g, "sendMessage").filter((x) => String(x.govde.chat_id) === "501").map((x) => x.govde.text), m.fuat);
+  assert.deepEqual([(await ayarOku(`mt:${rf.id}`)).durum, (await ayarOku(`mt:${rc.id}`)).durum], ["gonderildi", "mutabik"]);
 });

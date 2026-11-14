@@ -19,7 +19,7 @@ import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI, celalKoduMu } from "./stok.js";
 import { patronMu, silKuyrugu, geriKuyrugu, magazaStoklari, magazaStogu, STOK_KURALI } from "./sil.js";
-import { fuatSuzgec } from "./mutabakat.js";
+import { fuatSuzgec, onizlemeGonder as mutabakatOnizleme } from "./mutabakat.js";
 import { REPETE_EN_AZ } from "./repete-rapor.js";
 import { acikRepete, engelMetni, rkGeldi, rkHemradan, dagilimYazi, dagilimAdet, denemeTemizle, modRepeteKapat } from "./repete-kart.js"; // 11 Kasım: repete kartı (kural 43: açık repete varken yeni repete yok)
 
@@ -2934,6 +2934,9 @@ async function tekIslem(env, simdi, tg) {
     const lg = is.gun || gunAnahtari(simdi);
     const { giden, bekleyen } = await gidenSay(env, lg, null, null);
     sonuc.metin = gittiMetni(lg, simdi, giden, bekleyen); sonuc.giden = giden;
+  } else if (is.tur === "mutabakatHazirla") { // 14 Kasım (Patron): mutabakat önizlemesini ŞİMDİ hazırla → kart SADECE Patron'a gider ({gun, kisi: "fuat" | "celal"}); Patron onaylamadan kimseye gitmez
+    const r = await mutabakatOnizleme(env, tg, simdi, is.kaynak || "elle", { gun: /^\d{4}-\d{2}-\d{2}$/.test(String(is.gun || "")) ? is.gun : null, kisi: is.kisi === "celal" ? "celal" : "fuat" });
+    sonuc.mutabakat = r ? { id: r.id, gun: r.gun, kisi: r.kisi || "fuat", durum: r.durum, kart: Boolean(r.onizlemeMesaj), metin: r.duzFuat } : null;
   } else if (is.tur === "listeDurum") { // 10 Kasım: bugünün ve dünün liste durumu (okuma; hiçbir şey göndermez)
     sonuc.satisAcik = (await env.KAYIT.get("sami:satisAcik")) === "1";
     { const sc = is.soran ? MAGAZALAR.find((c) => c.magaza === is.soran) : null; sonuc.cevap = await listeDurumu(env, simdi, sc ? sc.kime(env) : null); } // 13 Kasım: Sami'nin "liste durumu" cevabının aynısı (soran: "VOLONTE" | "BLACKROSE" → o markanın kontrol sorumlusu sormuş gibi); sadece okur

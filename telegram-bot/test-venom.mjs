@@ -2450,19 +2450,27 @@ test("13 Kasım (Patron, kural 77 + B4) — cuma 20:00 mutabakat kontrolü: kapa
   const v = await import("./venom-bot.js");
   const stokYaz = (o, k, val) => o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k, v: JSON.stringify(val) }) });
   const cuma = ist(13, 20, 5), gun = "2026-11-13";
-  // 1) adım kapalı (bugünkü gerçek durum)
+  // 1) adım kapalı
   let o = ortam();
   let r = await v.mutabakatBak(o.env, cuma);
   assert.deepEqual([r.ok, r.sebep], [false, "mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı)"]);
-  assert.equal(v.mutabakatSatiri(r), "Cuma mutabakatı Fuat'a gitmedi — sebep: mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı) — önerim: \"mutabakatı aç\" derseniz açarım.");
-  // 2) açık ama çalışmadı
+  assert.equal(v.mutabakatSatiri(r), "Cuma mutabakatı (Fuat + Celal) tamamlanmadı — sebep: mutabakat adımı kapalı (10 Kasım görev kâğıdı düzeninde kapandı) — önerim: \"mutabakatı aç\" derseniz açarım.");
+  // 2) açık ama çalışmadı → Venom KENDİSİ çözer: Sami'ye Fuat + Celal kartlarını hazırlatır (Patron'a ayrı satır yok; kartlar gelir); kuru çalışmada dokunmaz
   o.depo.set("kagit:ac", JSON.stringify(["sami:mutabakat"]));
-  assert.equal((await v.mutabakatBak(o.env, cuma)).sebep, "mutabakat adımı açık ama bugün çalışmadı");
-  // 3) çalıştı, onay kartı Patron'da
+  r = await v.mutabakatBak(o.env, cuma, { kuru: true });
+  assert.ok(r.cozuldu); assert.equal(o.depo.has("sami:islemler"), false);
+  r = await v.mutabakatBak(o.env, cuma);
+  assert.deepEqual(JSON.parse(o.depo.get("sami:islemler")), [{ tur: "mutabakatHazirla", gun, kisi: "fuat", kaynak: "cuma" }, { tur: "mutabakatHazirla", gun, kisi: "celal", kaynak: "cuma" }]);
+  // 3) çalıştı: Fuat kartı Patron'da, Celal kartı yok
   await stokYaz(o, `mt:cuma:${gun}`, 1); await stokYaz(o, "mt:liste", ["a1"]); await stokYaz(o, "mt:a1", { id: "a1", gun, durum: "onizleme" });
-  assert.equal((await v.mutabakatBak(o.env, cuma)).sebep, "onay kartı sizde bekliyor (Fuat'a henüz gitmedi)");
-  // 4) Fuat'a gitti
-  await stokYaz(o, "mt:a1", { id: "a1", gun, durum: "gonderildi" });
+  r = await v.mutabakatBak(o.env, cuma);
+  assert.equal(r.sebep, "Fuat: onay kartı sizde bekliyor · Celal: kart hazırlanamadı (Celal carileri Vegawin'den okunmamış olabilir)");
+  // 4) Fuat'a gitti, Celal kartı onayda
+  await stokYaz(o, "mt:a1", { id: "a1", gun, durum: "gonderildi" }); await stokYaz(o, "mt:liste", ["a1", "c1"]); await stokYaz(o, "mt:c1", { id: "c1", gun, kisi: "celal", durum: "onizleme" });
+  r = await v.mutabakatBak(o.env, cuma);
+  assert.deepEqual([r.ok, r.sebep, r.oneri], [false, "Celal: onay kartı sizde bekliyor", "karttaki \"✅ … gönder\" düğmesine basın"]);
+  // 5) ikisi de gitti
+  await stokYaz(o, "mt:c1", { id: "c1", gun, kisi: "celal", durum: "mutabik" });
   assert.equal((await v.mutabakatBak(o.env, cuma)).ok, true);
   // rapor: akşam satırı + sınırlar
   o = ortam();
