@@ -83,7 +83,8 @@
   ],
   "videolar": [],
   "gizli": true,
-  "eklenme": "2026-11-11"
+  "eklenme": "2026-11-11",
+  "bitti": true
  },
  {
   "kod": "3489",
@@ -2408,7 +2409,8 @@
    "selin/3419/0"
   ],
   "gizli": true,
-  "eklenme": "2026-11-02"
+  "eklenme": "2026-11-02",
+  "bitti": true
  },
  {
   "kod": "3422",
@@ -2644,7 +2646,8 @@
    "selin/3490/0"
   ],
   "gizli": true,
-  "eklenme": "2026-11-02"
+  "eklenme": "2026-11-02",
+  "bitti": true
  },
  {
   "kod": "3494",
@@ -3685,7 +3688,8 @@
    "selin/3583/0"
   ],
   "gizli": true,
-  "eklenme": "2026-10-30"
+  "eklenme": "2026-10-30",
+  "bitti": true
  },
  {
   "kod": "3578",
