@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-14.4
+Sürüm: 2026-11-15.1
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -125,3 +125,4 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 82. Claude Code mevcut / eski HERHANGİ bir işe (sadece korunan akışlara değil) dokunacaksa önce Patron'a haber verir: "Şu işe dokunuyorum: X — eski hali: … — yeni hali: … — neden: …"; Patron "tamam" demeden o değişikliği yapmaz. Yeni eklenen iş eski işi değiştiremez; değiştirecekse yine önce haber verir.
 83. Rapor ciro · günlük gider · net gösterir; günlük gidere fabrika / cari ödemeleri GİRMEZ (borç ödemesidir, gider değildir). Fabrikaya yapılan ödeme raporda ayrı satırda yazılır: "🏭 Fabrikaya ödeme: …". Açıklamasında "Murat aldı" yazan kişisel harcama, ortak çekişi ve avans da günlük gider sayılmaz; ayrı satırda yazılır: "👤 Kişisel/ortak: …".
 84. Venom yapamadığı işi "not ettim" diye geçiştirmez: "Yapamıyorum — sebep: …" der ve işi eksik araç listesine yazar. Patron onaylarsa aracı Claude Code ekler; bot kendi kendine araç ekleyemez.
+85. Patron'un yazdığı HER mesaj Venom'un beynine gider; hiçbir kalıp cevap Patron'un sorusunu yutamaz.

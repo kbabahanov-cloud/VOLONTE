@@ -2814,7 +2814,7 @@ test("müşteri paylaşımı — akış: canlı değilken eski yol; Hemra 'müş
     const adres = String(url);
     if (adres.startsWith("https://api.anthropic.com")) {
       const g = JSON.parse(istek.body), sema = g.output_config.format.schema.required;
-      const cevap = sema.includes("tur") ? { tur: "ekran", kutular: [{ x: 0, y: 0, w: 1, h: 0.08, ne: "başlık: isim + numara + profil" }], mesaj: "Merci beaucoup, la robe est magnifique", kiyafet: false } : nora[noraNo++];
+      const cevap = sema.includes("tur") ? { tur: "ekran", kutular: [{ x: 0, y: 0, w: 1, h: 0.08, ne: "başlık: isim + numara + profil" }], mesaj: "Merci beaucoup, la robe est magnifique", kiyafet: false, marka: "" } : nora[noraNo++];
       return new Response(JSON.stringify({ id: "m", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(cevap) }], usage: { input_tokens: 10, output_tokens: 10 } }), { headers: { "content-type": "application/json" } });
     }
     if (adres.includes("/file/bot")) return new Response(new Uint8Array([1, 2, 3]));
@@ -2829,14 +2829,15 @@ test("müşteri paylaşımı — akış: canlı değilken eski yol; Hemra 'müş
   const { musteriPaylasimAdimi } = await import("./worker.js");
   o.env.__simdi = T(10);
   // 1) iş canlıya alınmadı: Hemra'nın "müşteri" fotoğrafı ESKİ yoluna gider (kuyruk açılmaz)
+  const gelenler = () => [...o.depo.keys()].filter((k) => k.startsWith("kemal:mpg:")).sort();
   await foto(333, "Hemra", "müşteri 3403 Paris");
-  assert.equal(o.depo.get("kemal:mpGelen"), undefined);
+  assert.deepEqual(gelenler(), []);
   // 2) canlı: Hemra → alındı; yetkisiz ekip üyesi (555) → eski yol
   o.depo.set("kemal:musteriPaylasim", "1");
   await foto(555, "Aziz", "müşteri");
-  assert.equal(o.depo.get("kemal:mpGelen"), undefined);
+  assert.deepEqual(gelenler(), []);
   await foto(333, "Hemra", "müşteri 3403 Paris");
-  assert.equal(JSON.parse(o.depo.get("kemal:mpGelen")).length, 1);
+  assert.deepEqual(gelenler(), ["kemal:mpg:333-m77:bas", "kemal:mpg:333-m77:f:000000000077"]);
   assert.match(json.at(-1).govde.text, /Müşteri paylaşımı alındı/);
   // 3) 5 dakikalık adım: kart SADECE gönderene (Hemra), tek mesaj: görsel + yazı + 3 düğme; kanala hiçbir şey gitmez
   await musteriPaylasimAdimi(o.env, T(10, 5));
@@ -2872,14 +2873,14 @@ test("müşteri paylaşımı — akış: canlı değilken eski yol; Hemra 'müş
   assert.equal(JSON.parse(o.depo.get(`kemal:mp:${id}`)).durum, "paylasildi");
   assert.equal(o.depo.get("kodlar"), onceKodlar); assert.equal([...o.depo.keys()].filter((k) => /^sayac:/.test(k)).length, onceSayac);
   assert.match(json.filter((x) => x.url.endsWith("/editMessageCaption")).at(-1).govde.caption, /✅ Kanala çıktı \(Hemra\)/);
-  // 6) Merdan (Black Rose) kod yazmadan: imza BLACK ROSE, model satırı YOK; 30 dk dolmadan onaylarsa SIRADA bekler, saati gelince çıkar
+  // 6) Merdan (Black Rose) kod yazmadan: imza BLACK ROSE, model satırı YOK (kartta da kod satırı yok — tahmin edilmez); 30 dk dolmadan onaylarsa SIRADA bekler, saati gelince çıkar
   o.env.__simdi = T(10, 15);
   await guncellemeIsle({ message: { message_id: 78, date: T(10, 15), chat: { id: 444, type: "private" }, from: { id: 444, first_name: "Merdan" }, photo: [{ file_id: "b2" }], caption: "Müşteri" } }, o.env);
   await musteriPaylasimAdimi(o.env, T(10, 20));
   const k2 = formlar[2].f, id2 = JSON.parse(k2.reply_markup).inline_keyboard[0][0].callback_data.split(":")[2];
   assert.equal(k2.chat_id, "444");
   assert.ok(k2.caption.includes("— BLACK ROSE family 🖤") && !/Model: (VOLONTE|BLACK ROSE)/.test(k2.caption));
-  assert.match(k2.caption, /Model kodu yazılmadı/);
+  assert.doesNotMatch(k2.caption, /Model/); // 15 Kasım (Patron): varsayılan — kod yok, kod satırı da yok
   o.env.__simdi = T(10, 25);
   await guncellemeIsle({ callback_query: { id: "c", from: { id: 444, first_name: "Merdan" }, data: `mp:o:${id2}`, message: { chat: { id: 444 }, message_id: 5002 } } }, o.env);
   assert.equal(formlar.length, 3); // kanala çıkmadı: önceki müşteri paylaşımından 15 dk sonra
@@ -2899,4 +2900,87 @@ test("müşteri paylaşımı — akış: canlı değilken eski yol; Hemra 'müş
   assert.match(json.filter((x) => x.url.endsWith("/editMessageCaption")).at(-1).govde.caption, /sırada: bugünkü 2 müşteri paylaşımı doldu/);
   // son 20 altyazı hafızası tutuluyor
   assert.equal(JSON.parse(o.depo.get("kemal:mpAltyazi")).length, 4);
+});
+
+test("müşteri paylaşımı — ALBÜM (15 Kasım, Patron): bir gönderideki bütün görseller TEK kart, tek onay, kanalda TEK albüm + tek altyazı; kod sadece açıkça yazılırsa; aynı görsel iki kez sayılmaz; iptal edilen kart kanala çıkmaz", async () => {
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  Object.assign(o.env, { ANTHROPIC_API_KEY: "k", MURAT_ID: "111", FABRIKA_SORUMLU: "333", EKIP_IDS: "333", BR_SORUMLU: "444", ALLOWED_IDS: "111,444" });
+  await kopru(o.env, [{ kod: "3403", adet: 40, fiyat: 44 }]);
+  o.env.IMAGES = { info: async () => ({ width: 1000, height: 2000 }), input: () => ({ transform() { return this; }, draw() { return this; }, async output() { return { response: () => new Response(new Uint8Array([9, 9, 9])) }; } }) };
+  o.depo.set("kemal:musteriPaylasim", "1");
+  let mid = 6000, inceleN = 0; const formlar = [], json = [], noraIstek = [];
+  const dosya = { a1: [1], a2: [2], a3: [3], a4: [3] }; // a4, a3 ile AYNI görsel
+  globalThis.fetch = async (url, istek) => {
+    const adres = String(url);
+    if (adres.startsWith("https://api.anthropic.com")) {
+      const g = JSON.parse(istek.body), sema = g.output_config.format.schema.required;
+      if (!sema.includes("tur")) noraIstek.push(g.messages[0].content.at(-1).text);
+      const cevap = sema.includes("tur") ? { tur: "ekran", kutular: inceleN++ === 0 ? [{ x: 0, y: 0, w: 1, h: 0.08, ne: "başlık" }] : [], mesaj: `Merci ${inceleN}`, kiyafet: false, marka: "" } : { fr: "Vos messages nous portent, merci à chacune de vous.", en: "Your messages carry us — thank you, each of you." };
+      return new Response(JSON.stringify({ id: "m", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(cevap) }], usage: { input_tokens: 10, output_tokens: 10 } }), { headers: { "content-type": "application/json" } });
+    }
+    const dm = adres.match(/\/file\/bot[^/]+\/p\/(\w+)\.jpg$/);
+    if (dm) return new Response(new Uint8Array(dosya[dm[1]] || [7]));
+    if (istek && istek.body instanceof FormData) {
+      const f = Object.fromEntries([...istek.body.entries()].map(([k, v]) => [k, typeof v === "string" ? v : "(dosya)"])); formlar.push({ url: adres, f });
+      const n = adres.endsWith("/sendMediaGroup") ? JSON.parse(f.media).length : 1;
+      return new Response(JSON.stringify({ ok: true, result: adres.endsWith("/sendMediaGroup") ? Array.from({ length: n }, () => ({ message_id: mid++ })) : { message_id: mid++ } }));
+    }
+    const govde = istek && istek.body ? JSON.parse(istek.body) : {};
+    json.push({ url: adres, govde });
+    if (adres.endsWith("/getFile")) return new Response(JSON.stringify({ ok: true, result: { file_path: `p/${govde.file_id}.jpg` } }));
+    return new Response(JSON.stringify({ ok: true, result: { message_id: mid++ } }));
+  };
+  const T = (hh, mm = 0) => Date.UTC(2026, 10, 15, hh - 3, mm) / 1000;
+  const { musteriPaylasimAdimi, mpIptal } = await import("./worker.js");
+  o.env.__simdi = T(10);
+  const album = (no, fid, yazi) => guncellemeIsle({ message: { message_id: no, date: T(10), media_group_id: "ALB1", chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, document: { file_id: fid, mime_type: "image/jpeg" }, ...(yazi ? { caption: yazi } : {}) } }, o.env);
+  // Hemra 4 görseli DOSYA olarak tek albümde gönderir; yazı sadece ilkinde ("müşteri", kod yok)
+  await album(81, "a1", "müşteri"); await album(82, "a2"); await album(83, "a3"); await album(84, "a4");
+  assert.equal(json.filter((x) => /Müşteri paylaşımı alındı/.test(x.govde.text || "")).length, 1); // tek "alındı" cevabı; diğer görseller sessizce eklenir
+  // albümün kalanı gelsin diye hemen karta çevrilmez
+  await musteriPaylasimAdimi(o.env, T(10) + 10);
+  assert.equal(formlar.length, 0);
+  await musteriPaylasimAdimi(o.env, T(10, 5));
+  // ekip: TEK albüm (3 görsel — aynı görsel bir kez) + altında TEK onay kartı
+  assert.equal(formlar.length, 1);
+  assert.ok(formlar[0].url.endsWith("/sendMediaGroup") && formlar[0].f.chat_id === "333");
+  assert.equal(JSON.parse(formlar[0].f.media).length, 3);
+  const kart = json.filter((x) => x.url.endsWith("/sendMessage") && (x.govde.reply_markup || {}).inline_keyboard).at(-1).govde;
+  assert.match(kart.text, /^👥 MÜŞTERİ PAYLAŞIMI — onayınıza/);
+  assert.match(kart.text, /🖼 3 görsel — kanala TEK albüm, tek yazıyla çıkar\./);
+  assert.match(kart.text, /🔒 1 kişisel bilgi alanı kapatıldı/);
+  assert.doesNotMatch(kart.text, /Model/); // kod yazılmadı → kod yok, tahmin yok
+  assert.ok(kart.text.endsWith("— VOLONTE family 🤍"));
+  assert.equal(noraIstek.length, 1); // TEK yazı
+  assert.match(noraIstek[0], /3 görsellik TEK albüm/); assert.match(noraIstek[0], /Gönderen yer belirtmedi \(yer YAZMA\)/);
+  assert.deepEqual([...o.depo.keys()].filter((k) => k.startsWith("kemal:mpg:")), []); // gelen kayıtları temizlendi
+  const id = kart.reply_markup.inline_keyboard[0][0].callback_data.split(":")[2];
+  assert.deepEqual([JSON.parse(o.depo.get(`kemal:mp:${id}`)).adet, [...o.depo.keys()].filter((k) => k.startsWith(`kemal:mpFoto:${id}:`)).length], [3, 3]);
+  // ✅ Paylaş → kanalda TEK albüm, yazı sadece ilk görselde; günlük sayaç 1 (3 görsel = 1 paylaşım)
+  o.env.__simdi = T(10, 10);
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `mp:o:${id}`, message: { chat: { id: 333 }, message_id: 6003 } } }, o.env);
+  assert.equal(formlar.length, 2);
+  const kanal = formlar[1].f, km = JSON.parse(kanal.media);
+  assert.ok(formlar[1].url.endsWith("/sendMediaGroup") && kanal.chat_id === "-100");
+  assert.deepEqual(km.map((m) => Boolean(m.caption)), [true, false, false]);
+  assert.equal(km[0].caption, "Vos messages nous portent, merci à chacune de vous.\n\nYour messages carry us — thank you, each of you.\n\n— VOLONTE family 🤍");
+  assert.equal(o.depo.get("kemal:mpGun:2026-11-15"), "1");
+  // kod AÇIKÇA yazılırsa eklenir (Vegawin'de doğrulanır)
+  o.env.__simdi = T(12);
+  await guncellemeIsle({ message: { message_id: 90, date: T(12), chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, photo: [{ file_id: "a1" }], caption: "müşteri 3403" } }, o.env);
+  await musteriPaylasimAdimi(o.env, T(12, 5));
+  const tek = formlar.at(-1);
+  assert.ok(tek.url.endsWith("/sendPhoto"));
+  assert.ok(tek.f.caption.includes("Model: 3403 (Vegawin'de doğrulandı).") && tek.f.caption.endsWith("— VOLONTE family 🤍\n\nModel: VOLONTE 3403"));
+  // iptal edilen kart: düğmesi artık çalışmaz, kanala çıkmaz
+  const id2 = JSON.parse(tek.f.reply_markup).inline_keyboard[0][0].callback_data.split(":")[2];
+  assert.equal((await mpIptal(o.env, id2, "Patron: tek fotoğraflı eski kart", T(12, 6))).ok, true);
+  const once = formlar.length;
+  await guncellemeIsle({ callback_query: { id: "c", from: { id: 333, first_name: "Hemra" }, data: `mp:o:${id2}`, message: { chat: { id: 333 }, message_id: 1 } } }, o.env);
+  assert.equal(formlar.length, once);
+  assert.equal(JSON.parse(o.depo.get(`kemal:mp:${id2}`)).durum, "iptal");
+  // PDF görsele çevrilemez: açıkça söylenir
+  await guncellemeIsle({ message: { message_id: 95, date: T(12), chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, document: { file_id: "p1", mime_type: "application/pdf" }, caption: "müşteri" } }, o.env);
+  assert.match(json.at(-1).govde.text, /PDF dosyasını görsele çeviremiyorum/);
 });

@@ -46,7 +46,7 @@ import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
 import { medyaDosyasi, dosyaIndir, dosyaBaytIndir, tarifle, adaySec, karsilastir, ayniModelMi, jsonIste, gorsel as gorselBlok, base64 as b64Yap } from "./tanima.js";
-import { mpNiyet, mpNot, gorselIncele, maskele, altyaziUret, altyaziKur, mpYayinKapisi, mpGunAnahtari, mpId, mpDugmeler, kartYazi, MP_HAFIZA, MP_GUNLUK } from "./musteri-paylasim.js"; // 14 Kasım: müşteri teşekkür paylaşımı (yeni iş)
+import { mpNiyet, mpNot, gorselIncele, maskele, altyaziUret, altyaziKur, mpYayinKapisi, mpGunAnahtari, mpId, mpDugmeler, kartYazi, MP_HAFIZA, MP_GUNLUK, MP_EN_FAZLA } from "./musteri-paylasim.js"; // 14 Kasım: müşteri teşekkür paylaşımı (yeni iş)
 import { markaBas } from "./marka.js";
 import { repeteHesapla, repeteMetni, siparisTaslagi, hatirlatmaTaslagi } from "./repete-rapor.js";
 import { haftaIci, magazaAcik } from "./magaza-saat.js";
@@ -163,6 +163,11 @@ export async function tasarimOnayi(env, { acik = true } = {}) {
 export async function venomTasarim(env, yol, g = {}) {
   if (env.KATALOG) return (await kemalNesne(env).fetch(`https://kemal/kemal/${yol}`, { method: "POST", body: JSON.stringify(g) })).json();
   return yol === "tasarim-ornek" ? tasarimOrnegi(env) : tasarimOnayi(env, g);
+}
+// 15 Kasım: müşteri paylaşımı kartının iptali (Patron'un emri; kart kapanır, kanala çıkmaz)
+export async function venomMpIptal(env, g) {
+  if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/mp-iptal", { method: "POST", body: JSON.stringify(g || {}) })).json();
+  return mpIptal(env, String((g || {}).id || ""), String((g || {}).neden || "Patron"));
 }
 // 13 Kasım: Venom'un "Kemal'i çalıştır" kapısı (durum Kemal'in kendi deposunda)
 export async function venomCalistir(env, g) {
@@ -3109,27 +3114,35 @@ export async function patronPaylasimAdimi(env, simdi) {
   }
 }
 // ---------- 14 Kasım (Patron): MÜŞTERİ TEŞEKKÜR PAYLAŞIMI (Kemal + Nora) — ayrıntı ve kurallar musteri-paylasim.js ----------
-// Kayıtlar (gerçek KV): "kemal:musteriPaylasim" = "1" (canlı) · "kemal:mpGelen" (bekleyen istekler) · "kemal:mp:<id>" (kart) ·
-// "kemal:mpFoto:<id>" (kapatılmış görsel) · "kemal:mpSira" (onaylı, saatini bekleyen) · "kemal:mpGun:<gün>" (günlük sayaç) ·
-// "kemal:mpSon" (son müşteri paylaşımı zamanı) · "kemal:mpAltyazi" (son 20 altyazı). Normal 12 paylaşımın sayacına / sırasına DOKUNMAZ.
+// Kayıtlar (gerçek KV): "kemal:musteriPaylasim" = "1" (canlı) · "kemal:mpg:<grup>:bas" + "kemal:mpg:<grup>:f:<mesaj>" (gelen gönderi:
+// her görsel AYRI anahtar; albüm tamamlanınca tek karta çevrilir) · "kemal:mp:<id>" (kart) · "kemal:mpFoto:<id>:<n>" (kapatılmış
+// görseller) · "kemal:mpSira" (onaylı, saatini bekleyen) · "kemal:mpGun:<gün>" (günlük sayaç) · "kemal:mpSon" · "kemal:mpAltyazi"
+// (son 20 altyazı). Normal 12 paylaşımın sayacına / sırasına DOKUNMAZ.
+// 15 Kasım (Patron): bir gönderideki BÜTÜN görseller (en fazla 10) TEK kart, tek onay; kanalda TEK albüm + tek altyazı. Model kodu
+// SADECE gönderen açıkça yazdıysa eklenir (fotoğraftan tahmin YOK); şehir de sadece gönderen yazdıysa.
 const mpAcik = async (env) => (await env.KAYIT.get("kemal:musteriPaylasim").catch(() => null)) === "1";
 const mpGonderen = (env, id) => [String(hemraId(env) || ""), merdanId(env)].filter(Boolean).includes(String(id));
 const mpY = (env) => ({ json: (g) => jsonIste(env, g), gorsel: gorselBlok });
 const mpSimdi = (env) => Number(env.__simdi) || Math.floor(Date.now() / 1000); // testte saat sabitlenir
 const mpListe = async (env, k) => (await env.KAYIT.get(k, "json").catch(() => null)) || [];
+const MP_ALBUM_BEKLE = 25; // albümün kalanı gelsin diye son görselden sonra beklenen süre (sn)
 async function mpYakala(msg, env) {
   const foto = msg.photo ? msg.photo[msg.photo.length - 1].file_id : msg.document && /^image\//.test(msg.document.mime_type || "") ? msg.document.file_id : null;
-  if (!foto) return false;
-  const albumK = `kemal:mpAlbum:${msg.chat.id}`;
-  if (!mpNiyet(msg.caption)) { // aynı albümün yazısız kalan fotoğrafları: sessizce yutulur (kart ilk fotoğrafla hazırlanır)
-    return Boolean(msg.media_group_id && (await env.KAYIT.get(albumK).catch(() => null)) === String(msg.media_group_id));
+  if (!foto) {
+    // PDF görsele çevrilemez: "müşteri" yazılı PDF için açıkça söylenir (sessizce yutulmaz)
+    if (msg.document && /pdf/i.test(msg.document.mime_type || "") && mpNiyet(msg.caption) && (await mpAcik(env))) { await telegram(env, "sendMessage", { chat_id: msg.chat.id, text: "⚠️ PDF dosyasını görsele çeviremiyorum. Ekran görüntüsünü fotoğraf ya da JPG olarak gönderin, yanına \"müşteri\" yazın.", reply_to_message_id: msg.message_id }); return true; }
+    return false;
   }
+  const niyet = mpNiyet(msg.caption);
+  if (!niyet && !msg.media_group_id) return false;
   if (!(await mpAcik(env))) return false; // iş canlıya alınmadıysa eski yol (hiçbir şey değişmez)
-  const simdi = mpSimdi(env);
-  if (msg.media_group_id) await env.KAYIT.put(albumK, String(msg.media_group_id), { expirationTtl: 300 }).catch(() => null);
-  const l = await mpListe(env, "kemal:mpGelen");
-  await env.KAYIT.put("kemal:mpGelen", JSON.stringify([...l, { file_id: foto, yazi: String(msg.caption || "").slice(0, 300), kim: kisiAdi(msg.from), kimId: String(msg.from.id), chat: msg.chat.id, zaman: simdi }].slice(-10)), { expirationTtl: 86400 });
-  await telegram(env, "sendMessage", { chat_id: msg.chat.id, text: "📥 Müşteri paylaşımı alındı. Birkaç dakika içinde onay kartı gelir (görsel + Nora'nın yazısı).", reply_to_message_id: msg.message_id });
+  const simdi = mpSimdi(env), grup = `${msg.chat.id}-${msg.media_group_id || `m${msg.message_id}`}`;
+  const bas = niyet ? null : await env.KAYIT.get(`kemal:mpg:${grup}:bas`, "json").catch(() => null);
+  // her görsel AYRI anahtara yazılır (albüm mesajları aynı anda gelir; tek listeye yazmak görsel kaybettirir)
+  await env.KAYIT.put(`kemal:mpg:${grup}:f:${String(msg.message_id).padStart(12, "0")}`, JSON.stringify({ file_id: foto, zaman: simdi }), { expirationTtl: niyet || bas ? 86400 : 600 });
+  if (!niyet) return Boolean(bas); // yazısız albüm görseli: gönderi "müşteri" gönderisiyse sessizce eklenir; değilse eski yol sürer (kayıt 10 dk'da silinir)
+  await env.KAYIT.put(`kemal:mpg:${grup}:bas`, JSON.stringify({ yazi: String(msg.caption || "").slice(0, 300), kim: kisiAdi(msg.from), kimId: String(msg.from.id), chat: msg.chat.id, zaman: simdi }), { expirationTtl: 86400 });
+  await telegram(env, "sendMessage", { chat_id: msg.chat.id, text: `📥 Müşteri paylaşımı alındı${msg.media_group_id ? " (albümdeki bütün görseller tek kartta toplanır)" : ""}. Birkaç dakika içinde onay kartı gelir (görsel + Nora'nın yazısı).`, reply_to_message_id: msg.message_id });
   return true;
 }
 async function mpBaytAl(env, g) {
@@ -3144,68 +3157,111 @@ async function mpBaytAl(env, g) {
   }
   return null;
 }
-// İstek → görsel incelenir, kişisel bilgi kapatılır, kod Vegawin'den doğrulanır, Nora yazar, gönderene TEK kart gider
-export async function mpHazirla(env, g, simdi, { ornek = false } = {}) {
-  const ham = await mpBaytAl(env, g);
-  if (!ham) return { ok: false, hata: "görsel indirilemedi" };
-  const jpeg = async (bayt, w) => new Uint8Array(await (await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: w, fit: "scale-down" }).output({ format: "image/jpeg", quality: 90 })).response().arrayBuffer());
-  const kucuk = env.IMAGES ? await jpeg(ham, 1280).catch(() => ham) : ham;
-  const b64 = b64Yap(kucuk.buffer.slice(kucuk.byteOffset, kucuk.byteOffset + kucuk.byteLength));
-  const y = mpY(env);
-  const inc = await gorselIncele(y, b64);
-  let bayt = env.IMAGES ? await jpeg(ham, 2000).catch(() => ham) : ham, maske = 0;
-  if ((inc.kutular || []).length) {
-    if (!env.IMAGES) return { ok: false, hata: "kişisel bilgi var ama kapatma aracı bağlı değil" };
-    const m = await maskele(env, bayt, inc.kutular); bayt = m.bayt; maske = m.n;
+const mpOzet = async (bayt) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bayt))].slice(0, 8).map((x) => x.toString(16).padStart(2, "0")).join("");
+const mpFotoAnahtar = (id, i) => `kemal:mpFoto:${id}:${i}`;
+async function mpFotolar(env, r) { const l = []; for (let i = 0; i < (r.adet || 1); i++) { const b = await env.KAYIT.get(mpFotoAnahtar(r.id, i), "arrayBuffer").catch(() => null); if (b) l.push(b); } return l; }
+async function mpFotoSil(env, r) { for (let i = 0; i < (r.adet || 1); i++) await env.KAYIT.delete(mpFotoAnahtar(r.id, i)).catch(() => null); }
+// Görseller tek çağrıda: 1 görsel → sendPhoto; 2+ → sendMediaGroup (yazı ilk görselin altında). Dönen: Telegram cevabı
+async function mpGorselGonder(env, chat, baytlar, yazi, klavye = null) {
+  const f = new FormData();
+  f.append("chat_id", String(chat));
+  if (baytlar.length === 1) {
+    f.append("photo", new Blob([baytlar[0]], { type: "image/jpeg" }), "musteri.jpg");
+    if (yazi) f.append("caption", String(yazi).slice(0, 1024));
+    if (klavye) f.append("reply_markup", JSON.stringify(klavye));
+    return telegramForm(env, "sendPhoto", f);
   }
-  // model kodu: gönderen yazdıysa Vegawin'de doğrulanır; yazmadıysa fotoğraf tanıma SADECE "yüksek" güvenle; yoksa kod YAZILMAZ
+  f.append("media", JSON.stringify(baytlar.map((_, i) => ({ type: "photo", media: `attach://f${i}`, ...(i === 0 && yazi ? { caption: String(yazi).slice(0, 1024) } : {}) }))));
+  baytlar.forEach((b, i) => f.append(`f${i}`, new Blob([b], { type: "image/jpeg" }), `musteri${i + 1}.jpg`));
+  if (klavye) f.append("reply_markup", JSON.stringify(klavye)); // sadece Patron'un kapısında (Venom) işe yarar; Telegram albümde düğme kabul etmez
+  return telegramForm(env, "sendMediaGroup", f);
+}
+// Gönderi → görseller incelenir, kişisel bilgi kapatılır, (yazıldıysa) kod Vegawin'den doğrulanır, Nora TEK yazı yazar, gönderene TEK kart
+export async function mpHazirla(env, g, simdi, { ornek = false } = {}) {
+  const kaynak = (g.dosyalar && g.dosyalar.length ? g.dosyalar : [{ file_id: g.file_id, url: g.url, b64: g.b64 }]).slice(0, MP_EN_FAZLA);
+  const jpeg = async (bayt, w) => new Uint8Array(await (await env.IMAGES.input(new Blob([bayt]).stream()).transform({ width: w, fit: "scale-down" }).output({ format: "image/jpeg", quality: 90 })).response().arrayBuffer());
+  const y = mpY(env);
+  const gorulen = new Set(), hamlar = [];
+  for (const k of kaynak) { const ham = await mpBaytAl(env, k).catch(() => null); if (!ham) continue; const oz = await mpOzet(ham); if (gorulen.has(oz)) continue; gorulen.add(oz); hamlar.push(ham); } // aynı görsel iki kez geldiyse bir kez
+  if (!hamlar.length) return { ok: false, hata: "görsel indirilemedi" };
+  const tek = async (ham) => {
+    const kucuk = env.IMAGES ? await jpeg(ham, 1280).catch(() => ham) : ham;
+    const inc = await gorselIncele(y, b64Yap(kucuk.buffer.slice(kucuk.byteOffset, kucuk.byteOffset + kucuk.byteLength)));
+    let bayt = env.IMAGES ? await jpeg(ham, 2000).catch(() => ham) : ham, maske = 0;
+    if ((inc.kutular || []).length) {
+      if (!env.IMAGES) throw new Error("kişisel bilgi var ama kapatma aracı bağlı değil");
+      const m = await maskele(env, bayt, inc.kutular); bayt = m.bayt; maske = m.n;
+    }
+    return { bayt, maske, inc };
+  };
+  const parcalar = [];
+  for (let i = 0; i < hamlar.length; i += 3) parcalar.push(...(await Promise.all(hamlar.slice(i, i + 3).map(tek)))); // üçer üçer (süre kısalır, sıra korunur)
+  const adet = parcalar.length, maske = parcalar.reduce((a, p) => a + p.maske, 0);
+  const turler = [...new Set(parcalar.map((p) => p.inc.tur))], tur = turler.length === 1 ? turler[0] : "karisik";
+  const mesaj = [...new Set(parcalar.map((p) => String(p.inc.mesaj || "").trim()).filter(Boolean))].join(" · ").slice(0, 900);
+  // model kodu: SADECE gönderen açıkça yazdıysa (Vegawin'de doğrulanır); fotoğraftan tahmin YOK. Yazılmadıysa kartta kod satırı da olmaz.
   const n = mpNot(g.yazi);
   let kod = null, kodNotu = null;
-  const vegawinde = async (k) => { const b = env.STOK ? await stokIste(env, "/bilgi", { kod: k }).catch(() => null) : null; return Boolean(b && (b.satirlar || []).length); };
-  if (n.kod) { if (await vegawinde(n.kod)) kod = n.kod; else kodNotu = `⚠️ ${n.kod} Vegawin'de bulunamadı; model kodu yazılmadı.`; }
-  else if (inc.tur === "foto" && inc.kiyafet) {
-    const t = await venomFotoTani(env, b64, "").catch(() => null);
-    const aday = t && t.ok && t.guven === "yuksek" && t.en_iyi ? (String(t.en_iyi).match(/\d{3,6}/) || [])[0] : null;
-    if (aday && (await vegawinde(aday))) kod = aday;
+  if (n.kod) {
+    const b = env.STOK ? await stokIste(env, "/bilgi", { kod: n.kod }).catch(() => null) : null;
+    if (b && (b.satirlar || []).length) { kod = n.kod; kodNotu = `Model: ${kod} (Vegawin'de doğrulandı).`; }
+    else kodNotu = `⚠️ ${n.kod} Vegawin'de bulunamadı; model kodu yazılmadı.`;
   }
-  const marka = kod ? await modelMarkasi(env, kod).catch(() => null) : n.marka || (String(g.kimId || "") === merdanId(env) ? "BLACKROSE" : "VOLONTE");
-  if (!kodNotu) kodNotu = kod ? `Model: ${kod} (Vegawin'de doğrulandı).` : "Model kodu yazılmadı (emin olunamadı; isterseniz \"müşteri 3394\" diye yeniden gönderin).";
+  // marka: koddan; yoksa gönderenin yazdığı; yoksa görselde AÇIKÇA okunan; yoksa gönderene göre (Merdan → Black Rose, diğerleri → VOLONTE)
+  const gorselMarka = [...new Set(parcalar.map((p) => p.inc.marka).filter((m) => m === "BLACKROSE" || m === "VOLONTE"))];
+  const marka = (kod ? await modelMarkasi(env, kod).catch(() => null) : null) || n.marka || (gorselMarka.length === 1 ? gorselMarka[0] : null) || (String(g.kimId || "") === merdanId(env) ? "BLACKROSE" : "VOLONTE");
   const onceki = await mpListe(env, "kemal:mpAltyazi");
-  const a = await altyaziUret(y, { mesaj: inc.mesaj, not: n.not, marka, tur: inc.tur }, onceki);
+  const a = await altyaziUret(y, { mesaj, not: n.not, marka, tur, adet }, onceki);
   await env.KAYIT.put("kemal:mpAltyazi", JSON.stringify([...onceki, { fr: a.fr, en: a.en }].slice(-MP_HAFIZA)), { expirationTtl: 180 * 86400 });
   const id = mpId(simdi);
-  const r = { id, durum: "kart", ornek, tur: inc.tur, mesaj: inc.mesaj || "", not: n.not, marka: marka === "BLACKROSE" ? "BLACKROSE" : "VOLONTE", kod, kodNotu, maske, fr: a.fr, en: a.en, kim: g.kim || "?", kimId: g.kimId || null, chat: g.chat, zaman: simdi, yeniden: 0 };
-  await env.KAYIT.put(`kemal:mpFoto:${id}`, bayt, { expirationTtl: 14 * 86400 });
-  const f = new FormData();
-  f.append("chat_id", String(g.chat)); f.append("photo", new Blob([bayt], { type: "image/jpeg" }), "musteri.jpg");
-  f.append("caption", mpKartYazi(r).slice(0, 1024)); f.append("reply_markup", JSON.stringify(mpKlavye(r)));
-  const k = await telegramForm(env, "sendPhoto", f);
+  const r = { id, durum: "kart", ornek, adet, tur, mesaj, not: n.not, marka: marka === "BLACKROSE" ? "BLACKROSE" : "VOLONTE", kod, kodNotu, maske, fr: a.fr, en: a.en, kim: g.kim || "?", kimId: g.kimId || null, chat: g.chat, zaman: simdi, yeniden: 0 };
+  for (const [i, p] of parcalar.entries()) await env.KAYIT.put(mpFotoAnahtar(id, i), p.bayt, { expirationTtl: 14 * 86400 });
+  const baytlar = parcalar.map((p) => p.bayt), patron = await patronaGider(env, g.chat);
+  let k;
+  if (adet === 1 || patron) k = await mpGorselGonder(env, g.chat, baytlar, mpKartYazi(r), mpKlavye(r)); // Patron: Venom albümü ve düğmeli yazıyı birlikte gösterir
+  else { // ekip: Telegram albümde düğme kabul etmez → albüm + hemen altında TEK onay kartı
+    const al = await mpGorselGonder(env, g.chat, baytlar, null);
+    if (!al || !al.ok) return { ok: false, hata: `albüm gönderilemedi: ${(al && al.description) || "?"}` };
+    k = await telegram(env, "sendMessage", { chat_id: g.chat, text: mpKartYazi(r), reply_markup: mpKlavye(r), reply_to_message_id: (al.result[0] || {}).message_id, disable_web_page_preview: true });
+  }
   if (!k || !k.ok) return { ok: false, hata: `kart gönderilemedi: ${(k && k.description) || "?"}` };
-  r.mid = k.result.message_id;
+  r.mid = (Array.isArray(k.result) ? k.result[0] : k.result).message_id;
   await env.KAYIT.put(`kemal:mp:${id}`, JSON.stringify(r), { expirationTtl: 14 * 86400 });
-  await defterYaz(env, { zaman: simdi, bot: "kemal", tur: "musteriPaylasimi", ozet: `müşteri paylaşımı kartı ${r.kim}'e gitti${kod ? ` (${kod})` : ""}${maske ? `, ${maske} kişisel bilgi alanı kapatıldı` : ""}${ornek ? " — ÖRNEK" : ""}`, kod, kime: r.kim, deneme: ornek }).catch(() => null);
-  return { ok: true, id, kod, marka: r.marka, maske, tur: inc.tur, yazi: altyaziKur(r), benzer: a.benzer, deneme: a.deneme };
+  await defterYaz(env, { zaman: simdi, bot: "kemal", tur: "musteriPaylasimi", ozet: `müşteri paylaşımı kartı ${r.kim}'e gitti (${adet} görsel${kod ? `, ${kod}` : ""})${maske ? `, ${maske} kişisel bilgi alanı kapatıldı` : ""}${ornek ? " — ÖRNEK" : ""}`, kod, kime: r.kim, deneme: ornek }).catch(() => null);
+  return { ok: true, id, adet, kod, marka: r.marka, maske, tur, yazi: altyaziKur(r), benzer: a.benzer, deneme: a.deneme };
 }
 const ORNEK_BASLIK = "🧪 ÖRNEK — MÜŞTERİ PAYLAŞIMI (kanala GİTMEZ; görsel deneme için hazırlandı, gerçek müşteri değil)";
 const mpKartYazi = (r, ek = "") => (r.ornek ? `${ORNEK_BASLIK}\n\n${kartYazi(r, ek).split("\n").slice(1).join("\n")}` : kartYazi(r, ek));
 const mpKlavye = (r) => (r.ornek ? { inline_keyboard: [[{ text: "✅ Tamam, canlıya al", callback_data: `mp:o:${r.id}` }, { text: "✏️ Yeniden yaz", callback_data: `mp:y:${r.id}` }], [{ text: "❌ Şimdilik kapalı kalsın", callback_data: `mp:x:${r.id}` }]] } : mpDugmeler(r.id));
-// Kanala çıkar (yayın kapısı uygunsa). Dönen: { ok } | { ok: false, bekle: yazı }
+// Kanala çıkar (yayın kapısı uygunsa): 1 görsel → tek fotoğraf; 2+ → TEK albüm, tek altyazı. Dönen: { ok } | { ok: false, bekle: yazı }
 async function mpYayinla(env, r, simdi) {
   const oz = await kemalOzet(env, simdi).catch(() => null);
   const kapi = mpYayinKapisi({ simdi, bugunSayi: Number(await env.KAYIT.get(mpGunAnahtari(simdi)).catch(() => 0)) || 0, sonNormal: oz ? oz.sonPaylasim : 0, siraVar: Boolean(oz && (oz.kuyruk || []).length), sonMusteri: Number(await env.KAYIT.get("kemal:mpSon").catch(() => 0)) || 0 });
   if (!kapi.ok) return { ok: false, bekle: kapi.yazi };
   const kanal = await env.KAYIT.get("kanal", "json");
-  const bayt = await env.KAYIT.get(`kemal:mpFoto:${r.id}`, "arrayBuffer").catch(() => null);
-  if (!kanal || !bayt) return { ok: false, hata: !kanal ? "kanal bilgisi yok" : "görsel kaydı bulunamadı" };
-  const f = new FormData();
-  f.append("chat_id", String(kanal.id)); f.append("photo", new Blob([bayt], { type: "image/jpeg" }), "musteri.jpg"); f.append("caption", altyaziKur(r));
-  const k = await telegramForm(env, "sendPhoto", f);
+  const baytlar = await mpFotolar(env, r);
+  if (!kanal || baytlar.length !== (r.adet || 1)) return { ok: false, hata: !kanal ? "kanal bilgisi yok" : "görsel kaydı bulunamadı" };
+  const k = await mpGorselGonder(env, kanal.id, baytlar, altyaziKur(r));
   if (!k || !k.ok) return { ok: false, hata: (k && k.description) || "kanal reddetti" };
+  const ilk = Array.isArray(k.result) ? k.result[0] : k.result;
   await env.KAYIT.put(mpGunAnahtari(simdi), String((Number(await env.KAYIT.get(mpGunAnahtari(simdi)).catch(() => 0)) || 0) + 1), { expirationTtl: 3 * 86400 });
   await env.KAYIT.put("kemal:mpSon", String(simdi), { expirationTtl: 3 * 86400 });
-  await env.KAYIT.put(`kemal:mp:${r.id}`, JSON.stringify({ ...r, durum: "paylasildi", kanalMesaj: k.result.message_id, yayin: simdi }), { expirationTtl: 30 * 86400 });
-  await defterYaz(env, { zaman: simdi, bot: "kemal", tur: "musteriPaylasimi", ozet: `müşteri paylaşımı kanala çıktı${r.kod ? ` (${r.kod})` : ""} · onaylayan ${r.onaylayan || r.kim}`, kod: r.kod || null, kime: "kanal" }).catch(() => null);
-  return { ok: true, mesaj: k.result.message_id };
+  await env.KAYIT.put(`kemal:mp:${r.id}`, JSON.stringify({ ...r, durum: "paylasildi", kanalMesaj: ilk.message_id, yayin: simdi }), { expirationTtl: 30 * 86400 });
+  await defterYaz(env, { zaman: simdi, bot: "kemal", tur: "musteriPaylasimi", ozet: `müşteri paylaşımı kanala çıktı (${r.adet || 1} görsel, tek paylaşım${r.kod ? `, ${r.kod}` : ""}) · onaylayan ${r.onaylayan || r.kim}`, kod: r.kod || null, kime: "kanal" }).catch(() => null);
+  return { ok: true, mesaj: ilk.message_id };
+}
+// Kart iptali (Patron'un emriyle; Claude Code işi): kart kapanır, görseller silinir, sıradaysa sıradan çıkar. Kanala ÇIKMAZ.
+export async function mpIptal(env, id, neden, simdi = Math.floor(Date.now() / 1000)) {
+  const r = await env.KAYIT.get(`kemal:mp:${id}`, "json").catch(() => null);
+  if (!r) return { ok: false, hata: "kart yok" };
+  if (r.durum === "paylasildi") return { ok: false, hata: "kanala çıkmış" };
+  await env.KAYIT.put(`kemal:mp:${id}`, JSON.stringify({ ...r, durum: "iptal", karar: neden }), { expirationTtl: 14 * 86400 });
+  await mpFotoSil(env, r); await env.KAYIT.delete(`kemal:mpFoto:${id}`).catch(() => null);
+  const sira = await mpListe(env, "kemal:mpSira");
+  if (sira.includes(id)) await env.KAYIT.put("kemal:mpSira", JSON.stringify(sira.filter((k) => k !== id)), { expirationTtl: 7 * 86400 });
+  if (r.chat && r.mid) await kartYazisi(env, r.chat, r.mid, mpKartYazi(r, `❌ Bu kart iptal edildi (${neden}). Kanala çıkmaz.`)).catch(() => null);
+  await defterYaz(env, { zaman: simdi, bot: "kemal", tur: "musteriPaylasimi", ozet: `müşteri paylaşımı kartı iptal edildi (${neden})`, kod: r.kod || null, kime: r.kim }).catch(() => null);
+  return { ok: true, id };
 }
 async function mpDugme(cq, env) {
   const cevapla = (text) => telegram(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
@@ -3219,7 +3275,7 @@ async function mpDugme(cq, env) {
     if ((r.yeniden || 0) >= 5) return cevapla("En fazla 5 kez yeniden yazdırılabilir.");
     await cevapla("Nora yeniden yazıyor…");
     const onceki = await mpListe(env, "kemal:mpAltyazi");
-    const a = await altyaziUret(mpY(env), { mesaj: r.mesaj, not: r.not, marka: r.marka, tur: r.tur, uyari: "gönderen başka bir yazı istedi" }, onceki).catch(() => null);
+    const a = await altyaziUret(mpY(env), { mesaj: r.mesaj, not: r.not, marka: r.marka, tur: r.tur, adet: r.adet || 1, uyari: "gönderen başka bir yazı istedi" }, onceki).catch(() => null);
     if (!a) return telegram(env, "sendMessage", { chat_id: r.chat, text: "⚠️ Nora şu an yeni yazı yazamadı; biraz sonra yeniden deneyin." });
     await env.KAYIT.put("kemal:mpAltyazi", JSON.stringify([...onceki, { fr: a.fr, en: a.en }].slice(-MP_HAFIZA)), { expirationTtl: 180 * 86400 });
     const y = { ...r, fr: a.fr, en: a.en, yeniden: (r.yeniden || 0) + 1 };
@@ -3229,7 +3285,7 @@ async function mpDugme(cq, env) {
   if (islem === "x") {
     await cevapla(r.ornek ? "Kapalı kaldı" : "Paylaşılmadı");
     await kaydet({ ...r, durum: "iptal", karar: ad });
-    await env.KAYIT.delete(`kemal:mpFoto:${id}`).catch(() => null);
+    await mpFotoSil(env, r);
     await defterYaz(env, { zaman: simdi, bot: "kemal", tur: "musteriPaylasimi", ozet: r.ornek ? "müşteri paylaşımı örneği: Patron şimdilik kapalı bıraktı" : `müşteri paylaşımı paylaşılmadı (${ad})`, kod: r.kod || null, kime: ad, deneme: Boolean(r.ornek) }).catch(() => null);
     return kartYazisi(env, r.chat, r.mid, mpKartYazi(r, r.ornek ? "❌ Kapalı kaldı. İş canlıya alınmadı." : `❌ Paylaşılmadı (${ad}).`));
   }
@@ -3237,7 +3293,7 @@ async function mpDugme(cq, env) {
     await cevapla("Canlıya alındı");
     await env.KAYIT.put("kemal:musteriPaylasim", "1");
     await kaydet({ ...r, durum: "ornekOnay", karar: ad });
-    await env.KAYIT.delete(`kemal:mpFoto:${id}`).catch(() => null);
+    await mpFotoSil(env, r);
     await defterIs(env, "kemal", "Müşteri teşekkür paylaşımı canlıya alındı (Patron örneği onayladı)", {}).catch(() => null);
     return kartYazisi(env, r.chat, r.mid, mpKartYazi(r, "✅ Canlıya alındı. Bundan sonra Hemra / Merdan fotoğrafın yanına \"müşteri\" yazınca bu kart onlara gelir; bu örnek kanala gitmedi."));
   }
@@ -3251,16 +3307,38 @@ async function mpDugme(cq, env) {
   await env.KAYIT.put("kemal:mpSira", JSON.stringify([...sira.filter((k) => k !== id), id]), { expirationTtl: 7 * 86400 });
   return kartYazisi(env, r.chat, r.mid, mpKartYazi(x, `✅ Onaylandı (${ad}) — sırada: ${s.bekle}.`));
 }
-// 5 dakikalık adım: gelen istekler karta çevrilir (her turda en fazla 2), onaylı sıradakiler saati gelince kanala çıkar
+// Ekipten gelen gönderiler: "kemal:mpg:<grup>:…" anahtarları gönderi gönderi toplanır (son görselden 25 sn sonra tamam sayılır)
+async function mpGelenler(env, simdi) {
+  const anahtarlar = ((await env.KAYIT.list({ prefix: "kemal:mpg:" }).catch(() => ({ keys: [] }))).keys || []).map((k) => k.name);
+  const gruplar = {};
+  for (const a of anahtarlar) {
+    const m = a.match(/^kemal:mpg:(.+):(bas|f:\d+)$/);
+    if (!m) continue;
+    const x = (gruplar[m[1]] = gruplar[m[1]] || { bas: null, f: [] });
+    if (m[2] === "bas") x.bas = a; else x.f.push(a);
+  }
+  const hazir = [];
+  for (const [grup, x] of Object.entries(gruplar)) {
+    if (!x.bas) continue; // "müşteri" yazısı olmayan albüm: kendi kendine silinir (10 dk)
+    const bas = await env.KAYIT.get(x.bas, "json").catch(() => null);
+    const f = []; for (const a of x.f.sort()) { const d = await env.KAYIT.get(a, "json").catch(() => null); if (d && d.file_id) f.push(d); }
+    if (!bas || !f.length) continue;
+    if (simdi - Math.max(bas.zaman || 0, ...f.map((d) => d.zaman || 0)) < MP_ALBUM_BEKLE) continue; // albümün kalanı geliyor olabilir
+    hazir.push({ grup, anahtarlar: [x.bas, ...x.f], is: { ...bas, dosyalar: f.slice(0, MP_EN_FAZLA).map((d) => ({ file_id: d.file_id })) } });
+  }
+  return hazir;
+}
+// 5 dakikalık adım: gelen gönderiler karta çevrilir (her turda en fazla 2), onaylı sıradakiler saati gelince kanala çıkar
 export async function musteriPaylasimAdimi(env, simdi) {
-  const gelen = await mpListe(env, "kemal:mpGelen"), canli = await mpAcik(env);
-  const venom = env.STOK ? await kuyruguAl(env, "musteriPaylas").catch(() => []) : []; // Patron Venom'a fotoğraf + "müşteri paylaşımı" yazdı
-  const isler = [...gelen, ...venom.map((v) => ({ url: (v.medya || [])[0] && ((v.medya || [])[0].url || null), file_id: null, yazi: v.yazi || "", kim: "Patron", kimId: kimlikler(env.MURAT_ID)[0], chat: kimlikler(env.MURAT_ID)[0], zaman: simdi, ornek: Boolean(v.ornek) || !canli, b64: v.b64 || null }))]; // iş canlıya alınmadıysa Patron'un gönderdiği ÖRNEK olur (kanala gitmez)
-  if (gelen.length) await env.KAYIT.put("kemal:mpGelen", JSON.stringify(gelen.slice(2)), { expirationTtl: 86400 });
-  for (const g of [...gelen.slice(0, 2), ...isler.slice(gelen.length)]) {
+  const canli = await mpAcik(env);
+  const isler = [];
+  for (const h of (await mpGelenler(env, simdi)).slice(0, 2)) { for (const a of h.anahtarlar) await env.KAYIT.delete(a).catch(() => null); isler.push(h.is); }
+  const venom = env.STOK ? await kuyruguAl(env, "musteriPaylas").catch(() => []) : []; // Patron Venom'a görsel + "müşteri paylaşımı" yazdı
+  for (const v of venom) isler.push({ dosyalar: (v.medya || []).filter((m) => m && m.url).slice(0, MP_EN_FAZLA).map((m) => ({ url: m.url })), yazi: v.yazi || "", kim: "Patron", kimId: kimlikler(env.MURAT_ID)[0], chat: kimlikler(env.MURAT_ID)[0], zaman: simdi, ornek: Boolean(v.ornek) || !canli }); // iş canlıya alınmadıysa Patron'un gönderdiği ÖRNEK olur (kanala gitmez)
+  for (const g of isler) {
     const r = await mpHazirla(env, g, simdi, { ornek: Boolean(g.ornek) }).catch((e) => ({ ok: false, hata: kisaHata(e) }));
-    if (!r.ok) { await telegram(env, "sendMessage", { chat_id: g.chat, text: `⚠️ Müşteri paylaşımı hazırlanamadı: ${r.hata}. Fotoğrafı yeniden gönderin.` }).catch(() => null); await env.KAYIT.put("kemal:mpHata", JSON.stringify({ zaman: simdi, hata: r.hata }), { expirationTtl: 7 * 86400 }).catch(() => null); }
-    else if (g.ornek) await env.KAYIT.put("kemal:mpOrnekSonuc", JSON.stringify({ zaman: simdi, ...r }), { expirationTtl: 7 * 86400 }).catch(() => null);
+    if (!r.ok) { await telegram(env, "sendMessage", { chat_id: g.chat, text: `⚠️ Müşteri paylaşımı hazırlanamadı: ${r.hata}. Görselleri yeniden gönderin.` }).catch(() => null); await env.KAYIT.put("kemal:mpHata", JSON.stringify({ zaman: simdi, hata: r.hata }), { expirationTtl: 7 * 86400 }).catch(() => null); }
+    await env.KAYIT.put("kemal:mpSonuc", JSON.stringify({ zaman: simdi, ...r }), { expirationTtl: 7 * 86400 }).catch(() => null);
   }
   const sira = await mpListe(env, "kemal:mpSira");
   if (!sira.length) return;
@@ -3933,6 +4011,7 @@ export class KatalogDO {
     const env = { ...this.env, KAYIT: karmaDepo(this.env.KAYIT, this.state.storage, KEMAL_YEREL), KEMAL_ICERDE: true };
     const simdi = Math.floor(Date.now() / 1000);
     tasarimAyarla(await this.env.KAYIT.get("kemal:tasarim").catch(() => null)); // 13 Kasım (B2): Patron örneği onayladıysa yeni kanal tasarımı
+    if (yol === "/kemal/mp-iptal") { const g = await istek.json().catch(() => ({})); return Response.json(await mpIptal(env, String(g.id || ""), String(g.neden || "Patron"), simdi)); } // 15 Kasım
     if (yol === "/kemal/soldout") return Response.json(await patronSoldOut(env, String((await istek.json().catch(() => ({}))).kod || ""), simdi)); // 13 Kasım: Patron "sil" + stok bitmiş → kartsız SOLD OUT
     if (yol === "/kemal/tasarim-ornek") return Response.json(await tasarimOrnegi(env, simdi));
     if (yol === "/kemal/tasarim-onay") return Response.json(await tasarimOnayi(env, await istek.json().catch(() => ({}))));

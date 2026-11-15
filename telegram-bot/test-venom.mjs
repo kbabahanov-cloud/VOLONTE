@@ -2651,3 +2651,41 @@ test("14 Kasım (Patron) KİŞİSEL / ORTAK: köprünün '#K' işaretli kasa ç�
   assert.equal(kisiselSatiri(v), "👤 Kişisel/ortak: 1.850,00 $ (VOLONTE kasası 1.850,00 $)");
   assert.equal(kisiselSatiri({ gun: G, VOLONTE: { kisisel: [] }, BLACKROSE: { kisisel: null } }), null);
 });
+
+test("15 Kasım (Patron) MÜŞTERİ PAYLAŞIMI — Venom: bütün görseller TEK kart; kod / şehir sadece Patron açıkça yazdıysa; Kemal'e düz yazı yerine HER ZAMAN müşteri aracı; 'bekleyenler' aracı Patron'un sorusunu yutmaz", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const T0 = ist(3, 12);
+  const kuyruk = async () => (await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "musteriPaylas" }) })).json());
+  const medyaYaz = (n) => o.depo.set("venom:bot:medya", JSON.stringify(Array.from({ length: n }, (_, i) => ({ tur: "foto", file_id: `F${i + 1}`, zaman: T0 - 600 }))));
+  // 1) 9 görsel → TEK iş, 9 görsel; beynin eklediği kod / şehir Patron'un mesajında YOKSA atılır
+  medyaYaz(9);
+  o.env.__patronMetni = "bunların alt yazısını yaz müşteri paylaşımı";
+  const c1 = await v.aracCalistir(o.env, "musteri_paylasimi", { kod: "3436", sehir: "Paris" }, T0);
+  assert.match(c1, /9 görsel TEK kartta, model kodu yok\./);
+  let k = await kuyruk();
+  assert.equal(k.length, 1); assert.equal(k[0].medya.length, 9); assert.equal(k[0].yazi, "müşteri");
+  assert.deepEqual(JSON.parse(o.depo.get("venom:bot:medya")), []); // kullanılan görseller başka işe karışmaz
+  // 2) Patron açıkça yazdıysa kod ve şehir eklenir; marka da
+  medyaYaz(2);
+  o.env.__patronMetni = "müşteri 3394 Paris black rose";
+  assert.match(await v.aracCalistir(o.env, "musteri_paylasimi", { kod: "3394", sehir: "Paris" }, T0), /2 görsel TEK kartta, model 3394, Paris\./);
+  k = await kuyruk();
+  assert.equal(k[0].yazi, "müşteri 3394 black rose Paris");
+  // 3) yanlış yönlendirme: beyin Kemal'e düz yazı yazmaya kalkarsa iş yine müşteri aracına gider (Kemal "aracım yok" diyemez)
+  medyaYaz(3);
+  o.env.__patronMetni = "müşteri paylaşımı yap";
+  o.env.KEMAL_W = { mesaj: async () => { throw new Error("Kemal'e düz yazı gitmemeliydi"); } };
+  assert.match(await v.aracCalistir(o.env, "bota_yaz", { bot: "kemal", metin: "Bu fotoğraflar için müşteri paylaşımı kartı hazırla" }, T0), /3 görsel TEK kartta/);
+  assert.equal((await kuyruk())[0].medya.length, 3);
+  assert.equal(v.musteriNiyeti("müşteri teşekkürü paylaş"), true); assert.equal(v.musteriNiyeti("3394 paylaş"), false); assert.equal(v.musteriNiyeti("müşteri geldi mi"), false);
+  // 4) görsel yoksa açıkça söyler
+  o.depo.delete("venom:bot:medya");
+  assert.match(await v.aracCalistir(o.env, "musteri_paylasimi", {}, T0), /başlamadı: son 3 saatte bana gelen görsel yok/);
+  // 5) "bekleyenler": bekleyen iş yokken Patron'a kendi başına kalıp cevap YAZMAZ, beynin cevabını susturmaz
+  o.g.length = 0; o.env.__tur = { yapamadi: [] };
+  const c5 = await v.aracCalistir(o.env, "bekleyenler", {}, T0);
+  assert.match(c5, /Kararınızı bekleyen iş YOK \(Patron'a henüz hiçbir şey yazılmadı\)\. Patron başka bir şey sorduysa ONUN SORUSUNA cevap ver/);
+  assert.equal(o.g.filter((x) => x.metod === "sendMessage").length, 0);
+  assert.notEqual(o.env.__tur.sus, true);
+});

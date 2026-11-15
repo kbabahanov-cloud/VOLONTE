@@ -326,7 +326,7 @@ const ARACLAR = [
   { name: "siteden_kaldir", description: "Bir modeli siteden (Selin) ve VOLONTE kanalından (Kemal) kaldırır. Önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
   { name: "model_boyu", description: "Bir modelin Pelin'de kayıtlı boyunu (mini/diz/midi/bilek/maksi, referans) gösterir. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
-  { name: "musteri_paylasimi", description: "MÜŞTERİ TEŞEKKÜR PAYLAŞIMI: Patron bir fotoğraf / ekran görüntüsü gönderip 'müşteri paylaşımı' (ya da 'müşteri') yazınca SADECE bunu kullan. Patron'un son gönderdiği fotoğraf Kemal'e gider: Kemal kişisel bilgiyi kapatır, Nora FR + EN altyazı yazar, onay kartı Patron'a gelir ([✅ Paylaş] [✏️ Yeniden yaz] [❌ Paylaşma]); onaysız kanala çıkmaz. Model kodu ve ülke / şehir Patron yazdıysa 'not' alanına aynen koy; yazmadıysa boş bırak (tahmin etme). kemal_paylas DEĞİL.", input_schema: { type: "object", additionalProperties: false, properties: { not: { type: "string", description: "Patron'un yazdığı ek bilgi: model kodu, ülke / şehir (ör. '3394 Paris'). Yazmadıysa boş." } } } },
+  { name: "musteri_paylasimi", description: "MÜŞTERİ TEŞEKKÜR PAYLAŞIMI: Patron görsel(ler) gönderip 'müşteri', 'müşteri paylaşımı', 'müşteri teşekkürü', 'bunların alt yazısını yaz' gibi bir şey yazınca HER ZAMAN ve SADECE bunu kullan (bota_yaz ile Kemal'e yazma, kemal_paylas kullanma; Kemal'in bu iş için ayrı aracı var ve bu araç onu çalıştırır). Patron'un gönderdiği BÜTÜN görseller (en fazla 10) TEK kart olur: Kemal kişisel bilgiyi kapatır, Nora TEK bir FR + EN teşekkür yazısı yazar, onay kartı Patron'a gelir; onaysız kanala çıkmaz. Varsayılan: model kodu ve şehir YOK. kod / sehir alanını SADECE Patron BU mesajında açıkça yazdıysa doldur; yazmadıysa BOŞ bırak (fotoğraftan ya da önceki konuşmadan tahmin etme).", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string", description: "Patron bu mesajında açıkça yazdıysa model kodu (ör. 3394); yoksa boş" }, sehir: { type: "string", description: "Patron bu mesajında açıkça yazdıysa ülke / şehir; yoksa boş" } } } },
   { name: "kemal_paylas", description: "Patron'un Venom'a son gönderdiği TÜM fotoğraf/videoları (video sesi/müziği aynen) Kemal'e verir: kanal paylaşımı (marka yazısı fotoğraflara, EN/FR alt yazı). Renk ve beden Patron ne yazdıysa o (yoksa model kartı). YAYINLAMAZ: SON YAYIN ONAYI kartı Patron'a gelir; onaydan sonra kanal + site. 'paylaş' isteği HER ZAMAN buraya (Pelin'e değil).", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Patron'un yazdığı renk, Türkçe (beyaz, koyu bordo…)" }, beden: { type: "string", enum: ["kucuk", "buyuk", "ikisi"] }, son_set: { type: "boolean", description: "Patron yeni dosya göndermeden 'en son gönderdiğim set' derse true" } } } },
   { name: "site_defteri", description: "TEK DOĞRU LİSTE (site defteri): sitedeki modellerin kodu, markası (Sami'den), renkleri, fotoğraf/video sayısı, video oynuyor mu, Merdan'dan video bekleniyor mu, eklenme tarihi. Site/marka/video sorularında SADECE buna bak; defterde yoksa tahmin etme. kod verilirse o model.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" }, filtre: { type: "string", enum: ["hepsi", "videosuz", "video_bekleyen", "black_rose", "volonte"] } } } },
   { name: "model_listesi", description: "Sitedeki modellerden liste (kod listesi döner; çok adımlı işte bir sonraki araca ver): videosuz, fotografsiz, paylasilmayan (stokta + 2 haftadır kanalda yok). Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["filtre"], properties: { filtre: { type: "string", enum: ["videosuz", "fotografsiz", "paylasilmayan"] } } } },
@@ -700,7 +700,12 @@ export async function aracCalistir(env, ad, g, simdi) {
   }
   if (ad === "pelin_foto_kaydet") return pelinFotoIlet(env, g, simdi);
   if (ad === "bekleyenler" && env.__kuru) return aracCalistir(env, "patron_kararlari", {}, simdi);
-  if (ad === "bekleyenler") { turKanit(env).sus = true; const n = await bekleyenleriGonder(env, simdi); return n ? `${n} bekleyen karar, düğmeleriyle Patron'a AYRI mesajlar olarak gönderildi. Listeyi tekrar YAZMA; tek kısa cümle yeter.` : "Kararınızı bekleyen iş yok — bunu Patron'a zaten yazdım; tekrar yazma, boş cevap ver."; }
+  if (ad === "bekleyenler") { // 15 Kasım (Patron): bu araç Patron'a kendi başına "bekleyen iş yok" YAZMAZ ve beynin cevabını SUSTURMAZ (soru yutuluyordu)
+    const l = await bekleyenKararlar(env, simdi);
+    if (!l.length) return "Kararınızı bekleyen iş YOK (Patron'a henüz hiçbir şey yazılmadı). Patron başka bir şey sorduysa ONUN SORUSUNA cevap ver; sadece 'bekleyen iş var mı' diye sorduysa tek cümleyle söyle.";
+    const n = await bekleyenleriGonder(env, simdi);
+    return `${n} bekleyen karar, düğmeleriyle Patron'a AYRI mesajlar olarak gönderildi. Listeyi tekrar YAZMA. Patron başka bir şey sorduysa ONUN SORUSUNA da cevap ver.`;
+  }
   if (ad === "kemal_calistir") { // 13 Kasım (Patron): "Kemal'i çalıştır"
     const r = await botaSor(env, "kemal", "calistir", { enAzGun: Number(g.en_az_gun) || 0, kuru: Boolean(env.__kuru) });
     if (!r) return "Kemal çalışamadı: Kemal'e ulaşılamadı.";
@@ -771,6 +776,8 @@ export async function aracCalistir(env, ad, g, simdi) {
   }
   if (ad === "bota_yaz") {
     if (!BOT_BAG[g.bot]) return "Bilinmeyen bot.";
+    // 15 Kasım (Patron): müşteri paylaşımı HER ZAMAN kendi aracıyla başlar (Kemal'e düz yazı gidince "aracım yok" diyordu)
+    if (g.bot === "kemal" && musteriNiyeti(g.metin)) return musteriPaylasimiBaslat(env, {}, simdi);
     if (g.bot === "pelin" && env.__sohbette && !pelinAcikca(env.__patronMetni)) return "Pelin'e İLETİLMEDİ: Patron mesajında açıkça \"Pelin\" demedi (11 Kasım kuralı). Bu iş bir kişiye ise kisiye_soyle kullan.";
     if (g.bot === "pelin" && /üret|uret|video|fotoğraf çek|maliyet/i.test(String(g.metin || "")) && !env.__sohbette && env.__izin !== "cevap") return "Pelin'e para gerektiren üretim emri Patron onayı olmadan verilmez (pelin_uret kartı).";
     const r = await botaSor(env, g.bot, "mesaj", String(g.metin || ""));
@@ -1189,22 +1196,41 @@ async function kemaleVer(env, b, liste, simdi, venomMedya = null) {
   if (ok) { await kaydet(env, "venom:bot:sonPaylasim", { kod: b.kod, liste, zaman: simdi }, 3 * 86400).catch(() => null); await isKaydet(env, "kemal", `${b.kod} paylaşım kartı (${liste.length} dosya)`, simdi); }
   return ok;
 }
-// 14 Kasım (Patron): MÜŞTERİ TEŞEKKÜR PAYLAŞIMI — Patron'un son gönderdiği fotoğraf Kemal'e (kuyruk "musteriPaylas"); onay kartı Patron'a gelir
-export async function musteriPaylasimiBaslat(env, g, simdi) {
-  const medya = (await oku(env, "venom:bot:medya", [])).filter((m) => m.tur === "foto");
-  if (!medya.length) return "❌ Müşteri paylaşımı başlamadı: son 1 saatte bana gelen fotoğraf yok. Fotoğrafı gönderip yanına \"müşteri paylaşımı\" yazın.";
-  if (env.__kuru) return "(DENEME) Müşteri paylaşımı: fotoğraf Kemal'e giderdi; denemede hiçbir şey gönderilmedi.";
-  const m = medya[medya.length - 1];
-  const f = await tg(env, "getFile", { file_id: m.file_id }).catch(() => null);
-  const r = f && f.ok ? await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`).catch(() => null) : null;
-  if (!r || !r.ok) return "❌ Müşteri paylaşımı başlamadı: fotoğraf indirilemedi; tekrar gönderir misiniz?";
-  const id = crypto.randomUUID().replace(/-/g, "");
-  await env.KAYIT.put(`venommedya:${id}`, await r.arrayBuffer(), { expirationTtl: 3 * 86400, metadata: { tur: "image/jpeg" } });
-  const ok = await kuyrugaEkle(env, "musteriPaylas", { id: `mp-${simdi}`, medya: [{ tur: "foto", url: `${env.SELF_URL}/medya/${id}` }], yazi: `müşteri ${String(g.not || "").slice(0, 200)}`.trim() }).then(() => true).catch(() => false);
+// 14 Kasım (Patron): MÜŞTERİ TEŞEKKÜR PAYLAŞIMI — Patron'un gönderdiği görseller Kemal'e (kuyruk "musteriPaylas"); onay kartı Patron'a gelir.
+// 15 Kasım (Patron): bir gönderideki BÜTÜN görseller (en fazla 10) TEK kart; model kodu ve şehir SADECE Patron mesajında açıkça
+// yazdıysa eklenir (beynin kendi eklediği kod / şehir kabul edilmez).
+export const musteriNiyeti = (metin) => /m[üu][şs]ter[iıİ]/iu.test(String(metin || "")) && /(payla[şs]|te[şs]ekk[üu]r|alt\s*yaz|foto|g[öo]rsel|kart|alb[üu]m)/iu.test(String(metin || ""));
+export async function musteriPaylasimiBaslat(env, g, simdi, { dosyalar = null, yazi = null, bekle = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  const fotolar = async () => (await oku(env, "venom:bot:medya", [])).filter((m) => m.tur === "foto");
+  let medya = dosyalar || (await fotolar());
+  // albümün kalanı birkaç saniye sonra gelebilir: liste 6 sn değişmeyene kadar (en fazla ~15 sn) beklenir
+  if (!dosyalar && !env.__kuru) for (let i = 0; i < 5 && medya.length && Math.floor(Date.now() / 1000) - Math.max(...medya.map((m) => m.zaman || 0)) < 6; i++) { await bekle(3000); medya = await fotolar(); }
+  if (!medya.length) return "❌ Müşteri paylaşımı başlamadı: son 3 saatte bana gelen görsel yok. Görselleri gönderip yanına \"müşteri paylaşımı\" yazın. (PDF görsele çevrilemiyor; fotoğraf ya da JPG gönderin.)";
+  if (env.__kuru) return `(DENEME) Müşteri paylaşımı: ${medya.length} görsel TEK kart olarak Kemal'e giderdi; denemede hiçbir şey gönderilmedi.`;
+  medya = medya.slice(-10);
+  const liste = [];
+  for (const m of medya) {
+    const f = await tg(env, "getFile", { file_id: m.file_id }).catch(() => null);
+    const r = f && f.ok ? await fetch(`https://api.telegram.org/file/bot${String(env.BOT_TOKEN).trim()}/${f.result.file_path}`).catch(() => null) : null;
+    if (!r || !r.ok) continue;
+    const id = crypto.randomUUID().replace(/-/g, "");
+    await env.KAYIT.put(`venommedya:${id}`, await r.arrayBuffer(), { expirationTtl: 3 * 86400, metadata: { tur: "image/jpeg" } });
+    liste.push({ tur: "foto", url: `${env.SELF_URL}/medya/${id}` });
+  }
+  if (!liste.length) return "❌ Müşteri paylaşımı başlamadı: görseller indirilemedi (20 MB üstü olabilir); tekrar gönderir misiniz?";
+  // kod / şehir / marka: SADECE Patron'un KENDİ mesajında yazıyorsa
+  const pm = String(env.__patronMetni || "");
+  const kod = (String(g.kod || "").match(/\d{3,6}/) || [])[0];
+  const kodOk = Boolean(kod && new RegExp(`(?<!\\d)${kod}(?!\\d)`).test(pm.replace(/\b(\d{2})[\s.](\d{2})\b/g, "$1$2")));
+  const sehir = String(g.sehir || "").trim().slice(0, 40);
+  const sehirOk = Boolean(sehir && pm.toLocaleLowerCase("tr").includes(sehir.toLocaleLowerCase("tr")));
+  const marka = /black\s*rose/i.test(pm) ? "black rose" : /volonte/i.test(pm) ? "volonte" : "";
+  const gidenYazi = yazi != null ? String(yazi) : ["müşteri", kodOk ? kod : "", marka, sehirOk ? sehir : ""].filter(Boolean).join(" ");
+  const ok = await kuyrugaEkle(env, "musteriPaylas", { id: `mp-${simdi}`, medya: liste, yazi: gidenYazi }).then(() => true).catch(() => false);
   if (!ok) return "❌ Müşteri paylaşımı Kemal'e gönderilemedi.";
-  await kaydet(env, "venom:bot:medya", (await oku(env, "venom:bot:medya", [])).filter((x) => x.file_id !== m.file_id), 3600).catch(() => null); // aynı fotoğraf başka işe karışmasın
-  await isKaydet(env, "kemal", "müşteri paylaşımı kartı (Patron'un fotoğrafı)", simdi);
-  return "📥 Müşteri paylaşımı Kemal'e verildi. Birkaç dakika içinde onay kartı gelir (görsel + Nora'nın yazısı); onaylamadan kanala çıkmaz.";
+  if (!dosyalar) { const kullanilan = new Set(medya.map((m) => m.file_id)); await kaydet(env, "venom:bot:medya", (await oku(env, "venom:bot:medya", [])).filter((x) => !kullanilan.has(x.file_id)), 3600).catch(() => null); } // aynı görseller başka işe karışmasın
+  await isKaydet(env, "kemal", `müşteri paylaşımı kartı (${liste.length} görsel, tek kart)`, simdi);
+  return `📥 Müşteri paylaşımı Kemal'e verildi: ${liste.length} görsel TEK kartta${medya.length > liste.length ? ` (⚠️ ${medya.length - liste.length} görsel indirilemedi)` : ""}${kodOk ? `, model ${kod}` : ", model kodu yok"}${sehirOk ? `, ${sehir}` : ""}. Birkaç dakika içinde onay kartı gelir (albüm + Nora'nın tek yazısı); onaylamadan kanala çıkmaz. Patron'a SADECE bunu söyle.`;
 }
 export async function paylasBaslat(env, { kod, renk = null, beden = null, sonSet = false }, simdi) {
   kod = String(kod || "").replace(/\D/g, "");
@@ -2427,6 +2453,8 @@ async function claudeIslemAdimi(env, simdi) {
     if (is.tur === "kararVer") sonuc.push({ tur: is.tur, kod: is.kod, ...(await kararVerildi(env, is.kod, is.karar || "kapat", simdi, { aciklama: is.aciklama || "" })) }); // model için karar: bütün açık kartlar kapanır
     else if (is.tur === "bekciDene") sonuc.push({ tur: is.tur, ...(await isBekcisi(env, simdi, { kuru: !is.kayit })) }); // 13 Kasım: iş bekçisi kuru çalışma (hiçbir şey göndermez)
     else if (is.tur === "kararTemizle") { const r = await stokIste(env, "/karar-temizle", { kod: String(is.kod) }).catch((e) => ({ ok: false, hata: String(e.message || e) })); if (r && r.ok) await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `${r.kod}: ekipten kalan eski "Sil" kararı kaldırıldı (${r.eski.kim || "?"}); model stoğu bittiği için SOLD OUT olarak görünür`, kod: r.kod }).catch(() => null); sonuc.push({ tur: is.tur, ...r }); } // 14 Kasım (Patron): 3448
+    else if (is.tur === "musteriAlbum") sonuc.push({ tur: is.tur, cevap: await musteriPaylasimiBaslat(env, {}, simdi, { dosyalar: (is.fileIds || []).slice(0, 10).map((f) => ({ tur: "foto", file_id: String(f) })), yazi: String(is.yazi || "müşteri") }) }); // 15 Kasım: verilen dosyalarla TEK kart (Patron'a; kanala gitmez)
+    else if (is.tur === "musteriIptal") { const l = []; for (const id of (is.ids || []).slice(0, 10)) l.push(await botaSor(env, "kemal", "mpIptal", { id: String(id), neden: String(is.neden || "Patron: tek fotoğraflı eski kart") })); sonuc.push({ tur: is.tur, l }); }
     else if (is.tur === "musteriOrnek") { // 14 Kasım: müşteri paylaşımının TEK örneği Patron'a (kanala gitmez); görsel KV "venommedya:<id>"
       const ok = /^[a-f0-9]{32}$/.test(String(is.medya || "")) && (await kuyrugaEkle(env, "musteriPaylas", { id: `mpo-${simdi}`, ornek: true, medya: [{ tur: "foto", url: `${env.SELF_URL}/medya/${is.medya}` }], yazi: `müşteri ${String(is.not || "")}`.trim() }).then(() => true).catch(() => false));
       sonuc.push({ tur: is.tur, ok: Boolean(ok) });

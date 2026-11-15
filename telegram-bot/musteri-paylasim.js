@@ -7,6 +7,9 @@
 //    kontrolü); ülke / şehir gönderen yazdıysa; müşteri adı YOK; fiyat ASLA; kod biliniyorsa en altta "Model: VOLONTE 3394";
 //    imza markaya göre "— VOLONTE family 🤍" / "— BLACK ROSE family 🖤".
 //  • Onay: gönderen kişiye TEK kart: görsel + altyazı + [✅ Paylaş] [✏️ Yeniden yaz] [❌ Paylaşma].
+//  • 15 Kasım (Patron): bir gönderide gelen BÜTÜN görseller (albüm ya da dosya olarak gönderilen resimler, en fazla 10) TEK kart,
+//    tek onay; kanalda TEK albüm + TEK altyazı. Varsayılan: model kodu ve şehir YOK (sadece FR + EN teşekkür + imza); kod SADECE
+//    gönderen açıkça yazdıysa ("müşteri 3394") eklenir — fotoğraftan kod TAHMİN EDİLMEZ.
 //  • Kurallar: günde en fazla 2 (normal 12 paylaşıma DAHİL DEĞİL), 09:00–21:00, normal paylaşımla en az 30 dk ara; deftere ayrı
 //    tür ("müşteri paylaşımı").
 //  • Canlıya alma: Patron örneği onaylayınca KV "kemal:musteriPaylasim" = "1". Kapalıyken ekipten gelen "müşteri" fotoğrafı eski
@@ -102,7 +105,8 @@ export async function maskele(env, bayt, kutular) {
 }
 
 // ---- yapay zekâ istekleri (y.json: tanima.js jsonIste; harcama orada yazılır) ----
-const INCELE_SEMA = { type: "object", additionalProperties: false, required: ["tur", "kutular", "mesaj", "kiyafet"], properties: {
+const INCELE_SEMA = { type: "object", additionalProperties: false, required: ["tur", "kutular", "mesaj", "kiyafet", "marka"], properties: {
+  marka: { type: "string", enum: ["BLACKROSE", "VOLONTE", ""] },
   tur: { type: "string", enum: ["ekran", "foto"] },
   kutular: { type: "array", items: { type: "object", additionalProperties: false, required: ["x", "y", "w", "h", "ne"], properties: { x: { type: "number" }, y: { type: "number" }, w: { type: "number" }, h: { type: "number" }, ne: { type: "string" } } } },
   mesaj: { type: "string" }, kiyafet: { type: "boolean" } } };
@@ -113,6 +117,7 @@ export async function gorselIncele(y, b64) {
       "kutular: görselde görünen HER telefon numarası, kişi adı / kullanıcı adı ve profil fotoğrafı için bir kutu ver (bunlar kapatılacak). Ölçüler 0–1 arası ORAN: x, y sol üst köşe; w genişlik; h yükseklik. Sohbet ekranının üst başlık çubuğunda isim / numara / profil fotoğrafı varsa çubuğun TAMAMINI tek kutu yap. Mesaj balonlarının içindeki teşekkür yazısını KAPATMA. Emin değilsen kutuyu biraz geniş tut. Kişisel bilgi yoksa boş liste. Kıyafetli müşteri fotoğrafında yüz kapatılmaz (izin alınmış).",
       "mesaj: müşterinin yazdığı teşekkürün özü, kendi dilinde, en fazla 200 karakter (isim, numara, fiyat YAZMA). Yazı yoksa boş.",
       "kiyafet: görselde giyilmiş / gösterilen bir kıyafet açıkça görünüyorsa true.",
+      "marka: görselde 'BLACK ROSE' ya da 'VOLONTE' yazısı / logosu AÇIKÇA okunuyorsa o (BLACKROSE / VOLONTE); okunmuyorsa boş bırak, tahmin etme.",
     ].join("\n") }],
     schema: INCELE_SEMA, maxTokens: 900,
   });
@@ -122,14 +127,14 @@ export const NORA_SISTEM = [
   "Sen NORA'sın: VOLONTE ve BLACK ROSE kadın giyim markalarının sıcak, zarif, samimi sesi. Bir müşterinin teşekkürünü ya da fotoğrafını Telegram kanalında paylaşıyoruz; altına kısa bir yazı yazacaksın.",
   "Kurallar: (1) Müşteriye değer verdiğini hissettir; içten, insan gibi, abartısız. Reklam dili, slogan, 'en iyi', 'eşsiz' gibi boş övgü yok. (2) Önce Fransızca (fr), sonra aynı duygunun İngilizcesi (en); kelime kelime çeviri olmak zorunda değil. (3) fr ve en ayrı ayrı 1–2 kısa satır; ikisi toplam 2–4 satır. (4) Müşterinin adı, telefonu, kullanıcı adı ASLA yazılmaz. (5) Fiyat, indirim, para birimi, sipariş çağrısı ASLA yok. (6) Ülke / şehir SADECE gönderenin notunda yazıyorsa kullan; yoksa yer uydurma. (7) Model kodu, marka adı ve imza YAZMA (onlar sonradan eklenir). (8) En fazla 1–2 sade emoji; hashtag yok. (9) Her yazı farklı olsun: sana verilen önceki yazıların giriş cümlesini, kalıbını, benzetmesini tekrar etme.",
 ].join("\n");
-export async function noraYaz(y, { mesaj, not, marka, tur, oncekiler = [], uyari = null }) {
+export async function noraYaz(y, { mesaj, not, marka, tur, adet = 1, oncekiler = [], uyari = null }) {
   const onceki = oncekiler.slice(-MP_HAFIZA).map((o, i) => `${i + 1}) ${String(o.fr || "").replace(/\n/g, " / ")} || ${String(o.en || "").replace(/\n/g, " / ")}`).join("\n");
   return y.json({
     system: NORA_SISTEM,
     content: [{ type: "text", text: [
       `Marka: ${MARKA_YAZI[marka === "BLACKROSE" ? "BLACKROSE" : "VOLONTE"]}.`,
-      `Paylaşılan: ${tur === "ekran" ? "müşterinin teşekkür mesajının ekran görüntüsü" : "müşterinin kıyafetle fotoğrafı"}.`,
-      mesaj ? `Müşterinin yazdığının özü: "${mesaj}"` : "Müşterinin yazısı yok.",
+      adet > 1 ? `Paylaşılan: ${adet} görsellik TEK albüm (${tur === "ekran" ? "müşterilerin teşekkür mesajlarının ekran görüntüleri" : tur === "foto" ? "müşterilerin kıyafetle fotoğrafları" : "müşteri teşekkür mesajları ve fotoğrafları"}). Hepsi için TEK yazı yaz; tek tek sayma.` : `Paylaşılan: ${tur === "ekran" ? "müşterinin teşekkür mesajının ekran görüntüsü" : "müşterinin kıyafetle fotoğrafı"}.`,
+      mesaj ? `${adet > 1 ? "Müşterilerin yazdıklarının özü" : "Müşterinin yazdığının özü"}: "${mesaj}"` : "Müşterinin yazısı yok.",
       not ? `Gönderenin notu (ülke / şehir varsa buradan): "${not}"` : "Gönderen yer belirtmedi (yer YAZMA).",
       onceki ? `Önceki yazılar (bunlara BENZEMESİN):\n${onceki}` : "",
       uyari ? `DİKKAT: bir önceki denemen kabul edilmedi (${uyari}). Baştan, farklı bir açıyla yaz.` : "",
@@ -169,4 +174,5 @@ export const mpGunAnahtari = (simdi) => `kemal:mpGun:${gunA(simdi)}`;
 export const mpId = (simdi) => `${simdi.toString(36)}${Math.floor(Math.random() * 1296).toString(36).padStart(2, "0")}`;
 export const mpDugmeler = (id) => ({ inline_keyboard: [[{ text: "✅ Paylaş", callback_data: `mp:o:${id}` }, { text: "✏️ Yeniden yaz", callback_data: `mp:y:${id}` }], [{ text: "❌ Paylaşma", callback_data: `mp:x:${id}` }]] });
 export const MP_KART_BASLIK = "👥 MÜŞTERİ PAYLAŞIMI — onayınıza (kanala aşağıdaki yazıyla çıkar)";
-export const kartYazi = (r, ek = "") => [MP_KART_BASLIK, r.maske ? `🔒 ${r.maske} kişisel bilgi alanı kapatıldı.` : null, r.kodNotu || null, "", altyaziKur(r), ek ? `\n${ek}` : null].filter((x) => x != null).join("\n");
+export const kartYazi = (r, ek = "") => [MP_KART_BASLIK, r.adet > 1 ? `🖼 ${r.adet} görsel — kanala TEK albüm, tek yazıyla çıkar.` : null, r.maske ? `🔒 ${r.maske} kişisel bilgi alanı kapatıldı.` : null, r.kodNotu || null, "", altyaziKur(r), ek ? `\n${ek}` : null].filter((x) => x != null).join("\n");
+export const MP_EN_FAZLA = 10; // bir gönderide en fazla 10 görsel (Telegram albüm sınırı)
