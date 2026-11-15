@@ -369,6 +369,16 @@ async function fuataGonder(env, tg, r, kim, simdi) {
   return true;
 }
 
+// 15 Kasım (Patron'un yazılı emri): önizlemesi Patron'da duran mutabakat, "Emin misiniz?" kartı Patron'a ulaşmadığı için gitmediyse
+// Patron'un emriyle AYNI içerikle gönderilir (süzgeç, arşiv, PDF aynen). Sadece "onizleme" durumundaki kayıt için çalışır.
+export async function patronEmriyleGonder(env, tg, id, simdi, not = "Patron'un yazılı emriyle") {
+  const r = await ayarOku(env, `mt:${id}`, null);
+  if (!r) return { ok: false, hata: "kayıt yok" };
+  if (r.durum !== "onizleme") return { ok: false, hata: `durum ${r.durum}`, mesaj: r.fuatMesaj || null };
+  r.gecmis.push([simdi, `${not}: onay kartı Patron'a ulaşmamıştı`]);
+  const s = await fuataGonder(env, tg, r, murat(env), simdi);
+  return s === true ? { ok: true, kisi: kisiOf(r), mesaj: r.fuatMesaj, zaman: tarihSaat(simdi) } : { ok: false, hata: s === null ? "alıcıya gönderilemedi (kayıtlı değil ya da /start yazmamış)" : "güvenlik süzgeci durdurdu" };
+}
 // Venom'dan (3 Kasım): Patron Venom'da kartı onaylayıp "Emin misiniz?" dedi → kartta gördüğü metin BİREBİR Fuat'a gider.
 // icerik = mutabakatIcerigi() (kart açılırken alınan); süzgeç, arşiv, PDF ve eski mutabakatları geçersiz kılma aynen uygulanır.
 export const mutabakatIcerigi = async (env, gun) => ({ gun, ...icerikAl(await mutabakatMetni(env, gun)) });

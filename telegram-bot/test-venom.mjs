@@ -2689,3 +2689,11 @@ test("15 Kasım (Patron) MÜŞTERİ PAYLAŞIMI — Venom: bütün görseller TEK
   assert.equal(o.g.filter((x) => x.metod === "sendMessage").length, 0);
   assert.notEqual(o.env.__tur.sus, true);
 });
+
+test("15 Kasım (Patron) 'Emin misiniz?' kartı süzgeçte KALMAZ: Celal mutabakatının onay kartı ve önizlemesi Patron'a geçer (Fuat'ınki gibi)", async () => {
+  const { izinBul } = await import("./venom-posta.js");
+  assert.equal(izinBul("⚠️ Emin misiniz? Bakiye mesajları şimdi Celal'e gidecek.", "sami"), "cevap");
+  assert.equal(izinBul("⚠️ Emin misiniz? Bakiye mesajları şimdi Fuat'a gidecek.", "sami"), "cevap");
+  assert.equal(izinBul("👁 ÖNİZLEME — Celal (13.11.2026): sadece siz görüyorsunuz.", "sami"), "onay");
+  assert.equal(izinBul("Bugün hava güzel", "sami"), null); // izinsiz sıradan kart yine geçmez
+});

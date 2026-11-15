@@ -95,7 +95,11 @@ export function izinBul(metin, kaynak = null) {
   const t = String(metin || "");
   if (kaynak === "pelin") return "para"; // Pelin'in kartları ücretli üretimin onayı (Patron onaylı iş)
   if (/SON YAYIN ONAYI/.test(t)) return "cevap"; // Patron'un kendi paylaşım isteğinin son onayı
-  if (/MÜŞTERİ PAYLAŞIMI/.test(t)) return "cevap"; // 14 Kasım: Patron'un Venom'a gönderdiği müşteri fotoğrafının onay kartı (kendi isteği)
+  if (/MÜŞTERİ PAYLAŞIMI/.test(t)) return "cevap";
+  // 15 Kasım (Patron): "Emin misiniz?" kartı Patron'un KENDİ bastığı düğmenin ikinci adımıdır; izin kelimesi aranmaz, HER ZAMAN geçer.
+  // (Celal mutabakatında "Emin misiniz? … Celal'e gidecek" kartı süzgeçte kaldı; Patron iki kez bastı, kart hiç gelmedi.)
+  if (/Emin misiniz\?/.test(t)) return "cevap";
+  if (/ÖNİZLEME — (Fuat|Celal)/.test(t)) return "onay"; // mutabakat önizlemesi (kişi adından bağımsız) // 14 Kasım: Patron'un Venom'a gönderdiği müşteri fotoğrafının onay kartı (kendi isteği)
   for (const [ad, re] of IZIN_KALIP) if (re.test(t)) return ad;
   return null;
 }
