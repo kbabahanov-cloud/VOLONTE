@@ -2028,6 +2028,12 @@ export async function haftalikListeMesajlari(env, simdi, { hic = null } = {}) {
   for (const p of parcalar) { if (m.length && `${m[m.length - 1]}\n\n${p}`.length <= 3800) m[m.length - 1] = `${m[m.length - 1]}\n\n${p}`; else m.push(p); }
   return { v, mesajlar: m };
 }
+// 16 Kasım: "gelecek" listesi — eski kayıtta mağaza yoksa marka Vegawin'den (kayıtlara dokunulmaz, sadece okunur)
+export async function gelecekMarkali(env, simdi) {
+  const l = gelecekGecikenler(await stokIste(env, "/fs-ozet", {}).catch(() => []), simdi);
+  for (const r of l) if (!r.magaza) { const b = await stokIste(env, "/bilgi", { kod: r.kod }).catch(() => null); const m = [...new Set(((b && b.satirlar) || []).map((x) => String(x.magaza || "").toUpperCase().replace(/\s+/g, "")))]; r.magaza = m.length === 1 ? m[0] : "VOLONTE"; }
+  return l;
+}
 export async function haftalikListeAdimi(env, simdi) {
   const s = saat(simdi);
   if (new Date((simdi + SAAT_FARKI) * 1000).getUTCDay() !== 1 || s < 10 || s >= 20) return null;
@@ -2040,7 +2046,7 @@ export async function haftalikListeAdimi(env, simdi) {
   // 16 Kasım (Patron): "gelecek" denip 7 günde gelmeyenler — AYRI mesaj, aynı gün; ekibe giden yeni yazı olduğu için Patron örneği
   // onaylayınca açılır (KV "venom:gelecekListeOnay" = "1", kural 34)
   if ((await oku(env, "venom:gelecekListeOnay", null)) === "1") {
-    const gm = gelecekListeMetni(gelecekGecikenler(await stokIste(env, "/fs-ozet", {}).catch(() => []), simdi), simdi);
+    const gm = gelecekListeMetni(await gelecekMarkali(env, simdi), simdi);
     if (gm) await kuyrugaEkle(env, "giden", { id: `gl-${gunAnahtari(simdi)}`, kime: "hemra", tur: "mesaj", metin: gm, izinli: "haftalikListe" });
   }
   await isKaydet(env, "venom", `Haftalık liste Hemra'ya gitti: hızlı satan ${v.hizli.map((x) => x.kod).join(", ") || "yok"}`, simdi).catch(() => null);
@@ -2579,7 +2585,7 @@ async function claudeIslemAdimi(env, simdi) {
     else if (is.tur === "stokOku" && ["/arsiv-kod", "/ayar-oku", "/ozet", "/satis-sayim", "/isd-bekleyen", "/fs-ozet", "/bilgi", "/toplu", "/gizliler", "/biten30", "/karar-liste", "/tum", "/olaylar", "/tg-hepsi", "/stoktakiler", "/isd-kod", "/model-ozet", "/celal-liste", "/fs-kod"].includes(is.yol)) sonuc.push({ tur: is.tur, yol: is.yol, v: await stokIste(env, is.yol, is.g || {}).catch((e) => String(e.message || e)) }); // sadece okuma
     else if (is.tur === "selinDurum") { const l = []; for (const k of (is.kodlar || []).slice(0, 25)) l.push(await botaSor(env, "selin", "durum", String(k))); sonuc.push({ tur: is.tur, l }); } // 14 Kasım: Selin'de modelin durumu (sadece okur)
     else if (is.tur === "fiyatOku") sonuc.push({ tur: is.tur, metin: await modelFiyatMetni(env, is.kodlar || []) }); // 14 Kasım: fiyat aracının çıktısı (sadece okur)
-    else if (is.tur === "gelecekOku") { const l = gelecekGecikenler(await stokIste(env, "/fs-ozet", {}).catch(() => []), simdi); sonuc.push({ tur: is.tur, n: l.length, metin: gelecekListeMetni(l, simdi) }); } // 16 Kasım: örnek (göndermez)
+    else if (is.tur === "gelecekOku") { const l = await gelecekMarkali(env, simdi); sonuc.push({ tur: is.tur, n: l.length, metin: gelecekListeMetni(l, simdi) }); } // 16 Kasım: örnek (göndermez)
     else if (is.tur === "raporOku") sonuc.push({ tur: is.tur, metin: await raporSatirlari(env, simdi, is.rapor === "aksam" ? "aksam" : "sabah").catch((e) => `HATA: ${String(e.message || e)}`) }); // 14 Kasım: raporun örneği (GÖNDERMEZ; sadece okur)
     else if (is.tur === "kopruSimdi") { await kopruIzle(env, simdi); sonuc.push({ tur: is.tur, ok: true, alarm: { VOLONTE: await oku(env, "venom:kopruAlarm:VOLONTE", null), BLACKROSE: await oku(env, "venom:kopruAlarm:BLACKROSE", null) } }); }
   }

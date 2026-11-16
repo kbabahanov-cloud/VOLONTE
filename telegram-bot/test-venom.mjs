@@ -2714,7 +2714,11 @@ test("16 Kasım (Patron) VENOM: renk kayıtta yoksa repete kartı gitmez (soru);
     { kod: "5076", magaza: "VOLONTE", grup: "celal", durum: "gelecek", cevapZaman: ist(7, 10) }, { kod: "3700", magaza: "VOLONTE", durum: "gelecek", cevapZaman: ist(14, 10) }, { kod: "3701", magaza: "VOLONTE", durum: "bekliyor", gonderim: ist(1, 10) }, { kod: "3702", magaza: "VOLONTE", durum: "gelecek", cevapZaman: ist(1, 10), deneme: true }];
   const gl = gelecekGecikenler(fs, ist(16, 10));
   assert.deepEqual(gl.map((x) => x.kod), ["3627", "3399", "5076"]);
-  assert.equal(gelecekListeMetni(gl, ist(16, 10)), "📦 Fabrika \"gelecek\" dedi, 7 günde gelmedi (16.11):\n🟦 VOLONTE (2): 3399 (06.11) · 5076 (07.11, Celal)\n🌹 BLACK ROSE (1): 3627 (06.11)\nFabrikaya otomatik soru gitmedi; gerekirse arayın. (Parantezde: fabrikanın \"gelecek\" dediği gün)");
+  assert.equal(gelecekListeMetni(gl, ist(16, 10)), "📦 Fabrika \"gelecek\" dedi, 7 günde gelmedi (16.11):\n🟦 VOLONTE (2): 3399 (06.11) · 5076 (07.11, Celal)\n🌹 BLACK ROSE (1): 3627 (06.11)\nFabrikaya otomatik soru gitmedi; gerekirse arayın. Mal geldiyse kartındaki düğmeden \"geldi\" işaretleyin. (Parantezde: fabrikanın \"gelecek\" dediği ilk gün)");
+  // eski kayıtta mağaza yok: Black Rose listesinden ("-BR") tanınır; aynı model iki siparişte → tek satır, sipariş sayısıyla
+  const gl2 = gelecekGecikenler([{ kod: "3627", durum: "gelecek", liste: "2026-11-06-BR", cevapZaman: ist(6, 13) }, { kod: "3627", durum: "gelecek", liste: "2026-11-02-BR", cevapZaman: ist(2, 13) }], ist(16, 10));
+  assert.deepEqual(gl2.map((x) => [x.kod, x.magaza, x.siparis]), [["3627", "BLACKROSE", 2]]);
+  assert.match(gelecekListeMetni(gl2, ist(16, 10)), /🌹 BLACK ROSE \(1\): 3627 \(02\.11, 2 sipariş\)/);
   assert.equal(gelecekListeMetni([], ist(16, 10)), null);
   // 7) müşteri kartları: sırada / kanala çıkan görünür; Patron'un onayındaki kart bekleyenlerde
   o.depo.set("kemal:mp:a1", JSON.stringify({ id: "a1", durum: "paylasildi", adet: 10, zaman: T0 - 50000, onay: T0 - 49900, onaylayan: "Patron", yayin: T0 - 7000, kanalMesaj: 15348, chat: String(PATRON) }));

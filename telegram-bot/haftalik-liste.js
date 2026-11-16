@@ -33,14 +33,15 @@ export const GELECEK_GUN = 7;
 const tarihKisa = (t) => { const d = new Date((Number(t) + 3 * 3600) * 1000).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)}`; };
 export function gelecekGecikenler(fs, simdi) {
   const l = (Array.isArray(fs) ? fs : []).filter((r) => r && r.durum === "gelecek" && !r.deneme && !r.mod && (Number(r.cevapZaman) || Number(r.gonderim) || simdi) <= simdi - GELECEK_GUN * 86400);
-  const tek = new Map(); // aynı model iki kayıtla görünürse en eskisi
-  for (const r of l.sort((a, b) => (a.cevapZaman || a.gonderim) - (b.cevapZaman || b.gonderim))) if (!tek.has(String(r.kod))) tek.set(String(r.kod), r);
-  return [...tek.values()];
+  const tek = new Map(); // aynı model birden fazla kayıtla görünürse en eskisi + kaç sipariş
+  for (const r of l.sort((a, b) => (a.cevapZaman || a.gonderim) - (b.cevapZaman || b.gonderim))) { const k = String(r.kod); if (tek.has(k)) tek.get(k).siparis++; else tek.set(k, { ...r, siparis: 1 }); }
+  // marka: kayıttaki mağaza; eski kayıtta yoksa Black Rose listesi ("-BR") — yine yoksa Venom Vegawin'den doldurur (markaBul)
+  return [...tek.values()].map((r) => ({ ...r, magaza: r.magaza || (/-BR$/.test(String(r.liste || "")) ? "BLACKROSE" : null) }));
 }
 export function gelecekListeMetni(l, simdi) {
   if (!l.length) return null;
   const grup = (m) => l.filter((r) => (m === "BLACKROSE" ? String(r.magaza).toUpperCase() === "BLACKROSE" : String(r.magaza).toUpperCase() !== "BLACKROSE"));
-  const satir = (r) => `${r.kod} (${tarihKisa(r.cevapZaman || r.gonderim)}${r.grup === "celal" ? ", Celal" : ""})`;
+  const satir = (r) => `${r.kod} (${tarihKisa(r.cevapZaman || r.gonderim)}${r.siparis > 1 ? `, ${r.siparis} sipariş` : ""}${r.grup === "celal" ? ", Celal" : ""})`;
   const bloklar = [["VOLONTE", "🟦 VOLONTE"], ["BLACKROSE", "🌹 BLACK ROSE"]].map(([m, ad]) => { const g = grup(m); return g.length ? `${ad} (${g.length}): ${g.map(satir).join(" · ")}` : null; }).filter(Boolean);
-  return [`📦 Fabrika "gelecek" dedi, ${GELECEK_GUN} günde gelmedi (${tarihKisa(simdi)}):`, ...bloklar, "Fabrikaya otomatik soru gitmedi; gerekirse arayın. (Parantezde: fabrikanın \"gelecek\" dediği gün)"].join("\n");
+  return [`📦 Fabrika "gelecek" dedi, ${GELECEK_GUN} günde gelmedi (${tarihKisa(simdi)}):`, ...bloklar, "Fabrikaya otomatik soru gitmedi; gerekirse arayın. Mal geldiyse kartındaki düğmeden \"geldi\" işaretleyin. (Parantezde: fabrikanın \"gelecek\" dediği ilk gün)"].join("\n");
 }
