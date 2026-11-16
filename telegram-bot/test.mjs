@@ -2241,7 +2241,8 @@ test("9 Kasım REPETE RAPORU: hızlı satan/bitmek üzere, bitti ama hızlıydı
   assert.ok(!/\$|fiyat/i.test(r.metin));
   assert.deepEqual(r.klavye[0].map((b) => b.callback_data), ["rr:r:3627", "rr:b:3627", "rr:x:3627"]);
   assert.ok(r.klavye.some((row) => row[0].callback_data === "rr:h:3377"));
-  assert.match(siparisTaslagi({ kod: "3377", s14: 9, fabrika: veri.fs[0] }), /3377 modelinden repete rica ediyoruz: siyah 10\. Toplam yaklaşık 40 adet/);
+  assert.match(siparisTaslagi({ kod: "3377", s14: 9, fabrika: veri.fs[0] }), /3377 modelinden repete rica ediyoruz: siyah 10\. Toplam yaklaşık 10 adet/); // 16 Kasım (Patron): 40 tabanı yok
+  assert.doesNotMatch(siparisTaslagi({ kod: "3377", s14: 0, fabrika: veri.fs[0] }), /Toplam yaklaşık/);
   // karar verilen (bekle) 7 gün sorulmaz
   const h2 = repeteHesapla({ ...veri, kararlar: [{ kod: "3500", karar: "b", zaman: simdi - 86400 }] }, { markalar: { 3627: "BLACKROSE" }, simdi });
   assert.equal(h2.bitti.length, 0);

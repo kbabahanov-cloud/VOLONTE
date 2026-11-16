@@ -2842,7 +2842,7 @@ test("REPETE (gerçek akış): Patron'un Venom'dan istediği repete → Hemra'ya
   await rk.repeteKartAdimi(o.env, simdi, tg2);
   const kartlar = o.g.filter((x) => String(x.govde.chat_id) === "333");
   assert.equal(kartlar.length, 2); // "100" model değil
-  assert.equal(kartlar[0].govde.text, "🔁 REPETE ÖNERİSİ — 🌹 BLACK ROSE · 3490\nPatron repete istedi · mağazada kalan: 2 adet\nSatış hızı: son 7 günde 6 adet · bu hızla ~3 günde biter\nÖnerilen repete: siyah · büyük 32, küçük 12 (toplam 44 adet)");
+  assert.equal(kartlar[0].govde.text, "🔁 REPETE ÖNERİSİ — 🌹 BLACK ROSE · 3490\nPatron repete istedi · mağazada kalan: 2 adet\nSatış hızı: son 7 günde 6 adet · bu hızla ~3 günde biter\nÖnerilen repete: siyah · büyük 12, küçük 4 (toplam 16 adet)"); // 16 Kasım (Patron): son istek aynen, 40'a ölçeklenmez
   assert.deepEqual(kartlar[0].govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Fuat'a gönder", "✏️ Dağılımı değiştir", "❌ Gerek yok"]); // 12 Kasım (Patron): repeteyi Patron başlattı → Hemra'dan doğrudan fabrikaya
   // 12 Kasım (Patron): satış hızı 0 → Sami repete ÖNERMEZ; kartta "satış yok, repete önerilmez"
   assert.equal(kartlar[1].govde.text, "🔁 REPETE ÖNERİSİ — 🟦 VOLONTE · 3477\nPatron repete istedi · mağazada kalan: 5 adet\nSatış hızı: son 7 günde satış yok, repete önerilmez\nÖnerilen repete: yok — lütfen yazın");
@@ -3181,7 +3181,7 @@ test("12 Kasım (Patron) DÖNGÜ YOK: yeni akış açıkken Hemra'nın 'bitti' k
   o.g.length = 0;
   await bas(333, `fh:r:${s.id}`, "Hemra");
   const dk2 = o.g.find((x) => /^editMessage/.test(x.metod) && String(x.govde.chat_id) === "333");
-  assert.match(yazi(dk2), /🔁 Hemra: Repete\.\nDağılım: siyah · büyük 40 \(toplam 40 adet\)$/);
+  assert.match(yazi(dk2), /🔁 Hemra: Repete\.\nDağılım: siyah · büyük 8 \(toplam 8 adet\)$/); // 16 Kasım (Patron): öneri 40'a ölçeklenmez — son istek aynen
   assert.deepEqual(dk2.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Patron'a gönder", "✏️ Dağılımı değiştir"]);
   assert.deepEqual(await kuyruk("bittiOneri"), []); // Patron'a iki kez sorulmaz
 });
@@ -3816,4 +3816,94 @@ test("14 Kasım (Patron) MUTABAKAT — ödeme satırı kalıcı (cari bazında, 
   await bas(999, `mt:g:${rf.id}`); await bas(999, `mt:G:${rf.id}`);
   assert.deepEqual(cagri(o.g, "sendMessage").filter((x) => String(x.govde.chat_id) === "501").map((x) => x.govde.text), m.fuat);
   assert.deepEqual([(await ayarOku(`mt:${rf.id}`)).durum, (await ayarOku(`mt:${rc.id}`)).durum], ["gonderildi", "mutabik"]);
+});
+
+test("16 Kasım (Patron) TEK KAPI — aynı kart 5 farklı yoldan: sadece ilki gider; açık kartta tek hatırlatma satırı, kapanmış kartta hiçbir şey; 3408 olayı (eski kart yeniden gönderme) tekrar edemez", async () => {
+  const { samiGonder } = await import("./sami.js");
+  const f = await import("./fabrika.js");
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", ALLOWED_IDS: "111,222", EKIP_IDS: "333" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }]));
+  const kartlar = (chat) => o.g.filter((x) => /^(send|copy)/.test(x.metod) && String(x.govde.chat_id) === chat && x.govde.reply_markup && x.govde.reply_markup.inline_keyboard);
+  const satirlar = (chat) => o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === chat && !x.govde.reply_markup);
+  const kart = (id, metod = "sendMessage") => ({ chat_id: 556, [metod === "sendPhoto" ? "caption" : "text"]: "🟦 VOLONTE\n3408 · Büyük (44-50) · beyaz 4\nNe zaman gelir?", ...(metod === "sendPhoto" ? { photo: "F1" } : {}), reply_markup: { inline_keyboard: [[{ text: "✅ Gelecek", callback_data: `fc:g:3408-${id}` }], [{ text: "❌ Bitti", callback_data: `fc:r:3408-${id}` }]] } });
+  // 1) eksik listesi yolu: ilk kart GİDER
+  await samiGonder(o.env, "sendMessage", kart("aaaa1111"));
+  assert.equal(kartlar("556").length, 1);
+  // 2) eski kart yeniden gönderme (yeni kayıt numarası) · 3) hatırlatma (fotoğraflı kopya) · 4) repete / Venom emri (kopya mesaj) · 5) kart tekrarı bayrağıyla → HİÇBİRİ yeni kart değil
+  await samiGonder(o.env, "sendMessage", kart("bbbb2222"));
+  await samiGonder(o.env, "sendPhoto", kart("cccc3333", "sendPhoto"));
+  await samiGonder(o.env, "copyMessage", { ...kart("dddd4444", "sendPhoto"), from_chat_id: -100, message_id: 650 });
+  await samiGonder({ ...o.env, __kartTekrar: true }, "sendMessage", kart("eeee5555"));
+  assert.equal(kartlar("556").length, 1);
+  assert.ok(satirlar("556").length <= 1); // açık kart: en fazla TEK hatırlatma satırı (saatte bir; mesai dışında hiç)
+  if (satirlar("556").length) assert.match(satirlar("556")[0].govde.text, /^🔔 Hatırlatma: cevap bekleyen kartınız var — 3408 · fabrika siparişi\. En alttaki karta bakın\.$/);
+  // farklı kart (başka beden / adet) ve başka kişi engellenmez
+  await samiGonder(o.env, "sendMessage", { ...kart("ffff6666"), text: "🟦 VOLONTE\n3408 · Küçük (38-44) · beyaz 4\nNe zaman gelir?" });
+  await samiGonder(o.env, "sendMessage", { ...kart("gggg7777"), chat_id: 557 });
+  assert.equal(kartlar("556").length, 2); assert.equal(kartlar("557").length, 1);
+  // kart kapandı (cevaplandı) → aynı kart yeniden gönderilirse HİÇBİR ŞEY gitmez (hatırlatma da yok)
+  const ilk = kartlar("556")[0];
+  await o.env.STOK.get().fetch("https://stok/isd-kart-kapat", { method: "POST", body: JSON.stringify({ chat: "556", mesaj: 51, neden: "kapandi" }) });
+  const once = o.g.length;
+  await samiGonder(o.env, "sendMessage", kart("hhhh8888"));
+  assert.ok(ilk);
+  assert.equal(o.g.length, once);
+  const defter = await (await o.env.STOK.get().fetch("https://stok/isd-kod", { method: "POST", body: JSON.stringify({ kod: "3408", basla: 0 }) })).json();
+  assert.ok(defter.some((x) => /TEK KAPI: 3408 · fabrika siparişi — aynı kart kapanmış/.test(x.ozet)));
+  assert.ok(defter.some((x) => /TEK KAPI: 3408 · fabrika siparişi — aynı kart açık, yeni kart gönderilmedi/.test(x.ozet)));
+  // 3408 OLAYI (14 Kasım): bir kerelik "kartYenidenGonder" işi eski kartı kapatıp AYNI kartı yeni kayıtla gönderiyordu → artık gitmez
+  const o2 = ortam();
+  Object.assign(o2.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", ALLOWED_IDS: "111,222", EKIP_IDS: "333" });
+  o2.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Sinem" }]));
+  o2.depo.set("kodlar", JSON.stringify({ 3408: [{ ids: [650], tarih: 1 }] })); // kanaldaki fotoğraf (fabrika kartı için)
+  const fsYaz = (rec) => o2.env.STOK.get().fetch("https://stok/fs-yaz", { method: "POST", body: JSON.stringify({ rec, kapali: false, takip: null, hafta: null, ozet: { kod: rec.kod, durum: rec.durum } }) });
+  await fsYaz({ id: "3408-eski1", kod: "3408", beden: "b", renkler: [{ renk: "beyaz", adet: 4 }], liste: "2026-11-10-T4", deneme: false, fotoKod: "3408", tur: "eksik", grup: "fabrika", sorumlu: "333", magaza: "VOLONTE", durum: "bekliyor", gonderim: 1, mesajlar: [], log: [] });
+  const sim = Math.floor(Date.now() / 1000);
+  o2.depo.set("sami:islemler", JSON.stringify([{ tur: "kartYenidenGonder", ids: ["3408-eski1"], neden: "deneme 1" }]));
+  await f.islemlerAdimi(o2.env, sim, samiGonder);
+  const k1 = o2.g.filter((x) => /^(send|copy)/.test(x.metod) && String(x.govde.chat_id) === "556" && x.govde.reply_markup);
+  assert.equal(k1.length, 1); // ilk gönderim (yeni kayıt) gitti
+  const yeniId = JSON.parse(o2.depo.get("sami:islemSonuc") || "[]").at(-1).l[0].yeni;
+  o2.depo.set("sami:islemler", JSON.stringify([{ tur: "kartYenidenGonder", ids: [yeniId], neden: "deneme 2 (eski kart hatırlatması)" }]));
+  await f.islemlerAdimi(o2.env, sim + 60, samiGonder);
+  const k2 = o2.g.filter((x) => /^(send|copy)/.test(x.metod) && String(x.govde.chat_id) === "556" && x.govde.reply_markup);
+  assert.equal(k2.length, 1); // ikinci kez AYNI kart GİTMEDİ
+  // kaynak taraması: Sami tarafında Telegram'a kart gönderen tek yol tg() (tek kapılı); başka "sendMessage/sendPhoto" fetch'i yok
+  const fs = await import("node:fs");
+  for (const d of ["sami.js", "fabrika.js", "repete-kart.js", "kart-takip.js", "kart-tekrar.js", "venom-kopru.js", "mutabakat.js", "cari-takip.js", "sami-beyin.js"]) {
+    const k = fs.readFileSync(new URL(`./${d}`, import.meta.url), "utf8");
+    const yollar = [...k.matchAll(/api\.telegram\.org\/bot[^`]*`[^)]*/g)].map((m) => m[0]);
+    for (const y of yollar) assert.ok(/\$\{m\}|sendDocument|getFile/.test(y), `${d}: kapıyı atlayan gönderim: ${y.slice(0, 120)}`);
+  }
+  assert.match(fs.readFileSync(new URL("./sami.js", import.meta.url), "utf8"), /const kapi = await kartKapisi\(env, metod, govde/);
+});
+
+test("16 Kasım (Patron) REPETE RENK / BEDEN KONTROLÜ (kural 87): 3583 'siyah · büyük 40' — kayıtta sadece kırmızı → kart Fuat'a GİTMEZ, sebep satırı; 3627 siyah (sitede siyah var) → gider; beden sitede yoksa durur", async () => {
+  const { uyumKontrol, renkUyar, bedenAraligi } = await import("./repete-uyum.js");
+  const { _fuataGonder } = await import("./repete-kart.js");
+  // saf karşılaştırma
+  assert.equal(renkUyar("Kırmızı", "kirmizi"), true); assert.equal(renkUyar("koyu bordo", "bordo"), true); assert.equal(renkUyar("siyah", "kırmızı"), false);
+  assert.deepEqual(bedenAraligi("38-40-42-44"), { kucuk: true, buyuk: false }); assert.equal(bedenAraligi(null), null);
+  const u = uyumKontrol([{ renk: "siyah", buyuk: 40, kucuk: 0 }], { renkler: ["kırmızı"], bedenler: "38-40-42-44-46-48-50" });
+  assert.deepEqual(u.sorun, ["dağılımda siyah var, kayıtlarda yok (kayıtlı renkler: kırmızı)"]);
+  assert.equal(uyumKontrol([{ renk: "siyah", buyuk: 8, kucuk: 0 }], { renkler: ["siyah", "koyu bordo", "beyaz"], bedenler: "38-40-42-44-46-48-50" }).ok, true);
+  assert.deepEqual(uyumKontrol([{ renk: "bej", buyuk: 8, kucuk: 0 }], { renkler: ["bej"], bedenler: "38-40-42-44" }).sorun, ["dağılımda büyük beden var, sitede sadece 38-40-42-44"]);
+  assert.equal(uyumKontrol([{ renk: "mor", buyuk: 8, kucuk: 0 }], { renkler: [], bedenler: null }).ok, true); // kayıt yoksa doğrulanamaz → engellenmez
+  // gerçek gönderim yolu: 3583 (6 Kasım eksik listesinde kırmızı istenmiş) → siyah repete Fuat'a GİTMEZ
+  const o = ortam();
+  Object.assign(o.env, { FABRIKA_SORUMLU: "333", MURAT_ID: "111", FUAT_ID: "556" });
+  o.depo.set("sami:fabrikaKisiler", JSON.stringify([{ id: 556, ad: "Fuat" }]));
+  const simdi = Math.floor(Date.now() / 1000);
+  const pzt = (await import("./worker.js")).gunAnahtari(simdi - ((new Date((simdi + 3 * 3600) * 1000).getUTCDay() + 6) % 7) * 86400);
+  await o.env.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `fs:hafta:${pzt}`, v: JSON.stringify({ "3583-to3gbrrk": { kod: "3583", beden: "b", renkler: [{ renk: "kırmızı", adet: 8 }], durum: "bitti" } }) }) });
+  const tg = async (_e, metod, govde) => { o.g.push({ metod, govde }); return { ok: true, result: { message_id: 900 + o.g.length } }; };
+  const rec = { id: "3583-test1", kod: "3583", magaza: "VOLONTE", uretici: "fuat", dagilim: [{ renk: "siyah", buyuk: 40, kucuk: 0 }], adet: 40, mesajlar: {}, kanit: [], deneme: false };
+  assert.equal(await _fuataGonder(o.env, tg, rec, simdi), false);
+  assert.equal(rec.hata, "renk/beden uyuşmuyor — dağılımda siyah var, kayıtlarda yok (kayıtlı renkler: kırmızı)");
+  assert.ok(!o.g.some((x) => /^send/.test(x.metod))); // Fuat'a hiçbir şey gitmedi
+  // kırmızı dağılım aynı kayıtla geçer
+  const rec2 = { ...rec, id: "3583-test2", dagilim: [{ renk: "kırmızı", buyuk: 40, kucuk: 0 }], mesajlar: {} };
+  assert.equal(await _fuataGonder(o.env, tg, rec2, simdi), true);
+  assert.ok(o.g.some((x) => /^send/.test(x.metod) && /3583 · kırmızı · büyük 40/.test(x.govde.caption || x.govde.text || "")));
 });

@@ -35,6 +35,7 @@ import { mutabakatKomutu, mutabakatDugmesi, mutabakatFarkMesaji, mutabakatAdimi,
 import { borcLimitKomutu } from "./cari-takip.js";
 import { patronMu, geriKuyrugu } from "./sil.js";
 import { guvenliGonder } from "./tg-guvenli.js";
+import { kartKapisi } from "./kart-kapisi.js"; // 16 Kasım: tek kapı (kural 86)
 import { ciroKomutu } from "./ciro.js";
 import { venomGidenAdimi } from "./venom-kopru.js";
 import { gorevDugmesi, gorevAciklamaMesaji } from "./venom-gorev.js";
@@ -57,6 +58,10 @@ const izinli = (id, env) => kisiler(env).includes(String(id));
 async function tg(env, metod, govde) {
   if (govde && venomCevabi(metod, govde)) return govde.text ? venomaAktar(env, "sami", "sendMessage", { chat_id: env.MURAT_ID, text: `ℹ️ ${govde.text}` }) : { ok: true, result: true };
   if (govde && (await patronaGider(env, govde.chat_id))) { const r = await venomaAktar(env, "sami", metod, govde, (m, g) => tgGercek(env, m, g)); await defterTg(env, "sami", metod, govde, r); return r; }
+  // 16 Kasım (Patron, kural 86 — TEK KAPI): ekibe / fabrikaya giden HER kart defterle karşılaştırılır; aynı kişi + model + konu için
+  // açık kart varsa yeni kart gitmez (tek hatırlatma satırı), kapanmışsa hiçbir şey gitmez. Bu işlev Sami'nin TEK gönderim yoludur.
+  const kapi = await kartKapisi(env, metod, govde, (m, g) => tgGercek(env, m, g));
+  if (kapi) return kapi;
   // 13 Kasım (Patron, kural 39 — TEKRAR SORU YASAĞI): bu kişide AYNI kart açıkken ikinci kez gönderilmez; açık kart geçerlidir
   const acikMesaj = await acikAyniKart(env, metod, govde);
   if (acikMesaj) return { ok: true, tekrar: true, result: { message_id: acikMesaj, chat: { id: govde.chat_id } } };
@@ -100,6 +105,7 @@ function gizliEsit(a, b) {
 }
 
 // TEK KAPI (5 Kasım): Venom'dan Sami düğmesi (sami-giris.js "VenomKapisi")
+export const samiGonder = (env, metod, govde) => tg(env, metod, govde); // 16 Kasım: testler için Sami'nin TEK gönderim yolu (tek kapı dahil)
 export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
 export async function repeteAdim(env) { await repeteKartAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: Venom → hemen (5 dk bekleme yok)
 export async function gidenAdim(env) { await venomGidenAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: "Merdan'a söyle" → kart HEMEN (5 dk bekleme yok)

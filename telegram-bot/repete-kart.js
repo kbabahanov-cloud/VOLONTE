@@ -16,6 +16,8 @@
 //   (Patron'un istediği repete: Hemra'ya dağılım kartı) · "rkSonuc" Sami → Venom (Patron'a tek satır / biriken bilgi).
 import { MOD_SATIR, modAcik, denemeKaydiMi } from "./deneme-modu.js";
 import { stokIste } from "./stokbot.js";
+import { uyumKaydi, uyumKontrol, uyumSatiri } from "./repete-uyum.js"; // 16 Kasım: kural 87
+import { siteVerisi } from "./depo-oku.js";
 import { fuatSuzgec } from "./mutabakat.js";
 export const ADET_SOR_ALT = 10, ADET_SOR_UST = 200; // bu aralığın dışındaki adet bir kez teyit edilir
 import { _rk, sorumlu, muratMi, DENEME } from "./fabrika.js";
@@ -301,7 +303,28 @@ export async function rkDugme(env, cq, tg, simdi) {
 }
 
 // ---------- 3) Fuat'a kart (Patron onayından sonra; "2 gün sonra dön" ve "tekrar aç" ile yeniden) ----------
+// 16 Kasım (Patron, kural 87): kayıt kaynakları (eksik listesi geçmişi son 6 hafta + açık sipariş, site, model kartı)
+const SAAT_FARKI_U = 3 * 3600;
+const pztU = (t) => gunA(t - ((new Date((t + SAAT_FARKI_U) * 1000).getUTCDay() + 6) % 7) * 86400);
+const uyumKaynaklari = (env, simdi) => ({
+  ayarOku: (k, b) => ayarOku(env, k, b),
+  fsKod: async (kod) => {
+    const l = [];
+    const a = await stokIste(env, "/fs-kod", { kod }).catch(() => null); if (a) l.push(a);
+    for (let h = 0; h < 6; h++) for (const x of Object.values((await ayarOku(env, `fs:hafta:${pztU(simdi - h * 7 * 86400)}`, {})) || {})) if (x && String(x.kod) === String(kod)) l.push(x);
+    return l;
+  },
+  site: () => siteVerisi(env),
+  kart: (kod) => env.KAYIT.get(`pelinboy:${kod}`, "json"),
+});
 async function fuataGonder(env, tg, rec, simdi, ne = "Fuat") {
+  // 16 Kasım (Patron, kural 87): İLK gönderimden önce dağılımdaki renk / beden kayıtla karşılaştırılır; uyuşmuyorsa kart GİTMEZ
+  // (rec.hata → çağıran Hemra'nın kartına ve Patron'a "renk/beden uyuşmuyor" satırını yazar). Deneme / test kaydı kontrole girmez.
+  if (!(rec.mesajlar && rec.mesajlar.fuat) && !denemeKaydiMi(rec) && !rec.test && Array.isArray(rec.dagilim)) {
+    const u = uyumKontrol(rec.dagilim, await uyumKaydi(rec.kod, uyumKaynaklari(env, simdi)).catch(() => ({ renkler: [], bedenler: null })));
+    rec.uyum = { zaman: simdi, ok: u.ok, sorun: u.sorun, renkKaydi: u.renkKaydi, bedenKaydi: u.bedenKaydi };
+    if (!u.ok) { rec.hata = uyumSatiri(u); return false; }
+  }
   const metin = fuatMetni(rec), fuat = await ureticiId(env, rec);
   rec.hata = !fuat ? `${ureticiAd(rec)}'${rec.uretici === "celal" ? "in" : "ın"} kimliği kayıtlı değil` : fuatSuzgec(metin) ? "güvenlik süzgeci durdurdu" : null;
   const m = rec.hata ? null : await kartGonder(env, tg, rec, ne, fuat, metin, fuatKlavye(rec), simdi, await fotoAdresi(env, rec));
@@ -341,7 +364,8 @@ export async function tekrarAc(env, tg, kod, kim, simdi) {
   const engel = await acikRepete(env, rec.kod, { deneme: rec.deneme, mod: Boolean(rec.mod) });
   if (engel) return { ok: false, metin: engelMetni(engel) };
   rec.tekrarAcan = [...(rec.tekrarAcan || []), { kim, zaman: simdi }];
-  if (!(await fuataGonder(env, tg, rec, simdi, "Fuat (tekrar açıldı)"))) { await rkYaz(env, rec); return { ok: false, rec, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "?"}).`) }; }
+  // 16 Kasım: tek kapı — Patron'un açık "tekrar aç" emri izinli yeniden gönderimdir
+  if (!(await fuataGonder({ ...env, __kapiIzin: `Patron "tekrar aç" dedi (${kim})` }, tg, rec, simdi, "Fuat (tekrar açıldı)"))) { await rkYaz(env, rec); return { ok: false, rec, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "?"}).`) }; }
   await rkYaz(env, rec);
   return { ok: true, rec, metin: yonelt(rec, `${DK(rec)}🔁 ${rec.kod} repete tekrar açıldı (${kim}); kart Fuat'a yeniden gitti.`) };
 }
@@ -623,3 +647,5 @@ export async function repeteKartAdimi(env, simdi, tg) {
     if (degisti) await rkYaz(env, rec);
   }
 }
+
+export { fuataGonder as _fuataGonder }; // 16 Kasım: test (kural 87 kontrolü)

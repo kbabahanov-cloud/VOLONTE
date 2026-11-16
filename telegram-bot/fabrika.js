@@ -20,7 +20,6 @@ import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI, celalKoduMu } from "./stok.js";
 import { patronMu, silKuyrugu, geriKuyrugu, magazaStoklari, magazaStogu, STOK_KURALI } from "./sil.js";
 import { fuatSuzgec, onizlemeGonder as mutabakatOnizleme, patronEmriyleGonder } from "./mutabakat.js";
-import { REPETE_EN_AZ } from "./repete-rapor.js";
 import { acikRepete, engelMetni, rkGeldi, rkHemradan, dagilimYazi, dagilimAdet, denemeTemizle, modRepeteKapat } from "./repete-kart.js"; // 11 Kasım: repete kartı (kural 43: açık repete varken yeni repete yok)
 
 const SAAT_FARKI = 3 * 3600;
@@ -1212,7 +1211,7 @@ export async function fabrikaDugmesi(env, cq, tg, simdi) {
       const onceki = (await ayarOku(env, "fabrika:sonIstek", {}))[kod];
       const acilA = d && !d.deneme ? (await acilOku(env))[kod] : null;
       const oncekiToplam = onceki ? (Array.isArray(onceki) ? onceki : Object.values(onceki.gruplar || {}).flat()).reduce((t, x) => t + (Number(x.adet) || 0), 0) : 0;
-      if (acilA && oncekiToplam < (acilA.min || 40)) { await cevapla(`⚡ ACİL: en az ${acilA.min || 40} adet`); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `⚡ ${kod} ACİL: önceki istek ${oncekiToplam} adet; en az ${acilA.min || 40} adet olmalı. Bedeni seçip yazıyla girin (örnek: ${kod} büyük siyah 30, küçük siyah 10).` }); }
+      // 16 Kasım (Patron): ACİL modelde "en az 40 adet" kalıntısı SİLİNDİ — önceki istek ne ise o; adedi Hemra / Patron belirler
       if (!onceki) { await cevapla("Önceki istek yok"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: `${kod}: önceki istek kaydı yok — bedeni seçin ve renk/adet yazın (örnek: ${kod} küçük siyah 10 bej 6).` }); }
       secim = { onceki };
       await cevapla(`Önceki gibi: ${sonIstekYazi(onceki)}`);
@@ -2081,7 +2080,8 @@ export function samiOnerisi(kalan, s7) {
   if (s7 >= 7 || (bitis != null && bitis <= 7)) return `Hızlı satıyor (7 günde ${s7}), ${kalan} adet kaldı, ~${bitis} günde biter; repete öneriyorum.`;
   return `Yavaş satıyor (7 günde ${s7}), ${kalan} adet kaldı, ~${bitis} günde biter; bitene kadar beklenebilir.`;
 }
-// Önerilen repete dağılımı (SADECE ÖNERİ — 13 Kasım: alt sınır yok, adedi Hemra / Patron belirler): son istekteki renk/beden oranı, 40 adede ölçeklenir, 4'ün katlarına yuvarlanır (seri = 4)
+// Önerilen repete dağılımı (SADECE ÖNERİ — alt sınır yok, adedi Hemra / Patron belirler): son istekteki renk / beden / adet AYNEN,
+// 4'ün katlarına yuvarlanır (seri = 4). 16 Kasım (Patron): "40 adede ölçekle / 40'a tamamla" kalıntısı SİLİNDİ.
 export function dagilimOner(onceki, rec = null) {
   const m = new Map();
   const ekle = (renk, g, adet) => { const r = String(renk || "").trim(); if (!r || !(Number(adet) > 0)) return; const x = m.get(r) || { renk: r, buyuk: 0, kucuk: 0 }; x[g === "b" ? "buyuk" : "kucuk"] += Number(adet); m.set(r, x); };
@@ -2089,9 +2089,7 @@ export function dagilimOner(onceki, rec = null) {
   if (!m.size && rec && rec.beden && Array.isArray(rec.renkler)) for (const r of rec.renkler) ekle(r.renk, rec.beden, r.adet);
   if (!m.size) return null;
   const l = [...m.values()];
-  const kat = Math.max(1, REPETE_EN_AZ / dagilimAdet(l));
-  for (const x of l) for (const g of ["buyuk", "kucuk"]) if (x[g] > 0) x[g] = Math.max(4, Math.round((x[g] * kat) / 4) * 4);
-  while (dagilimAdet(l) < REPETE_EN_AZ) { const en = l.flatMap((x) => ["buyuk", "kucuk"].filter((g) => x[g] > 0).map((g) => [x, g])).sort((a, b) => b[0][b[1]] - a[0][a[1]])[0]; en[0][en[1]] += 4; }
+  for (const x of l) for (const g of ["buyuk", "kucuk"]) if (x[g] > 0) x[g] = Math.max(4, Math.round(x[g] / 4) * 4);
   return l;
 }
 // Sinem "Bitti" → Hemra'ya HEMEN kart: fotoğraf + kod + mağazada kalan + son 7 gün / yıllık satış + Sami'nin önerisi + önerilen dağılım.
@@ -2801,7 +2799,7 @@ async function tekIslem(env, simdi, tg) {
     }
   } else if (is.tur === "acilYaz") { // 10 Kasım (Patron): ACİL modeller {kodlar:[{kod, magaza, min, not}], gun: 3} — listenin başında, en az min adet
     const a = (await ayarOku(env, "fabrika:acil", {})) || {};
-    for (const x of is.kodlar || []) a[String(x.kod)] = { magaza: x.magaza || null, min: x.min || 40, not: x.not || "stok az", zaman: simdi, bitis: simdi + (is.gun || 3) * 86400 };
+    for (const x of is.kodlar || []) a[String(x.kod)] = { magaza: x.magaza || null, not: x.not || "stok az", zaman: simdi, bitis: simdi + (is.gun || 3) * 86400 };
     await ayarYaz(env, "fabrika:acil", a);
     sonuc.acil = Object.keys(a);
     // bugünün açık listesinde olmayan acil model listeye eklenir (kontrol kartı kişiye gelir); varsa sıranın başına alınır

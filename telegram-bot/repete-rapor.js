@@ -2,7 +2,7 @@
 // Bu dosya SADECE hesap ve yazı (saf, test edilebilir); gönderme Kemal'de (worker.js repeteRaporuGonder).
 // Kurallar: VOLONTE ve BLACK ROSE asla toplanmaz — her model kendi markasının mağazasındaki stok/satışla hesaplanır.
 // Fiyat yok. Renk bazlı satış Vegawin'de yok (tek kart): renkler son fabrika siparişinden gösterilir.
-export const REPETE_EN_AZ = 40; // 13 Kasım (Patron, kural 29): SINIR DEĞİL — Sami'nin önerdiği başlangıç adedi; adedi Hemra / Patron belirler
+// 16 Kasım (Patron): "40 adet" kalıntısı SİLİNDİ — repete adedinde alt sınır da varsayılan başlangıç adedi de yoktur (kural 29); adedi Hemra / Patron yazar.
 export const HIZLI_SATIS14 = 6, BITTI_SATIS14 = 4, YAVAS_STOK = 20, ACIL_GUN = 3;
 const GUN = 86400;
 const MARKA_AD = { BLACKROSE: "BLACK ROSE", VOLONTE: "VOLONTE" };
@@ -92,7 +92,7 @@ export function repeteMetni(h, { simdi, defneVar = false }) {
 // Fuat'a gidecek sipariş taslağı (Patron onayına; adet/renk ✏️ Düzelt ile değişir)
 export function siparisTaslagi(x) {
   const renk = x.fabrika && (x.fabrika.renkler || []).length ? x.fabrika.renkler.map((r) => (typeof r === "string" ? r : `${r.renk}${r.adet ? ` ${r.adet}` : ""}`)).join(", ") : "önceki renkler";
-  const adet = Math.max(REPETE_EN_AZ, Math.ceil((x.s14 || 0) / 2) * 2); // 10 Kasım (Patron): repete en az 40 adet
-  return `Fuat Bey merhaba, ${x.kod} modelinden repete rica ediyoruz: ${renk}. Toplam yaklaşık ${adet} adet. Ne zaman hazır olur?`;
+  const adet = Math.ceil((x.s14 || 0) / 2) * 2; // son 14 günün satışının yarısı (öneri; Patron ✏️ Düzelt ile değiştirir) — alt sınır yok
+  return `Fuat Bey merhaba, ${x.kod} modelinden repete rica ediyoruz: ${renk}.${adet > 0 ? ` Toplam yaklaşık ${adet} adet.` : ""} Ne zaman hazır olur?`;
 }
 export const hatirlatmaTaslagi = (f) => `Fuat Bey merhaba, ${f.kod} siparişi (${gunYaz(f.gonderim)}) için cevabınızı bekliyoruz. Ne zaman hazır olur?`;

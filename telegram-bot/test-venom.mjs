@@ -2697,3 +2697,60 @@ test("15 Kasım (Patron) 'Emin misiniz?' kartı süzgeçte KALMAZ: Celal mutabak
   assert.equal(izinBul("👁 ÖNİZLEME — Celal (13.11.2026): sadece siz görüyorsunuz.", "sami"), "onay");
   assert.equal(izinBul("Bugün hava güzel", "sami"), null); // izinsiz sıradan kart yine geçmez
 });
+
+test("16 Kasım (Patron) VENOM: renk kayıtta yoksa repete kartı gitmez (soru); 'gelecek' listesi; müşteri kartlarını görür ('göremiyorum'); rapor düzeltme satırı ayrıntılı; yazı + fotoğraf birlikte işlenir", async () => {
+  const v = await import("./venom-bot.js");
+  const { gelecekGecikenler, gelecekListeMetni } = await import("./haftalik-liste.js");
+  const o = ortam();
+  const T0 = ist(16, 11);
+  // 4) renk: 3583 kayıtlarda sadece kırmızı → "siyah" repete BAŞLAMAZ, tek satır soru
+  await o.ayar("fabrika:sonIstek", { 3583: { beden: "b", gruplar: { b: [{ renk: "kırmızı", adet: 8 }] } } });
+  const c4 = await v.aracCalistir(o.env, "karar_uygula", { kod: "3583", karar: "repete", renk: "siyah" }, T0);
+  assert.match(c4, /^KART GÖNDERİLMEDİ\. Patron'a TEK satır sor .*"3583: "siyah" bu modelin kayıtlarında yok \(kayıtlı renkler: kırmızı\)\. Hangi renk olsun\?"/);
+  const rb = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "rkBaslat" }) })).json();
+  assert.deepEqual(rb, []); // repete başlatılmadı
+  // 5) "gelecek" denip 7 günde gelmeyen modeller (deneme hariç; 7 günden yeni olan girmez)
+  const fs = [{ kod: "3627", magaza: "BLACKROSE", durum: "gelecek", cevapZaman: ist(6, 13), gonderim: ist(6, 12) }, { kod: "3399", magaza: "VOLONTE", durum: "gelecek", cevapZaman: ist(6, 13) },
+    { kod: "5076", magaza: "VOLONTE", grup: "celal", durum: "gelecek", cevapZaman: ist(7, 10) }, { kod: "3700", magaza: "VOLONTE", durum: "gelecek", cevapZaman: ist(14, 10) }, { kod: "3701", magaza: "VOLONTE", durum: "bekliyor", gonderim: ist(1, 10) }, { kod: "3702", magaza: "VOLONTE", durum: "gelecek", cevapZaman: ist(1, 10), deneme: true }];
+  const gl = gelecekGecikenler(fs, ist(16, 10));
+  assert.deepEqual(gl.map((x) => x.kod), ["3627", "3399", "5076"]);
+  assert.equal(gelecekListeMetni(gl, ist(16, 10)), "📦 Fabrika \"gelecek\" dedi, 7 günde gelmedi (16.11):\n🟦 VOLONTE (2): 3399 (06.11) · 5076 (07.11, Celal)\n🌹 BLACK ROSE (1): 3627 (06.11)\nFabrikaya otomatik soru gitmedi; gerekirse arayın. (Parantezde: fabrikanın \"gelecek\" dediği gün)");
+  assert.equal(gelecekListeMetni([], ist(16, 10)), null);
+  // 7) müşteri kartları: sırada / kanala çıkan görünür; Patron'un onayındaki kart bekleyenlerde
+  o.depo.set("kemal:mp:a1", JSON.stringify({ id: "a1", durum: "paylasildi", adet: 10, zaman: T0 - 50000, onay: T0 - 49900, onaylayan: "Patron", yayin: T0 - 7000, kanalMesaj: 15348, chat: String(PATRON) }));
+  o.depo.set("kemal:mp:a2", JSON.stringify({ id: "a2", durum: "kart", adet: 3, zaman: T0 - 600, chat: String(PATRON) }));
+  const mk = await v.aracCalistir(o.env, "musteri_kartlari", {}, T0);
+  assert.match(mk, /👥 Müşteri paylaşımı kartları \(son 3 gün, 2\):/);
+  assert.match(mk, /10 görsel · kanala çıktı · onay .* \(Patron\) · kanala çıktı .*, mesaj no 15348/);
+  assert.match(mk, /3 görsel · onay bekliyor/);
+  assert.ok((await v.bekleyenKararlar(o.env, T0)).some((x) => x.tip === "musteri" && /müşteri paylaşımı \(3 görsel\): onayınızda/.test(x.baslik)));
+  const kor = { ...o.env, KAYIT: { ...o.env.KAYIT, list: async () => { throw new Error("okunamadı"); } } };
+  assert.match(await v.musteriKartlariMetni(kor, T0), /GÖREMİYORUM/);
+  // 8) rapor: "1 yazıda hata vardı" yok — hangi yazı · ne hatası · ne yaptım
+  assert.equal(v.duzeltmeCumlesi({ kod: "3396", notlar: ["açıklamadaki başka renk kelimesi çıkarıldı"] }), "3396 kanal yazısı · açıklamadaki başka renk kelimesi vardı → çıkardım (paylaşımdan önce)");
+  // 6) yazı + fotoğraf ayrı mesaj: yazı önce gelir, fotoğraf bekleme sırasında gelir → beyin fotoğrafı BİLEREK cevap verir
+  const o6 = ortam();
+  let bekleme = 0;
+  o6.env.__bekle = async () => { bekleme++; if (bekleme === 1) o6.depo.set("venom:bot:medya", JSON.stringify([{ tur: "foto", file_id: "K1", zaman: Math.floor(Date.now() / 1000) }])); };
+  o6.cevaplar.push({ text: "Tamam Patron, fotoğrafı aldım." });
+  await yazi(o6, PATRON, "Pelin kullansın. Bu benim fotoğrafım, Instagram kapak fotoğrafı yap");
+  assert.ok(bekleme >= 1);
+  assert.match(JSON.stringify(o6.claude.at(-1).messages.at(-1)), /Patron son 2 dakikada 1 fotoğraf\/video gönderdi/);
+  // fotoğraf yazıdan SONRA gelirse (yazı cevaplanmıştı): "📎 Aldım, ne yapayım?" sorulmaz; yazı fotoğrafla YENİDEN işlenir
+  const o7 = ortam();
+  o7.env.__bekle = async () => {};
+  o7.cevaplar.push({ text: "Patron, fotoğraf ulaşmadı." }, { text: "Şimdi fotoğrafla yapıyorum." });
+  await yazi(o7, PATRON, "Bunların alt yazısını yaz, müşteri paylaşımı");
+  const once = o7.claude.length;
+  await guncelleme({ update_id: uid++, message: { message_id: 5, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: "M1" }] } }, o7.env);
+  assert.equal(o7.claude.length, once + 1);
+  assert.match(JSON.stringify(o7.claude.at(-1).messages.at(-1)), /Bunların alt yazısını yaz[\s\S]*fotoğraflarını AZ ÖNCE gönderdi/);
+  assert.ok(!o7.g.some((x) => /📎 Aldım/.test(x.govde.text || "")));
+  // ilgisiz yazıdan sonra gelen açıklamasız fotoğraf → eskisi gibi düğmeli soru
+  const o8 = ortam();
+  o8.env.__bekle = async () => {};
+  o8.cevaplar.push({ text: "Tamam." });
+  await yazi(o8, PATRON, "3394 stokta kaç var");
+  await guncelleme({ update_id: uid++, message: { message_id: 6, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: "M2" }] } }, o8.env);
+  assert.ok(o8.g.some((x) => /📎 Aldım/.test(x.govde.text || "")));
+});

@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-15.1
+Sürüm: 2026-11-16.1
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -126,3 +126,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 83. Rapor ciro · günlük gider · net gösterir; günlük gidere fabrika / cari ödemeleri GİRMEZ (borç ödemesidir, gider değildir). Fabrikaya yapılan ödeme raporda ayrı satırda yazılır: "🏭 Fabrikaya ödeme: …". Açıklamasında "Murat aldı" yazan kişisel harcama, ortak çekişi ve avans da günlük gider sayılmaz; ayrı satırda yazılır: "👤 Kişisel/ortak: …".
 84. Venom yapamadığı işi "not ettim" diye geçiştirmez: "Yapamıyorum — sebep: …" der ve işi eksik araç listesine yazar. Patron onaylarsa aracı Claude Code ekler; bot kendi kendine araç ekleyemez.
 85. Patron'un yazdığı HER mesaj Venom'un beynine gider; hiçbir kalıp cevap Patron'un sorusunu yutamaz.
+86. Ekibe ve fabrikaya giden bütün kartlar (eksik listesi, hatırlatma, repete, eski kart, Venom'un emirleri) tek gönderim kapısından geçer; kapı defteri kontrol eder: aynı kişi + model + konu için açık kart varsa yeni kart göndermez, sadece hatırlatma satırı gider; kapanmış kart varsa hiçbir şey gitmez. Başka hiçbir yol doğrudan kart gönderemez.
+87. Repete kartı gönderilmeden önce dağılımdaki renk ve beden Vegawin kaydıyla ve kart görseliyle karşılaştırılır; uyuşmuyorsa kart gitmez, Hemra'ya ve Patron'a "renk/beden uyuşmuyor" satırı gelir. Patron'un söylediği renk kayıtla uyuşmuyorsa Venom Patron'a sorar, kart göndermez.
