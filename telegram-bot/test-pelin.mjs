@@ -1523,3 +1523,32 @@ test("VENOM → PELİN FOTOĞRAF (5 Kasım): '3627 beyaz ön/arka' kaydı; sadec
   assert.equal((await fotoKaydetVenom(o.env, { kod: "x", fotolar: [{ url: "https://a" }] }, 1)).ok, false);
   assert.equal((await fotoKaydetVenom(o.env, { kod: "3627", fotolar: [] }, 1)).ok, false);
 });
+
+test("16 Kasım (Patron) KURAL YANLIŞTI: işaretli üretim video çıktıktan sonra onaylanamaz, şablon / yeniden üret / başka araç işlemez, teslim kuyruğuna girmez; video çıkmadan 'yine de onayla' (devam) geçer; önizlemede not yazar", async () => {
+  const o = uretimOrtami();
+  o.depo.set("venom:pelinKuralYanlis", JSON.stringify({ "3271-z": { kod: "3271", not: "3271'e başka modelin kuralı yazıldı" } }));
+  o.depo.set("pelinboy:3271", JSON.stringify({ boy: "bilekalti", marka: "BLACKROSE" }));
+  // video çıkmış iş (onay) → onay işlemez, teslim yok
+  o.depo.set("pelin:is:3271-z", JSON.stringify({ id: "3271-z", kod: "3271", durum: "onay", foto: "f", sahne: "s", video: "v", marka: "BLACKROSE", gecmis: [] }));
+  for (const d of ["pu:a:3271-z", "pu:r:3271-z", "pu:s:3271-z", "pu:k:3271-z:kling4"]) {
+    o.g.length = 0;
+    await bas(o, MURAT, d);
+    assert.match(o.g.find((x) => x.metod === "answerCallbackQuery").govde.text, /3271: kural yanlıştı — bu üretim onaylanamaz, yayına gitmez/, d);
+  }
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3271-z")).durum, "onay");
+  assert.equal((await teslim(o)).length, 0);
+  // önizleme kartı yeniden gönderilirse (Venom "bildir" komutu) not satırı yazar
+  o.g.length = 0;
+  o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3271-z", islem: "bildir" }));
+  await pelinCron(o.env, Math.floor(Date.now() / 1000));
+  assert.ok(o.g.some((x) => /👁 ÖNİZLEME — 3271[^\n]*\n⚠️ KURAL YANLIŞTI — 3271'e başka modelin kuralı yazıldı\. Bu üretim yayına gitmez/.test(x.govde.text || "")), JSON.stringify(o.g.map((x) => (x.govde.text || x.govde.caption || "").slice(0, 80))));
+  // video çıkmadan önce (fotoğraf kontrolden geçmedi, uyari) → "yine de onayla" üretime devam eder
+  o.depo.set("pelin:is:3271-y", JSON.stringify({ id: "3271-y", kod: "3271", durum: "uyari", foto: "f", video: null, marka: "BLACKROSE", gecmis: [], sorunlar: ["boy farklı"] }));
+  o.depo.set("venom:pelinKuralYanlis", JSON.stringify({ "3271-y": { kod: "3271", not: "3271'e başka modelin kuralı yazıldı" } }));
+  await bas(o, MURAT, "pu:a:3271-y");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3271-y")).durum, "video_gonder");
+  // işaretsiz başka iş etkilenmez (yeniden üret çalışır)
+  o.depo.set("pelin:is:3394-q", JSON.stringify({ id: "3394-q", kod: "3394", durum: "uyari", foto: "f", video: null, gecmis: [], sorunlar: ["x"] }));
+  await bas(o, MURAT, "pu:r:3394-q");
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3394-q")).durum, "foto_gonder");
+});

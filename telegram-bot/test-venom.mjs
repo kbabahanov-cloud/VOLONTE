@@ -2752,3 +2752,44 @@ test("16 Kasım (Patron) VENOM: renk kayıtta yoksa repete kartı gitmez (soru);
   await guncelleme({ update_id: uid++, message: { message_id: 6, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, photo: [{ file_id: "M2" }] } }, o8.env);
   assert.ok(o8.g.some((x) => /📎 Aldım/.test(x.govde.text || "")));
 });
+
+test("16 Kasım (Patron) KURAL YANLIŞTI: işaretli Pelin üretiminin önizlemesi notla gelir, onay / şablon / yeniden üret düğmesi kalkar, eski düğme de işlemez; Kemal SON YAYIN kartı da notla gelir; başka model etkilenmez", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  o.depo.set("venom:pelinKuralYanlis", JSON.stringify({ "3271-8a2dbb67a1": { kod: "3271", not: "3271'e başka modelin kuralı yazıldı", zaman: 1 } }));
+  await v.aktarilanGonder(o.env, { bot: "pelin", metod: "sendMessage", metin: "👁 ÖNİZLEME — 3271 · büyük seri", butonlar: [[{ text: "✅ Onayla", callback_data: "pu:a:3271-8a2dbb67a1" }, { text: "🔄 Yeniden üret", callback_data: "pu:r:3271-8a2dbb67a1" }, { text: "❌ İptal", callback_data: "pu:x:3271-8a2dbb67a1" }], [{ text: "💾 şablon", callback_data: "pu:s:3271-8a2dbb67a1" }]], medya: [] });
+  const g = patronaGiden(o).at(-1);
+  assert.match(g.govde.text, /👁 ÖNİZLEME — 3271 · büyük seri\n⚠️ KURAL YANLIŞTI — 3271'e başka modelin kuralı yazıldı\nBu üretim yayına GİTMEZ/);
+  assert.deepEqual(g.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["❌ İptal"]);
+  // foto onay kartında "videoya geç" kalır (onaylı tutar), yeniden fotoğraf kalkar
+  await v.aktarilanGonder(o.env, { bot: "pelin", metod: "sendMessage", metin: "👁 3271: önce ÖN fotoğraf onayı. Uygunsa diğer açılar (~0,45 $) ve video üretilir: Kling 3.0 4K ~1,50 $.", butonlar: [[{ text: "✅ Fotoğraf uygun, videoya geç", callback_data: "pu:f:3271-8a2dbb67a1" }], [{ text: "🔄 Yeniden fotoğraf", callback_data: "pu:r:3271-8a2dbb67a1" }, { text: "❌ İptal", callback_data: "pu:x:3271-8a2dbb67a1" }]], medya: [] });
+  assert.deepEqual(patronaGiden(o).at(-1).govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Fotoğraf uygun, videoya geç", "❌ İptal"]);
+  // Kemal SON YAYIN kartı (aynı model) → not + sadece ❌
+  await v.aktarilanGonder(o.env, { bot: "kemal", metod: "sendMessage", metin: "🎬 SON YAYIN ONAYI — BLACK ROSE · 3271", butonlar: [[{ text: "📣 Gönder", callback_data: "ky:g:3271" }, { text: "❌ Gönderme", callback_data: "ky:x:3271" }]], medya: [] });
+  const ks = patronaGiden(o).at(-1);
+  assert.match(ks.govde.text, /KURAL YANLIŞTI/);
+  assert.deepEqual(ks.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["❌ Gönderme"]);
+  // başka model etkilenmez
+  await v.aktarilanGonder(o.env, { bot: "pelin", metod: "sendMessage", metin: "👁 ÖNİZLEME — 3394 · küçük seri", butonlar: [[{ text: "✅ Onayla", callback_data: "pu:a:3394-aa11bb22cc" }]], medya: [] });
+  const d = patronaGiden(o).at(-1);
+  assert.ok(!/KURAL YANLIŞTI/.test(d.govde.text));
+  assert.deepEqual(d.govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Onayla"]);
+  // ara aşama (fotoğraf kontrolden geçmedi, "Yine de onayla: bu fotoğrafla devam ederim") → onay düğmesi KALIR (üretime devam, onaylı tutar)
+  await v.aktarilanGonder(o.env, { bot: "pelin", metod: "sendMessage", metin: "⚠️ 3271 · büyük seri · foto 2. deneme\nBüyük farklar:\n• boy farklı\nBeğendiyseniz ✅ Yine de onayla: bu fotoğrafla devam ederim (video).", butonlar: [[{ text: "✅ Yine de onayla", callback_data: "pu:a:3271-8a2dbb67a1" }, { text: "🔄 Yeniden üret", callback_data: "pu:r:3271-8a2dbb67a1" }, { text: "❌ İptal", callback_data: "pu:x:3271-8a2dbb67a1" }]], medya: [] });
+  assert.deepEqual(patronaGiden(o).at(-1).govde.reply_markup.inline_keyboard.flat().map((b) => b.text), ["✅ Yine de onayla", "❌ İptal"]);
+  // basılmış onay düğmesi: video yoksa (devam) geçer, video çıktıysa (üretim onayı = yayın yolu) işlemez
+  o.depo.set("venom:bot:dugme:eski1", JSON.stringify({ bot: "pelin", data: "pu:a:3271-8a2dbb67a1" }));
+  o.depo.set("venom:pelinDurum", JSON.stringify({ isler: [{ id: "3271-8a2dbb67a1", kod: "3271", durum: "onay", video: "https://x/v.mp4" }] }));
+  let once = o.g.length;
+  await bas(o, "vr:eski1");
+  assert.ok(o.g.slice(once).some((x) => x.metod === "answerCallbackQuery" && /kural yanlıştı — bu üretim onaylanamaz/.test(x.govde.text)));
+  o.depo.set("venom:pelinDurum", JSON.stringify({ isler: [{ id: "3271-8a2dbb67a1", kod: "3271", durum: "uyari", video: null }] }));
+  once = o.g.length;
+  await bas(o, "vr:eski1");
+  assert.ok(!o.g.slice(once).some((x) => x.metod === "answerCallbackQuery" && /kural yanlıştı/.test(x.govde.text)));
+  // şablon / başka araç düğmesi her zaman işlemez
+  o.depo.set("venom:bot:dugme:eski2", JSON.stringify({ bot: "pelin", data: "pu:s:3271-8a2dbb67a1" }));
+  once = o.g.length;
+  await bas(o, "vr:eski2");
+  assert.ok(o.g.slice(once).some((x) => x.metod === "answerCallbackQuery" && /kural yanlıştı/.test(x.govde.text)));
+});

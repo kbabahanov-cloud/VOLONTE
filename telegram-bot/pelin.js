@@ -130,6 +130,13 @@ async function markaDugmesi(env, cq, simdi) {
   await tg(env, "editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: `🏷 ${q.kod} = ${MARKALAR[marka].ad} (kalıcı).` });
   return uretKomutu(env, { from: cq.from, chat: cq.message.chat, text: q.metin, sonSenaryo: q.sonSenaryo }, simdi, q.test);
 }
+// 16 Kasım (Patron): "KURAL YANLIŞTI" — yanlış model kuralıyla üretilmiş iş (KV "venom:pelinKuralYanlis" = { "<işId>": { kod, not } },
+// Patron'un kararıyla Venom / Claude Code yazar). Önizleme notla gelir; video çıktıktan sonra onaylanamaz (yayın yolu), şablon olmaz,
+// başka araçla denenmez, yeniden üretilmez, teslim (Kemal) yoluna giremez. Video çıkmadan önceki "yine de onayla / videoya geç" geçer.
+export async function kuralYanlisKaydi(env, id) {
+  try { const l = await env.KAYIT.get("venom:pelinKuralYanlis", "json"); return l && id && l[id] ? { id, ...l[id] } : null; } catch { return null; }
+}
+const kuralYanlisSatiri = (ky) => (ky ? `⚠️ KURAL YANLIŞTI — ${ky.not}. Bu üretim yayına gitmez (Patron'un kararı).` : null);
 // Yayın kilidi: videonun son karesindeki marka, model kartındaki markayla aynı olmalı
 export async function markaEngeli(env, is) {
   const b = await boyOku(env, is.kod);
@@ -2417,6 +2424,7 @@ const puanSatiri = (is) => {
 // DENEME (yayinYok) işler buraya HİÇ gelmez. v: 2 = yeni düzen kaydı (eski KV "venom:pelinTeslim" kayıtları önce Patron'a sorulur).
 async function teslimEt(env, is, simdi) {
   if (is.yayinYok) throw new Error("deneme iş yayına gönderilemez");
+  if (await kuralYanlisKaydi(env, is.id)) throw new Error("kural yanlıştı — Patron'un kararıyla yayına gönderilmez");
   const engel = await markaEngeli(env, is);
   if (engel) throw new Error(engel);
   is.durum = "onaylandi"; is.onayZaman = simdi;
@@ -2472,13 +2480,14 @@ async function isBildir(env, is) {
   }
 }
 async function isBildirIc(env, is, tgK, sonuc) {
+  const ky = await kuralYanlisKaydi(env, is.id);
   const ust = `${is.kod} · ${is.seri === "buyuk" ? "büyük seri" : "küçük seri"} · ${is.ortam ? is.ortam.ad : "stüdyo"}${is.videoOrtam ? ` / video ${is.videoOrtam.ad}` : ""}${is.sablon ? ` · şablon ${is.sablon.ad}` : ""} · foto ${is.fotoDeneme}. deneme, video ${is.videoDeneme}. deneme`;
   if (is.durum === "uyari") {
     if (is.foto) await tgK("sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `⚠️ ${is.kod}: ${denemeSiniri(is)} denemede kalite kontrolünden geçmedi.` }, "foto");
     if (is.sahne) await tgK("sendPhoto", { chat_id: murat(env), photo: is.sahne, caption: `🎞 ${is.kod} (video karesi)` }, "sahne");
     if (is.video) { const v = await videoGonder(env, is, `🎬 ${is.kod}`); sonuc.push(["video", Boolean(v && v.ok), v && v.ok ? null : "gönderilemedi"]); }
     const devam = devamAsamasi(is);
-    return yaz(env, murat(env), [`⚠️ ${ust}`, "Büyük farklar:", ...(is.sorunlar || []).slice(0, 6).map((s) => `• ${s}`), ...notSatirlari(is), puanSatiri(is),
+    return yaz(env, murat(env), [`⚠️ ${ust}`, kuralYanlisSatiri(ky), "Büyük farklar:", ...(is.sorunlar || []).slice(0, 6).map((s) => `• ${s}`), ...notSatirlari(is), puanSatiri(is),
       devam === "teslim" ? "Beğendiyseniz ✅ Yine de onayla: teslim kuyruğuna alınır (son söz sizde)." : devam ? `Beğendiyseniz ✅ Yine de onayla: bu fotoğrafla devam ederim (${devam === "sahne_gonder" ? "video karesi + video" : "video"}).` : "Fotoğraf üretilemedi; yeniden üretin ya da iptal edin."].filter(Boolean).join("\n"), { reply_markup: isKlavye(is.id, false, true) });
   }
   if (is.foto) await tgK("sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `📸 ${is.kod} (katalog)` }, "foto");
@@ -2488,10 +2497,11 @@ async function isBildirIc(env, is, tgK, sonuc) {
   const kk = (k) => (k ? `Pelin ${k.claude ? "✅" : "❌"} · ChatGPT ${k.openai === true ? "✅" : k.openai === false ? "❌" : k.openai}` : "—");
   if ((await oku(env, "pelin:ayar", {})).hemraOnay && hemra(env)) {
     if (is.video) await tg(env, "sendVideo", { chat_id: hemra(env), video: is.video, caption: `🎬 ${is.kod} — Pelin önizlemesi` });
-    await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi. Uygunsa ✅ Onayla (Patron da görüyor).`, { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${is.id}` }]] } });
+    if (ky) await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi — ${kuralYanlisSatiri(ky)}`);
+    else await yaz(env, hemra(env), `👁 ${is.kod} önizlemesi. Uygunsa ✅ Onayla (Patron da görüyor).`, { reply_markup: { inline_keyboard: [[{ text: "✅ Onayla", callback_data: `pu:a:${is.id}` }]] } });
   }
   const gunlukH = await bugunHarcanan(env, Math.floor(Date.now() / 1000)).catch(() => 0);
-  const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, `💵 Bu iş: ~${para(is.maliyet || 0)} · bugün Pelin: ${para(gunlukH)} / ${await gunlukSinir(env, Math.floor(Date.now() / 1000)).catch(() => GUNLUK_SINIR_USD)} $`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.sablonKey && SABLON_SECENEK[is.sablonKey] ? ` · şablon: ${SABLON_SECENEK[is.sablonKey].ad}` : ""}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
+  const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, ...(ky ? [kuralYanlisSatiri(ky)] : []), `💵 Bu iş: ~${para(is.maliyet || 0)} · bugün Pelin: ${para(gunlukH)} / ${await gunlukSinir(env, Math.floor(Date.now() / 1000)).catch(() => GUNLUK_SINIR_USD)} $`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.sablonKey && SABLON_SECENEK[is.sablonKey] ? ` · şablon: ${SABLON_SECENEK[is.sablonKey].ad}` : ""}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
     ...(is.aracYedek && (is.gecmis || []).some((g) => /işleyemedi .*→ aynı kareyle Kling 4\.0/.test(String(g[1]))) ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
     ...(is.hfYedek ? [`↪️ ${ARACLAR[is.hfYedek.from].ad} çalışmadı (${is.hfYedek.neden}); aynı fotoğrafla fal.ai ${ARACLAR[is.arac].ad} kullanıldı.`] : []),
     is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "✅ Onayla = ÜRETİM onayı (yayın değil): fotoğraf seti + marka yazısı eklenir, sonra Kemal SON YAYIN onay kartını getirir. Beğendiyseniz ayarları şablon olarak kaydedin."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok && !is.grup ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
@@ -2726,6 +2736,8 @@ async function uretimDugmesi(env, cq, simdi) {
     return uretimBaslat(env, onay, simdi);
   }
   const is = await oku(env, `pelin:is:${id}`, null);
+  const ky = await kuralYanlisKaydi(env, id); // 16 Kasım (Patron): "kural yanlıştı" işaretli üretim
+  if (ky && (["s", "k", "r"].includes(islem) || (islem === "a" && is && (is.video || is.durum === "onay")))) return cevap(`⚠️ ${ky.kod}: kural yanlıştı — bu üretim onaylanamaz, yayına gitmez.`);
   if (islem === "s" && is && ["onay", "onaylandi"].includes(is.durum)) {
     const ad = await sablonKaydet(env, is, simdi);
     await cevap("Şablon kaydedildi");

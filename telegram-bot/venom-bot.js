@@ -881,6 +881,15 @@ export async function dugme(env, cq, simdi) {
     const rid = String(cq.data).slice(3);
     const k = await oku(env, `venom:bot:dugme:${rid}`, null);
     if (!k) return cevap("Bu düğme artık geçerli değil.");
+    if (k.bot === "pelin" && /^pu:[arsk]:/.test(String(k.data))) { // 16 Kasım (Patron): "kural yanlıştı" işaretli üretim onaylanamaz / yeniden kullanılamaz
+      const l = await kuralYanlisListesi(env).catch(() => ({}));
+      const id = Object.keys(l).find((x) => String(k.data).split(":")[2] === x);
+      // Onay (pu:a) sadece video çıktıysa engellenir (o zaman "üretim onayı" = yayın yolu); video yoksa "üretime devam"dır, geçer.
+      const pd = id && /^pu:a:/.test(String(k.data)) ? await oku(env, "venom:pelinDurum", null).catch(() => null) : null;
+      const isd = pd && (pd.isler || []).find((x) => x.id === id);
+      const devamMi = Boolean(isd && !isd.video && !["onay"].includes(isd.durum));
+      if (id && !devamMi) return cevap(`⚠️ ${l[id].kod}: kural yanlıştı — bu üretim onaylanamaz, yayına gitmez.`);
+    }
     const r = await botaSor(env, k.bot, "dugme", k.data, rid);
     await cevap(r ? `${BOT_AD[k.bot]}'e iletildi` : "İletilemedi");
     return null;
@@ -1530,8 +1539,35 @@ async function butonCevir(env, bot, satirlar) {
   }
   return yeni;
 }
+// 16 Kasım (Patron): "KURAL YANLIŞTI" — Patron'un işaretlediği Pelin üretimi (yanlış model kuralıyla üretildi) önizlemesi notla gelir,
+// onay / yayın düğmeleri kalkar (sadece ❌ kalır), basılmış eski düğme de işlemez; aynı model için Kemal'in SON YAYIN kartı da
+// notla gelir ve yayın düğmesi kalkar. Kayıt: KV "venom:pelinKuralYanlis" = { "<işId>": { kod, not, zaman } }.
+export async function kuralYanlisListesi(env) { const l = await oku(env, "venom:pelinKuralYanlis", {}); return l && typeof l === "object" ? l : {}; }
+export function kuralYanlisEsle(l, k) {
+  const cbler = (k.butonlar || []).flat().map((b) => String((b && b.callback_data) || ""));
+  for (const [id, e] of Object.entries(l || {})) {
+    if (!e) continue;
+    if (k.bot === "pelin" && (cbler.some((c) => c.endsWith(`:${id}`) || c.includes(`:${id}:`)) || (e.kod && new RegExp(`(?<!\\d)${e.kod}(?!\\d)`).test(String(k.metin || "")) && /ÖNİZLEME|önizleme|SON YAYIN/.test(String(k.metin || ""))))) return { id, ...e };
+    if (k.bot === "kemal" && e.kod && /SON YAYIN/i.test(String(k.metin || "")) && new RegExp(`(?<!\\d)${e.kod}(?!\\d)`).test(String(k.metin || ""))) return { id, ...e };
+  }
+  return null;
+}
+export function kuralYanlisUygula(k, e) {
+  const not = `⚠️ KURAL YANLIŞTI — ${e.not}\nBu üretim yayına GİTMEZ (Patron'un kararı); onay düğmesi kaldırıldı.`;
+  // Pelin: onay (pu:a), şablon (pu:s), başka araçla dene (pu:k), yeniden üret (pu:r) kalkar; "videoya geç" (pu:f, onaylı tutar) ve ❌ kalır.
+  // Kemal SON YAYIN kartı: sadece ❌ kalır.
+  // Ara aşama kartı ("Yine de onayla: bu fotoğrafla devam ederim (video …)") → onay = üretime devam (onaylı tutar), kalır.
+  const araAsama = /devam ederim/.test(String(k.metin || ""));
+  const kalsin = (b) => b && (k.bot === "pelin" ? !(araAsama ? /^pu:[rsk]:/ : /^pu:[arsk]:/).test(String(b.callback_data || "")) : /❌|İptal|iptal/.test(String(b.text || "")));
+  const butonlar = (k.butonlar || []).map((s) => (s || []).filter(kalsin)).filter((s) => s.length);
+  // Not ilk satırın ALTINA yazılır: ilk satır kartın kendisi kalır (postane aynı ilk satırlı kartları "tekrar" sayıp birleştirir)
+  const [ilk, ...kalan] = String(k.metin || "").split("\n");
+  const notVar = /KURAL YANLIŞTI/.test(String(k.metin || "")); // Pelin notu kendisi yazdıysa ikinci kez yazılmaz
+  return { ...k, metin: notVar ? k.metin : k.metin ? [ilk, not, ...kalan].join("\n") : not, butonlar: butonlar.length ? butonlar : null };
+}
 export async function aktarilanGonder(env, k) {
   const simdi = Math.floor(Date.now() / 1000);
+  if (k && (k.bot === "pelin" || k.bot === "kemal")) { const e = kuralYanlisEsle(await kuralYanlisListesi(env).catch(() => ({})), k); if (e) k = kuralYanlisUygula(k, e); }
   const duzenleme = /^edit/.test(String(k.metod || "")) || /^✏️ /.test(String(k.metin || ""));
   const cevapIs = duzenleme ? null : await isCevap(env, k.bot, simdi).catch(() => null); // iş takibi: bot cevap verdi
   if (k.metin) await kaydet(env, "venom:bot:sonBot", { bot: k.bot, zaman: simdi, metin: String(k.metin).slice(0, 400) }, 3600).catch(() => null);
