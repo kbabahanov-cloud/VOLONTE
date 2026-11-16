@@ -2793,3 +2793,34 @@ test("16 Kasım (Patron) KURAL YANLIŞTI: işaretli Pelin üretiminin önizlemes
   await bas(o, "vr:eski2");
   assert.ok(o.g.slice(once).some((x) => x.metod === "answerCallbackQuery" && /kural yanlıştı/.test(x.govde.text)));
 });
+
+test("16 Kasım (Patron) PELİN DURDURMA TEK KAYNAK: durdurma varken kart AÇILMAZ — mesajdaki 'üret / video / çek' kelimesi durdurmayı delmez; Patron'a tek satır (kim, ne zaman, nasıl açılır); açılınca kart gelir; anahtar yoksa açık", async () => {
+  const o = ortam();
+  const { aracCalistir } = await import("./venom-bot.js");
+  const { _durOnbellekSifirla, pelinUretimDurdu } = await import("./durdurma.js");
+  _durOnbellekSifirla();
+  const sc = JSON.stringify({ yuz: { anahtar: "a", manken: 0 }, ortamlar: [{ ad: "retro", sahne: "x", hareket: "y" }], arac: "veo" });
+  o.depo.set("pelin:secim", sc); o.depo.set("venom:pelinSecim", sc);
+  o.depo.set("pelinboy:3271", JSON.stringify({ boy: "bilekalti" })); o.depo.set("pelinboy:3394", JSON.stringify({ boy: "maksi" }));
+  assert.equal(await pelinUretimDurdu(o.env), null); // anahtar yok → açık
+  o.env.__patronMetni = "Pelin üretimini durdur";
+  assert.match(await aracCalistir(o.env, "duraklatma", { is: "pelin_uretim", acik: false }, ist(16, 15, 40)), /DURAKLATILDI/);
+  const kartOnce = patronaGiden(o).filter((x) => x.govde.reply_markup).length;
+  for (const metin of ["Pelin 3394 için fotoğraf üretsin", "Pelin 3271", "Pelin 3271 video çek", "Pelin 3271 manken giydir"]) {
+    o.env.__patronMetni = metin;
+    const r = await aracCalistir(o.env, "pelin_uret", { kodlar: ["3271"] }, ist(16, 15, 41));
+    assert.match(r, /^⏸ Pelin'in yeni üretimi durdurulmuş \(Patron · 16\.11 15:40\) — maliyet kartı açılmadı, para harcanmadı\. Açmak için: "Pelin üretimini aç"\./, metin);
+  }
+  assert.equal(patronaGiden(o).filter((x) => x.govde.reply_markup).length, kartOnce); // hiçbir kart açılmadı
+  // Patron açar → kart gelir
+  o.env.__patronMetni = "Pelin üretimini aç";
+  assert.match(await aracCalistir(o.env, "duraklatma", { is: "pelin_uretim", acik: true }, ist(16, 15, 47)), /AÇILDI/);
+  assert.equal(await pelinUretimDurdu(o.env), null);
+  o.env.__patronMetni = "Pelin 3271";
+  await aracCalistir(o.env, "pelin_uret", { kodlar: ["3271"] }, ist(16, 15, 48));
+  assert.match(sonKart(o).govde.text, /3271/);
+  // "hepsini durdur" (venom:dur) da aynı kapıdan durdurur
+  o.depo.set("venom:dur", JSON.stringify({ hepsi: true })); _durOnbellekSifirla();
+  assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3271"] }, ist(16, 15, 50)), /Patron bütün botları durdurdu[\s\S]*yeni üretim kartı açılmadı/);
+  o.depo.delete("venom:dur"); _durOnbellekSifirla();
+});

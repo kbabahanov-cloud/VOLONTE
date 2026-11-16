@@ -21,3 +21,16 @@ export async function durYaz(env, degisim, simdi = Math.floor(Date.now() / 1000)
   onbellek = { t: Date.now(), v: yeni };
   return yeni;
 }
+// 16 Kasım (Patron): Pelin'in YENİ üretim durdurması TEK kaynaktan — "hepsini durdur" / "pelin durdur" (venom:dur) ya da Patron'un
+// duraklatma anahtarı (KV "venom:pelinUretimAcik" = "0"; kim / ne zaman: "venom:pelinUretimDurum"). Mesajdaki kelimeye BAKILMAZ (kural 10):
+// eskiden "üret / video / çek …" geçen mesaj durdurmayı deliyordu (3394 kartı açıldı, "Pelin 3271" durdu). Anahtar yoksa AÇIK sayılır
+// (5 Kasım "sağlamlaştırma haftası" varsayılanı "kapalı"ydı; hafta bitince açılmadığı için durdurma kendiliğinden sürmüştü).
+// Dönen: null (açık) ya da Patron'a tek satır (kim, ne zaman, nasıl açılır).
+export async function pelinUretimDurdu(env) {
+  if (await durdurulduMu(env, "pelin")) return `${await durMesaji(env, "pelin")} — yeni üretim kartı açılmadı.`;
+  const v = await env.KAYIT.get("venom:pelinUretimAcik").catch(() => null);
+  if (v !== "0") return null;
+  const k = await env.KAYIT.get("venom:pelinUretimDurum", "json").catch(() => null);
+  const ne = k && k.zaman ? `${k.kim || "Patron"} · ${new Date((Number(k.zaman) + 3 * 3600) * 1000).toISOString().slice(5, 16).replace(/(\d\d)-(\d\d)T/, "$2.$1 ")}` : "kaydı yok";
+  return `⏸ Pelin'in yeni üretimi durdurulmuş (${ne}) — maliyet kartı açılmadı, para harcanmadı. Açmak için: "Pelin üretimini aç".`;
+}

@@ -36,7 +36,7 @@ import { modelDurumu, silmeKaniti, silmeMetni, cevapsizKartlar, gunVerisi, gunVe
 import { silOnayli, silOnayliYaz, magazaStoklari } from "./sil.js";
 import { ekipSuzgec } from "./venom-yonetim.js";
 import { kisaYaz, isKaydet, isCevap, isHatirlat, bitmeyenIsler, hataAlarmi, hataSayilari, geriAlBul, satisUyarisi, stokBitiyor, paylasilmayanlar, paraOzeti, hatirlaticiEkle, vadesiGelenler, yedekAl, gunA } from "./venom-yonetim.js";
-import { durYaz, durDurumu, _durOnbellekSifirla } from "./durdurma.js";
+import { durYaz, durDurumu, _durOnbellekSifirla, pelinUretimDurdu } from "./durdurma.js";
 import { IZINLER, postaKarar, gonderildiKaydet, biriktir, siraya, kartSiraMesaji, birikimSatiri, ozetKisalt, kuralCoz, kuralEkle, kuralSil, kurallariOku, kuralYazi, POSTA_TAVAN, PERSONEL_KARTI, kategori as postaKategori } from "./venom-posta.js";
 import { kopruSustu, haftaIci } from "./magaza-saat.js";
 import { kodlariBul, modelSorusuMu, fotoSorusuMu, kartSatirlari, kartDugmeleri, stokBitti } from "./venom-model.js";
@@ -337,7 +337,7 @@ const ARACLAR = [
   { name: "kanal_paylasim_sil", description: "Patron 'sil' dediğinde (ör. '3512 sil', 'bu paylaşımı sil', 'bugünkü 3512 ve 3629 paylaşımlarını sil', link) çağır; ONAY KARTI YOK. Araç önce stoğa bakar: stok BİTMİŞSE paylaşım silinmez, hemen SOLD OUT yapılır; stok VARSA araç sana Patron'a soracağın tek satırı verir (aynen yaz, cevabı bekle). Link / mesaj_no verilirse sadece o paylaşım silinir. Model siteden kalkmaz (sadece o paylaşım). Sonucu Patron'a tek satır: 'Silindi: …'.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } }, mesaj_no: { type: "array", items: { type: "integer" } }, yine_de: { type: "boolean", description: "SADECE Patron 'stok var, yine de sileyim mi?' sorusuna açıkça evet dediyse true" } } } },
   { name: "kanal_paylasim_duzelt", description: "Kanaldaki paylaşımın YAZISI yanlışsa (eski yazı, fiyat, TEL, marka yok): Kemal aynı fotoğraf/videoyu alır, eskisini siler, doğru yazıyla (EN/FR, fiyatsız, marka imzalı, düğmeli) TEK ALBÜM olarak yeniden paylaşır (09–21, 60 dk aralık). 2 günden eskiyse yazıyı yerinde düzeltir. Patron'a onay kartı YOK; sonuç akşam özetinde.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, mesaj_no: { type: "array", items: { type: "integer" } } } } },
   { name: "hatirlatici", description: "Patron'un istediği zamanda hatırlatma (ör. 'yarın 10'da Merdan'a şunu sor'). zaman: İstanbul saatiyle YYYY-MM-DDTHH:MM. kime verilirse zamanı gelince o kişiye mesaj ONAY KARTI açılır.", input_schema: { type: "object", additionalProperties: false, required: ["zaman", "metin"], properties: { zaman: { type: "string" }, metin: { type: "string" }, kime: { type: "string", enum: ["merdan", "hemra", "fuat", "nuri"] } } } },
-  { name: "duraklatma", description: "Sağlamlaştırma haftası anahtarları: Venom üzerinden Kemal paylaşımı (kemal_paylas) ve Pelin'in yeni üretimi (pelin_uretim). SADECE Patron açıkça 'aç/kapat' derse.", input_schema: { type: "object", additionalProperties: false, required: ["is", "acik"], properties: { is: { type: "string", enum: ["kemal_paylas", "pelin_uretim"] }, acik: { type: "boolean" } } } },
+  { name: "duraklatma", description: "Duraklatma anahtarları: Venom üzerinden Kemal paylaşımı (kemal_paylas) ve Pelin'in yeni üretimi (pelin_uretim). SADECE Patron açıkça 'aç / kapat / durdur' derse. Kim ve ne zaman kaydedilir; durdurma varken Pelin kartı açılmaz.", input_schema: { type: "object", additionalProperties: false, required: ["is", "acik"], properties: { is: { type: "string", enum: ["kemal_paylas", "pelin_uretim"] }, acik: { type: "boolean" } } } },
   { name: "pelin_foto_kaydet", description: "Patron'un Venom'a son gönderdiği FOTOĞRAFLARI dosya olarak Pelin'e iletir ve ürün fotoğrafı olarak kaydeder: '<kod> <renk> ön/arka' (sıra: roller). sadece_bunlar=true → o rengin eski fotoğrafları (ör. site) silinir, üretimde SADECE bunlar kullanılır. yeniden_baslat=true → o kod/renk için bekleyen Pelin kartları iptal edilir ve üretim yeniden başlar (önce anlama/maliyet kartı, sonra ön fotoğraf onayı; onaysız para harcanmaz). Sonuç 'İLETİLDİ' ya da 'İLETİLMEDİ' diye döner; Patron'a aynen söyle.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Türkçe renk (beyaz, siyah, bordo…); bilinmiyorsa boş" }, roller: { type: "array", items: { type: "string", enum: ["on", "arka", "detay"] }, description: "Fotoğrafların gönderiliş sırasıyla rolleri; boşsa 1. ön, 2. arka, sonrası detay" }, etiket: { type: "string", enum: ["manken", "aski"] }, adet: { type: "integer", description: "Sadece SON gönderilen N fotoğraf (Patron 'iki fotoğraf attım' dediyse 2)" }, sadece_bunlar: { type: "boolean" }, yeniden_baslat: { type: "boolean" } } } },
   { name: "bekleyenler", description: "Bütün botlarda Patron onayı bekleyen işleri (Pelin, Kemal SON YAYIN kartları, Selin taslakları, Venom kartları) ve bugünkü Selin listesini tek listede verir. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "kemal_calistir", description: "Patron 'Kemal'i çalıştır', 'Kemal çalışsın', 'kanala model öner', 'paylaşım yap' gibi bir şey yazarsa: Kemal stokta olan ve fotoğrafı olan modellerden EN UZUN SÜREDİR paylaşılmayanları (hiç paylaşılmamışlar önde) bulur, öneri kartlarını Hemra ve Merdan'ın onayına gönderir; onaylananlar 09:00–21:00 arasında en az 60 dk arayla, günde en fazla 12 paylaşılır. Patron süre verirse (ör. '1 aydan beri paylaşılmayanları getir') en_az_gun ver (1 ay = 30, 2 hafta = 14). Aracın verdiği TEK satırı aynen yaz.", input_schema: { type: "object", additionalProperties: false, properties: { en_az_gun: { type: "integer" } } } },
@@ -626,8 +626,9 @@ export async function aracCalistir(env, ad, g, simdi) {
     // 11 Kasım (Patron, EN TEHLİKELİ HATA): Pelin sadece Patron mesajında açıkça "Pelin" derse çalışır
     if (pelinAcikca(env.__patronMetni) && env.__kuru) return "(DENEME: Pelin maliyet kartı gösterilirdi.)";
     if (!pelinAcikca(env.__patronMetni)) return "Pelin BAŞLATILMADI: Patron mesajında açıkça \"Pelin\" demedi. Para harcayan iş yanlış anlamayla başlamaz. Bu iş bir kişiye (Merdan/Aziz/Hemra) ise kisiye_soyle kullan.";
-    // 6 Kasım (sağlamlaştırma haftası): Pelin'in yeni üretimi SADECE Patron açıkça isterse
-    if (!(await anahtarAcik(env, "venom:pelinUretimAcik")) && !/[üu]ret|video|[çc]ek|giydir|manken/i.test(String(env.__patronMetni || ""))) return "⏸ Pelin'in yeni üretimleri bu hafta duraklatıldı; Patron açıkça istemedikçe başlatma (ör. \"3627 beyaz üret\"). Patron'a sorma, sadece durumu söyle.";
+    // 16 Kasım (Patron): durdurma TEK kaynaktan; mesajdaki kelimeye bakılmaz; durdurma varsa kart açılmaz, Patron'a tek satır (kim, ne zaman)
+    const durdu = await pelinUretimDurdu(env);
+    if (durdu) return `${durdu}\n(Bu satırı Patron'a AYNEN bir kez yaz; kart açma, başka yol deneme.)`;
     const kodlar = [...new Set((g.kodlar || []).map(String).filter((x) => /^\d{3,6}$/.test(x)))].slice(0, g.test ? 5 : 40);
     if (!kodlar.length) return "Geçerli model kodu yok.";
     const secim = await oku(env, "venom:pelinSecim", null); // Pelin'in seçiminin aynası (yüzler, ortamlar, araç)
@@ -705,6 +706,7 @@ export async function aracCalistir(env, ad, g, simdi) {
   if (ad === "duraklatma") {
     const k = g.is === "pelin_uretim" ? "venom:pelinUretimAcik" : "venom:kemalPaylasAcik";
     const ok = await env.KAYIT.put(k, g.acik ? "1" : "0").then(() => true).catch(() => false);
+    if (ok && g.is === "pelin_uretim") await env.KAYIT.put("venom:pelinUretimDurum", JSON.stringify({ acik: Boolean(g.acik), kim: "Patron", zaman: simdi })).catch(() => null); // 16 Kasım: kim / ne zaman
     return ok ? `${g.is === "pelin_uretim" ? "Pelin'in yeni üretimi" : "Venom üzerinden Kemal paylaşımı"} ${g.acik ? "AÇILDI" : "DURAKLATILDI"}.` : "Ayar kaydedilemedi (Cloudflare günlük yazma sınırı dolu olabilir); Claude Code'a söyleyin.";
   }
   if (ad === "pelin_foto_kaydet") return pelinFotoIlet(env, g, simdi);
@@ -2769,7 +2771,7 @@ export async function paraAlarmi(env, simdi) {
   const ad = { kemal: "Kemal", selin: "Selin", pelin: "Pelin", sami: "Sami", venom: "Venom" };
   const usd2 = (x) => `${x.toFixed(2).replace(".", ",")} $`;
   // 13 Kasım (Patron, kural 74): sınırlar kitaptaki TEK tablodan; bot aylık sınırının %80'ine gelince Patron'a tek satır
-  // (ayda bir kez; gece yazılmaz — 09:00–21:00). Venom ve Pelin kendi %80 uyarısını kendi sayacından verir.
+  // (ayda bir kez; gece yazılmaz — 09:00–21:00). Venom kendi %80 uyarısını kendi sayacından verir; Pelin'inkini (16 Kasım) Venom buradan yazar.
   const s9 = ((simdi + SAAT_FARKI) % 86400) / 3600;
   if (s9 >= 9 && s9 < 21) {
     const ay9 = gun.slice(0, 7);
@@ -2780,6 +2782,17 @@ export async function paraAlarmi(env, simdi) {
       if (!sinir || ayH[bot] < sinir * 0.8 || (await env.KAYIT.get(`venom:para80:${bot}:${ay9}`))) continue;
       await env.KAYIT.put(`venom:para80:${bot}:${ay9}`, "1", { expirationTtl: 40 * 86400 });
       await bildir(env, `⚠️ ${ad[bot]} bu ay sınırının %80'ine geldi: ${usd2(ayH[bot])} / ${sinir} $.`, { simdi, tur: "kart", izin: "para" });
+    }
+    // 16 Kasım (Patron, kural 74): Pelin'in %80 uyarısını da Venom yazar — günlük (10 $) ve aylık (100 $); Pelin'in aynası venom:pelinDurum
+    const pd = await oku(env, "venom:pelinDurum", null).catch(() => null);
+    if (pd && simdi - (Number(pd.zaman) || 0) < 6 * 3600) {
+      const ps = await botSiniri(env, "pelin", simdi);
+      const gs = Number(pd.gunlukSinir) || Number(ps.gun) || 10, as = Number(ps.ay) || 100;
+      if (Number(pd.bugun) >= gs * 0.8 && (await ilkKezBugun(env, `pelin80:${gun}`))) await bildir(env, `⚠️ Pelin bugün günlük sınırının %80'ine geldi: ${usd2(Number(pd.bugun))} / ${gs} $.`, { simdi, tur: "kart", izin: "para" });
+      if (Number(pd.ay) >= as * 0.8 && !(await env.KAYIT.get(`venom:para80:pelin:${ay9}`))) {
+        await env.KAYIT.put(`venom:para80:pelin:${ay9}`, "1", { expirationTtl: 40 * 86400 });
+        await bildir(env, `⚠️ Pelin bu ay sınırının %80'ine geldi: ${usd2(Number(pd.ay))} / ${as} $.`, { simdi, tur: "kart", izin: "para" });
+      }
     }
   }
   for (const bot of Object.keys(h)) {

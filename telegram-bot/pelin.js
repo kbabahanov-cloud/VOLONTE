@@ -17,7 +17,7 @@
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
 import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
-import { durdurulduMu, durMesaji } from "./durdurma.js";
+import { durdurulduMu, durMesaji, pelinUretimDurdu } from "./durdurma.js";
 import { kitapOku } from "./kitap.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
@@ -160,21 +160,28 @@ export function modelKaydiYap(b, renk) {
   if (!(b.detayEn || b.detayTr || b.astarEn || k)) return null;
   return { detayEn: b.detayEn || null, detayTr: b.detayTr || null, astarEn: k ? null : b.astarEn || null, astarTr: k ? null : b.astarTr || null, kuralEn: k ? k.en : null, kuralTr: k ? k.tr : null };
 }
+// 16 Kasım (Patron): model kuralı SADECE o modelin kendi kaydından (anlama: ust / alt / iclik + Pelin'in o model için yazdığı tarif) gelir;
+// kalıpta başka modelden kalma sabit metin yoktur. Eski kalıp her "alt astarlı" modele 3394'ün (şifon elbise) cümlesini yazıyordu
+// ("etek iki kat: üstte şifon, altında opak astar") → 3271 (yelek + pantolon) kartına ve istemine girdi. Cümleler giysi türü varsaymaz
+// ("üst kısım", "alt kısım (etek ya da pantolon)"); içlik sadece şeffaf üst varsa yazılır; modelin tarifi varsa en başta, aynen.
 export function modelKurallari(an, renk) {
   if (!an) return null;
-  const re = renk ? renkEn(renk) : "the dress color";
+  const re = renk ? renkEn(renk) : "the garment color";
   const en = [], tr = [];
-  if (an.ust === "seffaf") { en.push("The upper bodice and the sleeves are SHEER see-through chiffon"); tr.push("üst gövde ve kollar şeffaf şifon"); }
-  if (an.ust === "opak") { en.push("The upper bodice and the sleeves are fully lined and opaque"); tr.push("üst gövde ve kollar astarlı/opak"); }
-  if (an.alt === "opak") { en.push(`The skirt has TWO layers: sheer chiffon on top and an OPAQUE lining fabric of the SAME color (${re}) underneath — the legs are NEVER visible through the skirt`); tr.push(`etek iki kat: üstte şifon, altında aynı renkte (${renk || "elbise rengi"}) opak astar — bacaklar asla görünmez`); }
-  if (an.alt === "seffaf") { en.push("The skirt is sheer"); tr.push("etek şeffaf"); }
-  if (an.iclik === "yok") { en.push("There is NO camisole or lining under the sheer parts"); tr.push("içlik yok"); }
-  else if (an.iclik) {
-    const c = an.iclik === "elbise" ? `${re} (same as the dress)` : ICLIK_EN[an.iclik];
-    en.push(`Under the sheer chiffon at the bust there is ONLY a ${c} camisole lining (${c} camisole lining under sheer chiffon) — no other lining color anywhere`);
-    tr.push(`göğüste SADECE ${an.iclik === "elbise" ? "elbise renginde" : ANLAMA_SECENEK.iclik.d[an.iclik].toLocaleLowerCase("tr")} içlik (başka renk içlik yok)`);
+  if (an.tarifEn || an.tarifTr) { if (an.tarifEn) en.push(`THIS GARMENT: ${an.tarifEn}`); if (an.tarifTr) tr.push(an.tarifTr); }
+  if (an.ust === "seffaf") { en.push("The upper part (and the sleeves, if it has sleeves) is SHEER see-through"); tr.push("üst kısım (kolları varsa kollar da) şeffaf"); }
+  if (an.ust === "opak") { en.push("The upper part is fully lined and opaque (no skin visible through it)"); tr.push("üst kısım astarlı/opak"); }
+  if (an.alt === "opak") { en.push(`The lower part (skirt or trousers, whichever this garment has) is OPAQUE in the SAME color (${re}) — the legs are NEVER visible through it`); tr.push("alt kısım (etek ya da pantolon) astarlı/opak — bacaklar görünmez"); }
+  if (an.alt === "seffaf") { en.push("The lower part is sheer"); tr.push("alt kısım şeffaf"); }
+  if (an.ust === "seffaf") {
+    if (an.iclik === "yok") { en.push("There is NO camisole or lining under the sheer upper part"); tr.push("şeffaf üstün altında içlik yok"); }
+    else if (an.iclik) {
+      const c = an.iclik === "elbise" ? `${re} (same as the garment)` : ICLIK_EN[an.iclik];
+      en.push(`Under the sheer upper part at the bust there is ONLY a ${c} camisole lining — no other lining color anywhere`);
+      tr.push(`göğüste SADECE ${an.iclik === "elbise" ? "kıyafet renginde" : ANLAMA_SECENEK.iclik.d[an.iclik].toLocaleLowerCase("tr")} içlik (başka renk içlik yok)`);
+    }
+    if (an.alt === "opak") { en.push("Sheerness ONLY on the upper part"); tr.push("şeffaflık SADECE üst kısımda"); }
   }
-  if (an.ust === "seffaf" && an.alt === "opak") { en.push("Sheerness ONLY on the upper bodice and sleeves"); tr.push("şeffaflık SADECE üst gövde ve kollarda"); }
   return { en: en.join(". "), tr: tr.join("; ") };
 }
 const detayIstemi = (mk) => `${mk && mk.detayEn ? ` THIS MODEL: ${mk.detayEn}.` : ""}${mk && mk.kuralEn ? ` MODEL RULES (exact, highest priority after length): ${mk.kuralEn}.` : mk && mk.astarEn ? ` LINING AND SHEERNESS (exact, do not change): ${mk.astarEn}. Never make sheer parts opaque and never add lining where there is none.` : ""}`;
@@ -198,6 +205,16 @@ export function videoGirdisi(arac, kare) {
 }
 
 const yuvarla = (x) => Math.round(x * 1000) / 1000;
+// 16 Kasım (Patron): yazı kelime ortasında kesilmez — sığıyorsa tam; sığmıyorsa son tam cümlede (yoksa son kelimede "…") biter
+export function cumleKes(s, max = 600) {
+  const t = String(s || "").replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const parca = t.slice(0, max);
+  const son = Math.max(parca.lastIndexOf(". "), parca.lastIndexOf("! "), parca.lastIndexOf("? "), /[.!?]$/.test(parca) ? parca.length - 1 : -1);
+  if (son > max * 0.4) return parca.slice(0, son + 1).trim();
+  const bosluk = parca.lastIndexOf(" ");
+  return `${parca.slice(0, bosluk > 0 ? bosluk : max).trim()}…`;
+}
 export const para = (x) => `${(Math.round(x * 100) / 100).toFixed(2).replace(".", ",")} $`;
 
 // ---------- Harcama (ekipten ayrı) ----------
@@ -210,8 +227,9 @@ export async function buAyHarcanan(env, simdi) {
   return yuvarla(fal + claude + openai + hf);
 }
 const gunAnahtar = (simdi) => new Date((simdi + SAAT_FARKI) * 1000).toISOString().slice(0, 10);
-// Günlük sınır: varsayılan 10 $; Patron isterse (Claude Code) KV "pelin:gunlukSinir:<gün>" (sadece o gün) ya da "pelin:gunlukSinir"
-export const gunlukSinir = async (env, simdi) => Number((await env.KAYIT.get(`pelin:gunlukSinir:${gunAnahtar(simdi)}`)) || (await env.KAYIT.get("pelin:gunlukSinir")) || GUNLUK_SINIR_USD);
+// Günlük sınır: kitaptaki 10 $ (kural 74); Patron o gün için açık isterse (Claude Code) KV "pelin:gunlukSinir:<gün>" — SADECE o gün.
+// 16 Kasım (Patron, kural 74): kalıcı değiştiren "pelin:gunlukSinir" anahtarı kaldırıldı (sınır kitapta değişir, kayıtla değil).
+export const gunlukSinir = async (env, simdi) => Number((await env.KAYIT.get(`pelin:gunlukSinir:${gunAnahtar(simdi)}`)) || GUNLUK_SINIR_USD);
 export const bugunHarcanan = async (env, simdi) => Number((await env.KAYIT.get(`pelin-gun:${gunAnahtar(simdi)}`)) || 0);
 const ARAC_AD = { fal: "fal.ai", hf: "Higgsfield", openai: "ChatGPT" };
 async function harcamaYaz(env, usd, simdi, tur = "fal", kod = null) {
@@ -222,11 +240,7 @@ async function harcamaYaz(env, usd, simdi, tur = "fal", kod = null) {
   await env.KAYIT.put(k, String(yuvarla(once + usd)), { expirationTtl: 400 * 86400 });
   const gk = `pelin-gun:${gunAnahtar(simdi)}`;
   await env.KAYIT.put(gk, String(yuvarla(Number((await env.KAYIT.get(gk)) || 0) + usd)), { expirationTtl: 40 * 86400 });
-  const toplam = await buAyHarcanan(env, simdi);
-  if (toplam >= AYLIK_SINIR_USD * UYARI_ORANI && !(await env.KAYIT.get(`pelin:uyari:${ay(simdi)}`))) {
-    await env.KAYIT.put(`pelin:uyari:${ay(simdi)}`, "1", { expirationTtl: 40 * 86400 });
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `⚠️ Pelin bu ay ${para(toplam)} harcadı (aylık sınır ${AYLIK_SINIR_USD} $, %80'e ulaştı). Kalan: ${para(AYLIK_SINIR_USD - toplam)}.` });
-  }
+  // 16 Kasım (Patron, kural 74): %80 uyarısını (günlük ve aylık) Venom yazar — Pelin'in aynası "venom:pelinDurum"dan; Pelin kendisi yazmaz
 }
 async function claudeHarcama(env, model, u, simdi) {
   const f = CLAUDE_FIYAT[model] || CLAUDE_FIYAT["claude-opus-5-5"];
@@ -286,7 +300,30 @@ export const PELIN_YEREL = { anahtarlar: [], onekler: ["pelin:"], haric: ["pelin
 
 // ---------- fal.ai kuyruk API'si ----------
 const falBaslik = (env) => ({ authorization: `Key ${String(env.FAL_KEY || "").trim()}`, "content-type": "application/json" });
-async function falGonder(env, uc, girdi) {
+// 16 Kasım (Patron, kural 74): Pelin'in HER ücretli çağrısı (fal.ai, Higgsfield) bu kapıdan geçer — günlük 10 $ (o gün için Patron
+// açtıysa o günkü sınır) ya da aylık 100 $ aşılacaksa çağrı YAPILMAZ; hata iş kaydına düşer, Patron'a "durdum" diye gelir.
+export function ucFiyati(uc) {
+  const a = Object.values(ARACLAR).find((x) => x.uc === uc);
+  if (a) return yuvarla(a.saniye * URETIM_SN);
+  if (uc === GORSEL.duzenle || uc === GORSEL.metin) return GORSEL.fiyat;
+  if (uc === KARE.uc) return yuvarla(KARE.saniye * URETIM_SN);
+  if (uc === KESIM.uc) return KESIM.fiyat;
+  if (uc === BUL.uc) return BUL.fiyat;
+  const g = Object.values(GIYDIRME).find((x) => x.uc === uc);
+  if (g) return g.fiyat;
+  if (uc === VIDEO_YAZI.olcek || uc === VIDEO_YAZI.karisim) return VIDEO_YAZI.fiyat;
+  if (/ffmpeg-api/.test(String(uc))) return 0.01;
+  return 0.05; // bilinmeyen uç: temkinli tahmin
+}
+export async function paraKapisi(env, fiyat, simdi = Math.floor(Date.now() / 1000)) {
+  const f = Number(fiyat) || 0;
+  const bugun = await bugunHarcanan(env, simdi), gs = await gunlukSinir(env, simdi);
+  if (bugun + f > gs) throw new Error(`GÜNLÜK SINIR: bugün Pelin ~${para(bugun)} harcadı, bu adım ${para(f)} → günlük ${gs} $ aşılır; durdum, Patron'a soruyorum`);
+  const ayh = await buAyHarcanan(env, simdi);
+  if (ayh + f > AYLIK_SINIR_USD) throw new Error(`AYLIK SINIR: bu ay Pelin ~${para(ayh)} harcadı, bu adım ${para(f)} → aylık ${AYLIK_SINIR_USD} $ aşılır; durdum, Patron'a soruyorum`);
+}
+async function falGonder(env, uc, girdi, fiyat = ucFiyati(uc)) {
+  await paraKapisi(env, fiyat);
   const r = await fetch(`https://queue.fal.run/${uc}`, { method: "POST", headers: falBaslik(env), body: JSON.stringify(girdi) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.request_id) throw new Error(`fal ${uc} ${r.status}: ${JSON.stringify(j.detail || j).slice(0, 300)}`);
@@ -389,7 +426,8 @@ export function hfYetki(env) {
 }
 export const hfVar = (env) => /^[^:\s]+:[^:\s]+$/.test(hfYetki(env));
 const hfBaslik = (env, ek = {}) => ({ authorization: `Key ${hfYetki(env)}`, "content-type": "application/json", ...ek });
-async function hfGonder(env, yol, girdi) {
+async function hfGonder(env, yol, girdi, fiyat = ucFiyati(yol)) {
+  await paraKapisi(env, fiyat); // 16 Kasım (kural 74): Higgsfield de aynı kapıdan
   const r = await fetch(`${HF_API}/${yol}`, { method: "POST", headers: hfBaslik(env, { "idempotency-key": crypto.randomUUID() }), body: JSON.stringify(girdi) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.request_id) throw new Error(`higgsfield ${yol} ${r.status}: ${JSON.stringify(j.detail || j).slice(0, 300)}`);
@@ -893,8 +931,8 @@ async function sohbetAraci(env, m, ad, g, simdi) {
   if (!muratMi(env, m.from.id) && ad !== "kayitli_yuzler") return "Bu iş sadece Patron'da; hiçbir şey yapılmadı.";
   if (ad === "kurulum_karti") return kartSonucu(await kurulumKomutu(env, m, simdi));
   if (ad === "uretim_karti") {
-    // 6 Kasım (sağlamlaştırma haftası): yeni üretim SADECE Patron açıkça isterse
-    if ((await env.KAYIT.get("venom:pelinUretimAcik").catch(() => null)) !== "1" && !/[üu]ret|video|[çc]ek|giydir|maliyet|test/i.test(String((m && (m.text || m.caption)) || ""))) return "KART GÖNDERİLMEDİ: bu hafta (sağlamlaştırma) yeni üretim sadece Patron açıkça isterse başlar. Önerme; sadece sorulana cevap ver.";
+    // 16 Kasım (Patron): durdurma TEK kaynaktan (durdurma.js pelinUretimDurdu); mesajdaki kelimeye bakılmaz
+    { const durdu = await pelinUretimDurdu(env); if (durdu) return `KART GÖNDERİLMEDİ: ${durdu} (Bu satırı Patron'a aynen yaz; önerme.)`; };
     const buyuk = (g.buyuk_seri || []).map(String);
     const renk = Object.fromEntries((g.renkler || []).map((x) => [String(x.kod), String(x.renk).toLocaleLowerCase("tr")]));
     const bilinmeyen = Object.values(renk).filter((x) => !renkGecerli(x));
@@ -1226,7 +1264,10 @@ export default {
 // 2 denemede olmazsa Patron'a ⚠️. Fiyat, maliyet, stok hiçbir çıktıda yok. Para harcayan her iş Patron onaylı.
 // =====================================================================================================================
 const URETIM_SN = 6;
-const URETIM_DENEME = 2;
+// 16 Kasım (Patron, kural 6 / 67): kalite kontrolünden geçmeyen fotoğraf / video karesi KENDİLİĞİNDEN yeniden üretilmez — maliyet kartında
+// tek fotoğraf onaylanıyor; ikinci üretim onaysız harcamaydı (3271: foto 2, ~0,19 $). İş "uyari"da durur, karar Patron'da
+// (✅ yine de onayla · 🔄 yeniden üret — tutarı kartta yazar · ❌ iptal). Eski: 2 deneme.
+const URETIM_DENEME = 1;
 const denemeSiniri = (is) => (is && is.denemeSiniri) || URETIM_DENEME;
 const OPENAI_TAHMIN = 0.01; // görsel karşılaştırma başına (yaklaşık)
 const KONTROL_TAHMIN = 0.03; // Claude görsel karşılaştırma başına (yaklaşık; gerçek harcama kullanımdan yazılır)
@@ -1535,18 +1576,18 @@ async function boySorusu(env, m, kod, simdi, test) {
   return yaz(env, m.chat.id, t ? `📏 ${kod}: ${t.boy} boyu mu?${t.emin ? "" : " (emin değilim)"} ${t.neden}\nBir kez kaydedilir; bütün renklerde ve iki seride geçerli. Sonra maliyet kartı gelir.` : `📏 ${kod}: boyu nedir? Bir kez kaydedilir; sonra maliyet kartı gelir.`, { reply_markup: boyKlavye(id, t && t.boy) });
 }
 // Pelin fotoğraflara bakıp tahmin eder (Claude, kuruşlar); Patron sadece yanlışı düzeltip onaylar → kalıcı, bir daha sorulmaz
-const ANLAMA_SEMA = { type: "object", additionalProperties: false, required: ["ust", "alt", "iclik", "boy", "neden"], properties: { ust: { type: "string", enum: ["seffaf", "opak"] }, alt: { type: "string", enum: ["opak", "seffaf"] }, iclik: { type: "string", enum: ["yok", "siyah", "beyaz", "ten", "elbise"] }, boy: { type: "string", enum: Object.keys(BOYLAR) }, neden: { type: "string" } } };
+const ANLAMA_SEMA = { type: "object", additionalProperties: false, required: ["tarif", "tarif_en", "ust", "alt", "iclik", "boy", "neden"], properties: { tarif: { type: "string" }, tarif_en: { type: "string" }, ust: { type: "string", enum: ["seffaf", "opak"] }, alt: { type: "string", enum: ["opak", "seffaf"] }, iclik: { type: "string", enum: ["yok", "siyah", "beyaz", "ten", "elbise"] }, boy: { type: "string", enum: Object.keys(BOYLAR) }, neden: { type: "string" } } };
 async function anlamaTahmini(env, kod, renk, simdi) {
   const urun = (await urunFotoSecimi(env, kod, renk)).urller;
   if (!urun.length || !env.ANTHROPIC_API_KEY) return null;
-  return claudeJson(env, [{ type: "text", text: `Model ${kod}${renk ? `, renk ${renk}` : ""}. Ürün fotoğrafları:` }, ...urun.map(resimUrl), { type: "text", text: "Bu elbiseyi incele. ust: üst gövde ve kollar şeffaf (şifon/tül, ten görünür) mü yoksa astarlı/opak mı? alt: etek/alt kısım astarlı/opak mı (bacak görünmez) yoksa şeffaf mı? iclik: şeffaf üstün altında içlik/astar var mı, rengi ne (yok/siyah/beyaz/ten/elbise rengiyle aynı)? boy: mini (uyluk), diz, midi (baldır), bilek (bilekte biter), bilekalti (bileği hafif örter, ayakkabı görünür), maksi (yere kadar). neden: kısa Türkçe." }], ANLAMA_SEMA, simdi, 400);
+  return claudeJson(env, [{ type: "text", text: `Model ${kod}${renk ? `, renk ${renk}` : ""}. Ürün fotoğrafları:` }, ...urun.map(resimUrl), { type: "text", text: "Bu ürünü incele (elbise, etek, pantolon, takım, yelek, ceket… olabilir; giysi türünü fotoğraftan oku, varsayma). tarif: SADECE bu ürünün kısa Türkçe tarifi — renk, kumaş, parçalar ve kesim (ör. \"kiremit krep yelek + geniş paça pantolon\"); tarif_en: aynısı İngilizce. ust: üst kısım (kolları varsa kollar da) şeffaf (şifon/tül, ten görünür) mü yoksa astarlı/opak mı? alt: alt kısım (etek ya da pantolon) astarlı/opak mı (bacak görünmez) yoksa şeffaf mı? iclik: şeffaf üst VARSA altında içlik/astar var mı, rengi ne (yok/siyah/beyaz/ten/elbise rengiyle aynı); şeffaf üst yoksa \"yok\". boy: mini (uyluk), diz, midi (baldır), bilek (bilekte biter), bilekalti (bileği hafif örter, ayakkabı görünür), maksi (yere kadar). neden: en fazla iki kısa Türkçe cümle." }], ANLAMA_SEMA, simdi, 700);
 }
 const anlamaDugme = (id, alan, deger, secili, ad) => ({ text: `${secili === deger ? "☑️ " : ""}${ad}`, callback_data: `pa:${alan}:${id}:${deger}` });
 function anlamaKlavye(q) {
   const s = q.secim;
   return { inline_keyboard: [
     Object.entries(ANLAMA_SECENEK.ust.d).map(([k, ad]) => anlamaDugme(q.id, "ust", k, s.ust, `Üst: ${ad}`)),
-    Object.entries(ANLAMA_SECENEK.alt.d).map(([k, ad]) => anlamaDugme(q.id, "alt", k, s.alt, `Etek: ${ad}`)),
+    Object.entries(ANLAMA_SECENEK.alt.d).map(([k, ad]) => anlamaDugme(q.id, "alt", k, s.alt, `Alt: ${ad}`)),
     Object.entries(ANLAMA_SECENEK.iclik.d).slice(0, 3).map(([k, ad]) => anlamaDugme(q.id, "iclik", k, s.iclik, `İçlik: ${ad}`)),
     Object.entries(ANLAMA_SECENEK.iclik.d).slice(3).map(([k, ad]) => anlamaDugme(q.id, "iclik", k, s.iclik, `İçlik: ${ad}`)),
     Object.keys(BOYLAR).slice(0, 3).map((k) => anlamaDugme(q.id, "boy", k, s.boy, BOYLAR[k].ad[0].toLocaleUpperCase("tr") + BOYLAR[k].ad.slice(1))),
@@ -1558,6 +1599,7 @@ function anlamaMetni(q) {
   const s = q.secim, eksik = ["ust", "alt", "iclik", "boy"].filter((k) => !s[k]);
   return [
     `🔎 YENİ MODEL ANLAMA — ${q.kod}${q.renk ? ` · ${q.renk}` : ""} (bir kez sorulur, kalıcı kaydedilir)`,
+    q.tarifTr ? `Pelin'in anladığı: ${q.tarifTr}` : "",
     q.neden ? `Pelin'in tahmini (☑️ işaretli): ${q.neden}` : "Pelin tahmin edemedi (fotoğraf yok); lütfen seçin.",
     `Üst: ${s.ust ? ANLAMA_SECENEK.ust.d[s.ust] : "?"} · Etek/alt: ${s.alt ? ANLAMA_SECENEK.alt.d[s.alt] : "?"} · İçlik: ${s.iclik ? ANLAMA_SECENEK.iclik.d[s.iclik] : "?"} · Boy: ${s.boy ? BOYLAR[s.boy].ad : "?"}`,
     q.renk ? `İçlik rengi SADECE ${q.renk} için kaydedilir; başka renkte yeniden sorulur.` : "",
@@ -1568,7 +1610,8 @@ async function anlamaKarti(env, m, kod, renk, simdi, test) {
   const b = (await boyOku(env, kod)) || {};
   const t = await anlamaTahmini(env, kod, renk, simdi).catch(() => null);
   const ozel = anlamaOku(b, renk), eski = ozel || anlamaOku(b, null) || {};
-  const q = { id: kisaId(), kod, renk: renk || null, metin: m.text, test: Boolean(test), sonSenaryo: Boolean(m.sonSenaryo), neden: t ? String(t.neden).slice(0, 200) : null,
+  const q = { id: kisaId(), kod, renk: renk || null, metin: m.text, test: Boolean(test), sonSenaryo: Boolean(m.sonSenaryo), neden: t ? cumleKes(t.neden, 600) : null,
+    tarifTr: t && t.tarif ? cumleKes(t.tarif, 300) : (eski.tarifTr || null), tarifEn: t && t.tarif_en ? cumleKes(t.tarif_en, 300) : (eski.tarifEn || null),
     secim: { ust: eski.ust || (t && t.ust) || null, alt: eski.alt || (t && t.alt) || null, iclik: (ozel && ozel.iclik) || (!renk && eski.iclik) || (t && t.iclik) || null, boy: (BOYLAR[b.boy] ? b.boy : null) || (t && t.boy) || null } };
   await kaydet(env, `pelin:anlama:${q.id}`, q, 3 * 86400);
   const r = await yaz(env, m.chat.id, anlamaMetni(q), { reply_markup: anlamaKlavye(q) });
@@ -1591,7 +1634,7 @@ async function anlamaDugmesi(env, cq, simdi) {
   if (eksik.length) return cevap(`Önce seçin: ${eksik.map((k) => (k === "boy" ? "Boy" : ANLAMA_SECENEK[k].ad)).join(", ")}`);
   await env.KAYIT.delete(`pelin:anlama:${id}`);
   const b = (await boyOku(env, q.kod)) || {};
-  const anlama = { ...(b.anlama || {}), [q.renk || "genel"]: { ust: q.secim.ust, alt: q.secim.alt, iclik: q.secim.iclik, onay: simdi } };
+  const anlama = { ...(b.anlama || {}), [q.renk || "genel"]: { ust: q.secim.ust, alt: q.secim.alt, iclik: q.secim.iclik, ...(q.tarifTr ? { tarifTr: q.tarifTr } : {}), ...(q.tarifEn ? { tarifEn: q.tarifEn } : {}), onay: simdi } };
   await boyYaz(env, q.kod, { anlama, boy: q.secim.boy, ayakkabiGorunur: ayakkabiBoy(q.secim.boy) || undefined, yereDegmez: ayakkabiBoy(q.secim.boy) || undefined, zaman: simdi });
   await cevap("Kaydedildi");
   const k = modelKurallari(anlama[q.renk || "genel"], q.renk);
@@ -1620,7 +1663,8 @@ async function stilSec(env, kod, renk, urller, simdi) {
   const anahtar = renk || "genel";
   if (mk.stil && mk.stil[anahtar]) return mk.stil[anahtar];
   const st = await claudeJson(env, [{ type: "text", text: `VOLONTE (lüks kadın giyim) model ${kod}${renk ? `, renk: ${renk}` : ""}. Ürün fotoğrafları:` }, ...urller.slice(0, 3).map(resimUrl), { type: "text", text: `1) Bu elbiseye uygun AKSESUAR seç (rengine, desenine, tarzına göre): örn. bordo elbise → altın küpe/kolye, nude ya da altın çanta; siyah → inci ya da gümüş; çiçekli → sade, desenle yarışmayan; payetli/dantelli → az ve zarif takı. Aksesuar elbiseyi ASLA gölgelemez. aksesuar_tr: kısa Türkçe (kartta görünecek); aksesuar_en: aynısı kısa İngilizce (görsel üretim için). 2) PREMIUM video için lüks mekân seç (şunlardan biri, elbisenin tarzına göre): ${PREMIUM_MEKANLAR.join(", ")}. Sıradan sokak YOK. mekan_tr: kısa Türkçe; mekan_en: İngilizce sahne tarifi (mekân + ışık + hava; yazı/logo/marka yok; arka plandaki insanlar hafif bulanık).` }], STIL_SEMA, simdi, 500);
-  const kayit = { aksesuarTr: String(st.aksesuar_tr).slice(0, 160), aksesuarEn: String(st.aksesuar_en).slice(0, 240), mekanTr: String(st.mekan_tr).slice(0, 80), mekanEn: String(st.mekan_en).slice(0, 400) };
+  // 16 Kasım (Patron): kayıt kelime ortasında kesilmez (cümle / kelime sonunda biter)
+  const kayit = { aksesuarTr: cumleKes(st.aksesuar_tr, 160), aksesuarEn: cumleKes(st.aksesuar_en, 240), mekanTr: cumleKes(st.mekan_tr, 120), mekanEn: cumleKes(st.mekan_en, 400) };
   await boyYaz(env, kod, { stil: { ...(mk.stil || {}), [anahtar]: kayit } });
   return kayit;
 }
@@ -1775,7 +1819,7 @@ async function kartDugmesi(env, cq, simdi) {
 
 async function uretKomutu(env, m, simdi, test = false) {
   if (!muratMi(env, m.from.id)) return yaz(env, m.chat.id, "Üretimi sadece Patron başlatır.");
-  if (await durdurulduMu(env, "pelin")) return yaz(env, m.chat.id, `${await durMesaji(env, "pelin")} — üretim başlatılmadı.`);
+  { const durdu = await pelinUretimDurdu(env); if (durdu) return yaz(env, m.chat.id, durdu); } // 16 Kasım (Patron): durdurma varken kart AÇILMAZ (tek kaynak)
   const secim = await oku(env, "pelin:secim", null);
   if (!secim) return yaz(env, m.chat.id, "Önce kurulum: /kurulum (yüz + ortam seçimi).");
   const sozler = String(m.text || "").split(/\s+/).slice(1);
@@ -1866,6 +1910,7 @@ async function uretKomutu(env, m, simdi, test = false) {
 
 // Venom'dan gelen üretim (Patron Venom'da kartı onaylamış, "Emin misiniz?" demiş): kurulum ve aylık sınır burada da kontrol edilir
 export async function venomUretimi(env, onay, simdi) {
+  { const durdu = await pelinUretimDurdu(env); if (durdu) return { hata: durdu }; } // 16 Kasım (Patron): durdurma varken kart açılmaz
   const secim = await oku(env, "pelin:secim", null);
   if (!secim) return { hata: "kurulum yapılmamış (Pelin'e /kurulum: yüz + ortam seçimi)" };
   for (const k of onay.kodlar) if (!((await boyOku(env, k)) || {}).boy) return { hata: `${k} için boy kayıtlı değil — Pelin'e "/uret ${k}" yazın, boyu bir kez sorar` };
@@ -2240,7 +2285,7 @@ async function falIsle(env, is, uc, girdi, fiyat, simdi, hf = false) {
     const { t } = await grupHarcamasi(env, is.grup);
     if (t + fiyat > is.butce) throw new Error(`BÜTÇE: şimdiye kadar ~${para(t)}, bu adım ${para(fiyat)} → ${is.butce} $ sınırı aşılır; durdum, Patron'a soruyorum`);
   }
-  is.fal = hf ? await hfGonder(env, uc, girdi) : await falGonder(env, uc, girdi);
+  is.fal = hf ? await hfGonder(env, uc, girdi, fiyat) : await falGonder(env, uc, girdi, fiyat);
   is.falFiyat = fiyat; is.falTur = hf ? "hf" : "fal"; is.maliyet = yuvarla(is.maliyet + fiyat); is.bekleZaman = simdi;
   await harcamaYaz(env, fiyat, simdi, is.falTur, is.kod);
 }
@@ -2251,13 +2296,16 @@ async function hataVenoma(env, is, asama, simdi) {
   await defterIs(env, "pelin", `${asama} hatası: ${falHataTr(is.hamHata)} — kendiliğinden yeniden gönderilmedi (Patron kararı bekliyor)`, { kod: is.kod }).catch(() => null);
   try { const l = (await env.KAYIT.get("venom:pelinHata", "json")) || []; await env.KAYIT.put("venom:pelinHata", JSON.stringify([...l, { kod: is.kod, id: is.id || null, asama, hata: String(falHataTr(is.hamHata)).slice(0, 200), zaman: simdi }].slice(-20)), { expirationTtl: 7 * 86400 }); } catch { /* bildirim yazılamazsa iş yine durur */ }
 }
-// eslint-disable-next-line no-unused-vars
-function hfYedegeGec(is, arac, neden, simdi) {
+// 16 Kasım (Patron, kural 67): Higgsfield çalışmazsa iş KENDİLİĞİNDEN fal.ai'ye GEÇMEZ ("başka araca geçiş ancak onay kartıyla").
+// İş "uyari"da durur; Patron'un kartında yedek aracın adı ve tutarıyla "🎬 fal.ai … ile dene (~X $)" düğmesi çıkar (pu:y); basılırsa geçer.
+async function hfYedekOner(env, is, arac, neden, simdi) {
   const y = ARACLAR[arac] && ARACLAR[arac].yedek;
-  if (!y || !ARACLAR[y] || is.hfYedek || is.hfYedekYok) return false;
-  is.gecmis.push([simdi, `${ARACLAR[arac].ad} çalışmadı (${neden}) → aynı kareyle fal.ai ${ARACLAR[y].ad}`]);
-  Object.assign(is, { arac: y, hfYedek: { from: arac, neden }, videoDeneme: Math.max(0, is.videoDeneme - 1), durum: "video_gonder" });
-  return true;
+  is.hamHata = is.hamHata || String(neden).slice(0, 400);
+  is.durum = "uyari";
+  is.sorunlar = [`${ARACLAR[arac].ad} çalışmadı (${neden}) — ${TEKRAR_YOK}${y && ARACLAR[y] ? `; isterseniz aynı fotoğrafla fal.ai ${ARACLAR[y].ad} denenir (~${para(yuvarla(ARACLAR[y].saniye * URETIM_SN))})` : ""}`];
+  is.hfYedekOner = y && ARACLAR[y] && !is.hfYedekYok ? { from: arac, to: y, neden: String(neden).slice(0, 160), zaman: simdi } : null;
+  is.gecmis.push([simdi, `${ARACLAR[arac].ad} çalışmadı (${neden}) — kendiliğinden başka araca geçilmedi (Patron kararı)`]);
+  await hataVenoma(env, is, "video (Higgsfield)", simdi);
 }
 async function uretimAdimi(env, is, simdi) {
   const secim = await oku(env, "pelin:secim", null);
@@ -2356,14 +2404,14 @@ async function uretimAdimi(env, is, simdi) {
     return;
   }
   if (is.durum === "video_gonder") {
-    if (ARACLAR[arac].hf && !hfVar(env) && hfYedegeGec(is, arac, "Higgsfield anahtarı yok", simdi)) return;
+    if (ARACLAR[arac].hf && !hfVar(env)) { is.hamHata = "Higgsfield anahtarı yok"; return hfYedekOner(env, is, arac, "Higgsfield anahtarı yok", simdi); }
     is.videoDeneme++;
     const g = { ...videoGirdisi(arac, is.sahne || is.foto), prompt: is.sahneAyar ? yeniVideoIstemi(is) : uretimVideoIstemi(is.videoOrtam || is.ortam, is.sablon) };
     const yasak = [is.boy ? boyYasagiVideo(is.boy) : "", is.sahneAyar ? HAREKET_YASAK : ""].filter(Boolean).join(", ");
     if ("negative_prompt" in g) g.negative_prompt = [g.negative_prompt, yasak].filter(Boolean).join(", ");
     else if (ARACLAR[arac].hf && yasak) g.prompt = `${g.prompt} Avoid: ${yasak}.`.slice(0, 2400); // Higgsfield'de negatif alan yok
     try { await falIsle(env, is, ARACLAR[arac].uc, g, yuvarla(ARACLAR[arac].saniye * URETIM_SN), simdi, Boolean(ARACLAR[arac].hf)); } catch (e) {
-      if (ARACLAR[arac].hf) { is.hamHata = String(e.message).slice(0, 400); if (hfYedegeGec(is, arac, falHataTr(e.message), simdi)) return; }
+      if (ARACLAR[arac].hf && !/^(GÜNLÜK SINIR|AYLIK SINIR|BÜTÇE)/.test(String(e.message))) { is.hamHata = String(e.message).slice(0, 400); is.videoDeneme = Math.max(0, is.videoDeneme - 1); return hfYedekOner(env, is, arac, falHataTr(e.message), simdi); }
       throw e;
     }
     is.durum = "video_bekle"; return;
@@ -2405,6 +2453,13 @@ async function uretimAdimi(env, is, simdi) {
     is.sorunlar = k.sorunlar; is.durum = "uyari"; return; // 4 Kasım (Patron): video kendi kendine YENİDEN ÜRETİLMEZ; Patron karar verir
   }
 }
+// 16 Kasım (Patron, kural 67): Higgsfield çalışmadıysa uyarı kartında yedek araç düğmesi (tutarıyla) — basmak = o tutarın onayı
+const yedekliKlavye = (is) => {
+  const k = isKlavye(is.id, false, true);
+  const y = is.hfYedekOner && ARACLAR[is.hfYedekOner.to];
+  if (y) k.inline_keyboard.push([{ text: `🎬 fal.ai ${y.ad.replace(/ \(.*\)/, "")} ile dene (~${para(yuvarla(y.saniye * URETIM_SN))})`, callback_data: `pu:y:${is.id}` }]);
+  return k;
+};
 const isKlavye = (id, sablon = false, uyari = false, digerAraclar = [], deneme = false) => ({ inline_keyboard: [[{ text: uyari ? "✅ Yine de onayla" : deneme ? "💾 Beğendim (yayına gitmez)" : "✅ Onayla", callback_data: `pu:a:${id}` }, { text: "🔄 Yeniden üret", callback_data: `pu:r:${id}` }, { text: "❌ İptal", callback_data: `pu:x:${id}` }], ...(sablon ? [[{ text: "💾 Bu ayarları şablon olarak kaydet", callback_data: `pu:s:${id}` }]] : []),
   ...(digerAraclar.length ? [digerAraclar.map((a) => ({ text: `🎬 ${ARACLAR[a].ad.replace(/ \(.*\)/, "")} ile de dene (${para(ARACLAR[a].saniye * URETIM_SN)})`, callback_data: `pu:k:${id}:${a}` }))] : [])] });
 const KARSILASTIRMA = KART_ARACLARI;
@@ -2488,7 +2543,8 @@ async function isBildirIc(env, is, tgK, sonuc) {
     if (is.video) { const v = await videoGonder(env, is, `🎬 ${is.kod}`); sonuc.push(["video", Boolean(v && v.ok), v && v.ok ? null : "gönderilemedi"]); }
     const devam = devamAsamasi(is);
     return yaz(env, murat(env), [`⚠️ ${ust}`, kuralYanlisSatiri(ky), "Büyük farklar:", ...(is.sorunlar || []).slice(0, 6).map((s) => `• ${s}`), ...notSatirlari(is), puanSatiri(is),
-      devam === "teslim" ? "Beğendiyseniz ✅ Yine de onayla: teslim kuyruğuna alınır (son söz sizde)." : devam ? `Beğendiyseniz ✅ Yine de onayla: bu fotoğrafla devam ederim (${devam === "sahne_gonder" ? "video karesi + video" : "video"}).` : "Fotoğraf üretilemedi; yeniden üretin ya da iptal edin."].filter(Boolean).join("\n"), { reply_markup: isKlavye(is.id, false, true) });
+      devam === "teslim" ? "Beğendiyseniz ✅ Yine de onayla: teslim kuyruğuna alınır (son söz sizde)." : devam ? `Beğendiyseniz ✅ Yine de onayla: bu fotoğrafla devam ederim (${devam === "sahne_gonder" ? "video karesi + video" : "video"}).` : "Fotoğraf üretilemedi; yeniden üretin ya da iptal edin.",
+      `🔄 Yeniden üret = baştan yeni fotoğraf (~${para(yuvarla(GORSEL.fiyat + KONTROL_TAHMIN + OPENAI_TAHMIN))}, onaylanan tutara ek)${is.video ? " ve yeniden video" : ""}; kendiliğinden yeniden üretmedim.`].filter(Boolean).join("\n"), { reply_markup: yedekliKlavye(is) });
   }
   if (is.foto) await tgK("sendPhoto", { chat_id: murat(env), photo: is.foto, caption: `📸 ${is.kod} (katalog)` }, "foto");
   if (is.sahne) await tgK("sendPhoto", { chat_id: murat(env), photo: is.sahne, caption: `🎞 ${is.kod} (video karesi)` }, "sahne");
@@ -2503,7 +2559,7 @@ async function isBildirIc(env, is, tgK, sonuc) {
   const gunlukH = await bugunHarcanan(env, Math.floor(Date.now() / 1000)).catch(() => 0);
   const metinSonuc = await yaz(env, murat(env), [`👁 ÖNİZLEME — ${ust}`, ...(ky ? [kuralYanlisSatiri(ky)] : []), `💵 Bu iş: ~${para(is.maliyet || 0)} · bugün Pelin: ${para(gunlukH)} / ${await gunlukSinir(env, Math.floor(Date.now() / 1000)).catch(() => GUNLUK_SINIR_USD)} $`, `Kalite kontrol: foto ${kk(is.fotoKontrol)} | video ${kk(is.videoKontrol)}${is.sahneAyar && is.sahneAyar.sonYazi ? " · son kare yazısı ✅" : ""}${(is.patronOnay || []).length ? " · ⚠️ bir aşama Patron onayıyla geçti" : ""}`, puanSatiri(is), ...notSatirlari(is), `Ürün fotoğrafı: ${is.urunKaynak === "patron" ? "sizin gönderdiğiniz" : "site"}${is.renk ? ` · renk ${is.renk}` : ""}${is.boy ? ` · boy ${BOYLAR[is.boy.boy].ad}${(is.boyRef || []).length ? " (referanslı)" : ""}` : ""}`, `Video aracı: ${ARACLAR[is.arac || VARSAYILAN_ARAC].ad}${is.sablonKey && SABLON_SECENEK[is.sablonKey] ? ` · şablon: ${SABLON_SECENEK[is.sablonKey].ad}` : ""}${is.stil ? ` · aksesuar: ${is.stil.aksesuarTr}` : ""}${is.seviye === "premium" ? " · PREMIUM" : ""}`, ...(is.muzik ? [is.muzikEklendi ? `🎵 Müzik: ${is.muzik.ad} (sessiz hali saklı; müzik sonra değiştirilebilir)` : `🎵 Müzik eklenemedi: ${is.muzikHata || "bilinmiyor"} (video sessiz)`] : []),
     ...(is.aracYedek && (is.gecmis || []).some((g) => /işleyemedi .*→ aynı kareyle Kling 4\.0/.test(String(g[1]))) ? ["↪️ Veo bu istemi işleyemedi; aynı kareyle Kling 4.0 kullanıldı."] : []),
-    ...(is.hfYedek ? [`↪️ ${ARACLAR[is.hfYedek.from].ad} çalışmadı (${is.hfYedek.neden}); aynı fotoğrafla fal.ai ${ARACLAR[is.arac].ad} kullanıldı.`] : []),
+    ...(is.hfYedek ? [`↪️ ${ARACLAR[is.hfYedek.from].ad} çalışmadı (${is.hfYedek.neden}); ${is.hfYedek.onay ? "Patron onayıyla " : ""}aynı fotoğrafla fal.ai ${ARACLAR[is.arac].ad} kullanıldı.`] : []),
     is.yayinYok ? "🧪 DENEME — kanala ve siteye HİÇ GİTMEZ (kural). Beğenirseniz saklanır; yayın için normal üretim yapılır." : "✅ Onayla = ÜRETİM onayı (yayın değil): fotoğraf seti + marka yazısı eklenir, sonra Kemal SON YAYIN onay kartını getirir. Beğendiyseniz ayarları şablon olarak kaydedin."].join("\n"), { reply_markup: isKlavye(is.id, Boolean(is.sahneAyar), false, is.video && (is.sahne || is.foto) && !is.karsilastirma && !is.yayinYok && !is.grup ? KARSILASTIRMA.filter((a) => a !== (is.arac || VARSAYILAN_ARAC) && !((is.aracYasak || []).includes(a))) : [], Boolean(is.yayinYok)) });
   sonuc.push(["metin", Boolean(metinSonuc && metinSonuc.ok), metinSonuc && metinSonuc.ok ? null : String((metinSonuc && metinSonuc.description) || "?").slice(0, 120)]);
   return metinSonuc;
@@ -2663,7 +2719,7 @@ async function grupOzeti(env, gid, simdi) {
   const g = await oku(env, `pelin:grup:${gid}`, null);
   if (!g || g.ozet) return;
   const isler = await noraIsleri(env, gid);
-  if (isler.length < 2 || isler.some((x) => !BITMIS.includes(x.durum))) return;
+  if (isler.length < 2 || isler.some((x) => !BITMIS.includes(x.durum) || (x.durum === "uyari" && x.hfYedekOner))) return; // 16 Kasım: yedek araç kararı bekleyen iş bitmiş sayılmaz
   g.ozet = simdi; await kaydet(env, `pelin:grup:${gid}`, g, 14 * 86400);
   const puan = (x) => { const k = x.videoKontrol; return k && k.puan ? `${k.puan.pelin ?? "—"}${k.puan.chatgpt ? `/${k.puan.chatgpt}` : ""}` : "—"; };
   const harf = "ABCDEFGH";
@@ -2763,6 +2819,17 @@ async function uretimDugmesi(env, cq, simdi) {
     await cevap("Başlıyorum");
     return yaz(env, cq.message.chat.id, `🎬 ${is.kod}: aynı kareyle ${ARACLAR[ek].ad} videosu üretiliyor (~${para(fiyat)}). Hazır olunca önizleme gelir; iki videoyu karşılaştırıp beğendiğinizi onaylayın.`);
   }
+  if (islem === "y") { // 16 Kasım (Patron, kural 67): Higgsfield çalışmadı → Patron kartta yedek aracı (tutarıyla) onayladı
+    if (!is || is.durum !== "uyari" || !is.hfYedekOner || !ARACLAR[is.hfYedekOner.to]) return cevap("Bu düğme artık geçerli değil.");
+    const y = is.hfYedekOner, fiyat = yuvarla(ARACLAR[y.to].saniye * URETIM_SN);
+    try { await paraKapisi(env, fiyat, simdi); } catch (e) { await cevap("Sınır aşılır"); return yaz(env, cq.message.chat.id, `⛔ ${is.kod}: ${String(e.message).replace(/; durdum, Patron'a soruyorum$/, "")}. Fal.ai'ye geçilmedi.`); }
+    Object.assign(is, { arac: y.to, hfYedek: { from: y.from, neden: y.neden, onay: simdi }, hfYedekOner: null, durum: "video_gonder", sorunlar: [] });
+    is.gecmis.push([simdi, `Patron onayladı: ${ARACLAR[y.from].ad} yerine aynı fotoğrafla fal.ai ${ARACLAR[y.to].ad} (~${para(fiyat)})`]);
+    await kaydet(env, `pelin:is:${id}`, is);
+    const liste = await oku(env, "pelin:isler", []); if (!liste.includes(id)) { liste.push(id); await kaydet(env, "pelin:isler", liste.slice(-200)); }
+    await cevap("fal.ai ile deniyorum");
+    return kapat(`✅ ${is.kod}: Higgsfield yerine aynı fotoğrafla fal.ai ${ARACLAR[y.to].ad} deneniyor (~${para(fiyat)}). Hazır olunca önizleme gelecek.`);
+  }
   if (islem === "f" && is && is.durum === "foto_onay") {
     Object.assign(is, { durum: is.setYok ? "video_gonder" : "set_gonder", fotoOnaylandi: simdi }); is.gecmis.push([simdi, "ön fotoğraf Patron onaylı"]);
     await kaydet(env, `pelin:is:${id}`, is);
@@ -2783,12 +2850,12 @@ async function uretimDugmesi(env, cq, simdi) {
       return kapat(`💾 ${is.kod} denemesi beğenildi ve saklandı — DENEME olduğu için kanala/siteye gitmez.`);
     }
     if (devam === "teslim") { const engel = await markaEngeli(env, is); if (engel) { await cevap("Marka yanlış"); return yaz(env, cq.message.chat.id, `⛔ ${engel}`); } await paketeAl(env, is, simdi); await cevap("Onaylandı"); return kapat(`✅ ${is.kod} üretim onaylandı — ${is.setTamam ? "" : "önce fotoğraf seti, sonra "}marka yazısı basılıyor; ardından Kemal SON YAYIN onayınızı isteyecek.`); }
-    Object.assign(is, { durum: devam, sorunlar: [], fotoOnaylandi: is.fotoOnaylandi || simdi, ...(devam === "sahne_gonder" ? { sahneDeneme: 0 } : { videoDeneme: 0 }) });
+    Object.assign(is, { durum: devam, sorunlar: [], hfYedekOner: null, fotoOnaylandi: is.fotoOnaylandi || simdi, ...(devam === "sahne_gonder" ? { sahneDeneme: 0 } : { videoDeneme: 0 }) });
     await kaydet(env, `pelin:is:${id}`, is);
     await cevap("Devam ediyorum");
     return kapat(`✅ ${is.kod}: fotoğraf Patron onayıyla geçti — ${devam === "sahne_gonder" ? "video karesi ve video" : "video"} üretiliyor. Hazır olunca önizleme gelecek.`);
   }
-  if (islem === "r") { Object.assign(is, { durum: "foto_gonder", fotoDeneme: 0, sahneDeneme: 0, videoDeneme: 0, foto: null, sahne: null, video: null, kapak: null, fotoOnaylandi: null }); await kaydet(env, `pelin:is:${id}`, is); await cevap("Yeniden"); return kapat(`🔄 ${is.kod} yeniden üretiliyor.`); }
+  if (islem === "r") { Object.assign(is, { durum: "foto_gonder", fotoDeneme: 0, sahneDeneme: 0, videoDeneme: 0, foto: null, sahne: null, video: null, kapak: null, fotoOnaylandi: null, hfYedekOner: null }); await kaydet(env, `pelin:is:${id}`, is); await cevap("Yeniden"); return kapat(`🔄 ${is.kod} yeniden üretiliyor.`); }
   if (islem === "a" && is.durum === "onay" && is.yayinYok) { // DENEME: hiç yayına gitmez (Patron kuralı 4 Kasım)
     is.durum = "deneme_begenildi"; is.onayZaman = simdi; await kaydet(env, `pelin:is:${id}`, is);
     await ogrenmeYaz(env, { zaman: simdi, kod: is.kod, karar: "onay", farklar: [], notlar: (is.notlar || []).slice(0, 4) });
