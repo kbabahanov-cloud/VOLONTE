@@ -41,7 +41,7 @@ export function gelecekGecikenler(fs, simdi) {
 export function gelecekListeMetni(l, simdi) {
   if (!l.length) return null;
   const grup = (m) => l.filter((r) => (m === "BLACKROSE" ? String(r.magaza).toUpperCase() === "BLACKROSE" : String(r.magaza).toUpperCase() !== "BLACKROSE"));
-  const satir = (r) => `${r.kod} (${tarihKisa(r.cevapZaman || r.gonderim)}${r.siparis > 1 ? `, ${r.siparis} sipariş` : ""}${r.grup === "celal" ? ", Celal" : ""})`;
+  const satir = (r) => `${r.kod} (${tarihKisa(r.cevapZaman || r.gonderim)}${r.grup === "celal" ? ", Celal" : ""})`;
   const bloklar = [["VOLONTE", "🟦 VOLONTE"], ["BLACKROSE", "🌹 BLACK ROSE"]].map(([m, ad]) => { const g = grup(m); return g.length ? `${ad} (${g.length}): ${g.map(satir).join(" · ")}` : null; }).filter(Boolean);
   return [`📦 Fabrika "gelecek" dedi, ${GELECEK_GUN} günde gelmedi (${tarihKisa(simdi)}):`, ...bloklar, "Fabrikaya otomatik soru gitmedi; gerekirse arayın. Mal geldiyse kartındaki düğmeden \"geldi\" işaretleyin. (Parantezde: fabrikanın \"gelecek\" dediği ilk gün)"].join("\n");
 }

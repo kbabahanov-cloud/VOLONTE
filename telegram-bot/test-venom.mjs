@@ -2718,7 +2718,7 @@ test("16 Kasım (Patron) VENOM: renk kayıtta yoksa repete kartı gitmez (soru);
   // eski kayıtta mağaza yok: Black Rose listesinden ("-BR") tanınır; aynı model iki siparişte → tek satır, sipariş sayısıyla
   const gl2 = gelecekGecikenler([{ kod: "3627", durum: "gelecek", liste: "2026-11-06-BR", cevapZaman: ist(6, 13) }, { kod: "3627", durum: "gelecek", liste: "2026-11-02-BR", cevapZaman: ist(2, 13) }], ist(16, 10));
   assert.deepEqual(gl2.map((x) => [x.kod, x.magaza, x.siparis]), [["3627", "BLACKROSE", 2]]);
-  assert.match(gelecekListeMetni(gl2, ist(16, 10)), /🌹 BLACK ROSE \(1\): 3627 \(02\.11, 2 sipariş\)/);
+  assert.match(gelecekListeMetni(gl2, ist(16, 10)), /🌹 BLACK ROSE \(1\): 3627 \(02\.11\)/); // kayıt sayısı yazılmaz (beden / kişi başına kayıt — sipariş sayısı sanılmasın)
   assert.equal(gelecekListeMetni([], ist(16, 10)), null);
   // 7) müşteri kartları: sırada / kanala çıkan görünür; Patron'un onayındaki kart bekleyenlerde
   o.depo.set("kemal:mp:a1", JSON.stringify({ id: "a1", durum: "paylasildi", adet: 10, zaman: T0 - 50000, onay: T0 - 49900, onaylayan: "Patron", yayin: T0 - 7000, kanalMesaj: 15348, chat: String(PATRON) }));
