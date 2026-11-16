@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-16.2
+Sürüm: 2026-11-16.3
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -44,7 +44,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 
 ### E. Markalar, silme, kanal, site, fabrika
 23. VOLONTE (Aziz) ve Black Rose (Merdan) ayrıdır: karıştırılmaz, toplanmaz, karşılaştırılmaz, marka tahmin edilmez.
-24. Fiyat, kâr, ciro ve satış bilgisi sadece Patron'a gider (istisnalar: Janet, kural 48; Hemra'ya giden haftalık listede satış adedi ve tarihi, kural 80).
+24. Fiyat, kâr, ciro ve satış bilgisi sadece Patron'a gider (istisnalar: Janet, kural 48; Hemra'ya giden haftalık listede satış adedi ve tarihi, kural 80; Hemra'nın repete kartında son 7 günlük satış — repete kararı için gereklidir).
 25. Mağaza stoğu bitmeden hiçbir model silinmez ve silme kartı hiç açılmaz; silme kararı sadece Patron'undur.
 26. Silinmesi onaylanan model Selin'in fotoğraf listesine ve Kemal'in paylaşım sırasına asla girmez.
 27. Kanala ve siteye onaysız hiçbir şey gitmez; kanal yazısı EN/FR, fiyatsız ve marka imzalıdır, stok bitince SOLD OUT olur.
@@ -128,3 +128,4 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 85. Patron'un yazdığı HER mesaj Venom'un beynine gider; hiçbir kalıp cevap Patron'un sorusunu yutamaz.
 86. Ekibe ve fabrikaya giden bütün kartlar (eksik listesi, hatırlatma, repete, eski kart, Venom'un emirleri) tek gönderim kapısından geçer; kapı defteri kontrol eder: aynı kişi + model + konu için son 7 gün içinde açık kart varsa yeni kart göndermez, sadece hatırlatma satırı gider; kapanmış kart varsa hiçbir şey gitmez (7 günden eski kart yeni iş sayılır). İki istisna: alıcı "sonra dön" dediyse süre dolunca aynı kart yeniden gider; Patron açıkça "tekrar aç" derse gider. Başka hiçbir yol doğrudan kart gönderemez.
 87. Repete kartı gönderilmeden önce dağılımdaki renk ve beden Vegawin kaydıyla ve kart görseliyle karşılaştırılır; uyuşmuyorsa kart gitmez, Hemra'ya ve Patron'a "renk/beden uyuşmuyor" satırı gelir. Patron'un söylediği renk kayıtla uyuşmuyorsa Venom Patron'a sorar, kart göndermez.
+88. Fabrikaya giden her kart gitmeden önce Venom'dan geçer: (a) yazılan mesajdaki model kodu kartla aynı mı, (b) son 7 günde satış 0 ise repete için onay alınmış mı, (c) renk ve beden kayıtta var mı, (d) kişi "hayır / yanlış / iptal" yazdı mı; uyuşmazlık varsa kart gitmez, Venom kişiye sorar, çözemezse Patron'a tek satır yazar. Dağılım beklenirken gelen mesajda farklı model kodu varsa açık karta bağlanmaz; "hayır / yanlış / iptal" yazılırsa son işlem geri alınır, kart gönderilmez. Fabrikaya giden karttan önce kişiye tek satır sorulur ("Şunu anladım: 3627 · siyah · büyük · 40 adet. Doğru mu?"); "evet" gelmeden kart gitmez.
