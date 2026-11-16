@@ -57,7 +57,7 @@ import { cevapsizSatiri } from "./kart-tekrar.js";
 import { listeyeEkle, listeyiTemizle, hemraListesiGonder, hemraKararAdimi, hemraSatirlari, kisiId, markaSorumlusu, LISTE_SAATLERI } from "./venom-ekip.js";
 import { cozumDevret } from "./venom-gorev.js";
 import { gorevAc, gorevAdimi, cozumAdimi, yapilmayanSatiri, patronKarari, haftaSayilari, sayac as mudurSayac, sonSaat } from "./venom-gorev.js";
-import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec } from "./pelin.js";
+import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec, uretilenOku } from "./pelin.js";
 import { celalKoduMu } from "./stok.js"; // 12 Kasım: Celal'in modelleri (3000, 3002, Patron'un listesi)
 export { KISILER };
 
@@ -326,7 +326,8 @@ const ARACLAR = [
   { name: "mesaj_taslagi", description: "Birine (fuat, nuri, merdan, hemra) Sami adına mesaj: önce TAM METİN Patron'a onay kartıyla gösterilir; onaysız gitmez. Patron'un kendi metni varsa aynen kullan.", input_schema: { type: "object", additionalProperties: false, required: ["kime", "metin"], properties: { kime: { type: "string", enum: ["fuat", "nuri", "merdan", "hemra"] }, metin: { type: "string" } } } },
   { name: "mutabakat_gonder", description: "Fuat'a güncel cuma mutabakatını (bakiye mesajları) tekrar gönderip onayını ister. Önce Patron'a önizleme kartı.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "siteden_kaldir", description: "Bir modeli siteden (Selin) ve VOLONTE kanalından (Kemal) kaldırır. Önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
-  { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
+  { name: "magaza_stok_listesi", description: "İki mağazanın stoğu MODEL MODEL (Vegawin): her mağaza ayrı başlık, satır 'KOD · N adet', çoktan aza; liste kesilmez, uzunsa birkaç mesaja bölünüp Patron'a DOĞRUDAN gönderilir. 'iki mağazanın stoğunu model model ver', 'stok listesi' denince kullan; liste gönderildikten sonra tekrar yazma, sadece tek satır özet söyle.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
+  { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı. 16 Kasım: Pelin'de SADECE FOTOĞRAF (videosuz) üretim yolu YOK — Patron sadece fotoğraf isterse bu aracı da bota_yaz '/uret'i de KULLANMA; Patron'a tek satır yaz: \"Yapamıyorum — sebep: Pelin'de sadece fotoğraf yolu yok, her üretim fotoğraf + set + video (video kartında ~1,3–7 $ video payı). Sadece fotoğraf yolu eklenirse model başı ~0,64 $ (ön fotoğraf + kontrol 0,19 $, sağ/sol/arka 0,45 $); onaylarsanız Claude Code ekler.\" ve eksik_arac_listesi'ne yaz.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
   { name: "model_boyu", description: "Bir modelin Pelin'de kayıtlı boyunu (mini/diz/midi/bilek/maksi, referans) gösterir. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "musteri_paylasimi", description: "MÜŞTERİ TEŞEKKÜR PAYLAŞIMI: Patron görsel(ler) gönderip 'müşteri', 'müşteri paylaşımı', 'müşteri teşekkürü', 'bunların alt yazısını yaz' gibi bir şey yazınca HER ZAMAN ve SADECE bunu kullan (bota_yaz ile Kemal'e yazma, kemal_paylas kullanma; Kemal'in bu iş için ayrı aracı var ve bu araç onu çalıştırır). Patron'un gönderdiği BÜTÜN görseller (en fazla 10) TEK kart olur: Kemal kişisel bilgiyi kapatır, Nora TEK bir FR + EN teşekkür yazısı yazar, onay kartı Patron'a gelir; onaysız kanala çıkmaz. Varsayılan: model kodu ve şehir YOK. kod / sehir alanını SADECE Patron BU mesajında açıkça yazdıysa doldur; yazmadıysa BOŞ bırak (fotoğraftan ya da önceki konuşmadan tahmin etme).", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string", description: "Patron bu mesajında açıkça yazdıysa model kodu (ör. 3394); yoksa boş" }, sehir: { type: "string", description: "Patron bu mesajında açıkça yazdıysa ülke / şehir; yoksa boş" } } } },
   { name: "kemal_paylas", description: "Patron'un Venom'a son gönderdiği TÜM fotoğraf/videoları (video sesi/müziği aynen) Kemal'e verir: kanal paylaşımı (marka yazısı fotoğraflara, EN/FR alt yazı). Renk ve beden Patron ne yazdıysa o (yoksa model kartı). YAYINLAMAZ: SON YAYIN ONAYI kartı Patron'a gelir; onaydan sonra kanal + site. 'paylaş' isteği HER ZAMAN buraya (Pelin'e değil).", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Patron'un yazdığı renk, Türkçe (beyaz, koyu bordo…)" }, beden: { type: "string", enum: ["kucuk", "buyuk", "ikisi"] }, son_set: { type: "boolean", description: "Patron yeni dosya göndermeden 'en son gönderdiğim set' derse true" } } } },
@@ -350,7 +351,7 @@ const ARACLAR = [
   { name: "karar_kaydet", description: "Patron yeni bir KALICI karar/kural söylediğinde (ör. 'bundan sonra …', 'her zaman …', 'asla …') Venom'un hafızasına yazar; sonraki her konuşmada uygulanır. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["metin"], properties: { metin: { type: "string" } } } },
   { name: "selin_durum", description: "Selin'de bir modelin durumu: neden taslak çıkmadı (fotoğraf gelmedi mi, hata mı, onayda mı, sitede mi), bugünkü listede mi, kaç gündür gelmiyor, stok. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "selin_taslak", description: "Selin'e bir model için site taslağı (başlık + EN/FR/PT açıklama) hazırlatır; fotoğrafı Selin'e gelmiş olmalı. Küçük yapay zekâ maliyeti (~0,05 $): önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
-  { name: "bota_yaz", description: "Patron'un söylediği işi/cevabı ilgili bota Patron yazmış gibi iletir (yazı). Pelin: fotoğraf/video üretimi ve Nora senaryo; Kemal: kanal paylaşımı ve düzeltme metni; Selin: site; Sami: stok/ekip. Bir bot az önce yazı bekleyen bir soru sorduysa (ör. 'nasıl düzelteyim, yazın') Patron'un cevabını AYNEN o bota ilet. Para harcayan işlerde bot kendi maliyet kartını getirir.", input_schema: { type: "object", additionalProperties: false, required: ["bot", "metin"], properties: { bot: { type: "string", enum: ["pelin", "kemal", "selin", "sami"] }, metin: { type: "string" } } } },
+  { name: "bota_yaz", description: "Patron'un söylediği işi/cevabı ilgili bota Patron yazmış gibi iletir (yazı). Pelin: fotoğraf/video üretimi ve Nora senaryo; Kemal: kanal paylaşımı ve düzeltme metni; Selin: site; Sami: stok/ekip. Bir bot az önce yazı bekleyen bir soru sorduysa (ör. 'nasıl düzelteyim, yazın') Patron'un cevabını AYNEN o bota ilet. Para harcayan işlerde bot kendi maliyet kartını getirir. Pelin'e ÜRETİM komutu (/uret …) gönderirken Patron foto + video istemiş olmalı; Patron SADECE fotoğraf istediyse gönderme (Pelin'de sadece fotoğraf yolu yok; pelin_uret açıklamasındaki tek satırı yaz).", input_schema: { type: "object", additionalProperties: false, required: ["bot", "metin"], properties: { bot: { type: "string", enum: ["pelin", "kemal", "selin", "sami"] }, metin: { type: "string" } } } },
   { name: "kanal_paylasimlari", description: "VOLONTE Telegram kanalındaki son paylaşımlar (Venom kanalda yönetici, sadece okur): zaman, model kodu, medya, yazı ve bulunan sorunlar. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" }, gun: { type: "integer", description: "kaç günlük (varsayılan 1)" } } } },
   { name: "site_kontrol", description: "wearvolonte.com'u okur (değiştirmez): model sayısı, fotoğrafsız/videosuz, yapay zekâ (Pelin) fotoğrafı olanlar, stoğu bitmiş ama sitede görünenler; kod verilirse o modelin ayrıntısı. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" } } } },
   { name: "site_duzelt", description: "Sitede bir düzeltmeyi Selin'e verir (önce Patron onay kartı). yapay_zeka_fotolarini_kaldir SADECE Patron açıkça 'yapay zekâ / Pelin fotoğraflarını kaldır' derse — kendin önerme, başka bir isteği buna çevirme (9 Kasım). İşlemler: yapay zekâ (Pelin) fotoğraflarını kaldır, fotoğrafları yenile (önbellekteki eski görsel), taslağı yeniden hazırla, açıklamadaki renkleri yaz (renkler). Yeni renk Pelin'den siteye eklenince renk satırı kendiliğinden güncellenir; bu araç ilk rengi kaydetmek/düzeltmek için.", input_schema: { type: "object", additionalProperties: false, required: ["kod", "islem"], properties: { kod: { type: "string" }, islem: { type: "string", enum: ["yapay_zeka_fotolarini_kaldir", "fotolari_yenile", "taslak_yeniden", "renkler"] }, renkler: { type: "array", items: { type: "string" }, description: "islem=renkler: modelin sitedeki BÜTÜN renkleri, Türkçe, sırayla (ör. [\"siyah\", \"koyu bordo\"]); açıklamanın sonundaki renk satırı (EN/FR/PT) buna göre yazılır" } } } },
@@ -622,15 +623,34 @@ export async function aracCalistir(env, ad, g, simdi) {
     await kartAc(env, { tur: "sil", kod: String(g.kod) }, `🗑 ${g.kod}: önce siteden (Selin), hemen ardından VOLONTE kanalındaki bütün paylaşımlar (Kemal) kaldırılacak. Kopyalar arşive alınır; yanlışsa /geri.`, simdi);
     return "Silme onay kartı Patron'a gösterildi.";
   }
+  if (ad === "magaza_stok_listesi") { // 16 Kasım (Patron): kod · adet, çoktan aza, mağazalar ayrı (kural 23), liste kesilmez (kural 12)
+    const l = await stokIste(env, "/magaza-stok", {}).catch(() => null);
+    if (!l || typeof l !== "object") return "Stok listesi okunamadı (depoya ulaşılamadı); tekrar deneyin.";
+    const mesajlar = magazaStokMesajlari(l, simdi);
+    if (!mesajlar.length) return "Vegawin'de stokta model yok (iki mağaza da boş görünüyor).";
+    if (!env.__kuru) for (const m of mesajlar) await yaz(env, m, { posta: { kaynak: "venom", tur: "cevap", izin: "cevap" } });
+    return `${mesajlar.length} mesajda gönderildi: ${Object.entries(l).map(([m, x]) => `${m === "BLACKROSE" ? "BLACK ROSE" : m} ${x.length} model`).join(" · ")}. Listeyi TEKRAR YAZMA.`;
+  }
   if (ad === "pelin_uret") {
     // 11 Kasım (Patron, EN TEHLİKELİ HATA): Pelin sadece Patron mesajında açıkça "Pelin" derse çalışır
-    if (pelinAcikca(env.__patronMetni) && env.__kuru) return "(DENEME: Pelin maliyet kartı gösterilirdi.)";
-    if (!pelinAcikca(env.__patronMetni)) return "Pelin BAŞLATILMADI: Patron mesajında açıkça \"Pelin\" demedi. Para harcayan iş yanlış anlamayla başlamaz. Bu iş bir kişiye (Merdan/Aziz/Hemra) ise kisiye_soyle kullan.";
+    const pelinOk = await pelinIzinli(env, simdi); // 16 Kasım: Venom'un kendi kod sorusunun cevabı da geçer
+    if (pelinOk && env.__kuru) return "(DENEME: Pelin maliyet kartı gösterilirdi.)";
+    if (!pelinOk) return "Pelin BAŞLATILMADI: Patron mesajında açıkça \"Pelin\" demedi. Para harcayan iş yanlış anlamayla başlamaz. Bu iş bir kişiye (Merdan/Aziz/Hemra) ise kisiye_soyle kullan.";
     // 16 Kasım (Patron): durdurma TEK kaynaktan; mesajdaki kelimeye bakılmaz; durdurma varsa kart açılmaz, Patron'a tek satır (kim, ne zaman)
     const durdu = await pelinUretimDurdu(env);
     if (durdu) return `${durdu}\n(Bu satırı Patron'a AYNEN bir kez yaz; kart açma, başka yol deneme.)`;
-    const kodlar = [...new Set((g.kodlar || []).map(String).filter((x) => /^\d{3,6}$/.test(x)))].slice(0, g.test ? 5 : 40);
+    let kodlar = [...new Set((g.kodlar || []).map(String).filter((x) => /^\d{3,6}$/.test(x)))].slice(0, g.test ? 5 : 40);
     if (!kodlar.length) return "Geçerli model kodu yok.";
+    // 16 Kasım (Patron): onaylı kaydı olan model YENİDEN ÜRETİLMEZ — kayıtlı fotoğraf / video gönderilir (0 $); sadece "yeniden üret" yeni üretir
+    if (!g.test && !/(?<![\p{L}])yeniden(?![\p{L}])/iu.test(String(env.__patronMetni || ""))) {
+      const kayitli = [];
+      for (const k of kodlar) { const b = await boyOku(env, k); const u = uretilenOku(b, (b && b.renk) || null); if (u && u.foto) kayitli.push([k, u]); }
+      for (const [k, u] of kayitli) {
+        if (!env.__kuru) await tg(env, "sendPhoto", { chat_id: patron(env), photo: u.foto, caption: `📦 ${k} — kayıtlı onaylı fotoğraf. Yeni üretim yapılmadı, 0 $.`, izin: "cevap" }).catch(() => null);
+        if (u.video && !env.__kuru) await tg(env, "sendVideo", { chat_id: patron(env), video: u.video, caption: `📦 ${k} — kayıtlı onaylı video. 0 $.`, izin: "cevap" }).catch(() => null);
+      }
+      if (kayitli.length) { kodlar = kodlar.filter((k) => !kayitli.some(([x]) => x === k)); if (!kodlar.length) return `${kayitli.map(([k, u]) => `${k}: kayıtlı ${u.video ? "fotoğraf + video" : "fotoğraf"} Patron'a gönderildi`).join("; ")}. Yeni üretim YAPILMADI, para harcanmadı. Patron'a bunu tek satırla söyle; yeniden üretmek isterse "Pelin KOD yeniden üret" yazsın.`; }
+    }
     const secim = await oku(env, "venom:pelinSecim", null); // Pelin'in seçiminin aynası (yüzler, ortamlar, araç)
     if (!secim) return "Pelin'de kurulum yapılmamış (yüz + ortam seçimi). Patron önce Pelin'e /kurulum yazmalı.";
     const boylar = {};
@@ -709,7 +729,10 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (ok && g.is === "pelin_uretim") await env.KAYIT.put("venom:pelinUretimDurum", JSON.stringify({ acik: Boolean(g.acik), kim: "Patron", zaman: simdi })).catch(() => null); // 16 Kasım: kim / ne zaman
     return ok ? `${g.is === "pelin_uretim" ? "Pelin'in yeni üretimi" : "Venom üzerinden Kemal paylaşımı"} ${g.acik ? "AÇILDI" : "DURAKLATILDI"}.` : "Ayar kaydedilemedi (Cloudflare günlük yazma sınırı dolu olabilir); Claude Code'a söyleyin.";
   }
-  if (ad === "pelin_foto_kaydet") return pelinFotoIlet(env, g, simdi);
+  if (ad === "pelin_foto_kaydet") { // 16 Kasım (kural 7): "yeniden başlat" Pelin'de kart açar → sadece "Pelin" yazılınca ya da Venom'un kod sorusunun cevabında
+    if (g.yeniden_baslat && env.__sohbette && !(await pelinIzinli(env, simdi))) g = { ...g, yeniden_baslat: false };
+    return pelinFotoIlet(env, g, simdi);
+  }
   if (ad === "bekleyenler" && env.__kuru) return aracCalistir(env, "patron_kararlari", {}, simdi);
   if (ad === "bekleyenler") { // 15 Kasım (Patron): bu araç Patron'a kendi başına "bekleyen iş yok" YAZMAZ ve beynin cevabını SUSTURMAZ (soru yutuluyordu)
     const l = await bekleyenKararlar(env, simdi);
@@ -791,7 +814,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (!BOT_BAG[g.bot]) return "Bilinmeyen bot.";
     // 15 Kasım (Patron): müşteri paylaşımı HER ZAMAN kendi aracıyla başlar (Kemal'e düz yazı gidince "aracım yok" diyordu)
     if (g.bot === "kemal" && musteriNiyeti(g.metin)) return musteriPaylasimiBaslat(env, {}, simdi);
-    if (g.bot === "pelin" && env.__sohbette && !pelinAcikca(env.__patronMetni)) return "Pelin'e İLETİLMEDİ: Patron mesajında açıkça \"Pelin\" demedi (11 Kasım kuralı). Bu iş bir kişiye ise kisiye_soyle kullan.";
+    if (g.bot === "pelin" && env.__sohbette && !(await pelinIzinli(env, simdi))) return "Pelin'e İLETİLMEDİ: Patron mesajında açıkça \"Pelin\" demedi (11 Kasım kuralı). Bu iş bir kişiye ise kisiye_soyle kullan.";
     if (g.bot === "pelin" && /üret|uret|video|fotoğraf çek|maliyet/i.test(String(g.metin || "")) && !env.__sohbette && env.__izin !== "cevap") return "Pelin'e para gerektiren üretim emri Patron onayı olmadan verilmez (pelin_uret kartı).";
     const r = await botaSor(env, g.bot, "mesaj", String(g.metin || ""));
     if (r) await isKaydet(env, g.bot, String(g.metin || ""), simdi);
@@ -946,6 +969,7 @@ export async function dugme(env, cq, simdi) {
       return yaz(env, `🧭 Anladım: ${medya.length} dosya → sadece kaydet (3 gün). Kimseye gönderilmedi.`);
     }
     await kaydet(env, "venom:bot:medyaNiyet", { islem: sec === "p" ? "pelin" : "paylas", zaman: simdi }, 3600).catch(() => null);
+    if (sec === "p") await kaydet(env, "venom:pelinDevam", { zaman: simdi, metin: "🎬 Pelin kullanacak (düğme)" }, PELIN_DEVAM_SN).catch(() => null); // 16 Kasım: Venom "Kod ve renk?" diye sordu
     await cevap("Tamam");
     return yaz(env, sec === "p" ? "🎬 Pelin kullanacak. Kod ve renk? (ör. \"3627 beyaz\"; ön/arka sırasıyla gönderdiyseniz öyle kaydedilir)" : "📣 Paylaşım. Kod ve renk? (ör. \"3627 beyaz\"; beden için \"büyük küçük\")");
   }
@@ -1161,6 +1185,25 @@ async function ilkKezBugun(env, ad) {
 }
 // 14 Kasım (Patron): EKSİK ARAÇ LİSTESİ — bir iş araç olmadığı için yapılamadıysa buraya yazılır (KV "venom:eksikArac"); Patron onaylarsa
 // Claude Code aracı ekler. Aynı istek (ilk 60 harf) açıkken ikinci kez yazılmaz, sayısı artar. Claude Code'un eski not kaydı da sürer.
+// 16 Kasım (Patron): mağaza stok listesi mesajları — her mağaza ayrı, "KOD · N adet" çoktan aza; 3500 harfte bölünür (satır ortasında değil)
+export function magazaStokMesajlari(l, simdi = Math.floor(Date.now() / 1000)) {
+  const gun = new Date((simdi + 3 * 3600) * 1000).toISOString().slice(5, 10).split("-").reverse().join(".");
+  const sira = Object.keys(l || {}).sort((a, b) => (a === "VOLONTE" ? -1 : b === "VOLONTE" ? 1 : a.localeCompare(b)));
+  const out = [];
+  for (const m of sira) {
+    const ad = m === "BLACKROSE" ? "🌹 BLACK ROSE" : m === "VOLONTE" ? "🟦 VOLONTE" : m;
+    const satirlar = (l[m] || []).map((x) => `${x.kod} · ${Number.isInteger(x.adet) ? x.adet : Math.round(x.adet * 10) / 10} adet${x.indirimli ? " (indirimli)" : ""}${x.gizli ? " (silinmiş)" : ""}`);
+    const toplam = (l[m] || []).reduce((t, x) => t + Number(x.adet || 0), 0);
+    let parca = [`${ad} — stok (${gun}): ${satirlar.length} model, ${Math.round(toplam)} adet`];
+    let n = 1;
+    for (const s of satirlar) {
+      if ([...parca, s].join("\n").length > 3500) { out.push(parca.join("\n")); n++; parca = [`${ad} — stok (devam ${n})`]; }
+      parca.push(s);
+    }
+    out.push(parca.join("\n"));
+  }
+  return out;
+}
 export async function eksikAracYaz(env, { bot = "venom", istek, sebep = "", arac = "" }, simdi) {
   const l = await oku(env, "venom:eksikArac", []);
   const anahtar = (x) => String(x || "").toLocaleLowerCase("tr").replace(/\s+/g, " ").trim().slice(0, 60);
@@ -1228,6 +1271,18 @@ export function kodRenk(metin) {
 }
 // "3627 beyaz fotoğrafını / videosunu yap · üret · çek" → Pelin üretimi
 export const pelinAcikca = (metin) => /(?<![\p{L}])pel[iıİ]n/iu.test(String(metin || "")); // 13 Kasım (kural 36): "PELİN", "PELIN", "pelin" hepsi
+// 16 Kasım (Patron): Venom KENDİSİ kod sorduysa ("bu askı fotoğrafı hangi modelin?") cevap aynı Pelin işinin devamıdır — tekrar "Pelin" yazmak
+// gerekmez. Devam kaydı (KV "venom:pelinDevam", 30 dk) SADECE şu iki durumda açılır: (1) Patron'un "Pelin" yazdığı mesaja Venom kod soran bir
+// soruyla cevap verdi ve iş başlamadı; (2) Patron fotoğraf kartında "🎬 Pelin kullanacak"a bastı (Venom "Kod ve renk?" diye sordu).
+// Devam ancak cevapta model kodu varsa geçer; başka her durumda kural 7 / 66 aynen ("Pelin" yazılmadan Pelin çalışmaz).
+export const PELIN_DEVAM_SN = 1800;
+export const kodSorusuMu = (cevap) => /\?/.test(String(cevap || "")) && /(hangi model|model kodu|kodu (nedir|ne|yaz)|kod(u|unu)? (yazar|söyler)|hangi kod|kod ve renk|kodu\?)/iu.test(String(cevap || ""));
+export async function pelinDevamMi(env, metin, simdi = Math.floor(Date.now() / 1000)) {
+  const d = await oku(env, "venom:pelinDevam", null).catch(() => null);
+  return Boolean(d && simdi - (Number(d.zaman) || 0) < PELIN_DEVAM_SN && /(?<!\d)\d{3,6}(?!\d)/.test(String(metin || "")));
+}
+// Pelin işi için izin: mesajda açıkça "Pelin" ya da Venom'un kendi kod sorusunun cevabı
+export async function pelinIzinli(env, simdi = Math.floor(Date.now() / 1000)) { return pelinAcikca(env.__patronMetni) || (await pelinDevamMi(env, env.__patronMetni, simdi)); }
 export function uretNiyeti(metin) {
   const t = String(metin || "").toLocaleLowerCase("tr");
   if (!pelinAcikca(t)) return null; // 11 Kasım (Patron): Pelin sadece Patron açıkça "Pelin" derse; "fotoğraf" kelimesi Pelin sebebi değil
@@ -1555,13 +1610,15 @@ export function kuralYanlisEsle(l, k) {
   return null;
 }
 export function kuralYanlisUygula(k, e) {
-  const not = `⚠️ KURAL YANLIŞTI — ${e.not}\nBu üretim yayına GİTMEZ (Patron'un kararı); onay düğmesi kaldırıldı.`;
   // Pelin: onay (pu:a), şablon (pu:s), başka araçla dene (pu:k), yeniden üret (pu:r) kalkar; "videoya geç" (pu:f, onaylı tutar) ve ❌ kalır.
   // Kemal SON YAYIN kartı: sadece ❌ kalır.
   // Ara aşama kartı ("Yine de onayla: bu fotoğrafla devam ederim (video …)") → onay = üretime devam (onaylı tutar), kalır.
   const araAsama = /devam ederim/.test(String(k.metin || ""));
   const kalsin = (b) => b && (k.bot === "pelin" ? !(araAsama ? /^pu:[rsk]:/ : /^pu:[arsk]:/).test(String(b.callback_data || "")) : /❌|İptal|iptal/.test(String(b.text || "")));
   const butonlar = (k.butonlar || []).map((s) => (s || []).filter(kalsin)).filter((s) => s.length);
+  // 16 Kasım (Patron): not, kartta GERÇEKTEN kalan düğmeyle çelişmez ("onay düğmesi kaldırıldı" yazıp "Onayla" göstermek yok)
+  const kaldi = butonlar.flat().some((b) => /^pu:[af]:/.test(String(b.callback_data || "")));
+  const not = `⚠️ KURAL YANLIŞTI — ${e.not}\nBu üretim yayına GİTMEZ (Patron'un kararı)${kaldi ? "; karttaki düğme sadece üretime devam eder (yayın onayı değil)" : "; onay düğmesi kaldırıldı"}.`;
   // Not ilk satırın ALTINA yazılır: ilk satır kartın kendisi kalır (postane aynı ilk satırlı kartları "tekrar" sayıp birleştirir)
   const [ilk, ...kalan] = String(k.metin || "").split("\n");
   const notVar = /KURAL YANLIŞTI/.test(String(k.metin || "")); // Pelin notu kendisi yazdıysa ikinci kez yazılmaz
@@ -1833,6 +1890,14 @@ export async function sohbet(env, metin, simdi) {
   if (env.__tur && env.__tur.sus && !env.__kuru) cevapMetni = ""; // araç sonucu Patron'a zaten yazdı (kart / tek satır): ikinci mesaj yok
   if (cevapMetni) await yaz(env, cevapMetni);
   if (cevapMetni && !env.__kuru) await sozKaydet(env, env.__tur, metin, simdi).catch(() => null); // 12 Kasım: "sıraya alındı" denen iş takip edilir
+  // 16 Kasım (Patron): "Pelin" yazılan mesaja Venom kod soran soruyla cevap verdiyse → sıradaki kod cevabı aynı işin devamı (30 dk)
+  if (!env.__kuru) {
+    try {
+      const devamdi = !pelinAcikca(metin) && (await pelinDevamMi(env, metin, simdi));
+      if ((pelinAcikca(metin) || devamdi) && kodSorusuMu(cevapMetni)) await kaydet(env, "venom:pelinDevam", { zaman: simdi, metin: String(metin).slice(0, 300) }, PELIN_DEVAM_SN);
+      else if (devamdi) await env.KAYIT.delete("venom:pelinDevam"); // devam bir kez kullanılır
+    } catch { /* devam kaydı yazılamazsa kural aynen */ }
+  }
   if (env.__kuru) { env.__sohbette = false; return cevapMetni; }
   await kaydet(env, "venom:bot:sohbet", [...gecmis, { role: "user", content: girdi.slice(0, 1500) }, { role: "assistant", content: (cevapMetni || "…").slice(0, 1500) }].slice(-20), 7 * 86400);
   await env.KAYIT.delete("venom:sohbetAktif").catch(() => null);
@@ -2599,6 +2664,10 @@ async function claudeIslemAdimi(env, simdi) {
     else if (is.tur === "sozAdim") sonuc.push({ tur: is.tur, n: await sozAdimi(env, simdi), sozler: await oku(env, "venom:sozler", []) });
     else if (is.tur === "isdKod") sonuc.push({ tur: is.tur, kod: is.kod, v: await stokIste(env, "/isd-kod", { kod: String(is.kod), basla: simdi - (is.gun || 4) * 86400 }).catch((e) => String(e.message || e)) });
     else if (is.tur === "kvYaz" && /^(venom:bot:hafiza|silme:onayli)$/.test(String(is.k))) { await env.KAYIT.put(is.k, typeof is.v === "string" ? is.v : JSON.stringify(is.v)); sonuc.push({ tur: is.tur, k: is.k, ok: true }); }
+    else if (is.tur === "patronaFoto") { // 16 Kasım (Patron): kayıtlı bir fotoğrafı (yeni üretim YOK, 0 $) Patron'a yeniden gönder
+      const r = await tg(env, "sendPhoto", { chat_id: patron(env), photo: String(is.url || ""), caption: String(is.yazi || "").slice(0, 1000), izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
+      sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
+    }
     else if (is.tur === "testMesaj") { // Patron'a test mesajı; Telegram'ın döndürdüğü hali (telefona giden) kayda
       const r = await tg(env, "sendMessage", { chat_id: patron(env), text: String(is.metin || "").slice(0, 4000), izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
       sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null, bicim: r && r.result ? r.result.entities || null : null, hata: r && !r.ok ? r.description : null });

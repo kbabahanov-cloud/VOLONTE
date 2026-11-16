@@ -326,6 +326,15 @@ export class StokDeposu {
   }
 
   // Bütün bilinen modeller (Sami'nin kontrolleri için): kod → { toplam, fiyat, gizli }.
+  // 16 Kasım (Patron): mağaza mağaza model stoğu (kod · adet, çoktan aza) — Venom "iki mağazanın stoğunu model model ver"
+  magazaStok() {
+    const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
+    const l = this.hepsi("SELECT magaza, kod, SUM(adet) AS adet FROM urun GROUP BY magaza, kod HAVING SUM(adet) > 0 ORDER BY magaza, SUM(adet) DESC, kod");
+    const out = {};
+    for (const r of l) (out[r.magaza] = out[r.magaza] || []).push({ kod: r.kod, adet: Number(r.adet), indirimli: indirimliMi(r.kod), gizli: silinen.has(r.kod) });
+    return out;
+  }
+
   tum() {
     const silinen = new Set(this.hepsi("SELECT kod FROM karar WHERE durum = 'gizli'").map((r) => r.kod));
     return Object.fromEntries(this.hepsi("SELECT kod, SUM(adet) AS t, MAX(fiyat) AS f FROM urun GROUP BY kod")
@@ -674,6 +683,7 @@ export class StokDO {
     if (yol === "/gizliler") return cevap(d.gizliler());
     if (yol === "/karar-liste") return cevap(d.hepsi("SELECT kod, durum, kim, zaman FROM karar WHERE durum = ? AND zaman >= ? ORDER BY zaman", String(g.durum || "gizli"), Number(g.basla) || 0));
     if (yol === "/stoktakiler") return cevap(d.stoktakiler());
+    if (yol === "/magaza-stok") return cevap(d.magazaStok());
     if (yol === "/olaylar") return cevap(d.olaylar(g.basla, g.bitis));
     if (yol === "/paylasim-kaydet") return cevap(d.paylasimKaydet(g.mesaj, g.kod, g.zaman) || { ok: true });
     if (yol === "/paylasimlar") return cevap(d.paylasimlar(g.basla, g.bitis));

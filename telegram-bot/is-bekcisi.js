@@ -42,7 +42,8 @@ export function selinBak({ ozet, s }) {
   if (!l) return { ok: false, sebep: "bugünkü liste hazırlanamadı (site listesi okunamadı ya da alıcı tanımlı değil)", oneri: "Claude Code baksın", cozum: null };
   const takili = ((ozet.durumlar || {}).bulunamiyor || 0) + ((ozet.durumlar || {}).gonderilemedi || 0);
   if (!l.n) return { ok: true, n: 0, bilgi: `bugün istenecek yeni model çıkmadı${takili ? ` (${takili} modelin fotoğrafı daha önce istenip gelmedi)` : ""}` };
-  return { ok: true, n: l.n, gelen: l.gelen, bilgi: `fotoğraf listesi gitti (${l.n} model)${l.gelen == null ? "" : `, ${l.gelen} modelin fotoğrafı geldi`}` };
+  // 16 Kasım (Patron): liste gitti ama HİÇ fotoğraf gelmediyse ✅ değil 🟠 (sadece gösterim; Selin–Merdan akışına ve hatırlatmalarına dokunmaz)
+  return { ok: true, n: l.n, gelen: l.gelen, ...(l.gelen === 0 ? { uyari: true } : {}), bilgi: `fotoğraf listesi gitti (${l.n} model)${l.gelen == null ? "" : l.gelen === 0 ? ", henüz hiç fotoğraf gelmedi" : `, ${l.gelen} modelin fotoğrafı geldi`}` };
 }
 // Sami: dünkü eksik listesi fabrikaya gitti mi (listeler akşam çıkar; bugünkü 19:00'da henüz beklenmez), cevapsız kart var mı
 // dun: { mesai, listeler: [{ magaza, asama, model }], giden: sayı, satis: { VOLONTE, BLACKROSE } }
@@ -69,7 +70,7 @@ export function eksikYazi(bot, r) {
 }
 // Sohbet cevabı (Patron "işler yapıldı mı" derse): her bot tek satır
 export function bekciMetni(k, saatYazi) {
-  const sat = (bot, r) => (r.ok ? `✅ ${AD[bot]}: ${bot === "kemal" ? `${r.cikan} paylaşım (bu saate kadar ~${r.beklenen} beklenir)${r.bekleyen ? `, ${r.bekleyen} kart onayda` : ""}${r.sira ? `, ${r.sira} model sırada` : ""}` : r.bilgi}` : `🟠 ${eksikYazi(bot, r)}${r.cozuldu ? ` → ${r.cozuldu}` : ""}`);
+  const sat = (bot, r) => (r.ok ? `${r.uyari ? "🟠" : "✅"} ${AD[bot]}: ${bot === "kemal" ? `${r.cikan} paylaşım (bu saate kadar ~${r.beklenen} beklenir)${r.bekleyen ? `, ${r.bekleyen} kart onayda` : ""}${r.sira ? `, ${r.sira} model sırada` : ""}` : r.bilgi}` : `🟠 ${eksikYazi(bot, r)}${r.cozuldu ? ` → ${r.cozuldu}` : ""}`);
   const l = ["kemal", "selin", "sami"].filter((b) => k[b] && !k[b].durdu).map((b) => sat(b, k[b]));
   for (const b of ["kemal", "selin", "sami"]) if (k[b] && k[b].durdu) l.push(`⏸ ${AD[b]} durdurulmuş`);
   return [`🛡 İş kontrolü (${saatYazi})`, ...l].join("\n");

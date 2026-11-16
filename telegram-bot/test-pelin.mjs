@@ -46,7 +46,7 @@ function ortam({ fal = true } = {}) {
     if (u.startsWith("https://api.anthropic.com")) {
       claude.push(govde);
       const sema = govde.output_config && govde.output_config.format && govde.output_config.format.schema;
-      if (sema && (sema.required || []).includes("hareket_en")) return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(noraCevap) }], usage: { input_tokens: 10, output_tokens: 5 } });
+      if (sema && (sema.required || []).includes("hareket_en")) return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(globalThis.__noraCevap || noraCevap) }], usage: { input_tokens: 10, output_tokens: 5 } });
       if (sema && (sema.required || []).includes("kod_okunan")) return Response.json({ id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(yaziCevap.fn ? yaziCevap.fn() : { volonte_var: true, kod_okunan: yaziCevap.kod, baska_yazi_var: false, fiyat_var: false }) }], usage: { input_tokens: 10, output_tokens: 5 } });
       const c = claude.cevaplar && claude.cevaplar.shift();
       return Response.json(c || { id: "m", type: "message", role: "assistant", model: govde.model, stop_reason: "end_turn", content: [{ type: "text", text: "Merhaba!" }], usage: { input_tokens: 100, output_tokens: 50 } });
@@ -1658,4 +1658,41 @@ test("16 Kasım (Patron) 3271 MODEL KURALI: kural SADECE o modelin kaydından �
   const uk = o.g.filter((x) => x.metod === "sendMessage").at(-1).govde.text; // maliyet kartı
   assert.match(uk, /Model kuralı \(3271\): kiremit krep yelek \+ geniş paça pantolon; üst kısım astarlı\/opak; alt kısım \(etek ya da pantolon\) astarlı\/opak — bacaklar görünmez/);
   assert.ok(!/şifon|iki kat/.test(uk), uk);
+});
+
+test("16 Kasım (Patron) Nora senaryosu kesilmez: 400 harften uzun senaryo kayda ve karta TAM girer ('özgüvenli bi…' olmaz)", async () => {
+  const { noraYaz } = await import("./pelin.js");
+  const o = uretimOrtami();
+  const uzun = "0-2 sn: Model kameraya doğru iki yavaş, kendinden emin adım atar; ceketinin eteği hafifçe dalgalanır. 2-4 sn: Durur, omzunun üstünden hafifçe bakar, yüzünde sakin ve özgüvenli bir gülümseme belirir. 4-6 sn: Bir adım daha yaklaşır, elini hafifçe beline koyar, kamera çok yavaş yaklaşır ve kumaşın dokusu net görünür; mekân sakin ve lüks kalır. Işık sıcak ve yumuşaktır; arka plandaki konuklar bulanık kalır, dikkat tamamen kıyafette ve modelin özgüvenli duruşunda kalır.";
+  assert.ok(uzun.length > 400, String(uzun.length));
+  globalThis.__noraCevap = { senaryo_tr: uzun, hareket_en: "She takes two slow confident steps toward the camera, pauses, glances over her shoulder with a calm confident smile, then takes one more step." };
+  try {
+    const sen = await noraYaz(o.env, { kod: "3271", foto: "https://img/f.jpg" }, Math.floor(Date.now() / 1000));
+    assert.equal(sen.tr, uzun);
+  } finally { delete globalThis.__noraCevap; }
+});
+
+test("16 Kasım (Patron) BİR KEZ ÜRETİLEN KAYDEDİLİR: onaylanan fotoğraf modelin kaydı; aynı model yeniden istenince yeni üretim YOK, kayıtlı gönderilir (0 $); sadece 'yeniden üret' yeni kart açar", async () => {
+  const { uretilenOku } = await import("./pelin.js");
+  const o = uretimOrtami();
+  o.depo.set("pelin:secim", SECIM_ROLLU());
+  o.site.push({ kod: "3271", bedenler: "38-50", fotolar: ["galeri/3271/1.jpg"] });
+  o.depo.set("pelinboy:3271", JSON.stringify({ boy: "bilekalti", marka: "BLACKROSE", anlama: { genel: { ust: "opak", alt: "opak", iclik: "yok", onay: 1 } } }));
+  // ön fotoğraf onayı (pu:f) → kayıt
+  o.depo.set("pelin:is:3271-k", JSON.stringify({ id: "3271-k", kod: "3271", durum: "foto_onay", foto: "https://img/onayli.jpg", urunler: ["u"], gecmis: [], setYok: true }));
+  await bas(o, MURAT, "pu:f:3271-k");
+  const u = uretilenOku(JSON.parse(o.depo.get("pelinboy:3271")), null);
+  assert.deepEqual([u.foto, u.isId, Boolean(u.fotoOnay)], ["https://img/onayli.jpg", "3271-k", true]);
+  // aynı model yeniden istenir → yeni kart / üretim yok, kayıtlı fotoğraf gelir
+  o.g.length = 0;
+  const f0 = o.falIstek.length;
+  await yazi(o, MURAT, "/uret 3271");
+  assert.ok(o.g.some((x) => x.metod === "sendPhoto" && x.govde.photo === "https://img/onayli.jpg" && /kayıtlı onaylı fotoğraf[\s\S]*0 \$/.test(x.govde.caption)));
+  assert.match(o.g.at(-1).govde.text, /📦 3271: bu model için onayladığınız fotoğraf kayıtlı; yeni üretim yapmadım, para harcanmadı/);
+  assert.ok(!o.g.some((x) => /💰 Üretim/.test(x.govde.text || "")));
+  assert.equal(o.falIstek.length, f0);
+  // açıkça "yeniden üret" → normal maliyet kartı
+  o.g.length = 0;
+  await yazi(o, MURAT, "/uret 3271 yeniden");
+  assert.ok(o.g.some((x) => /💰 Üretim — 1 model: 3271/.test(x.govde.text || "")));
 });

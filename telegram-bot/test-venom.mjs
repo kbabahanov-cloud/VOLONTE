@@ -2824,3 +2824,65 @@ test("16 Kasım (Patron) PELİN DURDURMA TEK KAYNAK: durdurma varken kart AÇILM
   assert.match(await aracCalistir(o.env, "pelin_uret", { kodlar: ["3271"] }, ist(16, 15, 50)), /Patron bütün botları durdurdu[\s\S]*yeni üretim kartı açılmadı/);
   o.depo.delete("venom:dur"); _durOnbellekSifirla();
 });
+
+test("16 Kasım (Patron) 'PELİN' KELİMESİ: Venom kodu KENDİSİ sorduysa ('bu askı fotoğrafı hangi modelin?') kod cevabı aynı işin devamı — tekrar 'Pelin' gerekmez; devam tek kullanımlık, 30 dk; başka durumda kural aynen", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const sc = JSON.stringify({ yuz: { anahtar: "a", manken: 0 }, ortamlar: [{ ad: "retro", sahne: "x", hareket: "y" }], arac: "veo" });
+  o.depo.set("pelin:secim", sc); o.depo.set("venom:pelinSecim", sc);
+  o.depo.set("pelinboy:3271", JSON.stringify({ boy: "bilekalti" }));
+  assert.equal(v.kodSorusuMu("Patron, bu askı fotoğrafı hangi modelin? Kodu yazdığında kaydedeceğim."), true);
+  assert.equal(v.kodSorusuMu("Maliyet kartı geldi, onaylayın."), false);
+  // 1) 3271 konuşması birebir: Patron "Pelin …" yazar, Venom kodu sorar → devam açılır
+  o.cevaplar.push({ text: "Patron, bu askı fotoğrafı hangi modelin? Kodu yazdığında fotoğrafı Pelin'e kaydedeceğim ve maliyet kartı önce sana gelecek." });
+  await yazi(o, PATRON, "Pelin kullansın. Model Bu askıdaki fotoğraf, bundan mankenli ürün fotoğrafı üret. Önce bana maliyeti göster, onaysız üretme.");
+  assert.ok(o.depo.get("venom:pelinDevam"), "devam kaydı açılmalı");
+  // 2) Patron sadece kodu yazar → Pelin işi BAŞLAR (kart), "Pelin yazmadınız" denmez
+  o.cevaplar.push({ arac: "pelin_uret", girdi: { kodlar: ["3271"] } }, { text: "Maliyet kartı geldi." });
+  await yazi(o, PATRON, "3271");
+  const sonuc = JSON.stringify(o.claude.at(-1).messages.at(-1).content);
+  assert.ok(!/BAŞLATILMADI/.test(sonuc), sonuc.slice(0, 300));
+  assert.match(sonKart(o).govde.text, /3271/);
+  assert.equal(o.depo.get("venom:pelinDevam"), undefined); // tek kullanımlık
+  // 3) devam yokken sadece kod → kural aynen: başlamaz
+  o.cevaplar.push({ arac: "pelin_uret", girdi: { kodlar: ["3271"] } }, { text: "Pelin yazmanız gerekiyor." });
+  await yazi(o, PATRON, "3271");
+  assert.match(JSON.stringify(o.claude.at(-1).messages.at(-1).content), /Pelin BAŞLATILMADI/);
+  // 4) Venom kod sormadıysa ("Pelin" mesajına başka cevap) devam açılmaz
+  o.cevaplar.push({ text: "Tamam Patron, maliyet kartı geldi." });
+  await yazi(o, PATRON, "Pelin 3394 üret");
+  assert.equal(o.depo.get("venom:pelinDevam"), undefined);
+  // 5) devam açık ama cevapta kod yok → geçmez; 30 dk geçince geçmez
+  o.depo.set("venom:pelinDevam", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), metin: "Pelin …" }));
+  assert.equal(await v.pelinDevamMi(o.env, "evet"), false);
+  assert.equal(await v.pelinDevamMi(o.env, "3271"), true);
+  o.depo.set("venom:pelinDevam", JSON.stringify({ zaman: Math.floor(Date.now() / 1000) - 31 * 60, metin: "Pelin …" }));
+  assert.equal(await v.pelinDevamMi(o.env, "3271"), false);
+});
+
+test("16 Kasım (Patron) STOK LİSTESİ ARACI: iki mağaza ayrı, 'KOD · N adet' çoktan aza, liste kesilmez (uzunsa bölünür), Patron'a doğrudan gider", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const yazUrun = (magaza, urunler) => o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza, urunler, simdi: 1 }) });
+  await yazUrun("VOLONTE", [{ kod: "3394", adet: 40, fiyat: 30 }, { kod: "3100", adet: 2, fiyat: 20 }, { kod: "3200", adet: 0, fiyat: 20 }]);
+  await yazUrun("BLACKROSE", [{ kod: "3627", adet: 74, fiyat: 52 }, { kod: "3271", adet: 12, fiyat: 40 }]);
+  const r = await v.aracCalistir(o.env, "magaza_stok_listesi", {}, ist(16, 18));
+  assert.match(r, /^2 mesajda gönderildi: BLACK ROSE 2 model · VOLONTE 2 model\. Listeyi TEKRAR YAZMA\.$/);
+  const m = patronaGiden(o).map((x) => x.govde.text);
+  assert.ok(m.some((t) => /^🟦 VOLONTE — stok \(16\.11\): 2 model, 42 adet\n3394 · 40 adet\n3100 · 2 adet$/.test(t)), JSON.stringify(m));
+  assert.ok(m.some((t) => /^🌹 BLACK ROSE — stok \(16\.11\): 2 model, 86 adet\n3627 · 74 adet\n3271 · 12 adet$/.test(t)));
+  // uzun liste bölünür, satır kaybolmaz
+  const cok = { VOLONTE: Array.from({ length: 400 }, (_, i) => ({ kod: String(4000 + i), adet: 400 - i })) };
+  const parca = v.magazaStokMesajlari(cok, ist(16, 18));
+  assert.ok(parca.length >= 2 && parca.every((p) => p.length <= 3600));
+  assert.equal(parca.join("\n").match(/^\d+ · \d+ adet$/gm).length, 400);
+});
+
+test("16 Kasım (Patron) İŞ KONTROLÜ: Selin '15 model istendi, 0 fotoğraf geldi' → ✅ değil 🟠 (sadece gösterim); fotoğraf gelince ✅", async () => {
+  const { selinBak, bekciMetni } = await import("./is-bekcisi.js");
+  const r0 = selinBak({ ozet: { bugunListe: { n: 15, gelen: 0 }, durumlar: {} }, s: 12 });
+  assert.deepEqual([r0.ok, r0.uyari], [true, true]);
+  assert.match(bekciMetni({ selin: r0 }, "12:00"), /🟠 Selin: fotoğraf listesi gitti \(15 model\), henüz hiç fotoğraf gelmedi/);
+  const r1 = selinBak({ ozet: { bugunListe: { n: 15, gelen: 4 }, durumlar: {} }, s: 12 });
+  assert.match(bekciMetni({ selin: r1 }, "12:00"), /✅ Selin: fotoğraf listesi gitti \(15 model\), 4 modelin fotoğrafı geldi/);
+});
