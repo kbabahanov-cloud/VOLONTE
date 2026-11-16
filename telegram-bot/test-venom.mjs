@@ -739,7 +739,7 @@ test("6 Kasım: gizli mesaj — Patron'a iletilemez mesaj, anahtar hemen silinir
   assert.deepEqual(JSON.parse(o.depo.get("venom:silinecekMesaj")), []);
 });
 
-test("9 Kasım POSTANE: bilgi birikir, kart ve kritik anında; düzenleme (✏️) kart sayılmaz; 10 tavanı → fazla kartlar saatlik TEK mesaj", async () => {
+test("9 / 16 Kasım POSTANE: bilgi birikir, kart ve kritik anında; düzenleme (✏️) kart sayılmaz; 16 Kasım (kural 45): günlük sınır YOK — 12 izinli kartın 12'si de anında", async () => {
   const o = ortam();
   const v = await import("./venom-bot.js");
   const { postaKarar, kategori, kritikMi } = await import("./venom-posta.js");
@@ -758,21 +758,15 @@ test("9 Kasım POSTANE: bilgi birikir, kart ve kritik anında; düzenleme (✏�
   await v.aktarilanGonder(o.env, { bot: "selin", metod: "sendMessage", metin: "📝 2999 taslak onayı", butonlar: [[{ text: "✅ Onayla", callback_data: "so:2999" }]], medya: [] });
   assert.equal(patronaGiden(o).length, 0);
   assert.match(JSON.parse(o.depo.get("venom:cozum"))[0].ozet, /2999 taslak onayı/);
-  // izinli kart (fabrika sipariş onayı) → anında (10'a kadar)
+  // izinli kart (fabrika sipariş onayı) → anında; 16 Kasım (kural 45): günlük mesaj sınırı yok, 11. ve 12. kart da bekletilmez
   for (let i = 0; i < 12; i++) await v.aktarilanGonder(o.env, { bot: "sami", metod: "sendMessage", metin: `🏭 ${3000 + i} fabrika sipariş onayı`, butonlar: [[{ text: "✅ Onayla", callback_data: `so:${3000 + i}` }]], medya: [] });
-  assert.equal(patronaGiden(o).length, 10);
-  assert.equal(JSON.parse(o.depo.get("venom:posta:kartSira")).length, 2);
-  // kritik → tavan dolu olsa da anında
+  assert.equal(patronaGiden(o).length, 12);
+  assert.equal((JSON.parse(o.depo.get("venom:posta:kartSira") || "[]")).length, 0);
+  // kritik → anında; müşteri şikâyeti de acil (kural 45)
   await v.aktarilanGonder(o.env, { bot: "sami", metod: "sendMessage", metin: "🔴 Köprü VOLONTE sustu", medya: [] });
-  assert.equal(patronaGiden(o).length, 11);
-  // saat başı: kalan 2 kart TEK mesajda, numaralı düğmelerle
-  const simdi = Math.floor(Date.now() / 1000), saatBasi = simdi - (simdi % 3600) + 60;
-  await venomCron(o.env, saatBasi);
-  const bir = patronaGiden(o).filter((x) => /Birleştirilmiş onaylar \(2\)/.test(x.govde.text));
-  if (((saatBasi + 3 * 3600) % 86400) / 3600 >= 8 && ((saatBasi + 3 * 3600) % 86400) / 3600 < 22) {
-    assert.equal(bir.length, 1);
-    assert.match(bir[0].govde.reply_markup.inline_keyboard[0][0].text, /^1· ✅ Onayla/);
-  }
+  assert.equal(patronaGiden(o).length, 13);
+  assert.ok(kritikMi("Müşteri şikâyeti geldi: 3627 dikiş açık"));
+  assert.equal(kritikMi("Bugün şikâyet yok"), false);
 });
 
 test("9 Kasım: 'bunu bana gönderme' kalıcı kural olur (son mesajın botu + türü); /kurallarım listeler, ❌ ile kaldırılır; kritik susturulmaz", async () => {

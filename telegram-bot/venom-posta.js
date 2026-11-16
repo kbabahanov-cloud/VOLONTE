@@ -2,7 +2,7 @@
 //  • ANINDA: (a) Patron onayı / para gereken KART, (b) KRİTİK hata (bot çöktü, köprü sustu, yanlış paylaşım çıktı, para sınırı),
 //    (c) Patron'un kendi sorusunun / isteğinin cevabı.
 //  • Gerisi (paylaşıldı, onaylandı, durduruldu, raporlar, uyarılar) BİRİKİR: KV "venom:posta:<gün>" → 09:40 ve 20:00 TEK özet.
-//  • Tavan: acil ve cevap hariç günde en fazla 10 mesaj; fazla kartlar saatte bir TEK mesajda birleşir.
+//  • Tavan YOK (16 Kasım, kural 45): izinli kart her zaman hemen gider; POSTA_TAVAN sadece "çok kart" kaydı içindir.
 //  • Kalıcı bildirim kuralları (Patron "bunu bana gönderme" der): KV "venom:bildirimKurallari"; kritik hiçbir zaman susturulmaz.
 //  • Her gönderim kayıtlı: KV "venom:posta:gonderilen" (son 200) — sayım ve "bunu" hangi mesajdı.
 export const POSTA_TAVAN = 10;
@@ -14,7 +14,7 @@ const kaydet = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { e
 const kucuk = (s) => String(s || "").toLocaleLowerCase("tr");
 
 // Kritik: sadece gerçekten acil olanlar (Patron listesi). "durdu" tek başına kritik DEĞİL (Venom kontrolü durdurması bilgi).
-export const KRITIK = /(çöktü|çalışmıyor \(3 hata|durduruldu \(.*hata|otomatik durduruldu|köprü[^\n]{0,40}(sustu|sinyal (yok|göndermedi)|kopuk)|yanlış paylaşım|kanalda sorun|yanlış marka|para sınırı|sınırı (doldu|aşıl)|bütçe[^\n]{0,20}(aşıl|doldu)|%80)/i;
+export const KRITIK = /(müşteri[^\n]{0,30}şik[aâ]yet|şik[aâ]yet(i)? (geldi|var|etti|yazdı)|çöktü|çalışmıyor \(3 hata|durduruldu \(.*hata|otomatik durduruldu|köprü[^\n]{0,40}(sustu|sinyal (yok|göndermedi)|kopuk)|yanlış paylaşım|kanalda sorun|yanlış marka|para sınırı|sınırı (doldu|aşıl)|bütçe[^\n]{0,20}(aşıl|doldu)|%80)/i;
 export const kritikMi = (metin) => KRITIK.test(String(metin || ""));
 // Bilgi türü (akşam/sabah özetinde sayı olarak)
 const KATEGORI = [
@@ -133,7 +133,8 @@ export async function postaKarar(env, ileti, simdi) {
     const son12 = (await oku(env, "venom:posta:gonderilen", [])).filter((x) => x.tur === "kart" && simdi - x.zaman < 12 * 3600);
     if (son12.some((x) => (x.kaynak === (ileti.kaynak || "venom") && x.ozet === ilk) || (mut && /mutabakat/i.test(x.ozet)))) return { karar: "biriktir", tur, kategori: "tekrar kart (birleştirildi)" };
     const n = (await bugunGonderilen(env, simdi)).filter((x) => x.tavan).length;
-    return { karar: n < POSTA_TAVAN ? "gonder" : "sira", tur, kategori: kat, izin };
+    // 16 Kasım (denetim, kural 45): günlük mesaj sınırı YOKTUR — izinli kart (para, fabrika, onay) her zaman hemen gider. Sayı sadece kayıt için tutulur.
+    return { karar: "gonder", tur, kategori: kat, izin, ...(n >= POSTA_TAVAN ? { cokKart: n + 1 } : {}) };
   }
   if (tur === "ozet") return { karar: "gonder", tur, kategori: "rapor", izin: "rapor" };
   return { karar: "biriktir", tur, kategori: kat };

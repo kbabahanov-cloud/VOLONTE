@@ -20,7 +20,7 @@ import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI, celalKoduMu } from "./stok.js";
 import { patronMu, silKuyrugu, geriKuyrugu, magazaStoklari, magazaStogu, STOK_KURALI } from "./sil.js";
 import { fuatSuzgec, onizlemeGonder as mutabakatOnizleme, patronEmriyleGonder } from "./mutabakat.js";
-import { acikRepete, engelMetni, rkGeldi, rkHemradan, dagilimYazi, dagilimAdet, denemeTemizle, modRepeteKapat } from "./repete-kart.js"; // 11 Kasım: repete kartı (kural 43: açık repete varken yeni repete yok)
+import { acikRepete, engelMetni, rkGeldi, rkHemradan, dagilimYazi, dagilimAdet, denemeTemizle, modRepeteKapat, fabrikaVenomKontrol } from "./repete-kart.js"; // 11 Kasım: repete kartı (kural 43: açık repete varken yeni repete yok)
 
 const SAAT_FARKI = 3 * 3600;
 const saat = (t) => ((t + SAAT_FARKI) % 86400) / 3600;
@@ -2520,6 +2520,17 @@ export async function kararDugmesi(env, cq, tg, simdi) {
     return hepsiniYaz(`⏳ ${rec.kod}: ${kim} "Beklesin" dedi. 7 gün sonra yeniden sorulacak.`);
   }
   if (rec.karar === "repete") {
+    // 16 Kasım (Patron + denetim, kural 87): eski "bitti" kartındaki "Repete ver" de fabrikaya gitmeden ÖNCE Venom'dan geçer (renk / beden kayıtta mı)
+    if (!rec.deneme && !rec.mod) {
+      const bd = String(rec.beden || "").toLowerCase();
+      const dg = (rec.renkler || []).filter((x) => x && x.renk).map((x) => ({ renk: x.renk, buyuk: bd.startsWith("k") ? 0 : Number(x.adet) || 0, kucuk: bd.startsWith("k") ? Number(x.adet) || 0 : 0 }));
+      const vk = dg.length ? await fabrikaVenomKontrol(env, { kod: rec.kod, tur: "repete", dagilim: dg, satis7: null }, simdi).catch(() => ({ ok: true })) : { ok: true };
+      if (!vk.ok) {
+        rec.karar = null; rec.kontrolSorun = vk.sorun; await siparisYaz(env, rec);
+        await cevapla("Kart gitmedi — Venom kontrolü", true);
+        return hepsiniYaz(`⚠️ ${rec.kod} repete fabrikaya GİTMEDİ (Venom kontrolü): ${vk.sorun.join("; ")}. Repeteyi Venom'a doğru renk ve bedenle yazın.`);
+      }
+    }
     rec.durum = "kapandi";
     await siparisYaz(env, rec);
     await cevapla("Repete isteği gidiyor");

@@ -17,6 +17,7 @@
 import { MOD_SATIR, modAcik, denemeKaydiMi } from "./deneme-modu.js";
 import { stokIste } from "./stokbot.js";
 import { uyumKaydi, uyumKontrol, uyumSatiri } from "./repete-uyum.js"; // 16 Kasım: kural 87
+import { fabrikaKontrolu, retMi, iptalMi, evetMi, modelKodlari, anladimSatiri } from "./fabrika-kontrol.js"; // 16 Kasım: Venom kontrolü, ret / onay
 import { siteVerisi } from "./depo-oku.js";
 import { fuatSuzgec } from "./mutabakat.js";
 export const ADET_SOR_ALT = 10, ADET_SOR_UST = 200; // bu aralığın dışındaki adet bir kez teyit edilir
@@ -138,6 +139,14 @@ async function kartGonder(env, tg, rec, kime, chat, metin, kl, simdi, foto = nul
   kime = yonelt(rec, kime); metin = yonelt(rec, metin);
   let r = foto ? await tg(env, "sendPhoto", { chat_id: chat, photo: foto, caption: metin, ...(kl ? { reply_markup: kl } : {}) }) : null;
   if (!(r && r.ok)) r = await tg(env, "sendMessage", { chat_id: chat, text: metin, ...(kl ? { reply_markup: kl } : {}) });
+  // 16 Kasım (denetim, kural 86): tek kapı kartı DURDURDUYSA kart gitmemiştir — eski kartın numarası bu kayda yazılmaz (yoksa kayıt
+  // "gitti" sanılıp takılı kalır, Hemra'nın yazıları ona bağlanırdı). Kayda sebep yazılır; çağıran "gönderilemedi" yoluna girer.
+  if (r && r.tekrar) {
+    rec.kapiEngel = { zaman: simdi, kime, kapi: r.kapi };
+    rec.hata = `tek kapı: aynı kart (${kime}) son 7 günde gitti ve ${r.kapi === "acik" ? "hâlâ cevap bekliyor" : "kapandı"} — yeni kart gönderilmedi`;
+    kanit(rec, kime, { ok: false, description: rec.hata }, metin, kl, simdi);
+    return null;
+  }
   kanit(rec, kime, r, metin, kl, simdi);
   return r && r.ok ? [String(chat), r.result.message_id, r.result.photo ? "foto" : "yazi"] : null;
 }
@@ -169,7 +178,7 @@ const gonderDugme = (rec) => (rec.kaynak === "patron" ? `✅ ${ureticiAd(rec) ==
 const hemraKlavye = (rec) => ({ inline_keyboard: [...(rec.dagilim ? [[{ text: gonderDugme(rec), callback_data: `rk:ho:${rec.id}` }]] : []), [{ text: "✏️ Dağılımı değiştir", callback_data: `rk:hd:${rec.id}` }], ...(rec.hemraKart ? [] : [[{ text: "❌ Gerek yok", callback_data: `rk:hx:${rec.id}` }]])] });
 // Fabrikaya stok / satış / fiyat bilgisi GİTMEZ: sadece kod + dağılım
 export function fuatMetni(rec) {
-  return [rec.uretici === "celal" ? (rec.deneme ? DENEME.trim() : null) : `${D(rec)}${_rk.magazaAdi(rec.magaza)}`, `🔁 REPETE · ${rec.kod} · ${dagilimYazi(rec.dagilim)}`, `Toplam ${rec.adet} adet. Dağılım sabittir, değiştirilmez.`].filter(Boolean).join("\n"); // Celal'e mağaza adı gitmez
+  return [rec.uretici === "celal" ? (rec.mod ? MOD_SATIR.trim() : rec.deneme ? DENEME.trim() : null) : `${D(rec)}${_rk.magazaAdi(rec.magaza)}`, `🔁 REPETE · ${rec.kod} · ${dagilimYazi(rec.dagilim)}`, `Toplam ${rec.adet} adet. Dağılım sabittir, değiştirilmez.`].filter(Boolean).join("\n"); // Celal'e mağaza adı gitmez
 }
 const fuatKlavye = (rec) => ({ inline_keyboard: [[{ text: "✅ 4-8 gün", callback_data: `rk:f8:${rec.id}` }, { text: "✅ 10-15 gün", callback_data: `rk:f15:${rec.id}` }], [{ text: "⏳ 2 gün sonra dön", callback_data: `rk:fd:${rec.id}` }], [{ text: "❌ Yapamam", callback_data: `rk:fy:${rec.id}` }]] });
 const SURE = { f8: { gun: 8, etiket: "4-8 gün" }, f15: { gun: 15, etiket: "10-15 gün" } }; // teslim = aralığın son günü
@@ -191,12 +200,15 @@ export async function oneriAc(env, tg, g, simdi) {
     satis7 = Number((donem || {})[kod]) || 0;
   }
   if (g.samiOnerisi && !(Number(satis7) > 0)) { g = { ...g, dagilim: null }; adet = 0; } // 12 Kasım (Patron): satış yoksa Sami dağılım ÖNERMEZ (Hemra isterse kendisi yazar)
-  const uretici = g.uretici || (g.test ? "fuat" : ((await stokIste(env, "/tedarikci", { kodlar: [kod] }).catch(() => ({})))[kod] || {}).tedarikci === "CELAL" ? "celal" : "fuat");
+  // 16 Kasım (denetim, kural 31): tedarikçi okunamazsa "Fuat" VARSAYILMAZ — kart açılmaz, sebep yazılır
+  let ted = g.uretici || g.test ? null : await stokIste(env, "/tedarikci", { kodlar: [kod] }).catch(() => null);
+  if (!g.uretici && !g.test && !(ted && typeof ted === "object")) return { hata: `${kod}: üretici (Fuat mı Celal mi) okunamadı — repete kartı açılmadı, birazdan yeniden denenir.` };
+  const uretici = g.uretici || (g.test ? "fuat" : (ted[kod] || {}).tedarikci === "CELAL" ? "celal" : "fuat");
   const rec = { id: yeniId(kod, deneme, simdi), kod, uretici, magaza: g.magaza || "VOLONTE", deneme, ...(mod ? { mod: true } : {}), test: Boolean(g.test), ikinciDene: Boolean(g.ikinciDene), kaynak: g.kaynak || null, donSn: g.donSn || null,
     dagilim: g.dagilim || null, adet, kalan: Number(kalan) || 0, satis7: Number(satis7) || 0, durum: "hemra", zaman: simdi, mesajlar: {}, kanit: [] };
   rec.bitisGun = rec.satis7 > 0 ? Math.max(1, Math.ceil(rec.kalan / (rec.satis7 / 7))) : null;
   rec.mesajlar.hemra = await kartGonder(env, tg, rec, "Hemra", await _rk.koordinatorId(env, simdi), hemraMetni(rec), hemraKlavye(rec), simdi, await fotoAdresi(env, rec));
-  if (!rec.mesajlar.hemra) { rec.durum = "iptal"; rec.kapandi = simdi; await rkYaz(env, rec); return { hata: "Hemra'ya kart gönderilemedi.", rec }; }
+  if (!rec.mesajlar.hemra) { rec.durum = "iptal"; rec.kapandi = simdi; await rkYaz(env, rec); return { hata: `Hemra'ya kart gönderilemedi${rec.kapiEngel ? ` (${rec.hata})` : ""}.`, rec }; }
   await rkYaz(env, rec);
   return { rec };
 }
@@ -216,13 +228,27 @@ export async function rkHemradan(env, tg, sip, kart, kim, simdi) {
 export async function rkDugme(env, cq, tg, simdi) {
   const cevapla = (text, uyari = false) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: String(text).slice(0, 190), show_alert: uyari });
   const p = String(cq.data).split(":"), islem = p[1], id = p.slice(2).join(":");
+  if (islem === "yv" || islem === "yh") { // 16 Kasım: yazıyla yeni repete isteği — "Şunu anladım … Doğru mu?" cevabı (id = isteyen kişi)
+    if (String(cq.from.id) !== String(id)) return cevapla("Bu soru size ait değil.");
+    const soru = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
+    if (islem === "yh") { const y = await env.KAYIT.get(`rkYeni:${id}`, "json").catch(() => null); await env.KAYIT.delete(`rkYeni:${id}`).catch(() => null); await cevapla("Geri alındı"); return tg(env, "editMessageText", { ...soru, text: `↩️ ${y ? `${y.kod} için yeni repete isteği` : "İstek"} geri alındı. Hiçbir şey gönderilmedi.` }); }
+    await cevapla("Tamam");
+    await tg(env, "editMessageReplyMarkup", { ...soru, reply_markup: { inline_keyboard: [] } }).catch(() => null);
+    return yeniRepeteOnayla(env, tg, id, _rk.kisiAd(cq.from), cq.message.chat.id, simdi);
+  }
   const rec = await rkOku(env, id);
   if (!rec) return cevapla("Bu kart artık geçerli değil.");
   const kim = _rk.kisiAd(cq.from);
   const patronMu = muratMi(env, cq.from.id);
-  if (["ho", "hx", "hd", "ad", "az"].includes(islem)) {
+  if (["ho", "hx", "hd", "ad", "az", "ev", "hy"].includes(islem)) {
     const yetkili = [sorumlu(env), ilk(env.BR_SORUMLU), ilk(env.HEMRA_ID)].filter(Boolean).includes(String(cq.from.id)) || patronMu;
     if (!yetkili) return cevapla("Bu karar Hemra'da.");
+    if (islem === "ev" || islem === "hy") { // 16 Kasım: "Şunu anladım … Doğru mu?" → ✅ Evet / ❌ Hayır
+      if (rec.durum !== "hemra" || !rec.onayBekleyen) return cevapla("Bu soru artık geçerli değil.");
+      if (islem === "hy") { await cevapla("Geri alındı"); return tg(env, "sendMessage", { chat_id: cq.message.chat.id, text: await geriAl(env, tg, rec, String(cq.from.id), simdi) }); }
+      await cevapla("Kaydedildi");
+      return dagilimOnayla(env, tg, rec, cq.from, cq.message.chat.id, simdi);
+    }
     if (islem === "ad" || islem === "az") { // 13 Kasım: "N adet yazdınız. Doğru mu?" → ✅ Doğru / ✏️ Düzelt
       const soru = { chat_id: cq.message.chat.id, message_id: cq.message.message_id };
       if (rec.durum !== "hemra" || !rec.adetBekleyen) return cevapla("Bu soru artık geçerli değil.");
@@ -257,6 +283,14 @@ export async function rkDugme(env, cq, tg, simdi) {
       rec.patron = { karar: "onay", kim: "Patron", dugme: "repeteyi Patron başlattı", zaman: rec.zaman };
       const ura = ureticiAd(rec) === "Celal" ? "Celal'e" : "Fuat'a";
       if (!(await fuataGonder(env, tg, rec, simdi))) {
+        if (rec.kontrolSorun) { await cevapla("Kart gitmedi — kontrol", true); return kontrolDurdu(env, tg, rec, simdi, { patronaHemen: true }); }
+        if (rec.kapiEngel) { // 16 Kasım (kural 86): tek kapı durdurdu → "beklemede"; Patron "tekrar aç" derse izinli gider
+          Object.assign(rec, { durum: "beklemede", beklemeZaman: simdi });
+          await cevapla("Kart gitmedi — aynı kart yakın zamanda gitmiş", true);
+          await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n⚠️ Repete kartı ${ura} gitmedi — ${rec.hata}. Patron'a soruldu.`, null, simdi);
+          await kuyruk(env, "rkSonuc", { id: `${rec.id}:kapi`, rid: rec.id, metin: `${DK(rec)}⚠️ ${rec.kod} repete kartı ${ura} gitmedi — ${rec.hata}. Yine de göndermek isterseniz: "${rec.kod} repete tekrar aç".` });
+          return rkYaz(env, rec);
+        }
         Object.assign(rec, { durum: "iptal", kapandi: simdi });
         await cevapla("Gönderilemedi", true);
         await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n⚠️ Repete kartı ${ura} gönderilemedi (${rec.hata || "?"}). Repete açılmadı.`, null, simdi);
@@ -317,13 +351,34 @@ const uyumKaynaklari = (env, simdi) => ({
   site: () => siteVerisi(env),
   kart: (kod) => env.KAYIT.get(`pelinboy:${kod}`, "json"),
 });
+// Venom'a sorar (iç bağlantı); Venom'a ulaşılamazsa AYNI kontrol burada yapılır (kart yine kontrolsüz gitmez)
+async function venomKontrol(env, g, simdi) {
+  try { if (env.VENOM && typeof env.VENOM.fabrikaKontrol === "function") { const r = await env.VENOM.fabrikaKontrol(g); if (r && typeof r.ok === "boolean") return { ...r, kim: "Venom" }; } } catch { /* aşağıda */ }
+  const r = await fabrikaKontrolu(g, uyumKaynaklari(env, simdi));
+  return { ...r, kim: "Sami (Venom'a ulaşılamadı, aynı kontrol)" };
+}
+// Venom kontrolü kartı durdurdu: repete Hemra'da açık kalır, dağılım silinir, Hemra'ya sorulur (çözülmezse 2 saat sonra Patron'a tek satır)
+async function kontrolDurdu(env, tg, rec, simdi, { patronaHemen = false } = {}) {
+  const sorun = rec.kontrolSorun || [rec.hata || "?"];
+  const hemra = await _rk.koordinatorId(env, simdi);
+  Object.assign(rec, { durum: "hemra", dagilim: null, adet: 0, onayBekleyen: null, patron: null, sorunZaman: simdi, sorunMetin: sorun.join("; "), sorunPatron: patronaHemen ? simdi : null, kontrolSorun: null });
+  const satir = `${D(rec)}⚠️ ${rec.kod} repete kartı fabrikaya GİTMEDİ (Venom kontrolü): ${sorun.join("; ")}. Doğru dağılımı yazın ya da "iptal" yazın.`;
+  await kartGonder(env, tg, rec, "Hemra", hemra, satir, null, simdi);
+  if (hemra) await env.KAYIT.put(`rkDagilim:${hemra}`, JSON.stringify({ id: rec.id }), { expirationTtl: 2 * 86400 }).catch(() => null);
+  if (rec.mesajlar.hemra) await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, hemraTaban(rec), hemraKlavye(rec), simdi);
+  if (patronaHemen) await kuyruk(env, "rkSonuc", { id: `${rec.id}:k${simdi}`, rid: rec.id, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete Fuat'a gitmedi — ${sorun.join("; ")}. Hemra'ya soruldu.`) });
+  return rkYaz(env, rec);
+}
 async function fuataGonder(env, tg, rec, simdi, ne = "Fuat") {
   // 16 Kasım (Patron, kural 87): İLK gönderimden önce dağılımdaki renk / beden kayıtla karşılaştırılır; uyuşmuyorsa kart GİTMEZ
   // (rec.hata → çağıran Hemra'nın kartına ve Patron'a "renk/beden uyuşmuyor" satırını yazar). Deneme / test kaydı kontrole girmez.
-  if (!(rec.mesajlar && rec.mesajlar.fuat) && !denemeKaydiMi(rec) && !rec.test && Array.isArray(rec.dagilim)) {
-    const u = uyumKontrol(rec.dagilim, await uyumKaydi(rec.kod, uyumKaynaklari(env, simdi)).catch(() => ({ renkler: [], bedenler: null })));
-    rec.uyum = { zaman: simdi, ok: u.ok, sorun: u.sorun, renkKaydi: u.renkKaydi, bedenKaydi: u.bedenKaydi };
-    if (!u.ok) { rec.hata = uyumSatiri(u); return false; }
+  // 16 Kasım (Patron): fabrikaya giden HER kart gitmeden önce Venom'dan geçer — (a) yazılan mesajdaki kod, (b) satış 0 ise onay,
+  // (c) renk / beden kayıtta var mı, (d) "hayır / yanlış / iptal" yazıldı mı. Uyuşmazlıkta kart GİTMEZ (rec.kontrolSorun → çağıran kişiye sorar).
+  if (!(rec.mesajlar && rec.mesajlar.fuat) && !denemeKaydiMi(rec) && !rec.test) {
+    const k = await venomKontrol(env, { kod: rec.kod, tur: "repete", dagilim: Array.isArray(rec.dagilim) ? rec.dagilim : null, satis7: rec.satis7 ?? null,
+      satisOnay: Boolean(rec.satisOnay || (rec.patron && rec.patron.karar === "onay")), kaynakMetin: rec.dagilimMetin || null, kaynakZaman: rec.dagilimZaman || 0, hayirZaman: rec.hayirZaman || null, kim: rec.dagilimKim || "Hemra" }, simdi);
+    rec.kontrol = { zaman: simdi, ok: k.ok, sorun: k.sorun, kim: k.kim };
+    if (!k.ok) { rec.hata = k.sorun.join("; "); rec.kontrolSorun = k.sorun; return false; }
   }
   const metin = fuatMetni(rec), fuat = await ureticiId(env, rec);
   rec.hata = !fuat ? `${ureticiAd(rec)}'${rec.uretici === "celal" ? "in" : "ın"} kimliği kayıtlı değil` : fuatSuzgec(metin) ? "güvenlik süzgeci durdurdu" : null;
@@ -350,6 +405,12 @@ async function patronKarari(env, tg, k, simdi) {
     return rkYaz(env, rec);
   }
   if (!(await fuataGonder(env, tg, rec, simdi))) {
+    if (rec.kontrolSorun) return kontrolDurdu(env, tg, rec, simdi, { patronaHemen: true });
+    if (rec.kapiEngel) { // 16 Kasım (kural 86): tek kapı durdurdu → kayıt "beklemede" kalır; Patron "KOD repete tekrar aç" derse izinli yeniden gider
+      Object.assign(rec, { durum: "beklemede", beklemeZaman: simdi });
+      await kuyruk(env, "rkSonuc", { id: `${rec.id}:kapi`, rid: rec.id, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gitmedi — ${rec.hata}. Yine de göndermek isterseniz: "${rec.kod} repete tekrar aç".`) });
+      return rkYaz(env, rec);
+    }
     Object.assign(rec, { durum: "iptal", kapandi: simdi });
     await kuyruk(env, "rkSonuc", { id: `${rec.id}:h`, rid: rec.id, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete kartı Fuat'a gönderilemedi (${rec.hata || "Fuat Sami'ye /start yazmamış olabilir"}). Repete açılmadı.`) });
     return rkYaz(env, rec);
@@ -399,7 +460,9 @@ async function fuatYapamam(env, tg, rec, { kim, dugme = null, yazi = null }, sim
 // ---------- 5) Fuat'ın yazısı: "3419 onaylıyorum 10 gün" / "3419 yapamam" ----------
 export function fuatYaziCoz(metin) {
   const t = String(metin || "").toLocaleLowerCase("tr").trim();
-  const onay = /(^|[^\p{L}])onayl/u.test(t), yapamam = /(^|[^\p{L}])yapama/u.test(t);
+  const yapamam = /(^|[^\p{L}])yapama/u.test(t);
+  // 16 Kasım (denetim, kural 36): "onaylıyorum" ya da gün sayısıyla birlikte "tamam / olur / yaparım" ("3419 tamam 10 gün") onaydır
+  const onay = /(^|[^\p{L}])onayl/u.test(t) || (/(^|[^\p{L}])(tamam|olur|yapar[ıi]m|yapaca[ğg][ıi]m)(?![\p{L}])/u.test(t) && /\d{1,2}\s*g[üu]n/.test(t));
   if (!onay && !yapamam) return null;
   const gm = t.match(/(\d{1,2})\s*g[üu]n/);
   const kalan = gm ? t.replace(gm[0], " ") : t;
@@ -449,17 +512,61 @@ export async function rkHemraYazi(env, m, tg, simdi) {
   const yaz = (text) => tg(env, "sendMessage", { chat_id: m.chat.id, text });
   const ta = metin.match(new RegExp(`^\\s*${KOD_KALIP}\\s+repete(?:yi|sini)?\\s+tekrar\\s+a[çc]`, "i"));
   if (ta) { const r = await tekrarAc(env, tg, ta[1], _rk.kisiAd(m.from), simdi); await yaz(r.metin); return true; }
+  const kisi = String(m.from.id);
+  const iptalYetkili = [sorumlu(env), ilk(env.HEMRA_ID)].filter(Boolean).includes(kisi) || muratMi(env, m.from.id); // 16 Kasım (Patron): iptal sadece Hemra ve Patron
+  const acik = await acikKayitlar(env);
+  // 16 Kasım (Patron): "Şunu anladım … Doğru mu?" bekleyen dağılım — yazıyla "evet" de onaydır
+  const onayda = acik.filter((x) => x.onayBekleyen && x.onayBekleyen.kisi === kisi).sort((a, b) => b.onayBekleyen.zaman - a.onayBekleyen.zaman)[0];
+  if (onayda && evetMi(metin)) { await dagilimOnayla(env, tg, onayda, m.from, m.chat.id, simdi); return true; }
+  const yeniBek = await env.KAYIT.get(`rkYeni:${kisi}`, "json").catch(() => null);
+  if (yeniBek && evetMi(metin)) { await yeniRepeteOnayla(env, tg, kisi, _rk.kisiAd(m.from), m.chat.id, simdi); return true; }
+  // 16 Kasım (Patron): "hayır / yanlış / iptal" → son işlem GERİ ALINIR, kart gönderilmez ("iptal" + yetki → açık repete iptal)
+  if (retMi(metin)) {
+    if (yeniBek) { await env.KAYIT.delete(`rkYeni:${kisi}`).catch(() => null); await yaz(`↩️ ${yeniBek.kod} için yeni repete isteği geri alındı. Hiçbir şey gönderilmedi.`); return true; }
+    const kodlar = modelKodlari(metin);
+    const son = (x) => Math.max(Number(x.onayBekleyen && x.onayBekleyen.zaman) || 0, Number(x.dagilimZaman) || 0, x.durum === "hemra" ? Number(x.zaman) || 0 : 0);
+    const adaylar = acik.filter((x) => ["hemra", "patron"].includes(x.durum) && (!kodlar.length || kodlar.includes(String(x.kod)))
+      && ((x.onayBekleyen && x.onayBekleyen.kisi === kisi) || (x.dagilimKisi && x.dagilimKisi === kisi) || (x.mesajlar && x.mesajlar.hemra && String(x.mesajlar.hemra[0]) === String(m.chat.id)))).sort((a, b) => son(b) - son(a));
+    const hedef = adaylar[0];
+    if (iptalMi(metin) && kodlar.length) { // "3627 iptal" — kod yazıldıysa o modelin açık repetesi
+      const rx = acik.find((x) => kodlar.includes(String(x.kod)) && ACIK.includes(x.durum) && !x.deneme);
+      if (rx) { await yaz(await repeteIptal(env, tg, rx, _rk.kisiAd(m.from), iptalYetkili, simdi)); return true; }
+    }
+    if (!hedef) return false; // repete işi yok → "hayır" başka işin cevabıdır (eksik listesi, sohbet); burada yutulmaz
+    if (iptalMi(metin)) { await yaz(await repeteIptal(env, tg, hedef, _rk.kisiAd(m.from), iptalYetkili, simdi)); return true; }
+    await yaz(await geriAl(env, tg, hedef, kisi, simdi));
+    return true;
+  }
   // 12 Kasım (Patron): Sami dağılım BEKLERKEN o kişinin yazdığı her mesaj o karta gider (düğmeye basmadan yazsa da; başka işe / sohbet beynine gitmez).
   // Bekleme: "✏️ Dağılımı değiştir"e basıldı YA DA bu kişide dağılımı henüz yazılmamış açık repete kartı var.
   const st = await env.KAYIT.get(`rkDagilim:${m.from.id}`, "json").catch(() => null);
   let rec = st ? await rkOku(env, st.id) : null;
   if (rec && rec.durum !== "hemra") { rec = null; await env.KAYIT.delete(`rkDagilim:${m.from.id}`).catch(() => null); }
+  const kodlar = modelKodlari(metin);
   if (!rec) {
-    const bekleyen = (await acikKayitlar(env)).filter((x) => x.durum === "hemra" && !x.dagilim && x.mesajlar && x.mesajlar.hemra && String(x.mesajlar.hemra[0]) === String(m.chat.id));
-    if (!bekleyen.length) return false;
-    const yazilan = bekleyen.filter((x) => new RegExp(`(?<![\\p{L}\\d])${String(x.kod).replace(/[^\p{L}\d-]/gu, "")}(?![\\d])`, "iu").test(metin));
+    const bekleyen = acik.filter((x) => x.durum === "hemra" && !x.dagilim && x.mesajlar && x.mesajlar.hemra && String(x.mesajlar.hemra[0]) === String(m.chat.id));
+    const yazilan = bekleyen.filter((x) => kodlar.includes(String(x.kod)) || new RegExp(`(?<![\\p{L}\\d])${String(x.kod).replace(/[^\p{L}\d-]/gu, "")}(?![\\d])`, "iu").test(metin));
+    if (!bekleyen.length || (kodlar.length && !yazilan.length)) {
+      // 16 Kasım (Patron): "3627 repete siyah büyük 40" — açık kartı olmayan modele YENİ repete isteği → "Şunu anladım … Doğru mu?" → Patron'un onayı
+      const yeni = metin.match(/^\s*(\d{3,6})\s+repete(?:si|yi|sini)?\b(.*)$/iu);
+      if (yeni) { await yeniRepeteIstek(env, tg, yeni[1], yeni[2], m, simdi); return true; }
+      if (!bekleyen.length) return false;
+    }
     if (bekleyen.length > 1 && yazilan.length !== 1) { await yaz(`Hangi model için: ${bekleyen.map((x) => x.kod).join(", ")}?`); return true; }
     rec = yazilan[0] || bekleyen[0];
+  }
+  // 16 Kasım (Patron): dağılım beklenirken gelen mesajda FARKLI model kodu varsa AÇIK KARTA BAĞLANMAZ (3583 / 3627 olayı)
+  const baska = kodlar.filter((k) => k !== String(rec.kod));
+  if (baska.length && !kodlar.includes(String(rec.kod))) {
+    const r2 = acik.find((x) => x.durum === "hemra" && !x.dagilim && String(x.kod) === baska[0] && x.mesajlar && x.mesajlar.hemra && String(x.mesajlar.hemra[0]) === String(m.chat.id));
+    if (r2) rec = r2; // o modelin kendi açık kartı varsa ona bağlanır
+    else {
+      if (/repete/iu.test(metin)) { await yeniRepeteIstek(env, tg, baska[0], metin.replace(new RegExp(`^.*?${baska[0]}\\s*(repete(?:si|yi|sini)?)?`, "iu"), ""), m, simdi); return true; }
+      // dağılıma benzemeyen yazı ("3394 tamam" gibi) başka işin cevabıdır (eksik listesi) → burada YUTULMAZ, sıradaki işe gider
+      if (!dagilimAnaliz(metin, baska[0]).d) return false;
+      await yaz(`${D(rec)}Bu mesajda ${baska[0]} yazıyor ama dağılımı beklenen kart ${rec.kod} için; bu mesaj ${rec.kod}'e yazılmadı. ${rec.kod}'ün dağılımını yazın; ${baska[0]} için yeni repete istiyorsanız "${baska[0]} repete …" diye yazın.`);
+      return true;
+    }
   }
   const a = dagilimAnaliz(metin, rec.kod);
   if (!a.d) {
@@ -467,19 +574,139 @@ export async function rkHemraYazi(env, m, tg, simdi) {
     await yaz(`${D(rec)}${rec.kod}: ${eksikCumlesi(a.eksik)}`); // neyin eksik olduğu, tek cümle (örnek kalıp yok)
     return true;
   }
-  const d = a.d;
-  const n = dagilimAdet(d);
-  // 13 Kasım (Patron, kural 29): alt sınır yok; 10'dan az ya da 200'den fazlaysa BİR kez teyit ("N adet yazdınız. Doğru mu?")
-  if ((n < ADET_SOR_ALT || n > ADET_SOR_UST) && !rec.adetSoruldu) {
-    Object.assign(rec, { adetSoruldu: simdi, adetBekleyen: d });
-    await env.KAYIT.put(`rkDagilim:${m.from.id}`, JSON.stringify({ id: rec.id }), { expirationTtl: 7200 }).catch(() => null);
-    const r = await tg(env, "sendMessage", { chat_id: m.chat.id, text: `${D(rec)}❓ ${rec.kod} için ${n} adet yazdınız. Doğru mu?`, reply_markup: { inline_keyboard: [[{ text: "✅ Doğru", callback_data: `rk:ad:${rec.id}` }, { text: "✏️ Düzelt", callback_data: `rk:az:${rec.id}` }]] } });
-    kanit(rec, "Hemra", r, "", null, simdi);
-    await rkYaz(env, rec);
-    return true;
-  }
-  await dagilimiYaz(env, tg, rec, d, m.from.id, m.chat.id, simdi);
+  await dagilimSor(env, tg, rec, a.d, metin, m.from, m.chat.id, simdi);
   return true;
+}
+// 16 Kasım (Patron): fabrikaya gidecek dağılım ÖNCE kişiye tek satır sorulur: "Şunu anladım: 3627 · siyah · büyük · 40 adet. Doğru mu?"
+// "Evet" gelmeden karta yazılmaz, kart gitmez. Renk / beden kayıtta yoksa (kural 87) hiç sorulmadan geri çevrilir. Satış 0 ve
+// 10'dan az / 200'den fazla adet (kural 29) satırın altında uyarı olarak yazılır; "evet" bu uyarılara da onaydır.
+async function dagilimSor(env, tg, rec, d, metin, kimden, sohbet, simdi) {
+  const u = !denemeKaydiMi(rec) && !rec.test ? uyumKontrol(d, await uyumKaydi(rec.kod, uyumKaynaklari(env, simdi)).catch(() => ({ renkler: [], bedenler: null }))) : { ok: true, sorun: [] };
+  if (!u.ok) {
+    await env.KAYIT.put(`rkDagilim:${kimden.id}`, JSON.stringify({ id: rec.id }), { expirationTtl: 7200 }).catch(() => null);
+    await tg(env, "sendMessage", { chat_id: sohbet, text: `${D(rec)}⚠️ ${rec.kod}: renk/beden uyuşmuyor — ${u.sorun.join("; ")}. Kaydedilmedi; doğru dağılımı yazın.` });
+    return null;
+  }
+  const n = dagilimAdet(d), uyari = [];
+  if (!(Number(rec.satis7) > 0) && rec.satis7 != null) uyari.push(`${rec.kod} son 7 günde satmadı — yine de repete?`);
+  if (n < ADET_SOR_ALT || n > ADET_SOR_UST) uyari.push(`${n} adet yazdınız (${n < ADET_SOR_ALT ? `${ADET_SOR_ALT}'dan az` : `${ADET_SOR_UST}'den fazla`}) — doğru mu?`);
+  rec.onayBekleyen = { d, metin: String(metin).slice(0, 300), zaman: simdi, kisi: String(kimden.id), uyari: uyari.length > 0 };
+  await env.KAYIT.put(`rkDagilim:${kimden.id}`, JSON.stringify({ id: rec.id }), { expirationTtl: 7200 }).catch(() => null);
+  const r = await tg(env, "sendMessage", { chat_id: sohbet, text: `${D(rec)}${anladimSatiri(rec.kod, d, uyari)}`, reply_markup: { inline_keyboard: [[{ text: "✅ Evet", callback_data: `rk:ev:${rec.id}` }, { text: "❌ Hayır", callback_data: `rk:hy:${rec.id}` }]] } });
+  kanit(rec, "Hemra", r, "", null, simdi);
+  rec.onayBekleyen.mesaj = r && r.ok && r.result ? [String(sohbet), r.result.message_id] : null;
+  await rkYaz(env, rec);
+  return r;
+}
+async function dagilimOnayla(env, tg, rec, kimden, sohbet, simdi) {
+  const o = rec.onayBekleyen;
+  if (!o) return null;
+  Object.assign(rec, { dagilimMetin: o.metin, dagilimZaman: simdi, dagilimKisi: String(kimden.id), dagilimKim: _rk.kisiAd(kimden), satisOnay: Boolean(rec.satisOnay || o.uyari), onayBekleyen: null });
+  if (o.mesaj) await tg(env, "editMessageText", { chat_id: o.mesaj[0], message_id: o.mesaj[1], text: `${D(rec)}✅ ${anladimSatiri(rec.kod, o.d).replace(/ Doğru mu\?$/, "")} — ${_rk.kisiAd(kimden)} "evet" dedi.` }).catch(() => null);
+  return dagilimiYaz(env, tg, rec, o.d, kimden.id, sohbet, simdi);
+}
+// "Hayır / yanlış": son işlem geri alınır — onay bekleyen dağılım silinir; karta yazılmış (henüz gitmemiş) dağılım boşaltılır
+async function geriAl(env, tg, rec, kisi, simdi) {
+  rec.hayirZaman = simdi;
+  if (rec.onayBekleyen) {
+    const o = rec.onayBekleyen; rec.onayBekleyen = null;
+    if (o.mesaj) await tg(env, "editMessageText", { chat_id: o.mesaj[0], message_id: o.mesaj[1], text: `${D(rec)}↩️ ${rec.kod}: "${dagilimYazi(o.d)}" geri alındı.` }).catch(() => null);
+    await env.KAYIT.put(`rkDagilim:${kisi}`, JSON.stringify({ id: rec.id }), { expirationTtl: 7200 }).catch(() => null);
+    await rkYaz(env, rec);
+    return `${D(rec)}↩️ ${rec.kod}: anladığım dağılım (${dagilimYazi(o.d)}) geri alındı, kayda geçmedi, kart gönderilmedi. Doğru dağılımı yazın.`;
+  }
+  if (rec.durum === "hemra" && rec.dagilim) {
+    const eski = dagilimYazi(rec.dagilim);
+    Object.assign(rec, { dagilim: null, adet: 0, dagilimMetin: null });
+    await env.KAYIT.put(`rkDagilim:${kisi}`, JSON.stringify({ id: rec.id }), { expirationTtl: 7200 }).catch(() => null);
+    if (rec.mesajlar.hemra) await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, hemraTaban(rec), hemraKlavye(rec), simdi);
+    await rkYaz(env, rec);
+    return `${D(rec)}↩️ ${rec.kod}: dağılım (${eski}) geri alındı, kart gönderilmedi. Doğru dağılımı yazın ya da "iptal" yazın.`;
+  }
+  if (rec.durum === "patron") { await rkYaz(env, rec); return `${D(rec)}${rec.kod} repetesi Patron'un onayında; geri almak için "iptal" yazın.`; }
+  await rkYaz(env, rec);
+  return `${D(rec)}${rec.kod}: geri alınacak bir şey yok.`;
+}
+// 16 Kasım (Patron): açık repete İPTALİ — sadece Hemra ve Patron. Hemra / Patron onayındaki repete hemen kapanır; fabrikaya gitmiş
+// repete için fabrikaya kendiliğinden hiçbir şey gitmez, Patron'a tek satır sorulur.
+export async function repeteIptal(env, tg, rec, kim, yetkili, simdi) {
+  if (!yetkili) return `${D(rec)}Repete iptalini sadece Hemra ve Patron yapabilir.`;
+  if (["hemra", "patron", "beklemede"].includes(rec.durum)) { // beklemede: Fuat "yapamam" dedi ya da kart tek kapıda durdu — fabrikada iş yok
+    const once = rec.durum;
+    Object.assign(rec, { durum: "iptal", kapandi: simdi, iptal: { kim, zaman: simdi }, onayBekleyen: null });
+    if (rec.mesajlar.hemra) await kartDuzenle(env, tg, rec, "Hemra", rec.mesajlar.hemra, `${hemraTaban(rec)}\n\n❌ ${kim} iptal etti. Repete açılmadı.`, null, simdi);
+    if (once === "patron") await kuyruk(env, "rkSonuc", { id: `${rec.id}:i${simdi}`, rid: rec.id, metin: `${DK(rec)}↩️ ${rec.kod} repete isteği ${kim} tarafından iptal edildi; onay kartı geçersiz.` });
+    await rkYaz(env, rec);
+    return `${D(rec)}❌ ${rec.kod} repetesi iptal edildi (${kim}). Fabrikaya hiçbir şey gitmedi.`;
+  }
+  if (["fuat", "acik"].includes(rec.durum)) {
+    await kuyruk(env, "rkSonuc", { id: `${rec.id}:ii${simdi}`, rid: rec.id, metin: yonelt(rec, `${DK(rec)}⚠️ ${kim} ${rec.kod} repetesini iptal etmek istiyor; kart Fuat'ta (${durumYazi(rec)}). Fabrikaya iptal gitsin mi? (Sami kendiliğinden göndermedi)`) });
+    return yonelt(rec, `${D(rec)}${rec.kod} repete kartı Fuat'ta; fabrikaya kendiliğinden iptal gönderilmez. Patron'a sordum.`);
+  }
+  return `${D(rec)}${rec.kod} repetesi zaten kapalı (${rec.durum}).`;
+}
+// 16 Kasım (Patron): Sami'nin beyni açık repeteleri GÖRÜR ve (sadece Hemra / Patron isterse) İPTAL eder
+export async function acikRepeteListesi(env) {
+  return (await acikKayitlar(env)).filter((r) => IZLENEN.includes(r.durum) && !r.test).map((r) => ({ kod: r.kod, marka: _rk.magazaAdi(r.magaza), uretici: ureticiAd(r), durum: durumYazi(r),
+    dagilim: Array.isArray(r.dagilim) && r.dagilim.length ? dagilimYazi(r.dagilim) : "yazılmadı", adet: r.adet || 0, deneme: Boolean(r.deneme || r.mod), teslim: r.teslim ? gunGoster(r.teslim) : null }));
+}
+export async function repeteIptalKod(env, tg, kod, kim, yetkili, simdi) {
+  const l = (await acikKayitlar(env)).filter((r) => ayniKod(r.kod, kod) && IZLENEN.includes(r.durum) && !r.test);
+  if (!l.length) return `${String(kod).toLocaleUpperCase("tr")} için açık repete yok.`;
+  const out = [];
+  for (const r of l) out.push(await repeteIptal(env, tg, r, kim, yetkili, simdi));
+  return out.join("\n");
+}
+// 16 Kasım (Patron): açık kartı olmayan modele yazıyla repete isteği ("3627 repete siyah büyük 40") → Şunu anladım … Doğru mu? → Patron'un onayı
+async function yeniRepeteIstek(env, tg, kod, kalan, m, simdi) {
+  const yaz = (text, kl = null) => tg(env, "sendMessage", { chat_id: m.chat.id, text, ...(kl ? { reply_markup: kl } : {}) });
+  const engel = await acikRepete(env, kod, { deneme: false, mod: false });
+  if (engel) return yaz(engelMetni(engel));
+  const bilgi = await stokIste(env, "/bilgi", { kod }).catch(() => null);
+  if (!bilgi || !(bilgi.satirlar || []).length) return yaz(`${kod} Vegawin'de yok; repete açılmadı.`);
+  const a = dagilimAnaliz(kalan, kod);
+  if (!a.d) return yaz(`${kod} repete: ${eksikCumlesi(a.eksik)} Örnek: "${kod} repete siyah büyük 40".`);
+  const u = uyumKontrol(a.d, await uyumKaydi(kod, uyumKaynaklari(env, simdi)).catch(() => ({ renkler: [], bedenler: null })));
+  if (!u.ok) return yaz(`⚠️ ${kod}: renk/beden uyuşmuyor — ${u.sorun.join("; ")}. Kaydedilmedi; doğru dağılımı yazın.`);
+  const donem = await stokIste(env, "/satis-donem", { basla: gunA(simdi - 7 * GUN), bitis: gunA(simdi) }).catch(() => ({}));
+  const s7 = Number((donem || {})[kod]) || 0, n = dagilimAdet(a.d), uyari = [];
+  if (!s7) uyari.push(`${kod} son 7 günde satmadı — yine de repete?`);
+  if (n < ADET_SOR_ALT || n > ADET_SOR_UST) uyari.push(`${n} adet yazdınız (${n < ADET_SOR_ALT ? `${ADET_SOR_ALT}'dan az` : `${ADET_SOR_UST}'den fazla`}) — doğru mu?`);
+  await env.KAYIT.put(`rkYeni:${m.from.id}`, JSON.stringify({ kod, d: a.d, metin: String(m.text || "").slice(0, 300), zaman: simdi }), { expirationTtl: 7200 }).catch(() => null);
+  return yaz(`${anladimSatiri(kod, a.d, uyari).replace(/^Şunu anladım: /, "Şunu anladım: YENİ repete · ")}`, { inline_keyboard: [[{ text: "✅ Evet", callback_data: `rk:yv:${m.from.id}` }, { text: "❌ Hayır", callback_data: `rk:yh:${m.from.id}` }]] });
+}
+async function yeniRepeteOnayla(env, tg, kisi, kimAd, sohbet, simdi) {
+  const y = await env.KAYIT.get(`rkYeni:${kisi}`, "json").catch(() => null);
+  if (!y) return tg(env, "sendMessage", { chat_id: sohbet, text: "Bu istek artık geçerli değil." });
+  await env.KAYIT.delete(`rkYeni:${kisi}`).catch(() => null);
+  const r = await patronaRepeteAc(env, tg, { kod: y.kod, dagilim: y.d, kim: kimAd, kisi, kaynak: "hemra-yazi", metin: y.metin, satisOnay: true }, simdi);
+  return tg(env, "sendMessage", { chat_id: sohbet, text: r.engel ? r.metin : r.hata ? `⚠️ ${y.kod}: ${r.hata}` : `✅ ${y.kod} repete isteği (${dagilimYazi(y.d)}) Patron'un onayına gitti. Patron onaylamadan fabrikaya gitmez.` });
+}
+// Patron'un onayına giden repete (Hemra kartı yok): kayıt "patron" durumunda açılır, Venom'a Patron kartı (rkOneri) gider.
+// Venom kontrolü (kod, renk / beden) Patron kartından ÖNCE — uyuşmazsa Patron'a da gitmez.
+export async function patronaRepeteAc(env, tg, { kod, dagilim, kim = "Patron", kisi = null, kaynak = "patron-emri", metin = null, satisOnay = false }, simdi) {
+  kod = String(kod || "").trim();
+  const engel = await acikRepete(env, kod, { deneme: false, mod: false });
+  if (engel) return { engel, metin: engelMetni(engel) };
+  const bilgi = await stokIste(env, "/bilgi", { kod }).catch(() => null);
+  const magazalar = new Set(((bilgi && bilgi.satirlar) || []).map((x) => String(x.magaza || "").toUpperCase().replace(/\s+/g, "")));
+  if (!magazalar.size) return { hata: `${kod} Vegawin'de yok` };
+  const st = (await stokIste(env, "/toplu", { kodlar: [kod] }).catch(() => ({})))[kod];
+  const donem = await stokIste(env, "/satis-donem", { basla: gunA(simdi - 7 * GUN), bitis: gunA(simdi) }).catch(() => ({}));
+  const ted = await stokIste(env, "/tedarikci", { kodlar: [kod] }).catch(() => null); // kural 31: okunamazsa "Fuat" varsayılmaz
+  if (!(ted && typeof ted === "object")) return { hata: `${kod}: üretici (Fuat mı Celal mi) okunamadı — repete açılmadı, yeniden deneyin` };
+  if (magazalar.size > 1) return { hata: `${kod} iki mağazada da kayıtlı — marka belli değil (kural 23: tahmin edilmez), repete açılmadı` };
+  const uretici = (ted[kod] || {}).tedarikci === "CELAL" ? "celal" : "fuat";
+  const rec = { id: yeniId(kod, false, simdi), kod, uretici, magaza: magazalar.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", deneme: false, test: false, kaynak,
+    dagilim, adet: dagilimAdet(dagilim), kalan: st ? Math.max(0, Number(st.toplam) || 0) : 0, satis7: Number((donem || {})[kod]) || 0, durum: "patron", zaman: simdi, mesajlar: {}, kanit: [],
+    dagilimMetin: metin, dagilimZaman: simdi, dagilimKisi: kisi, dagilimKim: kim, satisOnay: Boolean(satisOnay), hemra: { kim, zaman: simdi } };
+  rec.bitisGun = rec.satis7 > 0 ? Math.max(1, Math.ceil(rec.kalan / (rec.satis7 / 7))) : null;
+  const k = await venomKontrol(env, { kod, tur: "repete", dagilim, satis7: null, kaynakMetin: metin, kaynakZaman: simdi, kim }, simdi); // satış 0 uyarısı Patron kartında yazar; Patron onayı = karar
+  rec.kontrol = { zaman: simdi, ok: k.ok, sorun: k.sorun, kim: k.kim };
+  if (!k.ok) return { hata: `Venom kontrolü durdurdu: ${k.sorun.join("; ")}` };
+  await kuyruk(env, "rkOneri", { id: `${rec.id}:o`, rid: rec.id, kod: rec.kod, uretici: ureticiAd(rec), magaza: rec.magaza, deneme: false, mod: false, dagilim: dagilimYazi(rec.dagilim), adet: rec.adet, kalan: rec.kalan, satis7: rec.satis7, bitisGun: rec.bitisGun, hemra: kim, foto: await fotoAdresi(env, rec), zaman: simdi });
+  await rkYaz(env, rec);
+  return { rec };
 }
 // Yazılan dağılımı karta işler (Hemra'nın kartı güncellenir; sonraki adım karttaki gönder düğmesi)
 async function dagilimiYaz(env, tg, rec, d, kisiId, sohbet, simdi) {
@@ -553,6 +780,9 @@ async function islemler(env, simdi, tg) {
         s.gitti = await fuataGonder(env, tg, rec, simdi, "Fuat (yeniden gönderildi)");
         await rkYaz(env, rec);
         s.kanit = rec.kanit.slice(-2);
+      } else if (is.tur === "patronRepete") { // 16 Kasım (Patron): repeteyi aç, kart ÖNCE Patron'a {kod, dagilim: [{renk, buyuk, kucuk}], kim, metin}
+        const r = await patronaRepeteAc(env, tg, { kod: is.kod, dagilim: is.dagilim, kim: is.kim || "Patron", kaynak: "patron-emri", metin: is.metin || null, satisOnay: true }, simdi);
+        s.sonuc = r.engel ? r.metin : r.hata ? r.hata : { id: r.rec.id, durum: r.rec.durum, magaza: r.rec.magaza, uretici: r.rec.uretici, dagilim: dagilimYazi(r.rec.dagilim), satis7: r.rec.satis7, kontrol: r.rec.kontrol };
       } else if (is.tur === "engelDene") {
         const e = await acikRepete(env, is.kod, { deneme: Boolean(is.deneme) });
         s.engel = e ? engelMetni(e) : null;
@@ -615,7 +845,10 @@ export async function repeteKartAdimi(env, simdi, tg) {
       const magazalar = new Set(((bilgi && bilgi.satirlar) || []).map((x) => x.magaza));
       if (!magazalar.size) continue; // Vegawin'de olmayan sayı (ör. adet) model sayılmaz
       bilinen++;
-      const r = await oneriAc(env, tg, { kod, magaza: magazalar.size === 1 && magazalar.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[kod]), samiOnerisi: true, kaynak: "patron", ...(b.mod ? { mod: true } : {}) }, simdi);
+      // 16 Kasım (denetim, kural 23): iki mağazada da kayıtlı modelde marka TAHMİN EDİLMEZ — kart açılmaz, Patron'a tek satır
+      const mz = new Set([...magazalar].map((x) => String(x || "").toUpperCase().replace(/\s+/g, "")));
+      if (mz.size > 1) { await kuyruk(env, "rkSonuc", { id: `rb:${kod}:m${simdi}`, rid: `rb-${kod}`, metin: `⚠️ ${kod} repete başlatılmadı: model iki mağazada da kayıtlı, marka belli değil (tahmin etmiyorum). Hangi marka?` }); continue; }
+      const r = await oneriAc(env, tg, { kod, magaza: mz.has("BLACKROSE") ? "BLACKROSE" : "VOLONTE", dagilim: _rk.dagilimOner((await ayarOku(env, "fabrika:sonIstek", {}))[kod]), samiOnerisi: true, kaynak: "patron", ...(b.mod ? { mod: true } : {}) }, simdi);
       if (r.engel || r.hata) await kuyruk(env, "rkSonuc", { id: `rb:${kod}:${simdi}`, rid: `rb-${kod}`, metin: r.engel ? r.metin : `⚠️ ${kod} repete başlatılamadı: ${r.hata}` });
     }
     if (!bilinen) await kuyruk(env, "rkSonuc", { id: `rb:yok:${simdi}`, rid: "rb-yok", metin: `⚠️ Repete başlatılamadı: ${(b.kodlar || [b.kod]).join(", ")} Vegawin'de bulunamadı.` });
@@ -628,6 +861,11 @@ export async function repeteKartAdimi(env, simdi, tg) {
     if (rec.durum === "fuat" && rec.donZaman) { // "2 gün sonra dön": süre dolunca kart Fuat'a yeniden (Hemra'ya sorulmaz)
       if (simdi >= rec.donZaman) { await fuataGonder(env, tg, rec, simdi, "Fuat (2 gün sonra yeniden)"); await rkYaz(env, rec); }
       continue;
+    }
+    // 16 Kasım (Patron): Venom kontrolünün durdurduğu kartı Hemra 2 saat (mesai) içinde düzeltmediyse Patron'a TEK satır
+    if (rec.durum === "hemra" && rec.sorunZaman && !rec.sorunPatron && !rec.dagilim && mesai(simdi) && simdi - rec.sorunZaman >= 2 * 3600) {
+      rec.sorunPatron = simdi; degisti = true;
+      await kuyruk(env, "rkSonuc", { id: `${rec.id}:s2`, rid: rec.id, metin: yonelt(rec, `${DK(rec)}⚠️ ${rec.kod} repete: kart fabrikaya gitmedi (${rec.sorunMetin || "Venom kontrolü"}); Hemra 2 saattir düzeltmedi.`) });
     }
     // 13 Kasım (Patron, kural 4): repete kartının ayrı 24 saat hatırlatması YOK — her kart gibi tek merdivende (kart-takip.js: 1 saat + 1 saat + Venom)
     if (rec.durum === "acik" && rec.teslim && bugun > rec.teslim && mesai(simdi) && saatI(simdi) >= 10 && !rec.teslimSoruldu) { // teslim günü geçti → Fuat'a sor
@@ -648,4 +886,4 @@ export async function repeteKartAdimi(env, simdi, tg) {
   }
 }
 
-export { fuataGonder as _fuataGonder }; // 16 Kasım: test (kural 87 kontrolü)
+export { fuataGonder as _fuataGonder, venomKontrol as fabrikaVenomKontrol }; // 16 Kasım: test (kural 87 kontrolü)

@@ -107,8 +107,9 @@ function gizliEsit(a, b) {
 // TEK KAPI (5 Kasım): Venom'dan Sami düğmesi (sami-giris.js "VenomKapisi")
 export const samiGonder = (env, metod, govde) => tg(env, metod, govde); // 16 Kasım: testler için Sami'nin TEK gönderim yolu (tek kapı dahil)
 export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
-export async function repeteAdim(env) { await repeteKartAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: Venom → hemen (5 dk bekleme yok)
-export async function gidenAdim(env) { await venomGidenAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: "Merdan'a söyle" → kart HEMEN (5 dk bekleme yok)
+// 16 Kasım (denetim, kural 43): "hepsini durdur" sonrası Venom'un anında çağırdığı adımlar da durur (zamanlı işlerle aynı kontrol)
+export async function repeteAdim(env) { if (await durdurulduMu(env, "sami")) return false; await repeteKartAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: Venom → hemen (5 dk bekleme yok)
+export async function gidenAdim(env) { if (await durdurulduMu(env, "sami")) return false; await venomGidenAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: "Merdan'a söyle" → kart HEMEN (5 dk bekleme yok)
 export async function venomMesaj(env, metin) { await guncelleme(sahteMesaj(env, metin), env); return true; }
 
 export default {

@@ -16,6 +16,7 @@ import { stokIste } from "./stokbot.js";
 import { indirimliMi } from "./stok.js";
 import { modelFiyatlari } from "./fiyat.js";
 import { listeDurumu, listeyeIsle, murat, muratMi, sorumlu } from "./fabrika.js";
+import { acikRepeteListesi, repeteIptalKod } from "./repete-kart.js";
 
 export const BEYIN_MODEL = "claude-opus-5-5"; // 11 Kasım (Patron onayı, kalıcı): Haiku → Opus
 export const AYLIK_SINIR_USD = 5; // 13 Kasım (Patron, kural 74): Sami 5 $/ay — asıl değer kitaptan okunur (botSiniri); %80 uyarısını Venom verir
@@ -62,6 +63,8 @@ const ARACLAR = [
   { name: "stok_bilgisi", description: "Bir model kodunun Vegawin stok adedi (mağaza bazında) ve durumu (stokta / bitti / gizli). Fiyat vermez.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
   { name: "satislar", description: "Bir günün satılan modelleri (çok satandan aza): kod, satılan adet, kalan stok. gun: 'bugun', 'dun' ya da YYYY-AA-GG.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
   { name: "magaza_stok_ozeti", description: "İki mağazanın (VOLONTE / Black Rose) stok özeti Vegawin'den: stoktaki model sayısı, toplam adet, bugün biten, bugün gelen. Model kodu gerekmez. \"iki mağazanın stoğunu ver\", \"stok özeti\" denince kullan; sonucu AYNEN yaz.", strict: true, input_schema: nesne({}) },
+  { name: "acik_repeteler", description: "Açık repeteler (16 Kasım, Patron): model kodu, marka, üretici (Fuat / Celal), nerede beklediği, dağılım, adet, teslim günü. \"açık repeteler\", \"repete ne durumda\" denince kullan. Fiyat / satış vermez.", strict: true, input_schema: nesne({}) },
+  { name: "repete_iptal", description: "Bir modelin açık repetesini iptal eder. SADECE Hemra ya da Murat (Patron) açıkça \"KOD repetesini iptal et\" derse kullan; başkası isterse kullanma. Kart henüz fabrikaya gitmediyse kapanır; fabrikadaysa fabrikaya kendiliğinden iptal GİTMEZ, Patron'a sorulur. Sonucu AYNEN yaz.", strict: true, input_schema: nesne({ kod: { type: "string" } }) },
   { name: "eksik_listesi_karti", description: "Fabrikaya giden son eksik listesi kartının AYNISINI (tam yazı + düğmeler, düğmeler sadece görüntü) bu sohbete gönderir. gun: 'bugun', 'dun', YYYY-AA-GG ya da boş (son kart). \"eksik listesi kartını göster\" denince kullan; kart gidince sadece aracın verdiği tek satırı yaz.", strict: true, input_schema: nesne({ gun: { type: "string" } }) },
   { name: "stoksuz_modeller", description: "Son 30 günde stoğu biten (ve hâlâ stoksuz olan) modellerin kodları ve bittiği gün. Eski pasif kartlar sayılmaz; 'stoksuz kaç model' sorusunun cevabı budur.", strict: true, input_schema: nesne({}) },
   { name: "eksik_listesi_durumu", description: "Bugünkü fabrika eksik listelerinin durumu, MARKA MARKA (VOLONTE ve Black Rose AYRI listedir; VOLONTE'yi Aziz, Black Rose'u Merdan kontrol eder, ikisini Hemra onaylar): kontrol kartı kimde, onaylandı mı, fabrikaya gitti mi; her modelin MARKASI, kararı (renkler / istenmeyecek / bekliyor) ve önceki istek kaydı. Cevapta her markayı ayrı yaz; soran kişiye önce kendi markasını anlat.", strict: true, input_schema: nesne({}) },
@@ -85,6 +88,12 @@ const ARACLAR = [
 ];
 
 async function aracCalistir(env, tg, ad, girdi, kim, simdi) {
+  if (ad === "acik_repeteler") { const l = await acikRepeteListesi(env); return l.length ? { repeteler: l } : { sonuc: "Açık repete yok." }; }
+  if (ad === "repete_iptal") { // 16 Kasım (Patron): iptal SADECE Hemra ve Patron
+    const yetkili = muratMi(env, kim) || String(kim) === String(sorumlu(env)) || String(kim) === String(env.HEMRA_ID || "").split(",")[0].trim();
+    if (!yetkili) return { sonuc: "Repete iptalini sadece Hemra ve Patron yapabilir." };
+    return { sonuc: await repeteIptalKod(env, tg, String(girdi.kod || "").trim(), muratMi(env, kim) ? "Patron" : "Hemra", true, simdi) };
+  }
   if (ad === "model_fiyati") { // 14 Kasım (Patron): satış fiyatı SADECE Patron'un kişisel hesabına
     if (String(kim) !== String(murat(env))) return { sonuc: "Fiyat bilgisi sadece Patron'a verilir." };
     return { fiyatlar: (await modelFiyatlari(env, girdi.kodlar || [])).map((x) => x.satir) };

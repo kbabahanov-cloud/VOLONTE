@@ -27,6 +27,7 @@ import { topluRaporMetni } from "./venom.js";
 import { KISILER, kuyrugaEkle, kuyruguAl, hataEkle } from "./venom-kopru.js";
 import { siteVerisi } from "./depo-oku.js";
 import { uyumKaydi, renkUyar } from "./repete-uyum.js"; // 16 Kasım: kural 87
+import { fabrikaKontrolu } from "./fabrika-kontrol.js"; // 16 Kasım: fabrika kartı Venom kontrolü
 import { renkCevir } from "./duzen.js";
 import { renkBilinir, renkDilleri } from "./site-renk.js";
 import { BOT_YETENEKLERI, MARKA_KARARLARI, VENOM_CEKIRDEK } from "./kurallar.js";
@@ -535,7 +536,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (g.karar === "repete") { const acik = await acikRepete(env, kod).catch(() => null); if (acik) return engelMetni(acik); }
     // 16 Kasım (Patron, kural 87): Patron'un söylediği renk model kayıtlarında yoksa kart GÖNDERİLMEZ, Patron'a tek satır sorulur
     if (g.karar === "repete" && String(g.renk || "").trim()) {
-      const k = await uyumKaydi(kod, { ayarOku: async (a, b) => { const v = (await stokIste(env, "/ayar-oku", { k: a })).v; return v == null ? b : JSON.parse(v); }, fsKod: (x) => stokIste(env, "/fs-kod", { kod: x }), site: () => siteVerisi(env), kart: (x) => env.KAYIT.get(`pelinboy:${x}`, "json") }).catch(() => ({ renkler: [] }));
+      const k = await uyumKaydi(kod, venomUyumKaynaklari(env)).catch(() => ({ renkler: [] }));
       const kayitli = [...new Set(k.renkler.map((r) => String(r).trim().toLocaleLowerCase("tr")))];
       if (kayitli.length && !kayitli.some((r) => renkUyar(r, g.renk))) return `KART GÖNDERİLMEDİ. Patron'a TEK satır sor (başka bir şey yazma): "${kod}: "${g.renk}" bu modelin kayıtlarında yok (kayıtlı renkler: ${kayitli.join(", ")}). Hangi renk olsun?"`;
     }
@@ -770,7 +771,9 @@ export async function aracCalistir(env, ad, g, simdi) {
     const l = await oku(env, "venom:bot:kararlar", []);
     l.push({ zaman: simdi, metin: String(g.metin).slice(0, 400) });
     await kaydet(env, "venom:bot:kararlar", l.slice(-60));
-    return "Karar hafızaya yazıldı; bundan sonra uygulanır.";
+    // 16 Kasım (denetim, kural 9 + 84): kural kitabını sadece Claude Code değiştirir; "uygulanır" sözü verilmez — kitaba eklenmek üzere listeye yazılır
+    await eksikAracYaz(env, { bot: "venom", istek: `Kural kitabına eklenecek Patron kararı: ${String(g.metin).slice(0, 300)}`, sebep: "kural kitabını (KURALLAR-PATRON.md) sadece Claude Code değiştirir (kural 9)", arac: "kitap" }, simdi).catch(() => null);
+    return "Venom'un hafızasına yazıldı ve kural kitabına eklenmek üzere Claude Code listesine kondu. Patron'a 'uygulanacak' DEME: bu kararı yerine getiren bir aracın yoksa 'Yapamıyorum — sebep: …' de (kural 84); varsa o araçla şimdi uygula.";
   }
   if (ad === "selin_durum") {
     const d = await botaSor(env, "selin", "durum", String(g.kod));
@@ -1078,6 +1081,15 @@ export async function bekleyenKararlar(env, simdi) {
   // 16 Kasım (Patron): Kemal'in müşteri paylaşımı kartları da görünür (Patron'un onayında olanlar)
   for (const x of (await musteriKartlari(env, simdi)).filter((y) => y.durum === "kart" && kimlikler(env.MURAT_ID).includes(String(y.chat)))) l.push({ baslik: `Kemal — müşteri paylaşımı (${x.adet || 1} görsel): onayınızda (düğmesi kendi kartında)`, zaman: x.zaman || simdi, klavye: null, tip: "musteri" });
   return l.sort((a, b) => b.zaman - a.zaman);
+}
+// 16 Kasım (Patron): renk / beden kayıt kaynakları (kural 87) — önceki fabrika istekleri, site, model kartı
+export const venomUyumKaynaklari = (env) => ({ ayarOku: async (a, b) => { const v = (await stokIste(env, "/ayar-oku", { k: a })).v; return v == null ? b : JSON.parse(v); }, fsKod: (x) => stokIste(env, "/fs-kod", { kod: x }), site: () => siteVerisi(env), kart: (x) => env.KAYIT.get(`pelinboy:${x}`, "json") });
+// 16 Kasım (Patron): FABRİKAYA GİDEN HER KART gitmeden önce Venom'dan geçer (Sami iç bağlantıyla sorar: VenomKapi.fabrikaKontrol).
+// Sonuç deftere yazılır; uyuşmazlıkta kart gitmez (Sami kişiye sorar, çözülmezse Patron'a tek satır).
+export async function venomFabrikaKontrol(env, g, simdi = Math.floor(Date.now() / 1000)) {
+  const r = await fabrikaKontrolu(g || {}, venomUyumKaynaklari(env));
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kod: String((g || {}).kod || "") || null, ozet: `Fabrika kartı kontrolü (${(g || {}).tur || "kart"}): ${r.ozet} — ${r.ok ? "uygun, gidebilir" : `DURDU: ${r.sorun.join("; ")}`}`.slice(0, 300) }).catch(() => null);
+  return r;
 }
 // 16 Kasım (Patron): Venom Kemal'in müşteri paylaşımı kartlarını ve SIRASINI görür (KV "kemal:mp:<id>", "kemal:mpSira"); görmediğini "yok" demez
 export async function musteriKartlari(env, simdi, gun = 3) {
@@ -2031,7 +2043,7 @@ export async function haftalikListeMesajlari(env, simdi, { hic = null } = {}) {
 // 16 Kasım: "gelecek" listesi — eski kayıtta mağaza yoksa marka Vegawin'den (kayıtlara dokunulmaz, sadece okunur)
 export async function gelecekMarkali(env, simdi) {
   const l = gelecekGecikenler(await stokIste(env, "/fs-ozet", {}).catch(() => []), simdi);
-  for (const r of l) if (!r.magaza) { const b = await stokIste(env, "/bilgi", { kod: r.kod }).catch(() => null); const m = [...new Set(((b && b.satirlar) || []).map((x) => String(x.magaza || "").toUpperCase().replace(/\s+/g, "")))]; r.magaza = m.length === 1 ? m[0] : "VOLONTE"; }
+  for (const r of l) if (!r.magaza) { const b = await stokIste(env, "/bilgi", { kod: r.kod }).catch(() => null); const m = [...new Set(((b && b.satirlar) || []).map((x) => String(x.magaza || "").toUpperCase().replace(/\s+/g, "")))]; r.magaza = m.length === 1 ? m[0] : null; } // kural 23: iki mağaza / kayıt yok → tahmin yok
   return l;
 }
 export async function haftalikListeAdimi(env, simdi) {
@@ -2982,7 +2994,7 @@ async function modelKartDugmesi(env, cq, simdi, cevap) {
 const SABIT_KURALLAR = [
   "Anında sadece: onay/para kartı, kritik hata (bot çöktü, köprü sustu, yanlış paylaşım, para sınırı) ve sizin sorunuzun cevabı.",
   "Gerisi Venom'da birikir: sabah 09:40 ve akşam 20:00 TEK özet (en fazla 8 satır, sabit sıra). Ayrıntı: /detay",
-  `Acil ve cevap hariç günde en fazla ${POSTA_TAVAN} mesaj; fazla kartlar saatte bir tek mesajda birleşir.`,
+  `Günlük mesaj sınırı yok (kural 45): acil iş ve onay kartı hemen gelir; gerisi 09:40 ve 20:00 raporunda.`,
   "Köprü hafta içi 10:30–20:00 izlenir: sinyal yoksa önce Merdan ve Hemra'ya sorulur, 30 dk'da düzelmezse size tek satır; cumartesi/pazar uyarı yok.",
 ];
 const DISARI = /\b(fuat|nuri|merdan|hemra|kanala|siteye|0091|ekibe|müşteri)/i;
