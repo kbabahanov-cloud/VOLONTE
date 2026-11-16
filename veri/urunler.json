@@ -1,5 +1,25 @@
 [
  {
+  "kod": "3047",
+  "baslik": "Check Panel Midi Dress",
+  "kategori": "dresses",
+  "aciklama": {
+   "en": "A black midi dress with long sleeves, a softly flared skirt and a notched stand collar. An asymmetric grey check panel runs down one side of the front, finished with a narrow and a wide rhinestone pocket flap, while matching check cuffs frame the sleeves. Easy to wear to the office, family gatherings or daytime events. Finished with careful workmanship.",
+   "fr": "Une robe midi noire à manches longues, jupe légèrement évasée et col montant échancré. Un empiècement asymétrique à carreaux gris descend sur un côté du devant, souligné par deux rabats de poche en strass, l'un étroit, l'autre large, tandis que des revers assortis encadrent les manches. Idéale au bureau, en famille ou pour une sortie de jour. Une finition soignée.",
+   "pt": "Um vestido midi preto de mangas compridas, saia levemente evasê e gola alta com decote em V. Um painel assimétrico xadrez cinza desce por um lado da frente, com duas abas de bolso em strass, uma estreita e outra larga, e punhos xadrez combinando nas mangas. Ideal para o escritório, encontros de família ou eventos de dia. Acabamento cuidadoso."
+  },
+  "bedenler": "38-40-42-44",
+  "fotolar": [
+   "galeri/3047/1.jpg",
+   "galeri/3047/2.jpg",
+   "galeri/3047/3.jpg",
+   "galeri/3047/4.jpg"
+  ],
+  "videolar": [],
+  "gizli": false,
+  "eklenme": "2026-11-16"
+ },
+ {
   "kod": "3526",
   "baslik": "Kimono Top Palazzo Set",
   "kategori": "sets",
