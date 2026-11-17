@@ -3031,3 +3031,27 @@ test("18 Kasım (Patron, KURAL 99): her SOLD OUT Venom'dan geçer — Venom sto�
   const defter = JSON.stringify([...o.depo.entries()]);
   assert.ok(/SOLD OUT kapısı \(silinemeyen eski mesajı gizleme\): DURDU: stok var \(iki mağaza toplamı 5 adet\) — kural 99/.test(defter + d));
 });
+
+test("18 Kasım: cari_hareketler dönem devrini açıkça yazar — devir satırı 'DEVİR', eski dönem satırları 'devrin içinde'; devir tutmuyorsa söyler (araştırma eski dönem ödemesini 'sayılmamış' sanmasın)", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const t = ist(17, 16);
+  await o.ayar("cari:CELAL:VOLONTE", { zaman: t - 600, birim: "$", hesaplar: [
+    { anahtar: "CA", ad: "HESAP A", donemler: { D0001TBLCARIGENELHAREKET: { n: 9, borc: 800, alacak: 3000, ilk: "2026-05-22", son: "2026-10-01" }, D0005TBLCARIGENELHAREKET: { n: 3, borc: 300, alacak: 2200, ilk: "2026-10-09", son: "2026-10-29" } } },
+    { anahtar: "CB", ad: "HESAP B", donemler: { D0001TBLCARIGENELHAREKET: { n: 5, borc: 500, alacak: 1500, ilk: "2026-02-16", son: "2026-10-09" }, D0005TBLCARIGENELHAREKET: { n: 2, borc: 0, alacak: 1400, ilk: "2026-10-09", son: "2026-11-16" } } },
+  ], hareketler: [
+    { hesap: "CA", tablo: "D0001TBLCARIGENELHAREKET", ind: 6003, tarih: "2026-09-25", borc: 180, alacak: 0 },
+    { hesap: "CA", tablo: "D0005TBLCARIGENELHAREKET", ind: 105, tarih: "2026-10-09", borc: 0, alacak: 2200 },
+    { hesap: "CA", tablo: "D0005TBLCARIGENELHAREKET", ind: 154, tarih: "2026-10-16", borc: 300, alacak: 0 },
+    { hesap: "CB", tablo: "D0005TBLCARIGENELHAREKET", ind: 106, tarih: "2026-10-09", borc: 0, alacak: 900 },
+    { hesap: "CB", tablo: "D0005TBLCARIGENELHAREKET", ind: 265, tarih: "2026-11-16", borc: 0, alacak: 500 },
+  ] });
+  const c = await v.cariHareketler(o.env, t, "celal", 60);
+  assert.match(c, /• HESAP A: GÜNCEL BAKİYE 1\.900,00 \$ = son dönem alacak 2\.200,00 − borç 300,00/);
+  assert.match(c, /↳ dönem devri: önceki dönemin \(22\.05\.2026–01\.10\.2026, 9 hareket\) neti 2\.200,00 \$ → yeni dönemin ilk satırı 09\.10\.2026 · kayıt no 105 · 2\.200,00 \$ → DEVİR TUTUYOR/);
+  assert.match(c, /09\.10\.2026 · HESAP A · DEVİR \(önceki dönemin neti\) 2\.200,00 \$ · kayıt no 105/);
+  assert.match(c, /25\.09\.2026 · HESAP A · BORÇ \(ödememiz\) 180,00 \$ · kayıt no 6003 · ESKİ DÖNEM \(devrin içinde; güncel bakiyeye ayrıca EKLENMEZ\)/);
+  assert.match(c, /16\.10\.2026 · HESAP A · BORÇ \(ödememiz\) 300,00 \$ · kayıt no 154$/m);
+  assert.match(c, /HESAP B[\s\S]*neti 1\.000,00 \$ → yeni dönemin ilk satırı 09\.10\.2026 · kayıt no 106 · 900,00 \$ → DEVİR TUTMUYOR \(fark -100,00 \$\) — Hemra'ya sorulmalı/);
+  assert.match(c, /09\.10\.2026 · HESAP B · ALACAK \(firmanın fişi\) 900,00 \$ · kayıt no 106$/m); // tutmayan devir "DEVİR" diye etiketlenmez
+});

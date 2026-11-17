@@ -1501,13 +1501,27 @@ export async function cariHareketler(env, simdi, firma, gun = 45) {
     if (!c || !(c.hesaplar || []).length) continue;
     const adlar = Object.fromEntries((c.hesaplar || []).map((h) => [h.anahtar, h.ad]));
     cikti.push(`📒 ${ad} — son okuma ${tarihSaat(c.zaman)}`);
+    // 18 Kasım: DÖNEM DEVRİ açıkça yazılır. Vegawin dönem kapatınca eski dönemin net bakiyesi yeni dönemin İLK satırı olur (devir). Eski
+    // dönemin hareketleri o devrin İÇİNDEDİR; ayrıca sayılırsa bakiye yanlış çıkar (deneme araştırmasında tam bu hata yapıldı).
+    const devirSatiri = new Set(), eskiTablo = new Set();
     for (const h of c.hesaplar || []) {
-      const son = Object.entries(h.donemler || {}).filter(([t]) => /CARIGENELHAREKET$/.test(t)).sort(([a], [b]) => a.localeCompare(b)).at(-1);
-      if (son && son[1] && son[1].n) cikti.push(`• ${h.ad}: son dönem alacak ${para2(son[1].alacak)} − borç ${para2(son[1].borc)} = bakiye ${para2((son[1].alacak || 0) - (son[1].borc || 0))} $ (${son[1].n} hareket, ${tr(son[1].ilk)}–${tr(son[1].son)})`);
+      const donemler = Object.entries(h.donemler || {}).filter(([t, d]) => /CARIGENELHAREKET$/.test(t) && d && d.n).sort(([a], [b]) => a.localeCompare(b));
+      const son = donemler.at(-1), onceki = donemler.length > 1 ? donemler.at(-2) : null;
+      if (!son) continue;
+      cikti.push(`• ${h.ad}: GÜNCEL BAKİYE ${para2((son[1].alacak || 0) - (son[1].borc || 0))} $ = son dönem alacak ${para2(son[1].alacak)} − borç ${para2(son[1].borc)} (${son[1].n} hareket, ${tr(son[1].ilk)}–${tr(son[1].son)})`);
+      for (const [t] of donemler.slice(0, -1)) eskiTablo.add(`${h.anahtar}|${t}`);
+      if (onceki) {
+        const net = (onceki[1].alacak || 0) - (onceki[1].borc || 0);
+        const ilk = (c.hareketler || []).filter((x) => x.hesap === h.anahtar && x.tablo === son[0]).sort((x, y) => String(x.tarih).localeCompare(String(y.tarih)) || Number(x.ind) - Number(y.ind))[0];
+        const ilkTutar = ilk ? (Number(ilk.alacak) || 0) - (Number(ilk.borc) || 0) : null;
+        const tutuyor = ilk && Math.abs(ilkTutar - net) < 0.01;
+        if (tutuyor) devirSatiri.add(`${h.anahtar}|${ilk.tablo}|${ilk.ind}`);
+        cikti.push(`  ↳ dönem devri: önceki dönemin (${tr(onceki[1].ilk)}–${tr(onceki[1].son)}, ${onceki[1].n} hareket) neti ${para2(net)} $ → ${ilk ? `yeni dönemin ilk satırı ${tr(ilk.tarih)} · kayıt no ${ilk.ind} · ${para2(ilkTutar)} $ → ${tutuyor ? "DEVİR TUTUYOR (bu satır devirdir, gerçek fiş değildir; önceki dönemin bütün hareketleri bunun içindedir)" : `DEVİR TUTMUYOR (fark ${para2(ilkTutar - net)} $) — Hemra'ya sorulmalı`}` : "yeni dönemin ilk satırı okunamadı"}`);
+      }
     }
     const l = (c.hareketler || []).filter((x) => String(x.tarih) >= bas).sort((x, y) => String(x.tarih).localeCompare(String(y.tarih)) || Number(x.ind) - Number(y.ind));
     cikti.push(l.length ? `Hareketler (${tr(bas)} sonrası, ${l.length} satır):` : `(${tr(bas)} sonrası hareket yok)`);
-    for (const x of l) cikti.push(`  ${tr(x.tarih)} · ${adlar[x.hesap] || x.hesap} · ${Number(x.alacak) > 0 ? `ALACAK (firmanın fişi) ${para2(x.alacak)} $` : `BORÇ (ödememiz) ${para2(x.borc)} $`} · kayıt no ${x.ind}${x.aciklama ? ` · ${String(x.aciklama).slice(0, 60)}` : ""}`);
+    for (const x of l) cikti.push(`  ${tr(x.tarih)} · ${adlar[x.hesap] || x.hesap} · ${devirSatiri.has(`${x.hesap}|${x.tablo}|${x.ind}`) ? `DEVİR (önceki dönemin neti) ${para2((Number(x.alacak) || 0) - (Number(x.borc) || 0))} $` : Number(x.alacak) > 0 ? `ALACAK (firmanın fişi) ${para2(x.alacak)} $` : `BORÇ (ödememiz) ${para2(x.borc)} $`} · kayıt no ${x.ind}${eskiTablo.has(`${x.hesap}|${x.tablo}`) ? " · ESKİ DÖNEM (devrin içinde; güncel bakiyeye ayrıca EKLENMEZ)" : ""}${x.aciklama ? ` · ${String(x.aciklama).slice(0, 60)}` : ""}`);
   }
   if (!cikti.length) return `${firma === "celal" ? "Celal" : "Fuat"} carileri Vegawin'den okunamadı (köprü).`;
   return `${cikti.join("\n")}\n(Kaynak: Vegawin cari hareketleri, köprünün son okuması. Venom Vegawin'de hiçbir şeyi değiştirmez; düzeltme gerekiyorsa Hemra girer. SADECE Patron'a.)`;
@@ -3549,7 +3563,7 @@ const SORUN_SISTEM = `Sen Venom'sun (VOLONTE'nin müdür botu). Şu an Patron'la
 KESİN KURALLAR: (1) Vegawin'de HİÇBİR ŞEYİ düzeltmez, değiştirmezsin; sadece okursun. Düzeltme gerekiyorsa Vegawin'e Hemra girer. (2) Sayıyı, tarihi, bakiyeyi SADECE araç sonucundan yazarsın; tahmin yok. (3) Firmaya (Fuat, Celal) bizim bakiyemizi, ödeme tutarını, fiyatı, iç bilgiyi YAZMAZSIN; sadece soru sorarsın.
 MUTABAKAT İTİRAZI ADIMLARI (kural 97):
 1) mutabakat_durumu ile kaydı oku: firma ne zaman "uyuşmuyor" dedi, açıklaması ve cevapları ne.
-2) cari_hareketler ile o firmanın cari hareketlerini satır satır oku (gun: 60). Hesap bakiyelerini ve son hareketleri çıkar.
+2) cari_hareketler ile o firmanın cari hareketlerini satır satır oku (gun: 60). Hesap bakiyelerini ve son hareketleri çıkar. DİKKAT: "DEVİR" yazan satır gerçek fiş değildir, önceki dönemin netidir; "ESKİ DÖNEM" yazan satırlar o devrin içindedir, güncel bakiyeye ayrıca eklenmez / çıkarılmaz. "DEVİR TUTUYOR" yazıyorsa devirde sorun yoktur; farkı SON DÖNEMİN satırlarında ara. Kendi toplamını yaparken sadece son dönemin satırlarını topla ve aracın yazdığı GÜNCEL BAKİYE ile karşılaştır.
 3) Firmanın yazdığını hareketlerle karşılaştır: firma hangi hesabı, hangi tutarı, hangi fişi / ödemeyi söylüyor? Bizim kayıtta karşılığı var mı? Fark hangi satırdan olabilir?
 4) Firma yeterli bilgi vermediyse (hangi hesap, kendi defterindeki bakiye, hangi fiş / ödeme) VE bu soru daha önce sorulup cevapsız kalmadıysa firmaya_sor ile sor. Standart soru zaten sorulduysa ve cevap yoksa YENİDEN SORMA; bekle.
 5) Sonucu AŞAĞIDAKİ BİÇİMDE yaz (başka hiçbir şey yazma):
