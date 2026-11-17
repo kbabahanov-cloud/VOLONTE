@@ -1296,6 +1296,12 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   assert.deepEqual(kayit.cevaplar.map((x) => x.metin), ["20 hesabında bizde 800 fazla"]);
   assert.deepEqual((await kuyruk()).at(-1).olay, "cevap"); // cevap da Venom'a düşer
   assert.equal((await kuyruk()).at(-1).metin, "20 hesabında bizde 800 fazla");
+  // kuyruk yazılınca Venom HEMEN haberdar edilir (Patron'a anında satır); Venom cevap vermese de itiraz kuyrukta durur
+  let venomCagri = 0;
+  const { itirazVenoma: itirazVenoma0 } = await import("./mutabakat.js");
+  assert.equal(await itirazVenoma0({ ...o.env, VENOM: { sorunSimdi: async () => { venomCagri += 1; } } }, kayit, "cevap", "y", 2), true);
+  assert.equal(await itirazVenoma0({ ...o.env, VENOM: { sorunSimdi: async () => { throw new Error("yok"); } } }, kayit, "cevap", "z", 3), true);
+  assert.equal(venomCagri, 1);
   // Venom kuyruğu yazılamazsa (yedek yol): Patron'a doğrudan satır — itiraz kaybolmaz
   const { itirazVenoma } = await import("./mutabakat.js");
   assert.equal(await itirazVenoma({ STOK: { idFromName: () => "x", get: () => ({ fetch: async () => { throw new Error("yok"); } }) } }, kayit, "cevap", "x", 1), false);

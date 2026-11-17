@@ -507,7 +507,9 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
 export async function itirazVenoma(env, r, olay, metin, simdi) {
   try {
     const s = await stokIste(env, "/kuyruk-ekle", { ad: "venomSorun", kayit: { tur: "mutabakat", mtId: r.id, firma: kisiOf(r), gun: r.gun, olay, metin: String(metin || "").slice(0, 2000), zaman: simdi } });
-    return Boolean(s && s.ok !== false);
+    if (!s || s.ok === false) return false;
+    try { if (env.VENOM) await env.VENOM.sorunSimdi(); } catch { /* Venom hemen alamadıysa kendi zamanlı işinde alır (kuyrukta duruyor) */ } // kural 97: itiraz Patron'a ANINDA düşsün
+    return true;
   } catch { return false; }
 }
 // 17 Kasım (Patron, kural 97): MUTABAKAT İTİRAZI — firma "uyuşmuyor" dediyse Venom firmaya sorar (rutin iş; Patron onayı beklemez).
