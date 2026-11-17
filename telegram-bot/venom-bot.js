@@ -2673,6 +2673,10 @@ async function claudeIslemAdimi(env, simdi) {
     else if (is.tur === "sozAdim") sonuc.push({ tur: is.tur, n: await sozAdimi(env, simdi), sozler: await oku(env, "venom:sozler", []) });
     else if (is.tur === "isdKod") sonuc.push({ tur: is.tur, kod: is.kod, v: await stokIste(env, "/isd-kod", { kod: String(is.kod), basla: simdi - (is.gun || 4) * 86400 }).catch((e) => String(e.message || e)) });
     else if (is.tur === "kvYaz" && /^(venom:bot:hafiza|silme:onayli)$/.test(String(is.k))) { await env.KAYIT.put(is.k, typeof is.v === "string" ? is.v : JSON.stringify(is.v)); sonuc.push({ tur: is.tur, k: is.k, ok: true }); }
+    else if (is.tur === "videoYazi") { // 17 Kasım (Patron onaylı deneme): hazır videoya Pelin'de yazı (ses korunur); kemal:false → sadece Patron'a
+      const r = env.PELIN_W && typeof env.PELIN_W.videoYazi === "function" ? await env.PELIN_W.videoYazi({ kod: String(is.kod), video: String(is.video), sure: is.sure || null, sonra: is.kemal ? { kemal: true } : null }).catch((e) => ({ ok: false, mesaj: String(e && e.message).slice(0, 200) })) : { ok: false, mesaj: "Pelin bağlantısı yok" };
+      sonuc.push({ tur: is.tur, ...r });
+    }
     else if (is.tur === "patronaFoto") { // 16 Kasım (Patron): kayıtlı bir fotoğrafı (yeni üretim YOK, 0 $) Patron'a yeniden gönder
       const r = await tg(env, "sendPhoto", { chat_id: patron(env), photo: String(is.url || ""), caption: String(is.yazi || "").slice(0, 1000), izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
       sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
