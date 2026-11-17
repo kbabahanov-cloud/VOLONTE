@@ -1264,10 +1264,14 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   // Uyuşmuyor → Patron'a hemen haber; açıklama Patron'a + PDF
   o.g.length = 0;
   await g2({ callback_query: { id: "c", from: { id: 501 }, data: `mt:u:${id}`, message: { chat: { id: 501 }, message_id: 3 } } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /Ne uyuşmuyor\?/);
-  assert.ok(cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "999" && /"Uyuşmuyor" dedi/.test(x.govde.text)));
+  // 17→18 Kasım (Patron, kural 97): firmaya Patron'un sorusu HEMEN; itiraz Venom'un sorun kuyruğuna düşer (Patron'a ham satır gitmez — çözülmüş kart gelir)
+  const kuyruk = async () => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "kuyruk:venomSorun" }) })).json()).v || "[]");
+  assert.match(cagri(o.g, "sendMessage").at(-1).govde.text, /^Fuat Bey, mutabakata "uyuşmuyor" dediniz\. Hangi hesapta uyuşmuyor\? Sizin defterinizde bakiye kaç\? Hangi fiş ya da ödeme farklı\?/);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "999"));
+  assert.deepEqual((await kuyruk()).map((x) => [x.tur, x.firma, x.olay, x.mtId]), [["mutabakat", "fuat", "uyusmuyor", id]]);
   await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "3634 bizde 18 görünüyor" } }, o.env);
-  assert.match(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "999").at(-1).govde.text, /Fuat mutabakatta uyuşmuyor \(06\.11\.2026, \d\d\.\d\d\.2026 \d\d:\d\d\):\n3634 bizde 18 görünüyor/);
+  assert.ok(!cagri(o.g, "sendMessage").some((x) => x.govde.chat_id === "999"));
+  assert.deepEqual((await kuyruk()).map((x) => [x.olay, x.metin]), [["uyusmuyor", ""], ["aciklama", "3634 bizde 18 görünüyor"]]);
   assert.equal(cagri(o.g, "sendDocument").length, 1);
   // Arşiv: sırayla, zincir sağlam, silinemez
   const st = (yol, gv = {}) => o.env.STOK.get().fetch(`https://stok${yol}`, { method: "POST", body: JSON.stringify(gv) }).then((r) => r.json());
@@ -1290,7 +1294,11 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   const kayit = JSON.parse((await st("/ayar-oku", { k: `mt:${id}` })).v);
   assert.equal(kayit.fark, "3634 bizde 18 görünüyor"); // ilk açıklama korunur
   assert.deepEqual(kayit.cevaplar.map((x) => x.metin), ["20 hesabında bizde 800 fazla"]);
-  assert.match(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "999").at(-1).govde.text, /^💬 Fuat mutabakat sorusuna cevap verdi \(06\.11\.2026 mutabakatı, [^)]*\):\n20 hesabında bizde 800 fazla$/);
+  assert.deepEqual((await kuyruk()).at(-1).olay, "cevap"); // cevap da Venom'a düşer
+  assert.equal((await kuyruk()).at(-1).metin, "20 hesabında bizde 800 fazla");
+  // Venom kuyruğu yazılamazsa (yedek yol): Patron'a doğrudan satır — itiraz kaybolmaz
+  const { itirazVenoma } = await import("./mutabakat.js");
+  assert.equal(await itirazVenoma({ STOK: { idFromName: () => "x", get: () => ({ fetch: async () => { throw new Error("yok"); } }) } }, kayit, "cevap", "x", 1), false);
 });
 
 test("mutabakat güvenliği: iki mağaza ayrı bakiye, tek düğme; Mutabıkım → tarih/saat/toplam/tam mesaj kayda + Patron'a 'Fuat X $ bakiyeyi onayladı'; yeni önizleme eskisini geçersiz kılar; süzgeç", async () => {

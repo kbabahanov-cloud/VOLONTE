@@ -472,6 +472,7 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
   if (!["gonderildi", "sonra", "fark"].includes(r.durum)) return cevapla("Bu mutabakat kapandı.");
   const kapat = () => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
   if (islem === "m") {
+    await stokIste(env, "/ayar-yaz", { k: `mt:fark:${kim}`, v: "null" }).catch(() => null); // itiraz yazışması kapanır
     Object.assign(r, { durum: "mutabik", cevapZaman: simdi }); r.gecmis.push([simdi, `${K.ad}: mutabıkım (toplam bakiye ${r.brToplamYazi || "—"})`]);
     await kayitYaz(env, r);
     const k = await arsiv(env, "mutabik", id, { fuat: kim, tarihSaat: tarihSaat(simdi), toplamBakiye: r.brToplam ?? null, toplamBakiyeYazi: r.brToplamYazi || null, mesaj: r.duzFuat || r.metin }, simdi);
@@ -486,8 +487,12 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
     await kayitYaz(env, r); await ayarYaz(env, `mt:fark:${kim}`, id);
     await arsiv(env, "uyusmuyor", id, { fuat: kim, tarihSaat: tarihSaat(simdi) }, simdi);
     await cevapla("Farkı yazın"); await kapat();
-    await tg(env, "sendMessage", { chat_id: murat(env), text: `❌ ${K.ad} ${tarihYaz(r.gun)} mutabakatında "Uyuşmuyor" dedi (${tarihSaat(simdi)}). Açıklamasını yazınca iletirim.` });
-    return tg(env, "sendMessage", { chat_id: alici, text: "Ne uyuşmuyor? Lütfen kısaca yazın (model kodu ve adet, ya da bakiye)." });
+    // Kural 97: firmaya Patron'un sorusu HEMEN (rutin); itiraz Venom'un sorun kuyruğuna — Venom araştırır, Patron'a çözülmüş kart gelir
+    const soru = ITIRAZ_SORUSU(K.ad);
+    const g = await tg(env, "sendMessage", { chat_id: alici, text: soru });
+    if (g && g.ok) { r.sorular = [...(r.sorular || []), { zaman: simdi, metin: soru, mesaj: g.result.message_id }]; await kayitYaz(env, r); }
+    if (!(await itirazVenoma(env, r, "uyusmuyor", "", simdi))) await tg(env, "sendMessage", { chat_id: murat(env), text: `❌ ${K.ad} ${tarihYaz(r.gun)} mutabakatında "Uyuşmuyor" dedi (${tarihSaat(simdi)}). Açıklamasını yazınca iletirim.` });
+    return g;
   }
   if (islem === "s") {
     Object.assign(r, { durum: "sonra", sonraBas: r.sonraBas || simdi, sorulanGun: gunAnahtari(simdi) }); r.gecmis.push([simdi, `${K.ad}: sonra kontrol edeceğim`]);
@@ -497,6 +502,14 @@ export async function mutabakatDugmesi(env, cq, tg, simdi) {
   }
 }
 
+// 17→18 Kasım gecesi (Patron: "uyuşmuyor anında Venom'a düşsün, Venom araştırsın, bana çözülmüş hali gelsin"): itiraz olayı Venom'un
+// sorun kuyruğuna yazılır (StokDO kuyruk "venomSorun"). Yazılamazsa false döner → eski yol: Patron'a doğrudan satır (hiçbir itiraz kaybolmaz).
+export async function itirazVenoma(env, r, olay, metin, simdi) {
+  try {
+    const s = await stokIste(env, "/kuyruk-ekle", { ad: "venomSorun", kayit: { tur: "mutabakat", mtId: r.id, firma: kisiOf(r), gun: r.gun, olay, metin: String(metin || "").slice(0, 2000), zaman: simdi } });
+    return Boolean(s && s.ok !== false);
+  } catch { return false; }
+}
 // 17 Kasım (Patron, kural 97): MUTABAKAT İTİRAZI — firma "uyuşmuyor" dediyse Venom firmaya sorar (rutin iş; Patron onayı beklemez).
 // Soru Patron'un cümlesidir (süzgeçten muaf tek kalıp); ek soru güvenlik süzgecinden geçer. Cevap aynı kayda "cevaplar" olarak eklenir.
 export const ITIRAZ_SORUSU = (ad) => `${ad} Bey, mutabakata "uyuşmuyor" dediniz. Hangi hesapta uyuşmuyor? Sizin defterinizde bakiye kaç? Hangi fiş ya da ödeme farklı? Buraya yazabilirsiniz.`;
@@ -527,14 +540,14 @@ export async function mutabakatFarkMesaji(env, m, tg, simdi) {
   await stokIste(env, "/ayar-yaz", { k: `mt:fark:${kim}`, v: "null" });
   if (!r) return false;
   const KF = KISI[kisiOf(r)];
-  const soruCevabi = Boolean(r.fark && (r.sorular || []).length); // 17 Kasım: Venom'un sorusuna cevap → ilk açıklama korunur, cevap kayda EKLENİR
+  const soruCevabi = Boolean(r.fark); // ilk yazı = açıklama (fark); sonrakiler cevap olarak EKLENİR (ilk açıklama korunur)
   const yazi = String(m.text).slice(0, 2000);
   if (soruCevabi) { r.cevaplar = [...(r.cevaplar || []), { zaman: simdi, metin: yazi }]; r.gecmis.push([simdi, `${KF.ad} soruya cevap yazdı`]); }
   else { Object.assign(r, { fark: yazi, farkZaman: simdi }); r.gecmis.push([simdi, `${KF.ad} açıklama yazdı`]); }
   await kayitYaz(env, r);
   await arsiv(env, soruCevabi ? "itiraz-cevap" : "fark-aciklama", id, { fuat: kim, tarihSaat: tarihSaat(simdi), aciklama: yazi }, simdi);
   await tg(env, "sendMessage", { chat_id: kim, text: "Teşekkürler, açıklamanız iletildi." });
-  await tg(env, "sendMessage", { chat_id: murat(env), text: soruCevabi ? `💬 ${KF.ad} mutabakat sorusuna cevap verdi (${tarihYaz(r.gun)} mutabakatı, ${tarihSaat(simdi)}):\n${yazi}` : `❌ ${KF.ad} mutabakatta uyuşmuyor (${tarihYaz(r.gun)}, ${tarihSaat(simdi)}):\n${r.fark}` });
+  if (!(await itirazVenoma(env, r, soruCevabi ? "cevap" : "aciklama", yazi, simdi))) await tg(env, "sendMessage", { chat_id: murat(env), text: soruCevabi ? `💬 ${KF.ad} mutabakat sorusuna cevap verdi (${tarihYaz(r.gun)} mutabakatı, ${tarihSaat(simdi)}):\n${yazi}` : `❌ ${KF.ad} mutabakatta uyuşmuyor (${tarihYaz(r.gun)}, ${tarihSaat(simdi)}):\n${r.fark}` });
   try { await pdfArsivle(env, r, `${KF.ad} uyuşmuyor`, simdi); } catch (e) { await arsiv(env, "pdf-hata", id, String(e && e.message), simdi); }
   return true;
 }

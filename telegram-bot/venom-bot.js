@@ -956,6 +956,7 @@ export async function dugme(env, cq, simdi) {
   if (String(cq.data) === "gz:-") return cevap("Bu kart sadece görüntü; düğmeleri basılamaz."); // 13 Kasım: gösterilen kart kopyası
   if (/^vmk:/.test(String(cq.data))) return modelKartDugmesi(env, cq, simdi, cevap); // 9 Kasım: kısa model kartı
   if (/^vrk:/.test(String(cq.data))) return rkKararDugmesi(env, cq, simdi, cevap); // 11 Kasım: repete kartı [Onaylıyorum] [Reddediyorum]
+  if (/^vso:/.test(String(cq.data))) return sorunDugmesi(env, cq, simdi, cevap); // 18 Kasım: sorun kartı (çözülmüş hali Patron'a)
   if (/^vbo:/.test(String(cq.data))) return bittiKararDugmesi(env, cq, simdi, cevap); // 10 Kasım: fabrika bitti → Hemra önerisi → Patron
   if (/^vkr:/.test(String(cq.data))) { // 9 Kasım: bildirim kuralını kaldır
     const ok = await kuralSil(env, String(cq.data).slice(4));
@@ -2330,6 +2331,7 @@ export async function venomCron(env, simdi) {
   }
   // 11 Kasım: Claude Code'un bir kerelik işleri — KV "venom:claudeIslem" = [{tur:"testMesaj", metin} | {tur:"kopruOku"}] → "venom:claudeIslemSonuc"
   try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
+  try { await sorunKuyrugu(env, simdi); await sorunAdimi(env, simdi); } catch (e) { await hataYaz(env, "sorun", e); } // 18 Kasım: sorun çözen beyin
   try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); }
   try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); }
   try { await tasarimOrnekAdimi(env, simdi); } catch (e) { await hataYaz(env, "tasarimOrnek", e); }
@@ -2827,6 +2829,16 @@ async function claudeIslemAdimi(env, simdi) {
       let c = null, hata = null;
       try { c = await sohbet(e2, String(is.metin || ""), simdi); } catch (e) { hata = String((e && e.message) || e).slice(0, 300); }
       sonuc.push({ tur: is.tur, soru: is.metin, cevap: c, kartlar: e2.__kuruYazi.filter((x) => x.dugmeler).map((x) => ({ yazi: x.text.slice(0, 200), dugmeler: x.dugmeler })), hata });
+    } else if (is.tur === "sorunDene") { // 18 Kasım: sorun araştırması DENEME modunda (firmaya / Patron'a hiçbir şey gitmez); sonuç sadece Claude Code'a
+      let a = null, hata = null;
+      try { a = await sorunArastir(env, { id: "deneme", tur: "mutabakat", mtId: String(is.mtId || ""), firma: is.firma === "fuat" ? "fuat" : "celal", gun: String(is.gun || ""), olaylar: Array.isArray(is.olaylar) ? is.olaylar : [] }, simdi, { kuru: true }); } catch (e) { hata = String((e && e.message) || e).slice(0, 300); }
+      sonuc.push({ tur: is.tur, sonuc: a, hata });
+    } else if (is.tur === "sorunAc") { // 18 Kasım: eski (kuyruktan önceki) itirazı sorun olarak aç — araştırma mesaide başlar. sessiz: Patron'a "anında satır" gitmez (zaten biliyor)
+      const l = await oku(env, "venom:sorunlar", []);
+      if (!l.some((x) => x.durum !== "kapandi" && x.mtId === is.mtId)) { l.push({ id: kisaId(), tur: "mutabakat", mtId: String(is.mtId), firma: is.firma === "fuat" ? "fuat" : "celal", gun: String(is.gun), konu: `${SORUN_FIRMA[is.firma] || is.firma} ${String(is.gun || "").split("-").reverse().join(".")} mutabakatına "uyuşmuyor" dedi`, acildi: Number(is.acildi) || simdi, durum: "acik", olaylar: Array.isArray(is.olaylar) ? is.olaylar : [], adimlar: [], arastirma: 0, yeni: true, soruZaman: Number(is.soruZaman) || 0, ikiSaat: is.ikiSaatYok ? simdi : 0 }); await sorunKaydet(env, l); }
+      sonuc.push({ tur: is.tur, ok: true, sorunlar: l.filter((x) => x.durum !== "kapandi").map((x) => ({ id: x.id, konu: x.konu, durum: x.durum })) });
+    } else if (is.tur === "sorunDok") {
+      sonuc.push({ tur: is.tur, sorunlar: await oku(env, "venom:sorunlar", []) });
     } else if (is.tur === "botIsKapat") { // Venom'un botlara verdiği iş: kanıtla kapat / iptal
       const l = await oku(env, "venom:bot:isler", []);
       const x = l.find((y) => y.id === is.id);
@@ -3484,3 +3496,150 @@ export default {
     try { await venomCron(env, Math.floor(Date.now() / 1000)); } catch (e) { await hataYaz(env, "cron", e); }
   },
 };
+
+// =====================================================================================================================
+// SORUN ÇÖZEN BEYİN (17→18 Kasım gecesi, Patron; kural 97–98): bir sorun çıkınca (ilk uygulama: mutabakata "uyuşmuyor") Venom Patron'a
+// hemen atmaz; kendisi araştırır (kayıt + cari hareketleri satır satır + gerekirse firmaya soru), Patron'a TEK KART getirir:
+// sorun ne · ne buldum · onayınız gereken. Çözemezse en geç 2 saatte tek satır. Her adım deftere yazılır.
+// Kayıt: KV "venom:sorunlar" (son 40). Olaylar botlardan StokDO kuyruğu "venomSorun" ile gelir (Sami: mutabakat itirazı).
+// Venom Vegawin'de HİÇBİR ŞEYİ değiştirmez (sadece okur). Gece ve mesai dışında kimseye yazılmaz: araştırma 09:00–20:00 (pzt–cmt).
+// =====================================================================================================================
+const SORUN_ARACLARI = ["mutabakat_durumu", "cari_hareketler", "firmaya_sor", "bakiye"];
+const SORUN_FIRMA = { fuat: "Fuat", celal: "Celal" };
+export const sorunMesai = (simdi) => { const d = new Date((simdi + SAAT_FARKI) * 1000); return d.getUTCDay() !== 0 && d.getUTCHours() >= 9 && d.getUTCHours() < 20; };
+const sorunKaydet = (env, l) => kaydet(env, "venom:sorunlar", l.slice(-40), 30 * 86400);
+// Botlardan gelen sorun olayları → açık soruna eklenir ya da yeni sorun açılır. Hata olursa itiraz KAYBOLMAZ: Patron'a doğrudan satır.
+export async function sorunKuyrugu(env, simdi) {
+  const olaylar = await kuyruguAl(env, "venomSorun").catch(() => []);
+  if (!olaylar.length) return 0;
+  const l = await oku(env, "venom:sorunlar", []);
+  for (const o of olaylar) {
+    try {
+      let s = l.find((x) => x.durum !== "kapandi" && x.tur === o.tur && x.mtId === o.mtId);
+      if (!s) { s = { id: kisaId(), tur: o.tur, mtId: o.mtId, firma: o.firma, gun: o.gun, konu: `${SORUN_FIRMA[o.firma] || o.firma} ${String(o.gun || "").split("-").reverse().join(".")} mutabakatına "uyuşmuyor" dedi`, acildi: o.zaman || simdi, durum: "acik", olaylar: [], adimlar: [], arastirma: 0 }; l.push(s); }
+      s.olaylar = [...(s.olaylar || []), { zaman: o.zaman || simdi, olay: o.olay, metin: String(o.metin || "").slice(0, 1000) }].slice(-12);
+      s.yeni = true; s.sonOlay = simdi;
+      if (o.olay === "uyusmuyor") s.soruZaman = o.zaman || simdi; // Sami standart soruyu o anda sordu
+      if (s.durum === "kart") s.durum = "acik"; // karttan sonra firma yeni bir şey yazdı: yeniden araştırılır
+      // Kural 97: itiraz ve firmanın cevabı Patron'a ANINDA düşer (özette beklemez) — tek kısa satır; çözülmüş kart araştırmadan sonra gelir
+      const ad = SORUN_FIRMA[o.firma] || o.firma, gunY = String(o.gun || "").split("-").reverse().join(".");
+      await yaz({ ...env, __izin: "kritik" }, o.olay === "uyusmuyor" ? `❌ ${ad} ${gunY} mutabakatına "uyuşmuyor" dedi (${tarihSaat(o.zaman || simdi)}). Firmaya sordum; araştırıyorum, size tek kart getireceğim.` : `💬 ${ad} mutabakat itirazında yazdı (${gunY} mutabakatı, ${tarihSaat(o.zaman || simdi)}):\n${String(o.metin || "").slice(0, 800)}\nAraştırıyorum; tek kart getireceğim.`, { posta: { izin: "kritik" } }).catch(() => null);
+      await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `SORUN (${s.id}): ${s.konu} — ${o.olay === "uyusmuyor" ? "itiraz geldi, firmaya soruldu, araştırma sırada" : `firma yazdı: "${String(o.metin || "").replace(/\s+/g, " ").slice(0, 120)}"`}` }).catch(() => null);
+    } catch (e) {
+      await hataYaz(env, "sorunKuyrugu", e);
+      await yaz({ ...env, __izin: "kritik" }, `🔴 ${SORUN_FIRMA[o.firma] || o.firma} mutabakata "uyuşmuyor" dedi${o.metin ? `: ${String(o.metin).slice(0, 300)}` : ""} (araştırma başlatılamadı; kayıt Sami'de duruyor).`, { posta: { izin: "kritik" } }).catch(() => null);
+    }
+  }
+  await sorunKaydet(env, l);
+  return olaylar.length;
+}
+const SORUN_SISTEM = `Sen Venom'sun (VOLONTE'nin müdür botu). Şu an Patron'la konuşmuyorsun: bir SORUNU kendin araştırıyorsun. İlke: Venom önce kendisi çözer; Patron'a sadece çözülmüş hali ya da gerçek karar gider.
+KESİN KURALLAR: (1) Vegawin'de HİÇBİR ŞEYİ düzeltmez, değiştirmezsin; sadece okursun. Düzeltme gerekiyorsa Vegawin'e Hemra girer. (2) Sayıyı, tarihi, bakiyeyi SADECE araç sonucundan yazarsın; tahmin yok. (3) Firmaya (Fuat, Celal) bizim bakiyemizi, ödeme tutarını, fiyatı, iç bilgiyi YAZMAZSIN; sadece soru sorarsın.
+MUTABAKAT İTİRAZI ADIMLARI (kural 97):
+1) mutabakat_durumu ile kaydı oku: firma ne zaman "uyuşmuyor" dedi, açıklaması ve cevapları ne.
+2) cari_hareketler ile o firmanın cari hareketlerini satır satır oku (gun: 60). Hesap bakiyelerini ve son hareketleri çıkar.
+3) Firmanın yazdığını hareketlerle karşılaştır: firma hangi hesabı, hangi tutarı, hangi fişi / ödemeyi söylüyor? Bizim kayıtta karşılığı var mı? Fark hangi satırdan olabilir?
+4) Firma yeterli bilgi vermediyse (hangi hesap, kendi defterindeki bakiye, hangi fiş / ödeme) VE bu soru daha önce sorulup cevapsız kalmadıysa firmaya_sor ile sor. Standart soru zaten sorulduysa ve cevap yoksa YENİDEN SORMA; bekle.
+5) Sonucu AŞAĞIDAKİ BİÇİMDE yaz (başka hiçbir şey yazma):
+DURUM: COZULDU | COZULEMEDI | BEKLIYOR
+KART:
+🧩 Mutabakat itirazı — <firma> (<mutabakat günü>)
+Hesap: <hangi hesap(lar)>
+Bizde bakiye: <tutar> · Firmada: <tutar ya da "firma yazmadı"> · Fark: <tutar ya da "bilinmiyor">
+Sebep: <bulduğun sebep, hangi satır(lar): tarih · hesap · tutar · kayıt no; bulamadıysan "bulunamadı">
+Firma ne dedi: <firmanın sözü, aynen kısa>
+Hemra: <Hemra'ya sorulması gereken soru; gerekmiyorsa "gerekmiyor">
+Onayınız gereken: <Patron'un vereceği karar; yoksa "yok">
+COZULDU = farkın sebebi satırıyla bulundu. COZULEMEDI = eldeki bilgiyle bulunamıyor ve firmadan yeni bilgi beklemenin anlamı yok. BEKLIYOR = firmaya soruldu, cevabı bekleniyor (KART yerine tek satır yaz: "Denedim: … · Takıldım: … · Bekliyorum: …").
+Sade Türkçe, kısa. Tablo yok.`;
+// Tek sorunu araştırır (yapay zekâ + okuma araçları). Dönen: { durum: "COZULDU" | "COZULEMEDI" | "BEKLIYOR" | "HATA", kart, araclar: [...] }
+export async function sorunArastir(env, s, simdi, { kuru = false } = {}) {
+  if (!claudeVar(env)) return { durum: "HATA", kart: "yapay zekâ anahtarı bağlı değil", araclar: [] };
+  const sinir = await venomSinir(env), harcanan = await venomHarcanan(env, simdi);
+  if (harcanan >= sinir) return { durum: "HATA", kart: `Venom'un aylık sınırı (${sinir} $) doldu; araştırma yapılamadı`, araclar: [] };
+  const e2 = kuru ? { ...env, __kuru: true, __kuruYazi: [] } : env;
+  const client = claudeIstemci(env, { maxRetries: 1, timeout: 60_000 });
+  const model = env.VENOM_MODEL || MODEL;
+  const araclar = ARACLAR.filter((a) => SORUN_ARACLARI.includes(a.name));
+  const olayYazi = (s.olaylar || []).map((o) => `- ${tarihSaat(o.zaman)}: ${o.olay === "uyusmuyor" ? "\"Uyuşmuyor\" düğmesine bastı" : o.olay === "aciklama" ? `açıklama yazdı: "${o.metin}"` : `soruya cevap yazdı: "${o.metin}"`}`).join("\n");
+  const mesajlar = [{ role: "user", content: `SORUN: mutabakat itirazı.\nFirma: ${SORUN_FIRMA[s.firma] || s.firma} (araçlarda firma: "${s.firma}")\nMutabakat günü: ${String(s.gun || "").split("-").reverse().join(".")} · kayıt: ${s.mtId}\nOlaylar:\n${olayYazi || "(olay yok)"}\nŞimdi: ${tarihSaat(simdi)}. Araştır ve sonucu istenen biçimde yaz.` }];
+  const sistem = [{ type: "text", text: await kitapOku(env, "venom", simdi) }, { type: "text", text: SORUN_SISTEM, cache_control: { type: "ephemeral" } }];
+  const kullanilan = [];
+  let son = "";
+  for (let tur = 0; tur < 6; tur++) {
+    const rr = await claudeTur(client, { model, max_tokens: 3000, system: sistem, tools: araclar, output_config: { effort: "medium" }, messages: mesajlar });
+    await venomHarcamaYaz(env, claudeUsd(model, rr.usage), simdi);
+    const yazi = rr.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    if (yazi) son = yazi;
+    const kullan = rr.content.filter((b) => b.type === "tool_use");
+    if (rr.stop_reason !== "tool_use" || !kullan.length) break;
+    mesajlar.push({ role: "assistant", content: rr.content });
+    const sonuclar = [];
+    for (const a of kullan) {
+      let c;
+      const soruBekliyor = a.name === "firmaya_sor" && s.soruZaman && !(s.olaylar || []).some((o) => o.olay !== "uyusmuyor" && o.zaman > s.soruZaman);
+      try {
+        c = !SORUN_ARACLARI.includes(a.name) ? "Bu araç araştırmada kullanılamaz." : soruBekliyor ? `Firmaya ${tarihSaat(s.soruZaman)} tarihinde soruldu, cevabı henüz gelmedi. Yeniden SORULMADI; cevabı bekle.` : await aracCalistir(e2, a.name, a.input || {}, simdi);
+        if (a.name === "firmaya_sor" && !soruBekliyor && !kuru && /mesaj no/i.test(String(c))) s.soruZaman = simdi;
+      } catch (e) { await hataYaz(env, `sorunArac:${a.name}`, e); c = "Araç çalışmadı."; }
+      kullanilan.push(a.name);
+      sonuclar.push({ type: "tool_result", tool_use_id: a.id, content: String(c).slice(0, 6000) });
+    }
+    mesajlar.push({ role: "user", content: sonuclar });
+  }
+  const d = (son.match(/DURUM:\s*(COZULDU|COZULEMEDI|BEKLIYOR)/) || [])[1];
+  const kart = (son.split(/KART:\s*/)[1] || son.replace(/DURUM:[^\n]*\n?/, "")).trim();
+  if (!d || !kart) return { durum: "HATA", kart: `araştırma sonucu okunamadı: ${son.slice(0, 200)}`, araclar: kullanilan };
+  return { durum: d, kart: tabloyuListeyeCevir(kart).slice(0, 3500), araclar: kullanilan };
+}
+const sorunKlavye = (s) => ({ inline_keyboard: [[{ text: "🔁 Mutabakatı yeniden hazırla", callback_data: `vso:m:${s.id}` }, { text: "✅ Tamam, kapat", callback_data: `vso:k:${s.id}` }]] });
+// Zamanlı adım: yeni olayı olan açık sorun araştırılır (mesaide); sonuç kartı Patron'a; 2 saatte kart çıkmadıysa tek satır.
+export async function sorunAdimi(env, simdi) {
+  const l = await oku(env, "venom:sorunlar", []);
+  let degisti = false;
+  for (const s of l) {
+    if (s.durum !== "acik") continue;
+    if (s.yeni && sorunMesai(simdi) && (s.arastirma || 0) < 6 && simdi - (s.sonArastirma || 0) >= 600) {
+      s.sonArastirma = simdi; s.arastirma = (s.arastirma || 0) + 1; s.yeni = false; degisti = true;
+      await sorunKaydet(env, l); // araştırma uzun sürerse aynı sorun ikinci kez başlamasın
+      const a = await sorunArastir(env, s, simdi).catch((e) => ({ durum: "HATA", kart: String(e && e.message).slice(0, 200), araclar: [] }));
+      s.adimlar = [...(s.adimlar || []), { zaman: simdi, durum: a.durum, araclar: a.araclar, ozet: String(a.kart).slice(0, 400) }].slice(-10);
+      await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `SORUN (${s.id}) araştırma ${s.arastirma}: ${a.durum} — araçlar: ${a.araclar.join(", ") || "yok"} — ${String(a.kart).replace(/\s+/g, " ").slice(0, 160)}` }).catch(() => null);
+      if (a.durum === "COZULDU" || a.durum === "COZULEMEDI") {
+        const g = await yaz({ ...env, __izin: "onay" }, `${a.durum === "COZULDU" ? "✅ Çözdüm" : "🟠 Çözemedim"} — ${a.kart}`, { reply_markup: sorunKlavye(s), posta: { izin: "onay" } }).catch(() => null);
+        if (g && g.ok) { s.durum = "kart"; s.kartMesaj = g.result.message_id; s.kartZaman = simdi; }
+        else s.yeni = true; // kart gidemedi: sonraki turda yeniden denenir (2 saat kuralı ayrıca işler)
+      } else if (a.durum === "BEKLIYOR") s.bekliyor = a.kart;
+      else s.hata = a.kart;
+    }
+    // 2 saat kuralı: kart çıkmadıysa Patron'a TEK satır (09:00–21:00)
+    const saatS = new Date((simdi + SAAT_FARKI) * 1000).getUTCHours();
+    if (s.durum === "acik" && !s.ikiSaat && simdi - s.acildi >= 7200 && saatS >= 9 && saatS < 21) {
+      const metin = `🟠 ${s.konu} — 2 saatte çözemedim. ${s.bekliyor ? s.bekliyor : s.hata ? `Takıldım: ${s.hata}` : "Araştırma henüz yapılamadı (mesai dışı ya da firma cevap vermedi)."} Kararınız gerekirse yazın; cevap gelince çözülmüş kartı getiririm.`;
+      const g = await yaz({ ...env, __izin: "cozulemeyen" }, metin, { posta: { izin: "cozulemeyen" } }).catch(() => null);
+      if (g && g.ok) { s.ikiSaat = simdi; degisti = true; await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `SORUN (${s.id}): 2 saat kuralı — Patron'a tek satır yazıldı (mesaj no ${g.result.message_id})` }).catch(() => null); }
+    }
+    if (s.durum === "kart" && simdi - (s.kartZaman || simdi) > 7 * 86400) { s.durum = "kapandi"; degisti = true; }
+  }
+  if (degisti) await sorunKaydet(env, l);
+}
+async function sorunDugmesi(env, cq, simdi, cevap) {
+  const [, islem, id] = String(cq.data).split(":");
+  if (!patronMu(env, cq.from && cq.from.id)) return cevap("Sadece Patron.");
+  const l = await oku(env, "venom:sorunlar", []);
+  const s = l.find((x) => x.id === id);
+  if (!s || s.durum === "kapandi") return cevap("Bu sorun kapandı.");
+  const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "vb:-" }]] } });
+  s.durum = "kapandi"; s.karar = { islem, zaman: simdi };
+  await sorunKaydet(env, l);
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `SORUN (${s.id}) Patron kararı: ${islem === "m" ? "mutabakatı yeniden hazırla" : "tamam, kapat"}`, kime: "Patron" }).catch(() => null);
+  if (islem === "m") {
+    await cevap("Hazırlıyorum"); await kapat("🔁 Yeniden hazırlanıyor");
+    if (s.firma === "celal") return yaz({ ...env, __izin: "cevap" }, await celalMutabakatGetir(env, simdi), { posta: { izin: "cevap" } });
+    const bekleyen = (await env.KAYIT.get("sami:islemler", "json").catch(() => null)) || [];
+    await env.KAYIT.put("sami:islemler", JSON.stringify([...(Array.isArray(bekleyen) ? bekleyen : []), { tur: "mutabakatHazirla", gun: gunAnahtari(simdi), kisi: "fuat", kaynak: "venom" }]), { expirationTtl: 3600 });
+    try { if (env.SAMI_W && typeof env.SAMI_W.islemAdim === "function") await env.SAMI_W.islemAdim(); } catch (e) { await hataYaz(env, "sorunMutabakat", e); }
+    return yaz({ ...env, __izin: "cevap" }, "Fuat'ın yeni mutabakat önizlemesi hazırlanıyor; kart size gelir, siz onaylamadan Fuat'a gitmez.", { posta: { izin: "cevap" } });
+  }
+  await cevap("Kapandı"); return kapat("✅ Kapandı");
+}

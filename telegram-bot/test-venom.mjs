@@ -2944,3 +2944,74 @@ test("17 Kasım (Patron): mutabakat_durumu — Celal / Fuat mutabakatı gitti mi
   assert.match(f.split("\n")[0], /SON → Fuat · 17\.11\.2026 mutabakatı: önizleme kartı Patron'da — henüz GÖNDERİLMEDİ/);
   assert.match(f.split("\n")[1], /önceki: Fuat · 13\.11\.2026 mutabakatı: gönderildi — CEVAP GELMEDİ \(bekleniyor\) · Fuat'a gidiş 14\.11\.2026 11:23/);
 });
+
+test("18 Kasım (Patron, kural 97–98): SORUN ÇÖZEN BEYİN — mutabakat itirazı Venom'a düşer, Patron'a anında tek satır, Venom araştırır (sadece okuma araçları), tek kart [yeniden hazırla / kapat]; 2 saat kuralı; mesai dışında araştırma yok", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const kuyruk = (kayit) => o.env.STOK.get().fetch("https://stok/kuyruk-ekle", { method: "POST", body: JSON.stringify({ ad: "venomSorun", kayit }) });
+  await o.ayar("mt:liste", ["2026-11-17-c"]);
+  await o.ayar("mt:2026-11-17-c", { id: "2026-11-17-c", gun: "2026-11-17", kisi: "celal", durum: "fark", gonderim: ist(17, 16, 28), cevapZaman: ist(17, 16, 32), fark: "Celal İndirim bakiye uyuşmuyor", brToplamYazi: "7.804,20 $", gecmis: [] });
+  // 1) gece 23:00: itiraz gelir → sorun açılır, Patron'a ANINDA tek satır; araştırma (yapay zekâ) BAŞLAMAZ (mesai dışı)
+  const gece = ist(17, 23, 0);
+  await kuyruk({ tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olay: "uyusmuyor", metin: "", zaman: gece });
+  await kuyruk({ tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olay: "aciklama", metin: "Celal İndirim bakiye uyuşmuyor", zaman: gece + 60 });
+  assert.equal(await v.sorunKuyrugu(o.env, gece + 120), 2);
+  await v.sorunAdimi(o.env, gece + 120);
+  let l = JSON.parse(o.depo.get("venom:sorunlar"));
+  assert.equal(l.length, 1); // iki olay TEK sorun
+  assert.deepEqual([l[0].durum, l[0].firma, l[0].olaylar.map((x) => x.olay).join()], ["acik", "celal", "uyusmuyor,aciklama"]);
+  assert.match(patronaGiden(o)[0].govde.text, /^❌ Celal 17\.11\.2026 mutabakatına "uyuşmuyor" dedi \(17\.11\.2026 23:00\)\. Firmaya sordum; araştırıyorum, size tek kart getireceğim\.$/);
+  assert.match(patronaGiden(o)[1].govde.text, /^💬 Celal mutabakat itirazında yazdı \(17\.11\.2026 mutabakatı, [^)]*\):\nCelal İndirim bakiye uyuşmuyor\n/);
+  assert.equal(o.claude.length, 0);
+  assert.equal(v.sorunMesai(gece), false);
+  // 2) sabah 09:05: araştırma — beyin sadece okuma araçlarını görür; sonuç kartı Patron'a düğmeli gelir
+  const sabah = ist(18, 9, 5);
+  o.cevaplar.push({ arac: "mutabakat_durumu", girdi: { firma: "celal" } }, { text: "DURUM: COZULDU\nKART:\n🧩 Mutabakat itirazı — Celal (17.11.2026)\nHesap: Celal İndirim (CI)\nBizde bakiye: 1.810,00 $ · Firmada: firma yazmadı · Fark: bilinmiyor\nSebep: 16.11 · CK · ALACAK 3.728,00 $ · kayıt no 265\nFirma ne dedi: Celal İndirim bakiye uyuşmuyor\nHemra: gerekmiyor\nOnayınız gereken: yok" });
+  await v.sorunAdimi(o.env, sabah);
+  assert.deepEqual(o.claude[0].tools.map((t) => t.name).sort(), ["bakiye", "cari_hareketler", "firmaya_sor", "mutabakat_durumu"].filter((n) => o.claude[0].tools.some((t) => t.name === n)).sort());
+  assert.ok(o.claude[0].tools.length >= 3 && !o.claude[0].tools.some((t) => /sil|paylas|pelin|bota_yaz|fabrika/.test(t.name)));
+  assert.match(o.claude[0].messages[0].content, /Firma: Celal \(araçlarda firma: "celal"\)[\s\S]*"Uyuşmuyor" düğmesine bastı[\s\S]*açıklama yazdı: "Celal İndirim bakiye uyuşmuyor"/);
+  const kart = sonKart(o);
+  assert.match(kart.govde.text, /^✅ Çözdüm — 🧩 Mutabakat itirazı — Celal \(17\.11\.2026\)\nHesap: Celal İndirim \(CI\)[\s\S]*kayıt no 265[\s\S]*Onayınız gereken: yok$/);
+  l = JSON.parse(o.depo.get("venom:sorunlar"));
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard[0].map((b) => [b.text, b.callback_data]), [["🔁 Mutabakatı yeniden hazırla", `vso:m:${l[0].id}`], ["✅ Tamam, kapat", `vso:k:${l[0].id}`]]);
+  assert.deepEqual([l[0].durum, l[0].arastirma, l[0].adimlar[0].durum, l[0].adimlar[0].araclar.join()], ["kart", 1, "COZULDU", "mutabakat_durumu"]);
+  // aynı sorun ikinci kez araştırılmaz (yeni olay yok)
+  const once = o.claude.length;
+  await v.sorunAdimi(o.env, sabah + 900);
+  assert.equal(o.claude.length, once);
+  // 3) firma karttan sonra yine yazarsa → sorun yeniden açılır ve yeniden araştırılır
+  await kuyruk({ tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olay: "cevap", metin: "Bizde CI 1.500", zaman: sabah + 1000 });
+  await v.sorunKuyrugu(o.env, sabah + 1000);
+  o.cevaplar.push({ text: "DURUM: BEKLIYOR\nDenedim: hareketleri okudum · Takıldım: 310 $ farkın satırı yok · Bekliyorum: firmanın fiş numarası" });
+  await v.sorunAdimi(o.env, sabah + 1000);
+  l = JSON.parse(o.depo.get("venom:sorunlar"));
+  assert.deepEqual([l[0].durum, l[0].arastirma], ["acik", 2]);
+  assert.match(l[0].bekliyor, /^Denedim: hareketleri okudum/);
+  // 4) düğme: ✅ Tamam, kapat → sorun kapanır
+  await bas(o, `vso:k:${l[0].id}`);
+  assert.equal(JSON.parse(o.depo.get("venom:sorunlar"))[0].durum, "kapandi");
+  // 5) 2 SAAT KURALI: çözülemeyen sorun 2 saat sonra Patron'a TEK satır (bir kez)
+  const o2 = ortam();
+  const t0 = ist(18, 10, 0);
+  await o2.env.STOK.get().fetch("https://stok/kuyruk-ekle", { method: "POST", body: JSON.stringify({ ad: "venomSorun", kayit: { tur: "mutabakat", mtId: "x1", firma: "fuat", gun: "2026-11-17", olay: "uyusmuyor", metin: "", zaman: t0 } }) });
+  await v.sorunKuyrugu(o2.env, t0);
+  o2.cevaplar.push({ text: "DURUM: BEKLIYOR\nDenedim: kaydı okudum · Takıldım: Fuat hangi hesap demedi · Bekliyorum: Fuat'ın cevabı" });
+  await v.sorunAdimi(o2.env, t0 + 60);
+  const onceki = patronaGiden(o2).length;
+  await v.sorunAdimi(o2.env, t0 + 3600); // 1 saat: satır yok
+  assert.equal(patronaGiden(o2).length, onceki);
+  await v.sorunAdimi(o2.env, t0 + 7260);
+  await v.sorunAdimi(o2.env, t0 + 7900);
+  const ikiSaat = patronaGiden(o2).slice(onceki);
+  assert.equal(ikiSaat.length, 1);
+  assert.match(ikiSaat[0].govde.text, /^🟠 Fuat 17\.11\.2026 mutabakatına "uyuşmuyor" dedi — 2 saatte çözemedim\. Denedim: kaydı okudum · Takıldım: Fuat hangi hesap demedi · Bekliyorum: Fuat'ın cevabı/);
+  // 6) deneme modu: araştırma firmaya / Patron'a hiçbir şey göndermez
+  const o3 = ortam();
+  o3.cevaplar.push({ arac: "firmaya_sor", girdi: { firma: "celal" } }, { text: "DURUM: BEKLIYOR\nDenedim: sordum" });
+  const a = await v.sorunArastir(o3.env, { id: "d", tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olaylar: [] }, sabah, { kuru: true });
+  assert.equal(a.durum, "BEKLIYOR");
+  assert.match(o3.claude[1].messages.at(-1).content[0].content, /^\(DENEME: Celal'e itiraz sorusu giderdi; denemede gönderilmedi\.\)$/);
+  assert.equal(o3.g.filter((x) => x.metod === "sendMessage").length, 0);
+  assert.equal(o3.depo.get("sami:islemler"), undefined);
+});

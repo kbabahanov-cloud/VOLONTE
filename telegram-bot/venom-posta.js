@@ -14,7 +14,7 @@ const kaydet = (env, k, v, ttl) => env.KAYIT.put(k, JSON.stringify(v), ttl ? { e
 const kucuk = (s) => String(s || "").toLocaleLowerCase("tr");
 
 // Kritik: sadece gerçekten acil olanlar (Patron listesi). "durdu" tek başına kritik DEĞİL (Venom kontrolü durdurması bilgi).
-export const KRITIK = /(müşteri[^\n]{0,30}şik[aâ]yet|şik[aâ]yet(i)? (geldi|var|etti|yazdı)|çöktü|çalışmıyor \(3 hata|durduruldu \(.*hata|otomatik durduruldu|köprü[^\n]{0,40}(sustu|sinyal (yok|göndermedi)|kopuk)|yanlış paylaşım|kanalda sorun|yanlış marka|para sınırı|sınırı (doldu|aşıl)|bütçe[^\n]{0,20}(aşıl|doldu)|%80|mutabakat[^\n]{0,60}uyuşmuyor|mutabakat sorusuna cevap)/i; // 17 Kasım (Patron): mutabakat itirazı anında gelir
+export const KRITIK = /(müşteri[^\n]{0,30}şik[aâ]yet|şik[aâ]yet(i)? (geldi|var|etti|yazdı)|çöktü|çalışmıyor \(3 hata|durduruldu \(.*hata|otomatik durduruldu|köprü[^\n]{0,40}(sustu|sinyal (yok|göndermedi)|kopuk)|yanlış paylaşım|kanalda sorun|yanlış marka|para sınırı|sınırı (doldu|aşıl)|bütçe[^\n]{0,20}(aşıl|doldu)|%80|mutabakat(?![^\n]*arşiv kopyası)[^\n]{0,60}uyuşmuyor|mutabakat sorusuna cevap)/i; // 17 Kasım (Patron): mutabakat itirazı anında gelir
 export const kritikMi = (metin) => KRITIK.test(String(metin || ""));
 // Bilgi türü (akşam/sabah özetinde sayı olarak)
 const KATEGORI = [
