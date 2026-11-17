@@ -3545,7 +3545,7 @@ export async function sorunKuyrugu(env, simdi) {
       if (!s) { s = { id: kisaId(), tur: o.tur, mtId: o.mtId, firma: o.firma, gun: o.gun, konu: `${SORUN_FIRMA[o.firma] || o.firma} ${String(o.gun || "").split("-").reverse().join(".")} mutabakatına "uyuşmuyor" dedi`, acildi: o.zaman || simdi, durum: "acik", olaylar: [], adimlar: [], arastirma: 0 }; l.push(s); }
       s.olaylar = [...(s.olaylar || []), { zaman: o.zaman || simdi, olay: o.olay, metin: String(o.metin || "").slice(0, 1000) }].slice(-12);
       s.yeni = true; s.sonOlay = simdi;
-      if (o.olay === "uyusmuyor") s.soruZaman = o.zaman || simdi; // Sami standart soruyu o anda sordu
+      if (o.olay === "uyusmuyor") { s.soruZaman = o.zaman || simdi; s.soruSayisi = (s.soruSayisi || 0) + 1; } // Sami standart soruyu o anda sordu
       if (s.durum === "kart") s.durum = "acik"; // karttan sonra firma yeni bir şey yazdı: yeniden araştırılır
       // Kural 97: itiraz ve firmanın cevabı Patron'a ANINDA düşer (özette beklemez) — tek kısa satır; çözülmüş kart araştırmadan sonra gelir
       const ad = SORUN_FIRMA[o.firma] || o.firma, gunY = String(o.gun || "").split("-").reverse().join(".");
@@ -3565,7 +3565,7 @@ MUTABAKAT İTİRAZI ADIMLARI (kural 97):
 1) mutabakat_durumu ile kaydı oku: firma ne zaman "uyuşmuyor" dedi, açıklaması ve cevapları ne.
 2) cari_hareketler ile o firmanın cari hareketlerini satır satır oku (gun: 60). Hesap bakiyelerini ve son hareketleri çıkar. DİKKAT: "DEVİR" yazan satır gerçek fiş değildir, önceki dönemin netidir; "ESKİ DÖNEM" yazan satırlar o devrin içindedir, güncel bakiyeye ayrıca eklenmez / çıkarılmaz. "DEVİR TUTUYOR" yazıyorsa devirde sorun yoktur; farkı SON DÖNEMİN satırlarında ara. Kendi toplamını yaparken sadece son dönemin satırlarını topla ve aracın yazdığı GÜNCEL BAKİYE ile karşılaştır.
 3) Firmanın yazdığını hareketlerle karşılaştır: firma hangi hesabı, hangi tutarı, hangi fişi / ödemeyi söylüyor? Bizim kayıtta karşılığı var mı? Fark hangi satırdan olabilir?
-4) Firma yeterli bilgi vermediyse (hangi hesap, kendi defterindeki bakiye, hangi fiş / ödeme) VE bu soru daha önce sorulup cevapsız kalmadıysa firmaya_sor ile sor. Standart soru zaten sorulduysa ve cevap yoksa YENİDEN SORMA; bekle.
+4) Firma yeterli bilgi vermediyse (hangi hesap, kendi defterindeki bakiye, hangi fiş / ödeme) VE bu soru daha önce sorulup cevapsız kalmadıysa firmaya_sor ile sor (firma: "fuat" ya da "celal"; ek metin YAZMA — firmaya sadece Patron'un onayladığı standart soru gider). Standart soru zaten sorulduysa ve cevap yoksa YENİDEN SORMA; bekle. Firmaya başka bir şey sormak gerekiyorsa metnini kartın "Onayınız gereken" satırına öneri olarak yaz.
 5) Sonucu AŞAĞIDAKİ BİÇİMDE yaz (başka hiçbir şey yazma):
 DURUM: COZULDU | COZULEMEDI | BEKLIYOR
 KART:
@@ -3605,8 +3605,15 @@ export async function sorunArastir(env, s, simdi, { kuru = false } = {}) {
       let c;
       const soruBekliyor = a.name === "firmaya_sor" && s.soruZaman && !(s.olaylar || []).some((o) => o.olay !== "uyusmuyor" && o.zaman > s.soruZaman);
       try {
-        c = !SORUN_ARACLARI.includes(a.name) ? "Bu araç araştırmada kullanılamaz." : soruBekliyor ? `Firmaya ${tarihSaat(s.soruZaman)} tarihinde soruldu, cevabı henüz gelmedi. Yeniden SORULMADI; cevabı bekle.` : await aracCalistir(e2, a.name, a.input || {}, simdi);
-        if (a.name === "firmaya_sor" && !soruBekliyor && !kuru && /mesaj no/i.test(String(c))) s.soruZaman = simdi;
+        // Firmaya SADECE Patron'un onayladığı standart soru gider (kural 97-1); Venom'un kendi yazdığı ek soru Patron görmeden gitmez (kartta önerilir).
+        const soruDoldu = a.name === "firmaya_sor" && (s.soruSayisi || 0) >= 2;
+        const ekVar = a.name === "firmaya_sor" && a.input && a.input.ek;
+        c = !SORUN_ARACLARI.includes(a.name) ? "Bu araç araştırmada kullanılamaz."
+          : soruBekliyor ? `Firmaya ${tarihSaat(s.soruZaman)} tarihinde soruldu, cevabı henüz gelmedi. Yeniden SORULMADI; cevabı bekle.`
+          : soruDoldu ? "Standart soru firmaya 2 kez soruldu; yeniden SORULMADI. Ek soru gerekiyorsa metnini kartın 'Onayınız gereken' satırına yaz (Patron onaylarsa gider)."
+          : await aracCalistir(e2, a.name, a.name === "firmaya_sor" ? { firma: s.firma } : a.input || {}, simdi);
+        if (ekVar && !soruBekliyor && !soruDoldu) c = `${c}\nNOT: senin yazdığın EK SORU firmaya GİTMEDİ (firmaya sadece Patron'un onayladığı standart soru gider). Ek soruyu kartın 'Onayınız gereken' satırına öneri olarak yaz.`;
+        if (a.name === "firmaya_sor" && !soruBekliyor && !soruDoldu && !kuru && /mesaj no/i.test(String(c))) { s.soruZaman = simdi; s.soruSayisi = (s.soruSayisi || 0) + 1; }
       } catch (e) { await hataYaz(env, `sorunArac:${a.name}`, e); c = "Araç çalışmadı."; }
       kullanilan.push(a.name);
       sonuclar.push({ type: "tool_result", tool_use_id: a.id, content: String(c).slice(0, 6000) });

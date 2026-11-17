@@ -16,7 +16,7 @@
 // Ayarlar (Cloudflare volonte-pelin): BOT_TOKEN, FAL_KEY, ANTHROPIC_API_KEY (secret, kullanıcı girer), WEBHOOK_SECRET (kurulumda
 // rastgele), KAYIT (ortak KV), PELIN (Durable Object), MURAT_ID, HEMRA_ID, ALLOWED_IDS, SELF_URL, KEMAL_URL.
 
-import { defterTg, defterKarar, defterIs, defterSatir } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterSatir, defterGelen } from "./is-defteri.js";
 import { durdurulduMu, durMesaji, pelinUretimDurdu } from "./durdurma.js";
 import { kitapOku } from "./kitap.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
@@ -1004,6 +1004,7 @@ const kisiAdi = (f) => [f.first_name, f.last_name].filter(Boolean).join(" ") || 
 
 export async function guncelleme(u, env) {
   const simdi = Math.floor(Date.now() / 1000);
+  if (u.message) await defterGelen(env, "pelin", u.message); // 18 Kasım (kural 98): gelen mesaj tek deftere (sadece kayıt)
   if (u.callback_query) {
     const cq = u.callback_query;
     await defterKarar(env, "pelin", cq); // 9 Kasım: iş defteri

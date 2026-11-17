@@ -86,6 +86,10 @@ export function kisiCevabi(env, kisi, satirlar, { gun = "bugün", gorevler = [] 
   const benim = (id) => kisiAdi(env, id) === kisi;
   const kartlar = satirlar.filter((x) => x.tur === "kart" && benim(x.kime));
   const kararlar = satirlar.filter((x) => x.tur === "karar" && benim(x.kime) && !["vg:-", "kt:-"].includes(String(x.cb || x.ozet)));
+  const BOT_AD = { sami: "Sami", kemal: "Kemal", selin: "Selin", pelin: "Pelin", nora: "Nora", venom: "Venom" };
+  const gelenler = satirlar.filter((x) => x.tur === "gelen" && benim(x.kime));
+  const yazdiklari = gelenler.length ? `• Yazdıkları (${gelenler.length}): ${gelenler.slice(-15).map((x) => `${new Date((Number(x.zaman) + 3 * 3600) * 1000).toISOString().slice(11, 16)} (${BOT_AD[x.bot] || x.bot} botuna) ${String(x.ozet).slice(0, 140)}`).join(" · ")}` : null;
+  if (!kartlar.length && !kararlar.length && yazdiklari) return `${kisi} ${gun}:\n${yazdiklari}\n• Kart / düğme cevabı kaydı yok.`;
   if (!kartlar.length && !kararlar.length) return `${kisi}: ${gun} için kayıt yok — bilmiyorum. Baktığım kaynak: iş defteri (1 Kasım'dan; kartlar, düğme cevapları, fabrika cevapları).`;
   const cevap = new Map();
   const DURUM_TR = { sureSoruluyor: "repete olacak (süre soruluyor)", bekliyor: "cevap bekliyor" };
@@ -95,6 +99,7 @@ export function kisiCevabi(env, kisi, satirlar, { gun = "bugün", gorevler = [] 
   s.push(`• Aldığı kartlar (${kartlar.length}): ${kartlar.length ? kartListe(kartlar.map(kartAdi)) : kararlar.some((r) => r.sonuc === "geçmiş kayıt") ? "kart kaydı yok (defter 9 Kasım 15:19'da açıldı; öncesi için sadece cevaplar kayıtlı)" : "yok"}`);
   s.push(`• Cevapladıkları (${cevap.size}): ${cevap.size ? [...cevap].map(([k, l]) => `${k}: ${l.join(", ")}`).join(" · ") : "yok"}`);
   s.push(`• Cevapsız (${cevapsiz.length}): ${cevapsiz.length ? kartListe(cevapsiz) : "yok"}`);
+  if (yazdiklari) s.push(yazdiklari);
   return s.join("\n");
 }
 // Canlı özetten kısa satırlar (bot hemen cevap verir)

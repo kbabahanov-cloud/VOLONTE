@@ -70,5 +70,18 @@ export async function defterKarar(env, bot, cq) {
   const kesin = Boolean(kod && cq.from && kesinler.includes(String(cq.from.id)) && !/^(hl|vm|vb|fb|fc|vd|vs):/.test(data) && !denemeMi((cq.message && (cq.message.text || cq.message.caption)) || ""));
   await defterYaz(env, { kesin, kimAd: (cq.from && cq.from.first_name) || null, zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: cq.from && cq.from.id, kod, ozet: ne ? `${kod ? `${kod}: ` : ""}${ne}`.slice(0, 120) : data.slice(0, 64), cb: data, sonuc: `${(cq.from && cq.from.first_name) || "biri"}: ${ne || data.slice(0, 40)}` });
 }
+// 18 Kasım (Patron, kural 98 — "her iş, her cevap tek deftere; Venom 'kaydım yok' diyemez"): botlara YAZIYLA / fotoğrafla / sesle gelen her
+// mesaj da deftere (kim, hangi bota, ne yazdı). tur "gelen": hiçbir kartı kapatmaz, hiçbir akışı değiştirmez — sadece kayıt.
+// Patron'un kendi mesajları ve "/start" yazılmaz; sadece özel sohbet (grup gürültüsü yazılmaz).
+export async function defterGelen(env, bot, m) {
+  try {
+    if (!env || !env.STOK || !m || !m.from || m.from.is_bot || !m.chat || m.chat.type !== "private") return;
+    if (String(env.MURAT_ID || "").split(",").map((x) => x.trim()).filter(Boolean).includes(String(m.from.id))) return;
+    const tur = m.photo ? "fotoğraf" : m.video ? "video" : m.voice || m.audio ? "sesli mesaj" : m.document ? "dosya" : m.contact ? "kişi kartı" : m.location ? "konum" : null;
+    const ne = m.text ? String(m.text) : `[${tur || "mesaj"}]${m.caption ? ` ${m.caption}` : ""}`;
+    if (/^\/start\b/.test(ne)) return;
+    await defterYaz(env, { zaman: Number(m.date) || Math.floor(Date.now() / 1000), bot, tur: "gelen", kime: m.from.id, kod: kodBulDefter(ne), ozet: `"${ne.replace(/\s+/g, " ").slice(0, 200)}"`, chat: String(m.chat.id), mesaj: m.message_id || null });
+  } catch { /* defter yazılamazsa iş durmaz */ }
+}
 // Yazıyla verilen cevap (açıklama, fabrika arama notu, düzeltme): kim, hangi model, ne yazdı
 export const defterCevap = (env, bot, kimId, kod, metin) => defterYaz(env, { zaman: Math.floor(Date.now() / 1000), bot, tur: "karar", kime: kimId, kod: kod || null, ozet: `${kod ? `${kod}: ` : ""}"${String(metin || "").replace(/\s+/g, " ").slice(0, 100)}"` });

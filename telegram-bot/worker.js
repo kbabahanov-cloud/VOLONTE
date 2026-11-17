@@ -41,7 +41,7 @@ import { calistirSatiri } from "./kemal-satir.js";
 import { kemalSayim } from "./is-bekcisi.js"; // 14 Kasım: öneri kartı sayısının tek kaynağı (rapor, iş bekçisi, ofis)
 export { calistirSatiri };
 import { kitapOku } from "./kitap.js";
-import { defterTg, defterKarar, defterIs, defterCevap, defterSatir, defterYaz } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterCevap, defterSatir, defterYaz, defterGelen } from "./is-defteri.js";
 import { soldOutStokKarari } from "./sold-kapi.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
@@ -360,7 +360,7 @@ export async function guncellemeIsle(update, env) {
     if (!(await anaKanalMi(t.chat, env))) return;
     return tepkiKaydet(env, t.message_id, (t.reactions || []).reduce((top, r) => top + (r.total_count || 0), 0));
   }
-  if (update.message) return mesajIsle(update.message, env);
+  if (update.message) { await defterGelen(env, "kemal", update.message); return mesajIsle(update.message, env); } // 18 Kasım (kural 98): gelen mesaj tek deftere (sadece kayıt)
   if (update.callback_query && update.callback_query.data === GUNCEL) return telegram(env, "answerCallbackQuery", { callback_query_id: update.callback_query.id, text: "⏩ Güncel kart aşağıda" });
   if (update.callback_query) { await defterKarar(env, "kemal", update.callback_query); return dugmeIsle(update.callback_query, env); }
 }

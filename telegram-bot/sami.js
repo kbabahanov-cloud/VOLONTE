@@ -15,7 +15,7 @@
 // KAYIT (ortak KV, okuma + birkaç kayıt) · STOK (Kemal'in betiğindeki StokDO).
 
 import { kitapOku } from "./kitap.js";
-import { defterTg, defterKarar, defterIs } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterGelen } from "./is-defteri.js";
 import { acikSessizlik } from "./magaza-saat.js";
 import { durdurulduMu } from "./durdurma.js";
 import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj } from "./tek-kapi.js";
@@ -202,6 +202,7 @@ async function sorular(env, simdi) {
 }
 
 export async function guncelleme(u, env) {
+  if (u.message) await defterGelen(env, "sami", u.message); // 18 Kasım (kural 98): yazıyla gelen her mesaj da tek deftere (sadece kayıt)
   if (u.callback_query) {
     const cq = u.callback_query;
     await defterKarar(env, "sami", cq); // 9 Kasım: iş defteri

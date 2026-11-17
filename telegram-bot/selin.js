@@ -12,7 +12,7 @@
 //  SELF_URL, ANTHROPIC_MODEL, GITHUB_REPO, SITE_URL  düz metin
 //  KAYIT (ortak KV), SELIN (Durable Object: yapay zekâ adımı Kuzey Amerika'da)
 
-import { defterTg, defterKarar, defterIs, defterSatir, defterYaz } from "./is-defteri.js";
+import { defterTg, defterKarar, defterIs, defterSatir, defterYaz, defterGelen } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
@@ -2812,6 +2812,7 @@ async function kareSecildi(env, cq, kod, n, kim, simdi, cevapla) {
 // ---------- 4) Telegram: düğmeler ve komutlar ----------
 
 export async function guncelleme(u, env) {
+  if (u.message) await defterGelen(env, "selin", u.message); // 18 Kasım (kural 98): gelen mesaj tek deftere (sadece kayıt)
   if (u.callback_query && u.callback_query.data === GUNCEL) return tg(env, "answerCallbackQuery", { callback_query_id: u.callback_query.id, text: "⏩ Güncel kart aşağıda" });
   if (u.callback_query) { await defterKarar(env, "selin", u.callback_query); return dugme(u.callback_query, env); }
   if (u.my_chat_member) return grupUyeligi(u.my_chat_member, env, "selin", "🌸 Selin (site)", tg);

@@ -3012,6 +3012,14 @@ test("18 Kasım (Patron, kural 97–98): SORUN ÇÖZEN BEYİN — mutabakat itir
   const a = await v.sorunArastir(o3.env, { id: "d", tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olaylar: [] }, sabah, { kuru: true });
   assert.equal(a.durum, "BEKLIYOR");
   assert.match(o3.claude[1].messages.at(-1).content[0].content, /^\(DENEME: Celal'e itiraz sorusu giderdi; denemede gönderilmedi\.\)$/);
+  // Venom'un kendi yazdığı EK soru firmaya gitmez (sadece standart soru); 2 kez sorulduysa yeniden sorulmaz
+  const o4 = ortam();
+  o4.cevaplar.push({ arac: "firmaya_sor", girdi: { firma: "celal", ek: "Bakiyeniz 1.810 mu?" } }, { text: "DURUM: BEKLIYOR\nDenedim: sordum" });
+  await v.sorunArastir(o4.env, { id: "d", tur: "mutabakat", mtId: "x", firma: "celal", gun: "2026-11-17", olaylar: [] }, sabah, { kuru: true });
+  assert.match(o4.claude[1].messages.at(-1).content[0].content, /NOT: senin yazdığın EK SORU firmaya GİTMEDİ/);
+  o4.cevaplar.push({ arac: "firmaya_sor", girdi: { firma: "celal" } }, { text: "DURUM: BEKLIYOR\nDenedim: x" });
+  await v.sorunArastir(o4.env, { id: "d", tur: "mutabakat", mtId: "x", firma: "celal", gun: "2026-11-17", olaylar: [], soruSayisi: 2 }, sabah, { kuru: true });
+  assert.match(o4.claude.at(-1).messages.at(-1).content[0].content, /^Standart soru firmaya 2 kez soruldu; yeniden SORULMADI/);
   assert.equal(o3.g.filter((x) => x.metod === "sendMessage").length, 0);
   assert.equal(o3.depo.get("sami:islemler"), undefined);
 });
@@ -3054,4 +3062,24 @@ test("18 Kasım: cari_hareketler dönem devrini açıkça yazar — devir satır
   assert.match(c, /16\.10\.2026 · HESAP A · BORÇ \(ödememiz\) 300,00 \$ · kayıt no 154$/m);
   assert.match(c, /HESAP B[\s\S]*neti 1\.000,00 \$ → yeni dönemin ilk satırı 09\.10\.2026 · kayıt no 106 · 900,00 \$ → DEVİR TUTMUYOR \(fark -100,00 \$\) — Hemra'ya sorulmalı/);
   assert.match(c, /09\.10\.2026 · HESAP B · ALACAK \(firmanın fişi\) 900,00 \$ · kayıt no 106$/m); // tutmayan devir "DEVİR" diye etiketlenmez
+});
+
+test("18 Kasım (kural 98): botlara yazıyla gelen mesaj tek deftere 'gelen' olarak yazılır — hiçbir kartı kapatmaz; Patron / grup / /start yazılmaz; Venom kişinin gününde 'Yazdıkları' satırını görür", async () => {
+  const o = ortam();
+  const { defterGelen, defterYaz } = await import("./is-defteri.js");
+  const { kisiCevabi } = await import("./venom-defter.js");
+  const t = ist(17, 12, 7);
+  const oku = async () => (await o.env.STOK.get().fetch("https://stok/isd-oku", { method: "POST", body: JSON.stringify({ basla: 0 }) })).json();
+  await defterYaz(o.env, { zaman: t - 600, bot: "sami", tur: "kart", kime: FUAT, kod: "3634", ozet: "3634 repete?", chat: FUAT, mesaj: 5, cbler: ["fb:e:1"] });
+  await defterGelen(o.env, "sami", { message_id: 9, date: t, chat: { id: Number(FUAT), type: "private" }, from: { id: Number(FUAT) }, text: "3634 bizde 18 görünüyor,\nbakiye uyuşmuyor" });
+  await defterGelen(o.env, "sami", { message_id: 10, date: t + 5, chat: { id: Number(FUAT), type: "private" }, from: { id: Number(FUAT) }, photo: [{ file_id: "f" }], caption: "fiş" });
+  await defterGelen(o.env, "sami", { message_id: 11, date: t, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, text: "patron yazısı" });
+  await defterGelen(o.env, "kemal", { message_id: 12, date: t, chat: { id: -5, type: "group" }, from: { id: Number(FUAT) }, text: "grup yazısı" });
+  await defterGelen(o.env, "sami", { message_id: 13, date: t, chat: { id: Number(FUAT), type: "private" }, from: { id: Number(FUAT) }, text: "/start" });
+  const l = await oku();
+  const gelen = l.filter((x) => x.tur === "gelen");
+  assert.deepEqual(gelen.map((x) => [x.bot, x.kime, x.kod, x.ozet, x.mesaj]), [["sami", FUAT, "3634", '"3634 bizde 18 görünüyor, bakiye uyuşmuyor"', 9], ["sami", FUAT, null, '"[fotoğraf] fiş"', 10]]);
+  assert.equal(l.find((x) => x.tur === "kart").durum, "bekliyor"); // gelen yazı kartı KAPATMAZ (akış değişmez)
+  const c = kisiCevabi(o.env, "Fuat", l, { gun: "bugün" });
+  assert.match(c, /• Yazdıkları \(2\): 12:07 \(Sami botuna\) "3634 bizde 18 görünüyor, bakiye uyuşmuyor" · 12:07 \(Sami botuna\) "\[fotoğraf\] fiş"/);
 });
