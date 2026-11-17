@@ -1,5 +1,29 @@
 [
  {
+  "kod": "600",
+  "baslik": "Printed Cape-Sleeve Jumpsuit",
+  "kategori": "jumpsuits",
+  "aciklama": {
+   "en": "A wide-leg jumpsuit in a satin-look printed fabric with a relaxed, flowing silhouette. Split cape sleeves fall softly from the shoulder, a fitted waist defines the shape, and a bold animal-inspired print comes in green, blue or red accents. Easy to style for events, dinners and special occasions. Made in Istanbul with careful workmanship.",
+   "fr": "Une combinaison à jambes larges dans un tissu imprimé à l'aspect satiné, à la silhouette fluide et décontractée. Les manches cape fendues tombent avec légèreté, la taille ajustée dessine la silhouette et l'imprimé animalier se décline en touches vertes, bleues ou rouges. Idéale pour les réceptions, les dîners et les occasions spéciales. Fabriquée à Istanbul avec un travail soigné.",
+   "pt": "Um macacão de pernas largas em tecido estampado com aspeto acetinado e silhueta fluida. As mangas capa abertas caem com leveza, a cintura ajustada valoriza a forma e o estampado de inspiração animal aparece em detalhes verdes, azuis ou vermelhos. Perfeito para eventos, jantares e ocasiões especiais. Produzido em Istambul com acabamento cuidadoso."
+  },
+  "bedenler": "44-46-48-50",
+  "fotolar": [
+   "galeri/600/1.jpg",
+   "galeri/600/2.jpg",
+   "galeri/600/3.jpg",
+   "galeri/600/4.jpg"
+  ],
+  "videolar": [
+   "selin/600/0",
+   "selin/600/1",
+   "selin/600/2"
+  ],
+  "gizli": false,
+  "eklenme": "2026-11-17"
+ },
+ {
   "kod": "3047",
   "baslik": "Check Panel Midi Dress",
   "kategori": "dresses",
