@@ -3810,8 +3810,9 @@
   "videolar": [
    "selin/3565/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-10-30"
+  "gizli": true,
+  "eklenme": "2026-10-30",
+  "bitti": true
  },
  {
   "kod": "3429",
