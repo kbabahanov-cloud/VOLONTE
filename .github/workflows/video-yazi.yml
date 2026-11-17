@@ -1,0 +1,8 @@
+name: video-yazi
+on:
+  workflow_dispatch:
+jobs:
+  deneme:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ffmpeg -version | head -1
