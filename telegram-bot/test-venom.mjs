@@ -3180,3 +3180,22 @@ test("18 Kasım: ekibin mutabakat görev cevabı (Hemra 'aradım, fark 80 dolar'
   await v.sorunArastir(o.env, { id: "d", tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olaylar: [] }, t, { kuru: true });
   assert.match(o.claude[0].messages[0].content, /Ekibin bu konudaki cevapları:\n👤 Hemra cevap verdi \(17\.11\.2026 16:38\): "Ben aradım {2}aradaki fark 80 dolar"/);
 });
+
+test("18 Kasım: Hemra mutabakat görevine yeni cevap yazınca (fark 80 dolar) açık / kartı gelmiş itiraz sorunu yeniden araştırılır", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const t0 = ist(18, 10, 0);
+  o.depo.set("venom:sorunlar", JSON.stringify([{ id: "s1", tur: "mutabakat", mtId: "m1", firma: "celal", gun: "2026-11-17", konu: "Celal 17.11.2026 mutabakatına \"uyuşmuyor\" dedi", acildi: t0 - 3600, durum: "kart", kartZaman: t0 - 1800, sonArastirma: t0 - 1800, arastirma: 1, olaylar: [], adimlar: [], ikiSaat: 1 }]));
+  await v.sorunAdimi(o.env, t0);
+  assert.equal(o.claude.length, 0); // yeni bilgi yok: yeniden araştırılmaz
+  o.depo.set("venom:gorevler", JSON.stringify([{ id: "g1", zaman: t0 - 600, durum: "bitti", kimler: ["hemra"], baslik: "Celal'i ara", metin: "Celal'i ara: mutabakatta Celal İndirim bakiye uyuşmuyor dedi.", kalemler: [{ kod: "İş", secim: "a", kim: "Hemra", aciklama: "aradım fark 80 dolar", zaman: t0 + 60 }] }]));
+  o.cevaplar.push({ text: "DURUM: COZULDU\nKART:\n🧩 Mutabakat itirazı — Celal (17.11.2026)\nHesap: Celal İndirim\nBizde bakiye: 1 $ · Firmada: 2 $ · Fark: 80 $\nSebep: aday satır\nFirma ne dedi: x\nHemra: aradım fark 80 dolar\nOnayınız gereken: yok" });
+  await v.sorunAdimi(o.env, t0 + 900);
+  assert.equal(o.claude.length, 1);
+  assert.match(o.claude[0].messages[0].content, /Ekibin bu konudaki cevapları:\n👤 Hemra cevap verdi[^\n]*"aradım fark 80 dolar"/);
+  const s = JSON.parse(o.depo.get("venom:sorunlar"))[0];
+  assert.deepEqual([s.durum, s.arastirma], ["kart", 2]);
+  const once = o.claude.length;
+  await v.sorunAdimi(o.env, t0 + 1800); // aynı cevap ikinci kez tetiklemez
+  assert.equal(o.claude.length, once);
+});

@@ -3726,7 +3726,13 @@ export async function sorunAdimi(env, simdi) {
   const l = await oku(env, "venom:sorunlar", []);
   let degisti = false;
   for (const s of l) {
-    if (s.durum !== "acik") continue;
+    if (s.durum !== "acik" && s.durum !== "kart") continue;
+    // 18 Kasım: ekip (Hemra) bu firmanın mutabakat görevine YENİ cevap yazdıysa (ör. "aradım, fark 80 dolar") sorun yeniden araştırılır
+    if (s.tur === "mutabakat") {
+      const sonCevap = Math.max(0, ...(await oku(env, "venom:gorevler", [])).filter((g) => /mutabakat|bakiye|uyuşmuyor/i.test(`${g.baslik || ""} ${g.metin || ""}`) && (s.firma === "celal" ? /celal/i : /fuat/i).test(`${g.baslik || ""} ${g.metin || ""}`)).flatMap((g) => (g.kalemler || []).filter((k) => k.kim && k.aciklama).map((k) => Number(k.zaman) || 0)));
+      if (sonCevap > Math.max(s.sonArastirma || 0, s.acildi || 0) && sonCevap > (s.gorevCevap || 0)) { s.gorevCevap = sonCevap; s.yeni = true; if (s.durum === "kart") s.durum = "acik"; degisti = true; }
+    }
+    if (s.durum !== "acik") { if (s.durum === "kart" && simdi - (s.kartZaman || simdi) > 7 * 86400) { s.durum = "kapandi"; degisti = true; } continue; }
     if (s.yeni && sorunSaati(s, simdi) && (s.arastirma || 0) < 6 && simdi - (s.sonArastirma || 0) >= 600) {
       s.sonArastirma = simdi; s.arastirma = (s.arastirma || 0) + 1; s.yeni = false; degisti = true;
       await sorunKaydet(env, l); // araştırma uzun sürerse aynı sorun ikinci kez başlamasın
@@ -3748,7 +3754,6 @@ export async function sorunAdimi(env, simdi) {
       const g = await yaz({ ...env, __izin: "cozulemeyen" }, metin, { posta: { izin: "cozulemeyen" } }).catch(() => null);
       if (g && g.ok) { s.ikiSaat = simdi; degisti = true; await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `SORUN (${s.id}): 2 saat kuralı — Patron'a tek satır yazıldı (mesaj no ${g.result.message_id})` }).catch(() => null); }
     }
-    if (s.durum === "kart" && simdi - (s.kartZaman || simdi) > 7 * 86400) { s.durum = "kapandi"; degisti = true; }
   }
   if (degisti) await sorunKaydet(env, l);
 }
