@@ -1,0 +1,111 @@
+# BULUT FFMPEG (17 Kasım, Patron kararı): fal.ai olmadan, ÜCRETSİZ video işleri.
+# Pelin işi kuyruğa yazar → bu iş akışı her 5 dakikada bir Pelin'in herkese açık "/ffmpeg/isler" ucunu okur →
+#   yazi : "MARKA · KOD" katmanını videonun tamamına basar; videonun KENDİ sesi aynen kopyalanır (yeniden kodlanmaz)
+#   kare : ilk / orta / son kare (kalite kontrol için)
+#   muzik: sessiz videoya müzik ekler
+# → sonucu "ffmpeg-cikti" dalına yazar (<id>.json + dosya). Pelin o dalı okur. Video yeniden ÜRETİLMEZ, gizli bilgi yoktur.
+name: video-yazi
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: video-yazi
+  cancel-in-progress: false
+jobs:
+  isle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PELIN: https://volonte-pelin.volonte.workers.dev
+      DAL: ffmpeg-cikti
+    steps:
+      - name: İşleri al
+        id: al
+        run: |
+          curl -fsS --retry 3 "$PELIN/ffmpeg/isler" -o isler.json || echo "[]" > isler.json
+          jq -e 'type == "array"' isler.json >/dev/null || echo "[]" > isler.json
+          mkdir -p cikti
+          if git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/$DAL" >/dev/null 2>&1; then
+            git clone -q --depth 1 -b "$DAL" "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" eski
+          else mkdir -p eski; fi
+          yeni=0
+          for id in $(jq -r '.[].id' isler.json); do
+            if ! printf '%s' "$id" | grep -Eq '^[A-Za-z0-9_-]{1,80}$'; then continue; fi
+            [ -f "eski/$id.json" ] || yeni=$((yeni + 1))
+          done
+          echo "yeni=$yeni" >> "$GITHUB_OUTPUT"
+          echo "Bekleyen yeni iş: $yeni"
+      - name: ffmpeg kur
+        if: steps.al.outputs.yeni != '0'
+        run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null)
+      - name: İşle
+        if: steps.al.outputs.yeni != '0'
+        run: |
+          set +e
+          simdi=$(date +%s)
+          hata() { jq -n --arg h "$2" --argjson z "$simdi" '{ok:false, hata:$h, zaman:$z}' > "cikti/$1.json"; }
+          n=$(jq length isler.json)
+          for i in $(seq 0 $((n - 1))); do
+            j=$(jq -c ".[$i]" isler.json)
+            id=$(jq -r .id <<<"$j"); islem=$(jq -r .islem <<<"$j"); video=$(jq -r .video <<<"$j")
+            kod=$(jq -r .kod <<<"$j"); marka=$(jq -r .marka <<<"$j"); ses=$(jq -r .ses <<<"$j"); muzik=$(jq -r '.muzik // ""' <<<"$j")
+            printf '%s' "$id" | grep -Eq '^[A-Za-z0-9_-]{1,80}$' || continue
+            [ -f "eski/$id.json" ] && continue
+            echo "== $id ($islem)"
+            rm -f g.mp4 k.png m.audio
+            if ! curl -fsSL --retry 3 --max-filesize 300000000 "$video" -o g.mp4; then hata "$id" "video indirilemedi"; continue; fi
+            boy=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x g.mp4 | head -1)
+            w=${boy%x*}; h=${boy#*x}
+            if [ -z "$w" ] || [ -z "$h" ]; then hata "$id" "video okunamadı"; continue; fi
+            sure=$(ffprobe -v error -show_entries format=duration -of csv=p=0 g.mp4 | head -1)
+            sesvar=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 g.mp4 | head -1)
+            case "$islem" in
+              yazi)
+                if ! curl -fsS --retry 3 "$PELIN/ffmpeg/katman?w=$w&h=$h&kod=$kod&marka=$marka" -o k.png; then hata "$id" "yazı katmanı alınamadı"; continue; fi
+                if [ -n "$sesvar" ]; then
+                  ffmpeg -nostdin -v error -y -i g.mp4 -i k.png -filter_complex "[0:v][1:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 0:a -c:v libx264 -preset veryfast -crf 18 -c:a copy -movflags +faststart "cikti/$id.mp4" || rm -f "cikti/$id.mp4"
+                  # ses kabı mp4'e uymazsa (çok nadir) ses aynı kalitede yeniden paketlenir
+                  [ -s "cikti/$id.mp4" ] || ffmpeg -nostdin -v error -y -i g.mp4 -i k.png -filter_complex "[0:v][1:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 0:a -c:v libx264 -preset veryfast -crf 18 -c:a aac -b:a 256k -movflags +faststart "cikti/$id.mp4"
+                else
+                  # ses izi yoksa sessiz ses izi eklenir (iPhone'da oynatma için); videonun sesi olan dosyada ses AYNEN kopyalanır
+                  ffmpeg -nostdin -v error -y -i g.mp4 -i k.png -f lavfi -i anullsrc=r=44100:cl=stereo -filter_complex "[0:v][1:v]overlay=0:0:format=auto,format=yuv420p[v]" -map "[v]" -map 2:a -shortest -c:v libx264 -preset veryfast -crf 18 -c:a aac -b:a 96k -movflags +faststart "cikti/$id.mp4"
+                fi
+                if [ $? -ne 0 ] || [ ! -s "cikti/$id.mp4" ]; then rm -f "cikti/$id.mp4"; hata "$id" "ffmpeg yazı basamadı"; continue; fi
+                jq -n --arg v "$id.mp4" --argjson z "$simdi" --arg s "${sesvar:+koru}" '{ok:true, video:$v, ses:$s, zaman:$z}' > "cikti/$id.json" ;;
+              kare)
+                orta=$(awk -v s="${sure:-0}" 'BEGIN{printf "%.2f", s/2}')
+                son=$(awk -v s="${sure:-0}" 'BEGIN{x=s-0.15; if (x<0) x=0; printf "%.2f", x}')
+                ffmpeg -nostdin -v error -y -i g.mp4 -frames:v 1 -q:v 3 "cikti/$id-1.jpg"
+                ffmpeg -nostdin -v error -y -ss "$orta" -i g.mp4 -frames:v 1 -q:v 3 "cikti/$id-2.jpg"
+                ffmpeg -nostdin -v error -y -sseof -0.3 -i g.mp4 -frames:v 1 -q:v 3 "cikti/$id-3.jpg" || ffmpeg -nostdin -v error -y -ss "$son" -i g.mp4 -frames:v 1 -q:v 3 "cikti/$id-3.jpg"
+                if [ ! -s "cikti/$id-1.jpg" ] || [ ! -s "cikti/$id-2.jpg" ] || [ ! -s "cikti/$id-3.jpg" ]; then rm -f "cikti/$id-"*.jpg; hata "$id" "kare alınamadı"; continue; fi
+                jq -n --arg a "$id-1.jpg" --arg b "$id-2.jpg" --arg c "$id-3.jpg" --argjson z "$simdi" '{ok:true, kareler:[$a,$b,$c], zaman:$z}' > "cikti/$id.json" ;;
+              muzik)
+                if ! curl -fsSL --retry 3 --max-filesize 50000000 "$muzik" -o m.audio; then hata "$id" "müzik indirilemedi"; continue; fi
+                ffmpeg -nostdin -v error -y -i g.mp4 -i m.audio -map 0:v -map 1:a -shortest -c:v copy -c:a aac -b:a 160k -movflags +faststart "cikti/$id.mp4"
+                if [ $? -ne 0 ] || [ ! -s "cikti/$id.mp4" ]; then rm -f "cikti/$id.mp4"; hata "$id" "ffmpeg müzik ekleyemedi"; continue; fi
+                jq -n --arg v "$id.mp4" --argjson z "$simdi" '{ok:true, video:$v, zaman:$z}' > "cikti/$id.json" ;;
+              *) hata "$id" "bilinmeyen işlem" ;;
+            esac
+          done
+          ls -la cikti
+      - name: Sonuçları yaz
+        if: steps.al.outputs.yeni != '0'
+        run: |
+          simdi=$(date +%s)
+          # son 2 günün sonuçları korunur (Pelin okuyana kadar), eskiler atılır; dal her seferinde tek işlemle yeniden yazılır (depo şişmez)
+          for f in eski/*.json; do
+            [ -f "$f" ] || continue
+            z=$(jq -r '.zaman // 0' "$f" 2>/dev/null || echo 0)
+            if [ $((simdi - z)) -lt 172800 ]; then
+              b=$(basename "$f" .json); cp -n "eski/$b".* cikti/ 2>/dev/null; cp -n "eski/$b"-*.jpg cikti/ 2>/dev/null
+            fi
+          done
+          cd cikti
+          git init -q -b "$DAL"
+          git config user.name "video-yazi"; git config user.email "video-yazi@users.noreply.github.com"
+          git add -A && git commit -q -m "bulut ffmpeg sonuçları $(date -u +%FT%TZ)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" "$DAL:$DAL"
