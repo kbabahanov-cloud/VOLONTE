@@ -3127,3 +3127,36 @@ test("18 Kasım (Patron, EK 6): SORUN ÇÖZEN BEYİN her konuda — Patron 'ara�
   assert.match(c, /^\(DENEME: "deneme" sorunu araştırmaya alınırdı/);
   assert.equal(o2.depo.get("venom:sorunlar"), undefined);
 });
+
+test("18 Kasım (Patron, KURAL 98) VENOM GENEL KAPISI: rutin iş → Venom kendisi onaylar (yapay zekâ çağrısı yok); kontrol → stokla karşılaştırır; para / fabrika siparişi → Patron onayı olmadan geçmez; tanımsız iş geçmez; her karar deftere", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const t = ist(17, 15, 0);
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 0, fiyat: 30 }, { kod: "3629", adet: 3, fiyat: 30 }], simdi: t - 600 });
+  await stokYaz("yaz", { magaza: "BLACKROSE", urunler: [{ kod: "3629", adet: 4, fiyat: 30 }], simdi: t - 600 });
+  assert.deepEqual(await v.venomIsKapisi(o.env, { bot: "sami", is: "eksik_listesi", ozet: "VOLONTE eksik listesi Aziz'e" }, t), { izin: true, sinif: "rutin" });
+  assert.deepEqual(await v.venomIsKapisi(o.env, { bot: "kemal", is: "sold_out", kod: "3394" }, t), { izin: true, toplam: 0, sinif: "kontrol" });
+  assert.deepEqual(await v.venomIsKapisi(o.env, { bot: "kemal", is: "sold_out", kod: "3629" }, t), { izin: false, neden: "stok var (iki mağaza toplamı 7 adet)", toplam: 7, sinif: "kontrol" });
+  assert.match((await v.venomIsKapisi(o.env, { bot: "selin", is: "silme", kod: "3629" }, t)).neden, /^mağazada stok var \(VOLONTE 3 adet · BLACK ROSE 4 adet\)/);
+  assert.deepEqual(await v.venomIsKapisi(o.env, { bot: "pelin", is: "para", kod: "3271" }, t), { izin: false, sinif: "patron", neden: "Patron onayı gerekir (kart)" });
+  assert.deepEqual(await v.venomIsKapisi(o.env, { bot: "pelin", is: "para", kod: "3271", patronOnayi: "kart 1731" }, t), { izin: true, sinif: "patron", onay: "kart 1731" });
+  assert.deepEqual(await v.venomIsKapisi(o.env, { bot: "sami", is: "bilinmeyen_is" }, t), { izin: false, sinif: "tanimsiz", neden: "tanımsız iş (bilinmeyen_is) — Patron'a sorulur" });
+  assert.equal(o.claude.length, 0); // kapı kuralla çalışır: yapay zekâ çağrısı (harcama) yok
+  const d = JSON.stringify(await (await stokYaz("isd-oku", { basla: 0, bitis: t + 99999 })).json());
+  assert.match(d, /KAPI \(sami · eksik_listesi\): rutin iş — onaylandı — VOLONTE eksik listesi Aziz'e/);
+  assert.match(d, /KAPI \(kemal · sold_out\): DURDU: stok var \(iki mağaza toplamı 7 adet\)/);
+  assert.match(d, /KAPI \(pelin · para\): DURDU: Patron onayı gerekir \(kart\)/);
+});
+
+test("18 Kasım: %80 harcama uyarısı arka plan işinden tetiklenince de Patron'a gider (kritik etiketli); gidemediyse işaret konmaz", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  o.depo.set("venom-harcama:2026-11", "56.5"); // sınır 70 $ → %80 = 56 $ (işaret henüz konmamış)
+  o.cevaplar.push({ text: "DURUM: COZULEMEDI\nKART:\n🧩 x\nSorun ne idi: a\nNe buldum: b\nNe düzelttim: c\nOnayınız gereken: yok" });
+  const a = await v.sorunArastir(o.env, { id: "d", tur: "genel", konu: "deneme", acildi: ist(17, 10) }, ist(17, 10), { kuru: true });
+  assert.ok(a.usd > 0);
+  const uyari = patronaGiden(o).filter((x) => /Venom bu ay .* yapay zekâ harcadı \(aylık sınır 70 \$, %80\)/.test(x.govde.text));
+  assert.equal(uyari.length, 1);
+  assert.equal(o.depo.get("venom:bot:uyari:2026-11"), "1");
+});

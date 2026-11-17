@@ -1084,8 +1084,9 @@ async function venomHarcamaYaz(env, usd, simdi) {
   await env.KAYIT.put(k, String(yeni), { expirationTtl: 400 * 86400 });
   const sinir = await venomSinir(env);
   if (yeni >= sinir * 0.8 && !(await env.KAYIT.get(`venom:bot:uyari:${ay(simdi)}`))) {
-    await env.KAYIT.put(`venom:bot:uyari:${ay(simdi)}`, "1", { expirationTtl: 40 * 86400 });
-    await yaz(env, `⚠️ Venom bu ay ${yeni.toFixed(2).replace(".", ",")} $ yapay zekâ harcadı (aylık sınır ${sinir} $, %80). Sınır dolunca sohbet durur; stok/bakiye raporları ve onay düğmeleri çalışmaya devam eder.`);
+    // 18 Kasım: uyarı "kritik" etiketiyle gider (arka plan işinden tetiklenince etiketsiz kalıp kapıda takılıyordu); gitmediyse işaret konmaz → yeniden denenir
+    const g = await yaz({ ...env, __izin: "kritik", __kuru: false }, `⚠️ Venom bu ay ${yeni.toFixed(2).replace(".", ",")} $ yapay zekâ harcadı (aylık sınır ${sinir} $, %80). Sınır dolunca sohbet ve araştırmalar durur; stok/bakiye raporları ve onay düğmeleri çalışmaya devam eder.`, { posta: { izin: "kritik" } }).catch(() => null);
+    if (g && g.ok) await env.KAYIT.put(`venom:bot:uyari:${ay(simdi)}`, "1", { expirationTtl: 40 * 86400 });
   }
 }
 const claudeUsd = (model, u = {}) => { const f = CLAUDE_FIYAT[model] || CLAUDE_FIYAT["claude-opus-5-5"]; return ((u.input_tokens || 0) * f.giris + (u.cache_creation_input_tokens || 0) * f.giris * 1.25 + (u.cache_read_input_tokens || 0) * f.okuma + (u.output_tokens || 0) * f.cikis) / 1e6; };
@@ -1176,6 +1177,31 @@ export async function venomSoldOutKontrol(env, g, simdi = Math.floor(Date.now() 
   let karar;
   try { karar = await soldOutStokKarari((y, gg) => stokIste(env, y, gg), kod, simdi); } catch { karar = { izin: false, neden: "stok okunamadı (depo cevap vermedi)" }; }
   await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kod: kod || null, ozet: `SOLD OUT kapısı (${yer}): ${karar.izin ? "stok 0, veri güncel → izin verildi" : `DURDU: ${karar.neden}`} — kural 99` }).catch(() => null);
+  return karar;
+}
+// 18 Kasım (Patron, KURAL 98 — ANA KURAL, KURULUYOR): VENOM GENEL KAPISI. Bir bot bir iş yapmadan önce buraya sorar: { bot, is, kod?, ... }.
+//  • rutin  : kitaptaki kurala uyan günlük iş → Venom kendisi onaylar, sadece deftere yazar (iş yavaşlamaz, yapay zekâ çağrısı YOK)
+//  • kontrol: Venom kendi okumasıyla denetler (SOLD OUT → stok; silme → stok; fabrika kartı → kod / satış / renk-beden); tutmazsa durdurur
+//  • patron : para harcayan / fabrikaya sipariş / mutabakat gönderimi / kural değişikliği → Patron onayı (kart) olmadan geçmez
+// Tanımsız iş geçmez (Patron'a sorulur). Her karar tek deftere yazılır. BU KAPI ŞU AN SADECE SOLD OUT ve fabrika kartında bağlıdır;
+// korunan akışlara (eksik listesi, fabrika / repete, Selin–Merdan, cuma mutabakatı, kanal paylaşımı) Patron eski / yeni yolu onaylayınca bağlanır.
+export const KAPI_TABLOSU = {
+  eksik_listesi: "rutin", foto_listesi: "rutin", hatirlatma: "rutin", kart_tekrari: "rutin", stok_sorusu: "rutin", kanal_paylasimi: "rutin", back_in_stock: "rutin", gunluk_rapor: "rutin", mutabakat_itiraz_sorusu: "rutin", site_guncelleme: "rutin",
+  sold_out: "kontrol", silme: "kontrol", fabrika_karti: "kontrol",
+  para: "patron", fabrika_siparisi: "patron", mutabakat_gonderimi: "patron", stoklu_silme: "patron", kural_degisikligi: "patron", yeni_kisi: "patron", musteriye_mesaj: "patron",
+};
+export async function venomIsKapisi(env, g, simdi = Math.floor(Date.now() / 1000)) {
+  const bot = String((g || {}).bot || "?"), is = String((g || {}).is || ""), kod = (g || {}).kod ? String(g.kod) : null;
+  const sinif = KAPI_TABLOSU[is] || null;
+  let karar;
+  if (!sinif) karar = { izin: false, sinif: "tanimsiz", neden: `tanımsız iş (${is || "adı yok"}) — Patron'a sorulur` };
+  else if (sinif === "rutin") karar = { izin: true, sinif };
+  else if (sinif === "patron") karar = g.patronOnayi ? { izin: true, sinif, onay: String(g.patronOnayi).slice(0, 60) } : { izin: false, sinif, neden: "Patron onayı gerekir (kart)" };
+  else if (is === "sold_out") { const k = await soldOutStokKarari((y, gg) => stokIste(env, y, gg), kod, simdi).catch(() => ({ izin: false, neden: "stok okunamadı (depo cevap vermedi)" })); karar = { ...k, sinif }; }
+  else if (is === "silme") { const st = await magazaStoklari(env, kod); karar = st.okundu === false ? { izin: false, sinif, neden: "stok okunamadı — ne SOLD OUT ne silme (kural 99)" } : st.var ? { izin: false, sinif, neden: `mağazada stok var (${st.yazi}) — Patron "yine de" demeden silinmez` } : { izin: true, sinif }; }
+  else if (is === "fabrika_karti") { const k = await fabrikaKontrolu(g.kart || {}, venomUyumKaynaklari(env)); karar = k.ok ? { izin: true, sinif } : { izin: false, sinif, neden: k.sorun.join("; ") }; }
+  else karar = { izin: false, sinif, neden: "kontrol tanımlı değil" };
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kod, ozet: `KAPI (${bot} · ${is || "?"}): ${karar.izin ? (karar.sinif === "rutin" ? "rutin iş — onaylandı" : karar.sinif === "patron" ? "Patron onaylı — geçti" : "kontrol edildi — geçti") : `DURDU: ${karar.neden}`}${g && g.ozet ? ` — ${String(g.ozet).slice(0, 120)}` : ""}` }).catch(() => null);
   return karar;
 }
 // 16 Kasım (Patron): Venom Kemal'in müşteri paylaşımı kartlarını ve SIRASINI görür (KV "kemal:mp:<id>", "kemal:mpSira"); görmediğini "yok" demez
@@ -3641,9 +3667,10 @@ export async function sorunArastir(env, s, simdi, { kuru = false } = {}) {
   const mesajlar = genel ? [{ role: "user", content: `SORUN: ${s.konu}\n${s.ayrinti ? `Ayrıntı: ${s.ayrinti}\n` : ""}Kaynak: ${s.kaynak || "?"} · açıldı: ${tarihSaat(s.acildi || simdi)}\nŞimdi: ${tarihSaat(simdi)}. Araştır ve sonucu istenen biçimde yaz.` }] : [{ role: "user", content: `SORUN: mutabakat itirazı.\nFirma: ${SORUN_FIRMA[s.firma] || s.firma} (araçlarda firma: "${s.firma}")\nMutabakat günü: ${String(s.gun || "").split("-").reverse().join(".")} · kayıt: ${s.mtId}\nOlaylar:\n${olayYazi || "(olay yok)"}\nŞimdi: ${tarihSaat(simdi)}. Araştır ve sonucu istenen biçimde yaz.` }];
   const sistem = [{ type: "text", text: await kitapOku(env, "venom", simdi) }, { type: "text", text: genel ? SORUN_SISTEM_GENEL : SORUN_SISTEM, cache_control: { type: "ephemeral" } }];
   const kullanilan = [];
-  let son = "";
+  let son = "", usd = 0;
   for (let tur = 0; tur < 6; tur++) {
     const rr = await claudeTur(client, { model, max_tokens: 3000, system: sistem, tools: araclar, output_config: { effort: "medium" }, messages: mesajlar });
+    usd += claudeUsd(model, rr.usage);
     await venomHarcamaYaz(env, claudeUsd(model, rr.usage), simdi);
     const yazi = rr.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     if (yazi) son = yazi;
@@ -3672,8 +3699,9 @@ export async function sorunArastir(env, s, simdi, { kuru = false } = {}) {
   }
   const d = (son.match(/DURUM:\s*(COZULDU|COZULEMEDI|BEKLIYOR)/) || [])[1];
   const kart = (son.split(/KART:\s*/)[1] || son.replace(/DURUM:[^\n]*\n?/, "")).trim();
-  if (!d || !kart) return { durum: "HATA", kart: `araştırma sonucu okunamadı: ${son.slice(0, 200)}`, araclar: kullanilan };
-  return { durum: d, kart: tabloyuListeyeCevir(kart).slice(0, 3500), araclar: kullanilan };
+  usd = Math.round(usd * 10000) / 10000;
+  if (!d || !kart) return { durum: "HATA", kart: `araştırma sonucu okunamadı: ${son.slice(0, 200)}`, araclar: kullanilan, usd };
+  return { durum: d, kart: tabloyuListeyeCevir(kart).slice(0, 3500), araclar: kullanilan, usd };
 }
 const sorunKlavye = (s) => ({ inline_keyboard: [[...(s.tur === "mutabakat" ? [{ text: "🔁 Mutabakatı yeniden hazırla", callback_data: `vso:m:${s.id}` }] : []), { text: "✅ Tamam, kapat", callback_data: `vso:k:${s.id}` }]] });
 // Araştırma ne zaman başlar: mutabakat itirazı → mesaide (firmaya soru gidebilir); genel sorun → 08:00–22:00 (gece kart gelmesin); Patron kendisi istediyse hemen
@@ -3688,7 +3716,8 @@ export async function sorunAdimi(env, simdi) {
       s.sonArastirma = simdi; s.arastirma = (s.arastirma || 0) + 1; s.yeni = false; degisti = true;
       await sorunKaydet(env, l); // araştırma uzun sürerse aynı sorun ikinci kez başlamasın
       const a = await sorunArastir(env, s, simdi).catch((e) => ({ durum: "HATA", kart: String(e && e.message).slice(0, 200), araclar: [] }));
-      s.adimlar = [...(s.adimlar || []), { zaman: simdi, durum: a.durum, araclar: a.araclar, ozet: String(a.kart).slice(0, 400) }].slice(-10);
+      s.adimlar = [...(s.adimlar || []), { zaman: simdi, durum: a.durum, araclar: a.araclar, usd: a.usd || 0, ozet: String(a.kart).slice(0, 400) }].slice(-10);
+      s.usd = Math.round(((s.usd || 0) + (a.usd || 0)) * 10000) / 10000;
       await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `SORUN (${s.id}) araştırma ${s.arastirma}: ${a.durum} — araçlar: ${a.araclar.join(", ") || "yok"} — ${String(a.kart).replace(/\s+/g, " ").slice(0, 160)}` }).catch(() => null);
       if (a.durum === "COZULDU" || a.durum === "COZULEMEDI") {
         const g = await yaz({ ...env, __izin: "onay" }, `${a.durum === "COZULDU" ? "✅ Çözdüm" : "🟠 Çözemedim"} — ${a.kart}`, { reply_markup: sorunKlavye(s), posta: { izin: "onay" } }).catch(() => null);
