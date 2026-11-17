@@ -3160,3 +3160,23 @@ test("18 Kasım: %80 harcama uyarısı arka plan işinden tetiklenince de Patron
   assert.equal(uyari.length, 1);
   assert.equal(o.depo.get("venom:bot:uyari:2026-11"), "1");
 });
+
+test("18 Kasım: ekibin mutabakat görev cevabı (Hemra 'aradım, fark 80 dolar') mutabakat_durumu'nda ve araştırmanın ilk mesajında görünür; başka firmanın / başka konunun görevi karışmaz", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const t = ist(17, 23, 0);
+  o.depo.set("venom:gorevler", JSON.stringify([
+    { id: "g1", zaman: ist(17, 16, 36), durum: "bitti", kimler: ["hemra"], baslik: "Patron: Celal'i ara", metin: "Patron'dan: Celal'i ara: 17.11 mutabakatında \"Celal İndirim bakiye uyuşmuyor\" dedi. Cevabı yaz.", kalemler: [{ kod: "İş", secim: "a", kim: "Hemra", aciklama: "Ben aradım  aradaki fark 80 dolar", zaman: ist(17, 16, 38) }], bitis: ist(17, 16, 40) },
+    { id: "g2", zaman: ist(17, 12, 0), durum: "acik", kimler: ["merdan"], baslik: "Selin: 3 modelin fotoğrafı yok", metin: "fotoğraf", kalemler: [{ kod: "3040" }] },
+    { id: "g3", zaman: ist(17, 17, 0), durum: "acik", kimler: ["hemra"], baslik: "Fuat mutabakat", metin: "Fuat'ı ara: mutabakat bakiye uyuşmuyor dedi.", kalemler: [{ kod: "İş" }] },
+  ]));
+  await o.ayar("mt:liste", ["2026-11-17-c"]);
+  await o.ayar("mt:2026-11-17-c", { id: "2026-11-17-c", gun: "2026-11-17", kisi: "celal", durum: "fark", gonderim: ist(17, 16, 28), cevapZaman: ist(17, 16, 32), fark: "Celal İndirim bakiye uyuşmuyor", brToplamYazi: "7.804,20 $", gecmis: [] });
+  const c = await v.mutabakatDurumu(o.env, t, "celal");
+  assert.match(c, /👤 Hemra cevap verdi \(17\.11\.2026 16:38\): "Ben aradım {2}aradaki fark 80 dolar" — görev: Patron'dan: Celal'i ara/);
+  assert.ok(!/Fuat'ı ara|fotoğraf/.test(c));
+  assert.match(await v.mutabakatDurumu(o.env, t, "fuat"), /👤 hemra kişisine görev gitti \(17\.11\.2026 17:00\), cevap YOK — görev: Fuat'ı ara/);
+  o.cevaplar.push({ text: "DURUM: BEKLIYOR\nDenedim: x" });
+  await v.sorunArastir(o.env, { id: "d", tur: "mutabakat", mtId: "2026-11-17-c", firma: "celal", gun: "2026-11-17", olaylar: [] }, t, { kuru: true });
+  assert.match(o.claude[0].messages[0].content, /Ekibin bu konudaki cevapları:\n👤 Hemra cevap verdi \(17\.11\.2026 16:38\): "Ben aradım {2}aradaki fark 80 dolar"/);
+});
