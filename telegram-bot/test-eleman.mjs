@@ -61,7 +61,7 @@ function ortam({ acik = [MERDAN] } = {}) {
   return { depo, g, venomEnv, samiEnv, durum, giden, defter, KAYIT, STOK };
 }
 let uid = 1;
-const venomaYaz = (o, kimden, text, ek = {}) => venom.guncelleme({ update_id: uid++, message: { message_id: 50 + uid, date: 1, chat: { id: Number(kimden), type: "private" }, from: { id: Number(kimden), first_name: "Merdan" }, text, ...ek } }, o.venomEnv);
+const venomaYaz = (o, kimden, text, ek = {}) => venom.guncelleme({ update_id: uid++, message: { message_id: 50 + uid, date: Math.floor(Date.now() / 1000), chat: { id: Number(kimden), type: "private" }, from: { id: Number(kimden), first_name: "Merdan" }, text, ...ek } }, o.venomEnv);
 const venomdaBas = (o, kimden, kart) => venom.guncelleme({ update_id: uid++, callback_query: { id: `cq${uid}`, from: { id: Number(kimden), first_name: "Merdan" }, data: kart.data, message: { message_id: kart.mesaj, date: 1, chat: { id: Number(kimden), type: "private" }, text: kart.text || "", reply_markup: kart.klavye ? { inline_keyboard: kart.klavye } : undefined } } }, o.venomEnv);
 
 test("KAPI KAPALI (bugünkü hal): kayıt yoksa botlar elemana KENDİ botlarından gönderir; Venom elemanın yazısını yok sayar", async () => {
