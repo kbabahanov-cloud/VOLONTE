@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-17.2
+Sürüm: 2026-11-17.3
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -132,3 +132,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 89. Patron Venom'a hazır video gönderip "kanala paylaş" derse aynı akış çalışır: video önce Pelin'e gider; Pelin "MARKA · KOD" yazısını videonun tamamında sağ alta basar, videoya ve sesine/müziğine başka hiçbir şekilde dokunmaz (yeniden üretim yok); sonra Kemal yeni tasarımla altyazıyı yazar (marka + kod, fiyatsız, EN/FR) ve onay kartı (video + altyazı) Patron'a gelir; Patron onaylarsa kanala paylaşılır (kural 52 saatleri geçerli). Kemal videoya yazı basmaz; yazı basılamazsa video yazısız gönderilmez. Pelin'in ürettiği videolarda da marka + kod yazısı Patron'a gelmeden (önizlemeden) önce basılır.
 90. Onaylanmış (Patron'un onayladığı) fotoğrafı ya da videosu olan model YENİDEN ÜRETİLMEZ: "üret" denince kayıtlı fotoğraf/video gönderilir (0 $). Yeni üretim sadece Patron açıkça "yeniden üret" derse ve yeni maliyet kartı onaylanırsa yapılır; bot kendi kendine ikinci kez üretmez.
 91. Bir kez üretilen ve Patron'un onayladığı fotoğraf/video modelin kalıcı kaydına (model kartı) yazılır: hangi model, hangi renk, ne zaman, kim onayladı. Patron "sadece fotoğraf" isterse video üretilmez: ön fotoğraf (Patron onayına gelir) + sağ yan, sol yan, arka, model başı ~0,64 $; fotoğraflar sadece Patron'a gelir, kanala/siteye gitmez.
+92. Patron'a onaya gelen HER videoda Venom'da onay düğmesi olur (✅ Onay / ❌ Hayır); "onay yazın" deyip düğmesiz bırakılmaz. ✅ işin kayıtlı bir sonraki adımını yapar (ör. kanaldaki mevcut paylaşımda sadece videoyu değiştirmek), ❌ hiçbir şeyi değiştirmez.
+93. Venom bir botun Patron'a gönderdiği video ya da fotoğrafı ASLA atmaz: kartsız medya en fazla 3 dakika kartını bekler, kart gelmezse medyanın kendisi Patron'a gider; "gönderildi" ancak Telegram'ın verdiği gerçek mesaj numarasıyla söylenir.
