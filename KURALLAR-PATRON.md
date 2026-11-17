@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-17.1
+Sürüm: 2026-11-17.2
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -83,7 +83,7 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 
 ## KEMAL
 52. Kanal paylaşımı sadece 09:00–21:00 arasındadır; 21:00'den sonra hiçbir yoldan paylaşım çıkmaz, kalan sabah 09:00'a kalır ve öneri kartları da 09:00'da gider.
-53. Günde en fazla 12 paylaşım yapılır (repete, yeni model ve ertelenen dahil), iki paylaşım arası en az 60 dakikadır; aynı model 7 gün içinde tekrar paylaşılmaz (repete hariç); hafta sonu paylaşım devam eder.
+53. Günde en fazla 12 paylaşım yapılır (repete, yeni model ve ertelenen dahil), iki paylaşım arası en az 60 dakikadır; aynı model 7 gün içinde tekrar paylaşılmaz (repete hariç); hafta sonu paylaşım devam eder. İSTİSNA (17 Kasım, Patron): Patron'un KENDİ gönderip onayladığı paylaşım günlük 12 sınırını ve 60 dakika aralığı beklemez; sadece 09:00–21:00 saati geçerli kalır (gece onaylanırsa sabah 09:00'da ilk sırada gider).
 54. Marka her zaman Vegawin'den okunur; "büyük ihtimalle" gibi tahmin cümlesi yazılmaz.
 55. Kemal yeniden paylaşımda eski alt yazıyı kopyalamaz: medyayı alır, alt yazıyı her zaman kendi düzeniyle yazar (EN/FR, fiyatsız, marka imzalı, düğmeli).
 56. Kemal'in kartları ve bildirimleri sadece Merdan ve Hemra'ya gider; Merdan'a sadece Black Rose kartı gider.
@@ -130,3 +130,5 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 87. Repete kartı gönderilmeden önce dağılımdaki renk ve beden Vegawin kaydıyla ve kart görseliyle karşılaştırılır; uyuşmuyorsa kart gitmez, Hemra'ya ve Patron'a "renk/beden uyuşmuyor" satırı gelir. Patron'un söylediği renk kayıtla uyuşmuyorsa Venom Patron'a sorar, kart göndermez.
 88. Fabrikaya giden her kart gitmeden önce Venom'dan geçer: (a) yazılan mesajdaki model kodu kartla aynı mı, (b) son 7 günde satış 0 ise repete için onay alınmış mı, (c) renk ve beden kayıtta var mı, (d) kişi "hayır / yanlış / iptal" yazdı mı; uyuşmazlık varsa kart gitmez, Venom kişiye sorar, çözemezse Patron'a tek satır yazar. Dağılım beklenirken gelen mesajda farklı model kodu varsa açık karta bağlanmaz; "hayır / yanlış / iptal" yazılırsa son işlem geri alınır, kart gönderilmez. Fabrikaya giden karttan önce kişiye tek satır sorulur ("Şunu anladım: 3627 · siyah · büyük · 40 adet. Doğru mu?"); "evet" gelmeden kart gitmez.
 89. Patron Venom'a hazır video gönderip "kanala paylaş" derse aynı akış çalışır: video önce Pelin'e gider; Pelin "MARKA · KOD" yazısını videonun tamamında sağ alta basar, videoya ve sesine/müziğine başka hiçbir şekilde dokunmaz (yeniden üretim yok); sonra Kemal yeni tasarımla altyazıyı yazar (marka + kod, fiyatsız, EN/FR) ve onay kartı (video + altyazı) Patron'a gelir; Patron onaylarsa kanala paylaşılır (kural 52 saatleri geçerli). Kemal videoya yazı basmaz; yazı basılamazsa video yazısız gönderilmez. Pelin'in ürettiği videolarda da marka + kod yazısı Patron'a gelmeden (önizlemeden) önce basılır.
+90. Onaylanmış (Patron'un onayladığı) fotoğrafı ya da videosu olan model YENİDEN ÜRETİLMEZ: "üret" denince kayıtlı fotoğraf/video gönderilir (0 $). Yeni üretim sadece Patron açıkça "yeniden üret" derse ve yeni maliyet kartı onaylanırsa yapılır; bot kendi kendine ikinci kez üretmez.
+91. Bir kez üretilen ve Patron'un onayladığı fotoğraf/video modelin kalıcı kaydına (model kartı) yazılır: hangi model, hangi renk, ne zaman, kim onayladı. Patron "sadece fotoğraf" isterse video üretilmez: ön fotoğraf (Patron onayına gelir) + sağ yan, sol yan, arka, model başı ~0,64 $; fotoğraflar sadece Patron'a gelir, kanala/siteye gitmez.

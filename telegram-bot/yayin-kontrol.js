@@ -58,6 +58,23 @@ export async function paylasimKaydet(env, kod, renk, simdi) {
   await env.KAYIT.put("kemal:paylasimGecmisi", JSON.stringify(g), { expirationTtl: 7 * 86400 }).catch(() => null);
 }
 const saatYaz = (t) => new Date((t + 3 * 3600) * 1000).toISOString().slice(11, 16);
+// 17 Kasım (Patron): ürünün kendi DETAY rengi (biye, şerit, kuşak, bağcık, yaka şeridi…) "başka renk" sayılmaz; sadece ANA renk
+// kontrol edilir. Renk kelimesinin 3 kelime yakınında detay adı varsa o renk detaydır ("black trim", "black-and-gold piping",
+// "trimmed in black", "ceinture noire", "liseré noir").
+export const DETAY_ADI = /^(trim|trims|trimmed|trimming|piping|piped|stripe|stripes|striped|band|bands|banded|belt|belted|sash|tie|ties|bow|bows|binding|bound|contrast|contrasting|accent|accents|accented|detail|details|detailing|lapel|lapels|collar|collars|cuff|cuffs|button|buttons|edging|edged|edge|edges|border|borders|ribbon|ribbons|panel|panels|strap|straps|buckle|waistband|lining|lined|insert|inserts|liseré|liserés|lisere|passepoil|passepoils|bande|bandes|rayure|rayures|rayé|rayée|ceinture|ceintures|noeud|nœud|noeuds|nœuds|galon|galons|bordure|bordures|ruban|rubans|revers|col|cols|poignet|poignets|bouton|boutons|détail|détails|detail|contraste|contrastée|contrasté|doublure|empiècement|empiècements|lien|liens|ganse|ganses)$/i;
+const GIYSI_ADI = /^(dress|dresses|gown|top|tops|blouse|blouses|shirt|skirt|skirts|set|sets|suit|suits|jumpsuit|jacket|coat|vest|cardigan|pants|trousers|tunic|kaftan|abaya|outfit|piece|robe|robes|jupe|jupes|chemise|chemisier|blouson|veste|manteau|gilet|pantalon|ensemble|tunique|combinaison|haut)$/i;
+export function detayRengiMi(kelimeler, j) {
+  const k = (i) => kelimeler[i] || "";
+  if (DETAY_ADI.test(k(j - 1)) && !/ed$/i.test(k(j - 1))) return true; // "ceinture noire", "liseré noir" (Fransızcada renk sonra gelir)
+  if (GIYSI_ADI.test(k(j + 1)) || GIYSI_ADI.test(k(j - 1))) return false; // "black dress", "belted black dress", "robe noire" → ana renk
+  for (let i = j + 1; i <= Math.min(kelimeler.length - 1, j + 3); i++) { if (GIYSI_ADI.test(k(i))) break; if (DETAY_ADI.test(k(i))) return true; } // "black waist tie", "black-and-gold piping"
+  return /^(in|with|en|avec|de)$/i.test(k(j - 1)) && DETAY_ADI.test(k(j - 2)); // "trimmed in black", "passepoil en noir"
+}
+// Metindeki renk kelimelerinden ANA renk olarak geçenler (detay rengi olanlar hariç); sozluk: kelime → İngilizce renk
+export function anaRenkKelimeleri(metin, sozluk) {
+  const k = String(metin || "").match(/[A-Za-zÀ-ÿœ]+/g) || [];
+  return [...new Set(k.flatMap((w, j) => (sozluk[w.toLowerCase()] && !detayRengiMi(k, j) ? [sozluk[w.toLowerCase()]] : [])))];
+}
 // Kanal paketi kontrolü. p: { kod, marka, renkler[], bedenler, en, fr, medya[], adlar[] }; beklenen: { renk (TR) }
 export async function kanalKontrol(env, p, { renk = null, simdi = Math.floor(Date.now() / 1000), kopya = false } = {}) {
   const sorunlar = [], uyarilar = [];
@@ -75,7 +92,8 @@ export async function kanalKontrol(env, p, { renk = null, simdi = Math.floor(Dat
     } else if (!yaziRenk.length) uyarilar.push("yazıda renk satırı yok");
     if (!String(p.bedenler || "").match(/\d{2}/)) sorunlar.push("beden satırı yok");
     if (!String(p.en || "").trim() || !String(p.fr || "").trim()) sorunlar.push("EN/FR açıklama eksik");
-    const baska = ["black", "white", "burgundy", "red", "navy", "blue", "green", "beige", "pink", "purple", "grey", "brown"].filter((c) => new RegExp(`\\b${c}\\b`, "i").test(String(p.en || "")) && !yaziRenk.some((r) => r.split(/\s+/).includes(c)));
+    const anaEn = anaRenkKelimeleri(p.en, Object.fromEntries(["black", "white", "burgundy", "red", "navy", "blue", "green", "beige", "pink", "purple", "grey", "brown"].map((c) => [c, c])));
+    const baska = anaEn.filter((c) => !yaziRenk.some((r) => r.split(/\s+/).includes(c))); // 17 Kasım: detay rengi (biye, şerit, kuşak) sayılmaz
     if (yaziRenk.length && baska.length) sorunlar.push(`açıklamada başka renk geçiyor (${baska.join(", ")})`);
     if (FIYAT.test(`${p.en || ""} ${p.fr || ""}`)) sorunlar.push("yazıda FİYAT var");
     // 9 Kasım: Pelin'in yazılı detay sayfası ("detay 1/2", ör. "ELEGANT TWO-PIECE SET") da yapay zekâ kolajıdır

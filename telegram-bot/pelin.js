@@ -1808,8 +1808,23 @@ export function kartMaliyeti(secim, aracSecimi, sablonAnahtar, sablonlar = {}) {
   ];
   return { araclar, kalemler, toplam: yuvarla(kalemler.reduce((t, k) => t + k.birim, 0)) };
 }
+// 17 Kasım (Patron): SADECE FOTOĞRAF yolu — ön fotoğraf + kontrol, sağ/sol/arka seti; video YOK (~0,64 $/model)
+export function fotoMaliyeti(secim) {
+  const kat = rolOrtami(secim, "katalog");
+  const kalemler = [
+    { ad: `Ön fotoğraf + kontrol${kat ? ` (${kat.ad})` : ""}`, birim: yuvarla(GORSEL.fiyat + KONTROL_TAHMIN + OPENAI_TAHMIN) },
+    { ad: "Fotoğraf seti: sağ yan, sol yan, arka (ön onaylanınca) + gerçek askı fotoğrafı (ücretsiz)", birim: yuvarla(SET_FIYAT) },
+  ];
+  return { kalemler, toplam: yuvarla(kalemler.reduce((x, k) => x + k.birim, 0)) };
+}
 function uretimKartMetni(onay, secim, sablonlar, harcanan) {
   const n = onay.kodlar.length;
+  if (onay.sadeceFoto) {
+    const fm = fotoMaliyeti(secim);
+    return [...onay.ust, "📸 SADECE FOTOĞRAF: ön fotoğraf (onayınıza gelir) + sağ yan, sol yan, arka. VİDEO YOK. Kanala/siteye gitmez; fotoğraflar sadece size gelir ve modelin kaydına yazılır.",
+      ...fm.kalemler.map((k) => `• ${k.ad}: ${para(k.birim)}`), `Model başı ~${para(fm.toplam)} · TOPLAM ~${para(fm.toplam * n)}`,
+      `Bu ay Pelin: ${para(harcanan)} / ${AYLIK_SINIR_USD} $${harcanan + fm.toplam * n > AYLIK_SINIR_USD ? " ⚠️ SINIRI AŞAR" : ""}`, "Hazır: ✅ Onayla'ya basınca fotoğraf başlar."].join("\n");
+  }
   const mm = onay.arac ? kartMaliyeti(secim, onay.arac, onay.sablonKey, sablonlar) : null;
   return [
     ...onay.ust,
@@ -1824,6 +1839,7 @@ function uretimKlavye(onay, secim, sablonlar) {
   const n = onay.kodlar.length;
   const fiyat = (a) => para(kartMaliyeti(secim, a, onay.sablonKey, sablonlar).toplam * n);
   const isaret = (x, y) => (x === y ? "☑️ " : "");
+  if (onay.sadeceFoto) return { inline_keyboard: [[{ text: `✅ Onayla (~${para(fotoMaliyeti(secim).toplam * n)})`, callback_data: `pu:o:${onay.id}` }, { text: "❌ İptal", callback_data: `pu:i:${onay.id}` }]] };
   return { inline_keyboard: [
     KART_ARACLARI.slice(0, 2).map((a) => ({ text: `${isaret(onay.arac, a)}${KART_ARAC_AD[a]} · ${fiyat(a)}`, callback_data: `pc:a:${onay.id}:${a}` })),
     [...KART_ARACLARI.slice(2).map((a) => ({ text: `${isaret(onay.arac, a)}${KART_ARAC_AD[a]} · ${fiyat(a)}`, callback_data: `pc:a:${onay.id}:${a}` })), { text: `${isaret(onay.arac, "hepsi")}Hepsini dene · ${fiyat("hepsi")}`, callback_data: `pc:a:${onay.id}:hepsi` }],
@@ -1896,6 +1912,7 @@ async function uretKomutu(env, m, simdi, test = false) {
     kodlar = kalan;
   }
   const sablonAd = (sozler.find((x) => /^şablon:|^sablon:/i.test(x)) || "").split(":")[1] || null;
+  const sadeceFoto = !test && sozler.some((x) => /^(foto|fotoğraf|fotograf|sadecefoto)$/i.test(x)); // 17 Kasım (Patron): "/uret 3271 foto" → video yok
   const seviye = sozler.some((x) => /^premium$/i.test(x)) ? "premium" : "standart"; // premium: lüks mekân (vitrin modelleri)
   if (!kodlar.length) return yaz(env, m.chat.id, test ? "Kullanım: /maliyettesti 3557 3592 3577 3601 3602 (5 model)" : "Kullanım: /uret 3557 [3592 …] [şablon:ad]");
   const sablonlar = await oku(env, "pelin:sablonlar", {});
@@ -1928,7 +1945,7 @@ async function uretKomutu(env, m, simdi, test = false) {
   for (const k of kodlar) foto[k] = await urunFotoSecimi(env, k, renkler[k] || null);
   for (const k of kodlar) stiller[k] = foto[k].urller.length ? await stilSec(env, k, renkler[k] || null, foto[k].urller, simdi).catch(() => null) : null;
   const kat = rolOrtami(secim, "katalog");
-  const onay = { id, kodlar, sablonAd, test, seriler, renkler, seviye, stiller, senaryolar, arac: null, sablonKey: null, zaman: simdi };
+  const onay = { id, kodlar, sablonAd, test, seriler, renkler, seviye, stiller, senaryolar, arac: null, sablonKey: null, zaman: simdi, ...(sadeceFoto ? { sadeceFoto: true } : {}) };
   onay.ust = [
     `🏷 Marka: ${kodlar.map((k) => `${k} = ${MARKALAR[(boylar[k] || {}).marka] ? MARKALAR[boylar[k].marka].ad : "?"}`).join(", ")} (videonun tamamında sağ altta, fotoğraflarda sağ altta)`,
     `💰 ${test ? "MALİYET TESTİ" : "Üretim"} — ${kodlar.length} model: ${kodlar.join(", ")}${sablonAd ? ` (kayıtlı şablon: ${sablonAd})` : ""} · ${seviye === "premium" ? "PREMIUM" : "standart"}`,
@@ -1945,6 +1962,7 @@ async function uretKomutu(env, m, simdi, test = false) {
     `Sahne: kameraya doğru İLERİ birkaç yavaş adım · hafif duruş · omuz üstünden bakış · kumaş doğal dalgalanır · hızlı dönüş, geri yürüme ve kamera dönüşü YOK · yaka/dikiş yakın kare · marka + kod videonun tamamında sağ altta, sonradan basılır (fiyat yok) · kapak fotoğrafı videodan`,
     ...(Object.keys(senaryolar).length ? kodlar.filter((k) => senaryolar[k]).map((k) => `📝 Senaryo (${k}) — Nora'nın son senaryosu, aynen:\n${senaryolar[k].tr}`) : ["📝 Senaryo: fotoğraf hazır olunca Nora yazar, onayınıza gelir."]),
   ];
+  if (sadeceFoto) onay.ust = onay.ust.filter((x) => !/^(Sahne:|📝 Senaryo)/.test(x)).map((x) => (/^💰 Üretim/.test(x) ? x.replace("💰 Üretim", "💰 SADECE FOTOĞRAF") : /^Ortam: /.test(x) ? x.replace(/ · video.*$/, "") : x));
   // Eksik fotoğraf (ön/arka mankende, yakın detay): karta yazılır + elemana (Hemra) söylenir; arşivde paket varsa yeniden üretmeye gerek yok
   const eksikler = {};
   for (const k of kodlar) { const e = await eksikFotolar(env, k); if (e.length) eksikler[k] = e; }
@@ -1979,7 +1997,8 @@ export async function venomUretimi(env, onay, simdi) {
   if (harcanan + enAz > AYLIK_SINIR_USD) return { hata: `aylık sınır aşılır (bu ay ${para(harcanan)} / ${AYLIK_SINIR_USD} $, bu iş en az ~${para(enAz)}); sınırı artırmak Patron onayıyla` };
   // 4 Kasım (Patron): varsayılan araç yok → Venom'dan gelen iş de Pelin'in araç + şablon kartına döner (Patron orada seçer)
   const p = murat(env);
-  const r = await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: `/${onay.test ? "maliyettesti" : "uret"} ${onay.kodlar.join(" ")}` }, simdi, Boolean(onay.test));
+  const r = await uretKomutu(env, { from: { id: p }, chat: { id: p }, text: `/${onay.test ? "maliyettesti" : "uret"} ${onay.kodlar.join(" ")}${onay.sadeceFoto && !onay.test ? " foto" : ""}` }, simdi, Boolean(onay.test));
+  if (onay.sadeceFoto && r && r.ok) return { ok: true, mesaj: `Pelin'e ${onay.kodlar.join(", ")} SADECE FOTOĞRAF kartı gönderildi (video yok): ✅ Onayla'ya basın. Para henüz harcanmadı.` };
   return r && r.ok ? { ok: true, mesaj: `Pelin'e ${onay.kodlar.join(", ")} kartı gönderildi: araç ve şablonu orada seçip ✅ Onayla'ya basın. Para henüz harcanmadı.` } : { hata: "Pelin kartı gönderemedi" };
 }
 
@@ -2005,9 +2024,10 @@ async function uretimBaslat(env, onay, simdi) {
     const kartSablon = onay.sablonKey ? sablonOrtami(secim, onay.sablonKey, sablonlar) : null; // kartta seçilen şablon (video ortamı)
     const videoOrtam = premiumOrtam || kartSablon || ornekOrtam || (sablon && ortamBul(sablon.videoOrtamId)) || rolOrtami(secim, "video", i);
     const boy = await boyOku(env, kod);
-    const araclar = onay.arac === "hepsi" ? KART_ARACLARI : [ARACLAR[onay.arac] ? onay.arac : aracSec(secim)];
+    const araclar = onay.arac === "hepsi" && !onay.sadeceFoto ? KART_ARACLARI : [ARACLAR[onay.arac] ? onay.arac : aracSec(secim)];
     if (onay.sablonKey) await boyYaz(env, kod, { sonSablon: onay.sablonKey });
     const is = { id, kod, testId, seri, renk, marka: (boy && MARKALAR[boy.marka]) ? boy.marka : null, aracYasak: [], seviye: onay.seviye || "standart", stil, arac: araclar[0], sablonKey: onay.sablonKey || null, senaryo: (onay.senaryolar && onay.senaryolar[kod]) || null, urunEtiketler: fs.etiketler || [], modelKaydi: modelKaydiYap(boy, renk), boy: boy && BOYLAR[boy.boy] ? { boy: boy.boy } : null, boyRef: ((boy && boy.referans) || []).filter((x) => x.tur === "foto").slice(0, 1).map((x) => dosyaAdresi(env, x.anahtar)), urunRoller: fs.roller, urunKaynak: fs.kaynak, sahneAyar: { ...SAHNE_VARSAYILAN, ...((sablon && sablon.sahne) || {}) }, ortam, videoOrtam: videoOrtam && (!ortam || videoOrtam.id !== ortam.id) ? videoOrtam : null, sahneDeneme: 0, sablon, urunler, durum: urunler.length ? "foto_gonder" : "hata", fotoDeneme: 0, videoDeneme: 0, maliyet: 0, zaman: simdi, gecmis: [] };
+    if (onay.sadeceFoto) { is.sadeceFoto = true; is.gecmis = [...(is.gecmis || []), [simdi, "SADECE FOTOĞRAF (Patron onayı): ön + set, video yok"]]; }
     if (!urunler.length) is.hata = "ürün fotoğrafı yok (sitede değil; fotoğrafı yazısında model koduyla Pelin'e gönderin: \"3627 manken\", \"3627 askı\")";
     // HEPSİNİ DENE: lider (ilk araç) fotoğrafı/kareyi üretir; diğer araçlar aynı fotoğraf + aynı senaryoyla bekler, sonra yan yana
     if (araclar.length > 1 && urunler.length) {
@@ -2472,6 +2492,10 @@ async function fotoOnayKarti(env, is) {
   const kare = is.sahne || is.foto;
   const n = 1 + (is.takipciler || []).length;
   const fiyat = ARACLAR[is.arac] ? yuvarla(ARACLAR[is.arac].saniye * URETIM_SN * n) : 0;
+  if (is.sadeceFoto) { // 17 Kasım (Patron): sadece fotoğraf — video yok
+    await tg(env, "sendPhoto", { chat_id: murat(env), photo: kare, caption: `📸 ${is.kod} — ön fotoğraf (kontrolden geçti)` });
+    return yaz(env, murat(env), [`👁 ${is.kod}: ÖN fotoğraf onayı (SADECE FOTOĞRAF). Uygunsa diğer açılar üretilir: sağ yan, sol yan, arka ~${para(SET_FIYAT)}. Video YOK.`, ...notSatirlari(is), "Uygun değilse 🔄 yeniden fotoğraf (~0,15 $) ya da ❌ iptal."].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Fotoğraf uygun, diğer açılar", callback_data: `pu:f:${is.id}` }], [{ text: "🔄 Yeniden fotoğraf", callback_data: `pu:r:${is.id}` }, { text: "❌ İptal", callback_data: `pu:x:${is.id}` }]] } });
+  }
   await tg(env, "sendPhoto", { chat_id: murat(env), photo: kare, caption: `📸 ${is.kod} — videonun başlangıç fotoğrafı (kontrolden geçti${is.fotoKontrol && is.fotoKontrol.puan && is.fotoKontrol.puan.pelin ? `, puan ${is.fotoKontrol.puan.pelin}` : ""})` });
   return yaz(env, murat(env), [`👁 ${is.kod}: önce ÖN fotoğraf onayı. Uygunsa diğer açılar (sağ yan, sol yan, arka ~${para(SET_FIYAT)}; askı = sizin gerçek fotoğrafınız, ücretsiz) ve video üretilir${n > 1 ? ` (${n} video)` : ""}: ${ARACLAR[is.arac] ? ARACLAR[is.arac].ad : "?"} ~${para(fiyat)}.`, ...notSatirlari(is), "Uygun değilse 🔄 yeniden fotoğraf (~0,15 $) ya da ❌ iptal."].join("\n"), { reply_markup: { inline_keyboard: [[{ text: "✅ Fotoğraf uygun, videoya geç", callback_data: `pu:f:${is.id}` }], [{ text: "🔄 Yeniden fotoğraf", callback_data: `pu:r:${is.id}` }, { text: "❌ İptal", callback_data: `pu:x:${is.id}` }]] } });
 }
@@ -2508,6 +2532,14 @@ async function uretimAdimi(env, is, simdi) {
   // 16 Kasım (Patron): model kuralı her adımda modelin GÜNCEL kaydından okunur — iş başında alınan kopya eskiyse (ör. 3271) düzeltme
   // devam eden işte, "yeniden üret"te ve "ile de dene"de de hemen geçerli olur (başka modelden kalma metin taşınmaz).
   try { const bk = await boyOku(env, is.kod); const mk = bk ? modelKaydiYap(bk, is.renk || null) : null; if (mk) is.modelKaydi = mk; } catch { /* eski kopya kalır */ }
+  // 17 Kasım (Patron): SADECE FOTOĞRAF işi video / video karesi / senaryo aşamasına HİÇ geçmez — set bitince iş kapanır
+  if (is.sadeceFoto && ["video_gonder", "sahne_gonder", "senaryo_yaz"].includes(is.durum)) {
+    if (!is.setTamam && !is.setYok) { is.durum = "set_gonder"; return; }
+    is.durum = "foto_bitti"; is.gecmis.push([simdi, "sadece fotoğraf: tamamlandı (video yok)"]);
+    await uretilenKaydet(env, is, simdi, { fotoOnay: is.fotoOnaylandi || simdi }).catch(() => null);
+    await yaz(env, murat(env), `✅ ${is.kod}: SADECE FOTOĞRAF bitti — ön + diğer açılar yukarıda (harcanan ~${para(is.maliyet || 0)}). Video üretilmedi; kanala/siteye gitmedi. Fotoğraflar modelin kaydında.`);
+    return;
+  }
   const secim = await oku(env, "pelin:secim", null);
   const yuz = yuzAdres(env, seriYuzu(secim, is.seri || "kucuk"));
   const arac = is.arac || aracSec(secim);
@@ -2531,7 +2563,7 @@ async function uretimAdimi(env, is, simdi) {
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     if (!k.gecti && renkKaymasi(k)) is.renkKaydi = (is.renkKaydi || 0) + 1; // 4 Kasım: renk kayması → yeniden üretimde renk düzeltme notu (Patron'a gelmeden)
     is.fotoKontrol = k; is.gecmis.push([simdi, `foto ${is.fotoDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
-    if (k.gecti) { is.durum = is.videoOrtam && (is.sahneAyar || !is.sablon) ? "sahne_gonder" : fotoOnayiGerek(is) ? "foto_onay" : "video_gonder"; return; }
+    if (k.gecti) { is.durum = is.sadeceFoto ? "foto_onay" : is.videoOrtam && (is.sahneAyar || !is.sablon) ? "sahne_gonder" : fotoOnayiGerek(is) ? "foto_onay" : "video_gonder"; return; }
     is.sorunlar = k.sorunlar; is.durum = is.fotoDeneme < denemeSiniri(is) ? "foto_gonder" : "uyari"; return;
   }
   // Video başlangıç karesi (video ortamı, ör. "Live Your Life Şehir"): katalog fotoğrafından ayrı, aynı yüz + aynı kıyafet
@@ -2549,7 +2581,7 @@ async function uretimAdimi(env, is, simdi) {
     is.maliyet = yuvarla(is.maliyet + KONTROL_TAHMIN + (env.OPENAI_API_KEY ? OPENAI_TAHMIN : 0));
     if (!k.gecti && renkKaymasi(k)) is.renkKaydi = (is.renkKaydi || 0) + 1;
     is.sahneKontrol = k; is.gecmis.push([simdi, `video karesi ${is.sahneDeneme}: ${k.gecti ? "geçti" : `geçmedi (${k.sorunlar.join("; ").slice(0, 200)})`}`]);
-    if (k.gecti) { is.durum = fotoOnayiGerek(is) ? "foto_onay" : "video_gonder"; return; }
+    if (k.gecti) { is.durum = is.sadeceFoto || fotoOnayiGerek(is) ? "foto_onay" : "video_gonder"; return; }
     is.sorunlar = k.sorunlar; is.durum = is.sahneDeneme < denemeSiniri(is) ? "sahne_gonder" : "uyari"; return;
   }
   if (is.durum === "set_gonder") {
@@ -2575,7 +2607,7 @@ async function uretimAdimi(env, is, simdi) {
     const media = [{ type: "photo", media: is.sahne || is.foto, caption: `${is.kod} · ön` }, ...ACILAR.filter((a) => is.set[a.k] && is.set[a.k] !== "yok").map((a) => ({ type: "photo", media: is.set[a.k], caption: `${is.kod} · ${a.ad}` }))];
     await tg(env, "sendMediaGroup", { chat_id: murat(env), media });
     const eksik = ACILAR.filter((a) => !is.set[a.k] || is.set[a.k] === "yok").map((a) => a.ad);
-    await yaz(env, murat(env), `📸 ${is.kod} fotoğraf seti: ön + ${ACILAR.length - eksik.length} açı${eksik.length ? ` (üretilemedi: ${eksik.join(", ")})` : ""}. ${is.video ? "Şimdi marka yazısı basılıyor; ardından Kemal son yayın onay kartını getirecek." : "Video üretiliyor."}`);
+    await yaz(env, murat(env), `📸 ${is.kod} fotoğraf seti: ön + ${ACILAR.length - eksik.length} açı${eksik.length ? ` (üretilemedi: ${eksik.join(", ")})` : ""}. ${is.video ? "Şimdi marka yazısı basılıyor; ardından Kemal son yayın onay kartını getirecek." : is.sadeceFoto ? "Video yok (sadece fotoğraf); iş tamamlanıyor." : "Video üretiliyor."}`);
     is.gecmis.push([simdi, `fotoğraf seti: ${media.length} kare`]);
     is.setTamam = true;
     is.durum = is.video ? "paket_gonder" : "video_gonder"; return; // video zaten varsa (sonradan set): paketlemeye
@@ -2995,10 +3027,10 @@ async function uretimDugmesi(env, cq, simdi) {
   if (islem === "o" || islem === "i") {
     const onay = await oku(env, `pelin:uretimOnay:${id}`, null);
     if (!onay || onay.kullanildi) return cevap("Bu onay geçersiz.");
-    if (islem === "o" && (!onay.arac || !(onay.sablonKey || onay.sablonAd)) && onay.ust) return cevap(!onay.arac ? "Önce video aracını seçin." : "Önce şablonu seçin.");
+    if (islem === "o" && !onay.sadeceFoto && (!onay.arac || !(onay.sablonKey || onay.sablonAd)) && onay.ust) return cevap(!onay.arac ? "Önce video aracını seçin." : "Önce şablonu seçin.");
     if (islem === "o") { // 4 Kasım (Patron): aylık sınır aşılıyorsa üretim BAŞLAMAZ
       const secimB = await oku(env, "pelin:secim", null);
-      const tahmin = yuvarla((onay.arac ? kartMaliyeti(secimB, onay.arac, onay.sablonKey, await oku(env, "pelin:sablonlar", {})).toplam : uretimMaliyeti(aracSec(secimB), secimB).toplam) * onay.kodlar.length);
+      const tahmin = yuvarla((onay.sadeceFoto ? fotoMaliyeti(secimB).toplam : onay.arac ? kartMaliyeti(secimB, onay.arac, onay.sablonKey, await oku(env, "pelin:sablonlar", {})).toplam : uretimMaliyeti(aracSec(secimB), secimB).toplam) * onay.kodlar.length);
       const harcanan = await buAyHarcanan(env, simdi);
       const gunluk = await bugunHarcanan(env, simdi), gs = await gunlukSinir(env, simdi);
       if (gunluk + tahmin > gs) { await cevap("Günlük sınır aşılır"); return yaz(env, cq.message.chat.id, `⛔ Üretim başlamadı: bugün Pelin ${para(gunluk)} harcadı, bu iş ~${para(tahmin)}; günlük sınır ${gs} $. Bugün için sınırı açmak isterseniz Claude Code'a söyleyin.`); }
@@ -3007,7 +3039,7 @@ async function uretimDugmesi(env, cq, simdi) {
     onay.kullanildi = true; await kaydet(env, `pelin:uretimOnay:${id}`, onay, 86400);
     await acikKartSil(env, id);
     if (islem === "i") { await cevap("İptal"); return kapat("❌ İptal edildi, hiçbir şey harcanmadı."); }
-    await cevap("Başlıyorum"); await kapat(`✅ Onaylandı — ${onay.kodlar.length} model üretime alındı (${onay.kodlar.join(", ")})${onay.arac ? ` · araç: ${onay.arac === "hepsi" ? "hepsi (yan yana)" : ARACLAR[onay.arac].ad} · şablon: ${onay.sablonKey ? SABLON_SECENEK[onay.sablonKey].ad : onay.sablonAd}` : ""}. Hazır olan önizleme olarak gelecek.`);
+    await cevap("Başlıyorum"); await kapat(`✅ Onaylandı — ${onay.kodlar.length} model ${onay.sadeceFoto ? "SADECE FOTOĞRAF (video yok)" : "üretime alındı"} (${onay.kodlar.join(", ")})${onay.arac ? ` · araç: ${onay.arac === "hepsi" ? "hepsi (yan yana)" : ARACLAR[onay.arac].ad} · şablon: ${onay.sablonKey ? SABLON_SECENEK[onay.sablonKey].ad : onay.sablonAd}` : ""}. Hazır olan önizleme olarak gelecek.`);
     return uretimBaslat(env, onay, simdi);
   }
   const is = await oku(env, `pelin:is:${id}`, null);
@@ -3053,7 +3085,8 @@ async function uretimDugmesi(env, cq, simdi) {
     Object.assign(is, { durum: is.setYok ? "video_gonder" : "set_gonder", fotoOnaylandi: simdi }); is.gecmis.push([simdi, "ön fotoğraf Patron onaylı"]);
     await uretilenKaydet(env, is, simdi, { fotoOnay: simdi }).catch(() => null); // 16 Kasım: onaylı fotoğraf modelin kalıcı kaydı
     await kaydet(env, `pelin:is:${id}`, is);
-    await cevap("Videoya geçiyorum");
+    await cevap(is.sadeceFoto ? "Diğer açılara geçiyorum" : "Videoya geçiyorum");
+    if (is.sadeceFoto) return kapat(`✅ ${is.kod}: ön fotoğraf onaylandı — diğer açılar (sağ yan, sol yan, arka) üretiliyor. VİDEO YOK (sadece fotoğraf). Hazır olunca gelir.`);
     return kapat(`✅ ${is.kod}: ön fotoğraf onaylandı — ${is.setYok ? "" : "diğer açılar (sağ yan, sol yan, arka; askı = gerçek fotoğraf) ve "}video üretiliyor${(is.takipciler || []).length ? ` (${is.takipciler.length + 1} video)` : ""}. Hazır olunca gelir.`);
   }
   if (!is || !["onay", "uyari", ...(["r", "x"].includes(islem) ? ["foto_onay"] : [])].includes(is.durum)) return cevap("Bu iş artık beklemiyor.");

@@ -1753,3 +1753,30 @@ test("16 Kasım (Patron) Pelin videosu: marka + kod yazısı ÖNİZLEMEDEN ÖNCE
   assert.equal(o.bulut.filter((y) => y.islem === "yazi").length, 1); // ikinci kez basılmaz
   assert.equal(JSON.parse(o.depo.get("pelin:is:3557-v")).paket.video, x.video);
 });
+
+test("17 Kasım (Patron) SADECE FOTOĞRAF yolu: '/uret 3557 foto' → ~0,64 $ kartı (araç/şablon yok) → ön fotoğraf onayı → sağ/sol/arka → iş kapanır; video, senaryo, kanal YOK; kayda yazılır", async () => {
+  const o = uretimOrtami();
+  secimKur(o);
+  o.depo.set("pelin:urunfoto:3557", JSON.stringify(["b".repeat(32)]));
+  await yazi(o, MURAT, "/uret 3557 foto");
+  const kart = o.g.at(-1).govde;
+  assert.match(kart.text, /SADECE FOTOĞRAF — 1 model: 3557/);
+  assert.match(kart.text, /Model başı ~0,6\d \$/);
+  assert.ok(!/Sahne:|Senaryo/.test(kart.text));
+  assert.deepEqual(kart.reply_markup.inline_keyboard.flat().map((d) => d.callback_data.split(":")[1]), ["o", "i"]); // araç / şablon düğmesi yok
+  await bas(o, MURAT, kart.reply_markup.inline_keyboard[0][0].callback_data);
+  o.claude.cevaplar = Array.from({ length: 8 }, () => claudeJsonCevap(GECTI));
+  await cronlar(o, 16);
+  const id = JSON.parse(o.depo.get("pelin:isler")).at(-1);
+  const is = JSON.parse(o.depo.get(`pelin:is:${id}`));
+  assert.equal(is.durum, "foto_bitti", JSON.stringify(is.gecmis));
+  assert.equal(is.sadeceFoto, true);
+  assert.equal(o.hfIstek.length, 0); // video aracı hiç çağrılmadı
+  assert.ok(!o.falIstek.some((x) => /video|veo|kling|seedance/i.test(x.uc)));
+  assert.ok(o.falIstek.some((x) => SET_ISTEM.test(x.govde.prompt || ""))); // sağ/sol/arka seti üretildi
+  assert.ok(!o.g.some((x) => /senaryo/i.test((x.govde && x.govde.text) || "") && /Nora/.test((x.govde && x.govde.text) || "")));
+  assert.ok(o.g.some((x) => /ÖN fotoğraf onayı \(SADECE FOTOĞRAF\)/.test((x.govde && x.govde.text) || "")));
+  assert.ok(o.g.some((x) => /3557: SADECE FOTOĞRAF bitti/.test((x.govde && x.govde.text) || "")));
+  assert.equal((await teslim(o)).length, 0); // kanala gitmez
+  assert.ok(JSON.parse(o.depo.get("pelinboy:3557")).uretilen, "kayda yazıldı");
+});

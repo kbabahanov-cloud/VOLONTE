@@ -2143,7 +2143,7 @@ test("9 Kasım: Venom kendi düzeltir — açıklamadaki başka renk (3557 'blac
   const { kanalKontrol } = await import("./yayin-kontrol.js");
   const o = await yeniOrtam();
   Object.assign(o.env, { MURAT_ID: "111", ALLOWED_IDS: "111,222", FABRIKA_SORUMLU: "333" });
-  const p = { kod: "3403", marka: "VOLONTE", renkler: ["orange"], bedenler: "38-40", en: "Orange jacquard skirt with black trim.", fr: "Jupe jacquard orange à bordure noire.", medya: [{ type: "photo", media: "https://x/1.jpg" }], adlar: ["ön", "detay 1"] };
+  const p = { kod: "3403", marka: "VOLONTE", renkler: ["orange"], bedenler: "38-40", en: "Orange and black jacquard skirt.", fr: "Jupe jacquard orange et noire.", medya: [{ type: "photo", media: "https://x/1.jpg" }], adlar: ["ön", "detay 1"] };
   const k = await kanalKontrol(o.env, p, { simdi: ist(10) });
   assert.ok(k.sorunlar.some((x) => /başka renk geçiyor \(black\)/.test(x)) && k.sorunlar.some((x) => /kolaj/.test(x)));
   const d = await kendiDuzelt(o.env, p, k, { simdi: ist(10) });
@@ -2157,6 +2157,19 @@ test("9 Kasım: Venom kendi düzeltir — açıklamadaki başka renk (3557 'blac
   const d2 = await kendiDuzelt(o.env, p2, await kanalKontrol(o.env, p2, { simdi: ist(10) }), { simdi: ist(10) });
   assert.equal(d2.paket.en, "y");
   assert.equal(d2.kontrol.ok, false);
+});
+
+test("17 Kasım (Patron): ürünün DETAY rengi (biye, şerit, kuşak) 'başka renk' sayılmaz ve silinmez; sadece ana renk kontrol edilir", async () => {
+  const { baskaRenkSil } = await import("./worker.js");
+  const { kanalKontrol } = await import("./yayin-kontrol.js");
+  const o = await yeniOrtam();
+  const p = { kod: "3271", marka: "BLACKROSE", renkler: ["rust"], bedenler: "38-44", en: "Rust sleeveless wrap top with black contrast stripes and a black waist tie.", fr: "Haut cache-cœur rouille avec rayures noires et ceinture noire.", medya: [{ type: "photo", media: "https://x/1.jpg" }], adlar: ["ön"] };
+  const k = await kanalKontrol(o.env, p, { simdi: ist(10) });
+  assert.ok(!k.sorunlar.some((x) => /başka renk/.test(x)), k.satir);
+  assert.equal(baskaRenkSil(p.en, p.renkler, "en"), p.en);
+  assert.equal(baskaRenkSil(p.fr, p.renkler, "fr"), p.fr);
+  const k2 = await kanalKontrol(o.env, { ...p, en: "Elegant black dress with a rust belt." }, { simdi: ist(10) }); // ana renk yanlış → yine yakalanır
+  assert.ok(k2.sorunlar.some((x) => /başka renk geçiyor \(black\)/.test(x)));
 });
 
 test("9 Kasım YAYIN KAPISI: gece (23:00) onaylanan paylaşım kanala gitmez, kuyruğa girer; 09:00'dan itibaren gider; son paylaşımdan 60 dk geçmeden ikinci gitmez", async () => {
@@ -2213,6 +2226,16 @@ test("13 Kasım KESİN KAPI (kural 52–53): 21:00'den sonra HİÇBİR yoldan pa
   assert.deepEqual(await kesinKapi(o.env, son + 59 * 60), { acik: false, neden: "ara" });
   assert.deepEqual(await kesinKapi(o.env, son + 60 * 60), { acik: true, neden: null });
   assert.equal(typeof kanaldaPaylas, "function");
+  // 4) 17 Kasım (Patron, kural 53 istisnası): Patron'un gönderip onayladığı paylaşım 12 sınırını ve 60 dk aralığı beklemez; saat kalır
+  o.depo.set("sonpaylasim", JSON.stringify(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(5000 + i), ist(9, 0, 1) + i * 1800]))));
+  const az = ist(9, 0, 1) + 11 * 1800 + 5 * 60; // 12 paylaşım dolu + son paylaşımdan 5 dk sonra
+  assert.deepEqual(await kesinKapi(o.env, az), { acik: false, neden: "sinir" });
+  assert.deepEqual(await kesinKapi(o.env, az, { patron: true }), { acik: true, neden: null });
+  assert.deepEqual(await kesinKapi(o.env, ist(21, 30, 1), { patron: true }), { acik: false, neden: "saat" });
+  o.depo.delete("kuyruk:3332");
+  const rg = await yeniKanalaPaylas(o.env, paket("3333"), ist(22, 0, 1), { sayma: false, stokKontrol: false, patron: true });
+  assert.equal(rg.ertelendi, true); // gece: Patron'unki de sabahı bekler
+  assert.equal(JSON.parse(o.depo.get("kuyruk:3333")).secenek.patron, true);
 });
 
 test("9 Kasım REPETE RAPORU: hızlı satan/bitmek üzere, bitti ama hızlıydı, fabrikadan gelecek (cevapsız 🔴 + hatırlat), yavaş+stok çok; iki marka toplanmaz; düğmeler", async () => {

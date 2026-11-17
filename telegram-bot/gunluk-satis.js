@@ -22,7 +22,9 @@ export async function gunlukSatis(env, simdi, gun = gunA(simdi)) {
     const say = await stokIste(env, "/satis-sayim", { gun, magaza: m }).catch(() => null);
     const kopru = ((ozet && ozet.kopruler) || []).find((k) => String(k.magaza).toUpperCase() === m) || null;
     const c = await ayar(env, `ciro:${m}`);
-    s[m] = { adet: say ? Number(say.toplam) || 0 : null, model: say ? Number(say.model) || 0 : null, indirimli: say ? Number(say.indirimliAdet) || 0 : 0, ciro: gunlukCiro(c, gun), gider: kasaGideri(c, gun), cariOdeme: kasaCariOdeme(c, gun), kisisel: kasaKisisel(c, gun), fabrika: fabrikaOdemesi(await ayar(env, `cari:${m}`), gun), sinyal: kopru ? Math.max(Number(kopru.son) || 0, Number(kopru.kalp) || 0) : null };
+    // 17 Kasım (Patron): köprü o günü bitirdikten SONRA okumadıysa (köprü kapalı) ciro/gider "okunamadı" — "yok" denmez
+    const taze = Boolean(c && c.zaman && (gunA(c.zaman) > gun || (gunA(c.zaman) === gun && simdi - c.zaman < 3 * 3600)));
+    s[m] = { adet: say ? Number(say.toplam) || 0 : null, model: say ? Number(say.model) || 0 : null, indirimli: say ? Number(say.indirimliAdet) || 0 : 0, ciro: taze ? gunlukCiro(c, gun) : null, gider: taze ? kasaGideri(c, gun) : null, kopruKapali: !taze, cariOdeme: kasaCariOdeme(c, gun), kisisel: kasaKisisel(c, gun), fabrika: fabrikaOdemesi(await ayar(env, `cari:${m}`), gun), sinyal: kopru ? Math.max(Number(kopru.son) || 0, Number(kopru.kalp) || 0) : null };
   }
   return s;
 }
@@ -33,8 +35,9 @@ export function ciroYazi(c) {
 }
 // Gider + net: "gider 120,00 $ · net 1.080,00 $"; gider başka para birimindeyse ayrı yazılır (net'e katılmaz). "" = gider kaydı gelmiyor
 export function giderNetYazi(x) {
+  if (x && x.kopruKapali) return "gider okunamadı (köprü kapalı)"; // 17 Kasım (Patron): veri yoksa "yok" denmez
   if (!x || !x.gider) return "";
-  if (!x.gider.length) return "günlük gider yok";
+  if (!x.gider.length) return "günlük gider 0";
   const g = x.gider.map((y) => `${paraYaz(y.tutar)} ${y.birim}`).join(" + ");
   const c = x.ciro && x.ciro.satirlar.length === 1 ? x.ciro.satirlar[0] : null, ayni = c ? x.gider.find((y) => y.birim === c.birim) : null;
   return `günlük gider ${g}${c && (ayni || x.gider.length) ? ` · net ${paraYaz(c.net - (ayni ? ayni.tutar : 0))} ${c.birim}${x.gider.some((y) => y.birim !== c.birim) ? " (başka para birimindeki gider düşülmedi)" : ""}` : ""}`;
@@ -76,7 +79,15 @@ export function gunlukSatisMetni(v, simdi, magaza = null) {
 }
 // Akşam raporu satırı (tek satır, markalar ayrı): "Satış: VOLONTE 12 adet, 840,00 $ · Black Rose 6 adet, 410,00 $"
 export function raporSatisSatiri(v) {
-  const b = (m) => { const x = v[m]; if (!x || x.adet == null) return `${AD[m]} ?`; const c = x.ciro && x.ciro.satirlar.length ? `, ${x.ciro.satirlar.map((y) => `${paraYaz(y.net)} ${y.birim}`).join(" + ")}` : ""; const gn = c ? giderNetYazi(x).replace(/ \(başka para birimindeki gider düşülmedi\)/, "") : ""; return `${AD[m]} ${x.adet} adet${c}${gn ? ` (${gn})` : ""}`; };
+  // 17 Kasım (Patron): TUTAR iki marka için AYRI AYRI yazılır; veri gelmediyse "okunamadı (köprü kapalı)", "yok" denmez
+  const b = (m) => {
+    const x = v[m];
+    if (!x || x.adet == null) return `${AD[m]} satış okunamadı (köprü kapalı)`;
+    if (x.kopruKapali || !x.ciro) return `${AD[m]} ${x.adet} adet, tutar okunamadı · gider okunamadı (köprü kapalı)`;
+    const c = `, ${x.ciro.satirlar.length ? x.ciro.satirlar.map((y) => `${paraYaz(y.net)} ${y.birim}`).join(" + ") : "0 $"}`;
+    const gn = giderNetYazi(x).replace(/ \(başka para birimindeki gider düşülmedi\)/, "");
+    return `${AD[m]} ${x.adet} adet${c}${gn ? ` (${gn})` : ""}`;
+  };
   return `Satış: ${b("VOLONTE")} · ${b("BLACKROSE")}`;
 }
 // Soru kalıbı: "bugün Black Rose kaç adet sattı, kaç dolarlık" / "dünkü satış" / "bugünkü ciro"

@@ -62,7 +62,7 @@ import { SITE_VERI, VIDEO_SUNUCU, PAYLASIM_ARASI_GUN, COK_SATAN_GUN, DURUMLAR, D
 import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
-import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce, ESKI_YAZI } from "./yayin-kontrol.js";
+import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce, ESKI_YAZI, detayRengiMi } from "./yayin-kontrol.js";
 import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { magazaStogu, STOK_KURALI } from "./sil.js";
@@ -1673,11 +1673,16 @@ async function silmeDevam(env) {
 async function siradakiniPaylas(env, simdi) {
   if (await durdurulduMu(env, "kemal")) return; // 6 Kasım: durdurulduysa sıradaki bekler (silinmez)
   const sonraki = Number((await env.KAYIT.get("sonraki")) || 0);
-  if (simdi < sonraki) return;
   const liste = await kuyrukListesi(env);
-  if (!liste.length || !(await kesinKapi(env, simdi)).acik) return; // 13 Kasım: saat / günde 12 / 60 dk — sıradaki bekler (silinmez)
+  // 17 Kasım (Patron, kural 53 istisnası): Patron'un gönderip onayladığı paylaşım sırada beklemez — 12 sınırı ve 60 dk yok, sadece saat
+  const patronOge = liste.find((x) => x.secenek && x.secenek.patron);
+  const patronAcik = patronOge && (await kesinKapi(env, simdi, { patron: true })).acik;
+  if (!patronAcik) {
+    if (simdi < sonraki) return;
+    if (!liste.length || !(await kesinKapi(env, simdi)).acik) return; // 13 Kasım: saat / günde 12 / 60 dk — sıradaki bekler (silinmez)
+  }
   const oncelik = liste.find((x) => x.sinirsiz); // gece onaylanan / ertelenen önce çıkar (günlük 12'ye sayılır)
-  const oge = oncelik || liste[0];
+  const oge = patronAcik ? patronOge : oncelik || liste[0];
   if (!oge) return;
 
   // Önce sıradan çıkar: görev üst üste çalışırsa aynı model iki kez paylaşılmasın.
@@ -1922,11 +1927,14 @@ export async function yayinKapisi(env, simdi) {
 }
 // 13 Kasım (Patron, kural 52–53): KESİN KAPI — kanala giden HER paylaşımın (tur, repete, yeni model, ertelenen, Pelin videosu;
 // sıradan gelen dahil) son kontrolü: saat 09:00–21:00, bugün kanala çıkan model < 12, son paylaşımdan ≥ 60 dk. Hiçbir yol atlayamaz.
-export async function kesinKapi(env, simdi) {
-  if ((await bugunSayac(env, simdi)) >= GUNLUK_SINIR) return { acik: false, neden: "sinir" };
+// 17 Kasım (Patron, kural 53 istisnası): Patron'un KENDİ gönderip onayladığı paylaşım günlük 12 sınırını ve 60 dk aralığı
+// beklemez; sadece 09:00–21:00 saati geçerli kalır.
+export async function kesinKapi(env, simdi, { patron = false } = {}) {
+  if (!patron && (await bugunSayac(env, simdi)) >= GUNLUK_SINIR) return { acik: false, neden: "sinir" };
   if (env.YAYIN_KAPISI === "0") return { acik: true, neden: null }; // sadece testler: saat ve ara gerçek saatten bağımsız
   const s = saat(simdi);
   if (s < YAYIN_BAS || s >= YAYIN_BIT) return { acik: false, neden: "saat" };
+  if (patron) return { acik: true, neden: null };
   const sp = Object.values((await env.KAYIT.get("sonpaylasim", "json").catch(() => null)) || {}).map(Number).filter(Boolean);
   if (simdi - Math.max(0, ...sp) < YAYIN_ARA_DK * 60) return { acik: false, neden: "ara" };
   return { acik: true, neden: null };
@@ -2025,7 +2033,9 @@ export function baskaRenkSil(metin, renkler, dil) {
   if (!metin) return metin;
   const izin = new Set((renkler || []).flatMap((r) => String(r).toLowerCase().split(/\s+/)));
   const sozluk = RENK_KELIME[dil] || {};
-  return String(metin).replace(/[A-Za-zÀ-ÿ]+/g, (w) => (sozluk[w.toLowerCase()] && !izin.has(sozluk[w.toLowerCase()]) ? "" : w)).replace(/\s{2,}/g, " ").replace(/\s+([,.;])/g, "$1").trim();
+  const kelimeler = String(metin).match(/[A-Za-zÀ-ÿœ]+/g) || [];
+  let j = -1; // 17 Kasım (Patron): ürünün detay rengi (biye, şerit, kuşak) silinmez — sadece ANA renk kontrol edilir
+  return String(metin).replace(/[A-Za-zÀ-ÿœ]+/g, (w) => { j++; return sozluk[w.toLowerCase()] && !izin.has(sozluk[w.toLowerCase()]) && !detayRengiMi(kelimeler, j) ? "" : w; }).replace(/\s{2,}/g, " ").replace(/\s+([,.;])/g, "$1").trim();
 }
 async function paketHazirla(env, u, baglam, simdi, { durum = null, medya = null, renk = null, beden = null } = {}) {
   let yazi = await env.KAYIT.get(`yazi:${u.kod}`, "json");
@@ -2652,10 +2662,10 @@ async function siteyeVideoBildir(env, kod, mesajlar, simdi, ek = {}) {
   if (!env.STOK || !mesajlar.length) return;
   await kuyrugaEkle(env, "kanalVideo", { id: `kv-${kod}-${mesajlar[0]}`, kod: String(kod), mesajlar: mesajlar.slice(0, 10), zaman: simdi, ...ek }).catch(() => null);
 }
-export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null, zamanli = false, kim = null } = {}) {
+export async function yeniKanalaPaylas(env, paket, simdi, { sayma = true, stokKontrol = true, siteVideo = true, renk = null, onayliSorunlar = null, zamanli = false, kim = null, patron = false } = {}) {
   if (await durdurulduMu(env, "kemal")) return { ok: false, hata: await durMesaji(env, "kemal"), durduruldu: true };
   if (((await env.KAYIT.get("silme:onayli", "json").catch(() => null)) || {})[String(paket.kod)]) return { ok: false, hata: `${paket.kod} için silme onaylandı; kanala paylaşılmaz` }; // 12 Kasım
-  if ((!zamanli && !(await yayinKapisi(env, simdi)).acik) || !(await kesinKapi(env, simdi)).acik) return yayiniErtele(env, { kod: String(paket.kod), yeni: true, paket, kim: kim || "onaylı", secenek: { sayma: false, stokKontrol, siteVideo, renk, onayliSorunlar } }, simdi);
+  if ((!zamanli && !patron && !(await yayinKapisi(env, simdi)).acik) || !(await kesinKapi(env, simdi, { patron })).acik) return yayiniErtele(env, { kod: String(paket.kod), yeni: true, paket, kim: kim || "onaylı", secenek: { sayma: false, stokKontrol, siteVideo, renk, onayliSorunlar, ...(patron ? { patron: true } : {}) } }, simdi);
   const kanal = await env.KAYIT.get("kanal", "json");
   if (!kanal) return { ok: false, hata: "kanal bilgisi yok" };
   // 6 Kasım: VENOM KONTROLÜ — yanlışsa yayına çıkmaz. Patron (ya da onaylayan) ⚠️'li kartı gördüyse o sorunlar geçer; yeni çıkan sorun durdurur.
@@ -3020,7 +3030,7 @@ async function yayinOnayUygula(env, id, islem) {
   const u = (await siteUrunleriAl(env)).find((y) => String(y.kod) === String(x.kod) && !y.gizli);
   if (!u) return `⚠️ ${x.kod}: model sitede yok ya da gizli — paylaşılmadı.`;
   const paket = await paketHazirla(env, u, await durumBaglami(env, [String(x.kod)], simdi), simdi, { medya: pelinMedya(x), renk: x.renk || null, beden: x.beden || null, durum: x.yeniRenk ? "yenirenk" : null });
-  const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false, siteVideo: false, renk: x.renk || null, onayliSorunlar: k.kontrolSorunlar || [] }); // site işi aşağıda (pelinSite, dosyadan)
+  const g = await yeniKanalaPaylas(env, paket, simdi, { sayma: false, siteVideo: false, renk: x.renk || null, onayliSorunlar: k.kontrolSorunlar || [], patron: Boolean(x.patronIstegi) }); // site işi aşağıda (pelinSite, dosyadan); 17 Kasım: Patron'un kendi paylaşımı 12/60 dk beklemez
   if (!g.ok) return `⚠️ ${x.kod}: kanala paylaşılamadı: ${kisaHata(g.hata)}`;
   const ertelendi = g.ertelendi ? ` ${ertelemeMetni(g, x.kod)}` : ""; // 9 Kasım: kanal sıraya; site yine şimdi (dosyadan)
   // 5 Kasım: Selin videoyu DOSYADAN (videoUrl) koyar; kanal mesajı yedek. Fotoğraflar: ön + set (hepsi).

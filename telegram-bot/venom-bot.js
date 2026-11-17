@@ -57,7 +57,7 @@ import { cevapsizSatiri } from "./kart-tekrar.js";
 import { listeyeEkle, listeyiTemizle, hemraListesiGonder, hemraKararAdimi, hemraSatirlari, kisiId, markaSorumlusu, LISTE_SAATLERI } from "./venom-ekip.js";
 import { cozumDevret } from "./venom-gorev.js";
 import { gorevAc, gorevAdimi, cozumAdimi, yapilmayanSatiri, patronKarari, haftaSayilari, sayac as mudurSayac, sonSaat } from "./venom-gorev.js";
-import { uretimMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec, uretilenOku } from "./pelin.js";
+import { uretimMaliyeti, fotoMaliyeti, buAyHarcanan, AYLIK_SINIR_USD, para, boyOku, boyYazi, aracSec, uretilenOku } from "./pelin.js";
 import { celalKoduMu } from "./stok.js"; // 12 Kasım: Celal'in modelleri (3000, 3002, Patron'un listesi)
 export { KISILER };
 
@@ -327,7 +327,7 @@ const ARACLAR = [
   { name: "mutabakat_gonder", description: "Fuat'a güncel cuma mutabakatını (bakiye mesajları) tekrar gönderip onayını ister. Önce Patron'a önizleme kartı.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "siteden_kaldir", description: "Bir modeli siteden (Selin) ve VOLONTE kanalından (Kemal) kaldırır. Önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "magaza_stok_listesi", description: "İki mağazanın stoğu MODEL MODEL (Vegawin): her mağaza ayrı başlık, satır 'KOD · N adet', çoktan aza; liste kesilmez, uzunsa birkaç mesaja bölünüp Patron'a DOĞRUDAN gönderilir. 'iki mağazanın stoğunu model model ver', 'stok listesi' denince kullan; liste gönderildikten sonra tekrar yazma, sadece tek satır özet söyle.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
-  { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı. 16 Kasım: Pelin'de SADECE FOTOĞRAF (videosuz) üretim yolu YOK — Patron sadece fotoğraf isterse bu aracı da bota_yaz '/uret'i de KULLANMA; Patron'a tek satır yaz: \"Yapamıyorum — sebep: Pelin'de sadece fotoğraf yolu yok, her üretim fotoğraf + set + video (video kartında ~1,3–7 $ video payı). Sadece fotoğraf yolu eklenirse model başı ~0,64 $ (ön fotoğraf + kontrol 0,19 $, sağ/sol/arka 0,45 $); onaylarsanız Claude Code ekler.\" ve eksik_arac_listesi'ne yaz.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" } } } },
+  { name: "pelin_uret", description: "Pelin'e model(ler) için foto + video ürettir (para harcar). test=true ise 5 modellik maliyet testi. Önce maliyet kartı. 17 Kasım (Patron): Patron SADECE FOTOĞRAF isterse (video istemedi: \"fotoğraf üret\", \"sadece foto\") sadece_foto=true — ön fotoğraf + sağ/sol/arka, VİDEO YOK, model başı ~0,64 $; fotoğraflar sadece Patron'a, kanala gitmez. Patron video da istediyse sadece_foto=false. Emin değilsen sor: \"Sadece fotoğraf mı (~0,64 $), fotoğraf + video mu?\"", input_schema: { type: "object", additionalProperties: false, required: ["kodlar", "test"], properties: { kodlar: { type: "array", items: { type: "string" } }, test: { type: "boolean" }, sadece_foto: { type: "boolean", description: "Patron sadece fotoğraf istedi (video yok)" } } } },
   { name: "model_boyu", description: "Bir modelin Pelin'de kayıtlı boyunu (mini/diz/midi/bilek/maksi, referans) gösterir. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "musteri_paylasimi", description: "MÜŞTERİ TEŞEKKÜR PAYLAŞIMI: Patron görsel(ler) gönderip 'müşteri', 'müşteri paylaşımı', 'müşteri teşekkürü', 'bunların alt yazısını yaz' gibi bir şey yazınca HER ZAMAN ve SADECE bunu kullan (bota_yaz ile Kemal'e yazma, kemal_paylas kullanma; Kemal'in bu iş için ayrı aracı var ve bu araç onu çalıştırır). Patron'un gönderdiği BÜTÜN görseller (en fazla 10) TEK kart olur: Kemal kişisel bilgiyi kapatır, Nora TEK bir FR + EN teşekkür yazısı yazar, onay kartı Patron'a gelir; onaysız kanala çıkmaz. Varsayılan: model kodu ve şehir YOK. kod / sehir alanını SADECE Patron BU mesajında açıkça yazdıysa doldur; yazmadıysa BOŞ bırak (fotoğraftan ya da önceki konuşmadan tahmin etme).", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string", description: "Patron bu mesajında açıkça yazdıysa model kodu (ör. 3394); yoksa boş" }, sehir: { type: "string", description: "Patron bu mesajında açıkça yazdıysa ülke / şehir; yoksa boş" } } } },
   { name: "kemal_paylas", description: "Patron'un Venom'a son gönderdiği TÜM fotoğraf/videoları (video sesi/müziği aynen) Kemal'e verir: kanal paylaşımı (marka yazısı fotoğraflara, EN/FR alt yazı). Renk ve beden Patron ne yazdıysa o (yoksa model kartı). YAYINLAMAZ: SON YAYIN ONAYI kartı Patron'a gelir; onaydan sonra kanal + site. 'paylaş' isteği HER ZAMAN buraya (Pelin'e değil).", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" }, renk: { type: "string", description: "Patron'un yazdığı renk, Türkçe (beyaz, koyu bordo…)" }, beden: { type: "string", enum: ["kucuk", "buyuk", "ikisi"] }, son_set: { type: "boolean", description: "Patron yeni dosya göndermeden 'en son gönderdiğim set' derse true" } } } },
@@ -351,7 +351,7 @@ const ARACLAR = [
   { name: "karar_kaydet", description: "Patron yeni bir KALICI karar/kural söylediğinde (ör. 'bundan sonra …', 'her zaman …', 'asla …') Venom'un hafızasına yazar; sonraki her konuşmada uygulanır. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["metin"], properties: { metin: { type: "string" } } } },
   { name: "selin_durum", description: "Selin'de bir modelin durumu: neden taslak çıkmadı (fotoğraf gelmedi mi, hata mı, onayda mı, sitede mi), bugünkü listede mi, kaç gündür gelmiyor, stok. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
   { name: "selin_taslak", description: "Selin'e bir model için site taslağı (başlık + EN/FR/PT açıklama) hazırlatır; fotoğrafı Selin'e gelmiş olmalı. Küçük yapay zekâ maliyeti (~0,05 $): önce onay kartı.", input_schema: { type: "object", additionalProperties: false, required: ["kod"], properties: { kod: { type: "string" } } } },
-  { name: "bota_yaz", description: "Patron'un söylediği işi/cevabı ilgili bota Patron yazmış gibi iletir (yazı). Pelin: fotoğraf/video üretimi ve Nora senaryo; Kemal: kanal paylaşımı ve düzeltme metni; Selin: site; Sami: stok/ekip. Bir bot az önce yazı bekleyen bir soru sorduysa (ör. 'nasıl düzelteyim, yazın') Patron'un cevabını AYNEN o bota ilet. Para harcayan işlerde bot kendi maliyet kartını getirir. Pelin'e ÜRETİM komutu (/uret …) gönderirken Patron foto + video istemiş olmalı; Patron SADECE fotoğraf istediyse gönderme (Pelin'de sadece fotoğraf yolu yok; pelin_uret açıklamasındaki tek satırı yaz).", input_schema: { type: "object", additionalProperties: false, required: ["bot", "metin"], properties: { bot: { type: "string", enum: ["pelin", "kemal", "selin", "sami"] }, metin: { type: "string" } } } },
+  { name: "bota_yaz", description: "Patron'un söylediği işi/cevabı ilgili bota Patron yazmış gibi iletir (yazı). Pelin: fotoğraf/video üretimi ve Nora senaryo; Kemal: kanal paylaşımı ve düzeltme metni; Selin: site; Sami: stok/ekip. Bir bot az önce yazı bekleyen bir soru sorduysa (ör. 'nasıl düzelteyim, yazın') Patron'un cevabını AYNEN o bota ilet. Para harcayan işlerde bot kendi maliyet kartını getirir. Pelin'e ÜRETİM komutu (/uret …) gönderirken Patron foto + video istemiş olmalı; Patron SADECE fotoğraf istediyse bota_yaz KULLANMA; pelin_uret sadece_foto=true kullan (17 Kasım: sadece fotoğraf yolu var, ~0,64 $/model).", input_schema: { type: "object", additionalProperties: false, required: ["bot", "metin"], properties: { bot: { type: "string", enum: ["pelin", "kemal", "selin", "sami"] }, metin: { type: "string" } } } },
   { name: "kanal_paylasimlari", description: "VOLONTE Telegram kanalındaki son paylaşımlar (Venom kanalda yönetici, sadece okur): zaman, model kodu, medya, yazı ve bulunan sorunlar. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" }, gun: { type: "integer", description: "kaç günlük (varsayılan 1)" } } } },
   { name: "site_kontrol", description: "wearvolonte.com'u okur (değiştirmez): model sayısı, fotoğrafsız/videosuz, yapay zekâ (Pelin) fotoğrafı olanlar, stoğu bitmiş ama sitede görünenler; kod verilirse o modelin ayrıntısı. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: { kod: { type: "string" } } } },
   { name: "site_duzelt", description: "Sitede bir düzeltmeyi Selin'e verir (önce Patron onay kartı). yapay_zeka_fotolarini_kaldir SADECE Patron açıkça 'yapay zekâ / Pelin fotoğraflarını kaldır' derse — kendin önerme, başka bir isteği buna çevirme (9 Kasım). İşlemler: yapay zekâ (Pelin) fotoğraflarını kaldır, fotoğrafları yenile (önbellekteki eski görsel), taslağı yeniden hazırla, açıklamadaki renkleri yaz (renkler). Yeni renk Pelin'den siteye eklenince renk satırı kendiliğinden güncellenir; bu araç ilk rengi kaydetmek/düzeltmek için.", input_schema: { type: "object", additionalProperties: false, required: ["kod", "islem"], properties: { kod: { type: "string" }, islem: { type: "string", enum: ["yapay_zeka_fotolarini_kaldir", "fotolari_yenile", "taslak_yeniden", "renkler"] }, renkler: { type: "array", items: { type: "string" }, description: "islem=renkler: modelin sitedeki BÜTÜN renkleri, Türkçe, sırayla (ör. [\"siyah\", \"koyu bordo\"]); açıklamanın sonundaki renk satırı (EN/FR/PT) buna göre yazılır" } } } },
@@ -657,6 +657,18 @@ export async function aracCalistir(env, ad, g, simdi) {
     for (const k of kodlar) boylar[k] = await boyOku(env, k);
     const boysuz = kodlar.filter((k) => !(boylar[k] && boylar[k].boy));
     if (boysuz.length) return `${boysuz.join(", ")} için boy kayıtlı değil. Patron Pelin'e "/uret ${boysuz[0]}" yazınca Pelin boyu bir kez sorar; sonra buradan üretilebilir.`;
+    if (g.sadece_foto && !g.test) { // 17 Kasım (Patron): SADECE FOTOĞRAF yolu — video yok, ~0,64 $/model
+      const fm = fotoMaliyeti(secim), top = fm.toplam * kodlar.length, har = await buAyHarcanan(env, simdi);
+      await kartAc(env, { tur: "pelin", kodlar, test: false, sadeceFoto: true }, [
+        `📸 Pelin SADECE FOTOĞRAF — ${kodlar.length} model: ${kodlar.join(", ")} (video YOK)`,
+        `Boy: ${kodlar.map((k) => `${k} ${boyYazi(boylar[k])}`).join(", ")}`,
+        ...fm.kalemler.map((k) => `• ${k.ad}: ${para(k.birim)}`),
+        `Model başı ~${para(fm.toplam)} · toplam ~${para(top)}`,
+        `Bu ay Pelin: ${para(har)} / ${AYLIK_SINIR_USD} $${har + top > AYLIK_SINIR_USD ? " ⚠️ SINIRI AŞAR (Pelin başlamaz)" : ""}`,
+        "Fotoğraflar sadece size gelir; kanala/siteye gitmez.",
+      ].join("\n"), simdi);
+      return "Sadece fotoğraf maliyet kartı Patron'a gösterildi; onaylamadan para harcanmaz.";
+    }
     const mm = uretimMaliyeti(aracSec(secim), secim);
     const toplam = mm.toplam * kodlar.length, harcanan = await buAyHarcanan(env, simdi);
     await kartAc(env, { tur: "pelin", kodlar, test: Boolean(g.test) }, [
@@ -872,7 +884,7 @@ async function isCalistir(env, is, simdi) {
   else if (is.tur === "mesaj") await kuyrugaEkle(env, "giden", { id: is.id, kime: is.kime, metin: is.govde, tur: "mesaj", onaylayan });
   else if (is.tur === "mutabakat") await kuyrugaEkle(env, "giden", { id: is.id, kime: "fuat", tur: "mutabakat", icerik: is.icerik, onaylayan });
   else if (is.tur === "sil") { const r = await silKuyrugu(env, is.kod, "Patron (Venom)", simdi); if (r && r.engel) await yaz(env, STOK_KURALI(is.kod, r.engel), { posta: { izin: "cevap" } }); }
-  else if (is.tur === "pelin") await kuyrugaEkle(env, "pelinIs", { id: is.id, kodlar: is.kodlar, test: is.test });
+  else if (is.tur === "pelin") await kuyrugaEkle(env, "pelinIs", { id: is.id, kodlar: is.kodlar, test: is.test, ...(is.sadeceFoto ? { sadeceFoto: true } : {}) });
   else if (is.tur === "siteDuzelt") {
     if (is.islem === "fotolari_yenile") await kaydet(env, "venom:siteFotoYenile", { kod: is.kod });
     else if (is.islem === "renkler") { const l = await oku(env, "venom:siteRenk", []); await kaydet(env, "venom:siteRenk", [...[].concat(l), { kod: is.kod, renkler: is.renkler || [], mod: "yaz" }]); }
@@ -1109,8 +1121,8 @@ export async function bekleyenKararlar(env, simdi) {
   const ayna = await oku(env, "venom:pelinDurum", null);
   if (ayna) {
     const ad = { senaryo_onay: "senaryo onayı", foto_onay: "ön fotoğraf onayı", onay: "video önizlemesi", uyari: "kontrolden geçmedi, kararınız", paket_onay: "paket önizlemesi" };
-    for (const x of (ayna.isler || []).filter((y) => ad[y.durum] && !y.deneme && simdi - (y.zaman || 0) <= KARAR_ESKI)) l.push({ baslik: `Pelin — ${x.kod}: ${ad[x.durum]} (düğmesi kendi kartında, yukarıda)`, zaman: x.zaman || simdi, klavye: null });
-    for (const k of (ayna.acikKartlar || []).filter((y) => simdi - (y.zaman || simdi) <= KARAR_ESKI)) l.push({ baslik: `Pelin — maliyet kartı: ${ilkCumle(k.baslik)} (düğmesi kendi kartında, yukarıda)`, zaman: k.zaman || simdi, klavye: null });
+    for (const x of (ayna.isler || []).filter((y) => ad[y.durum] && !y.deneme && simdi - (y.zaman || 0) <= KARAR_ESKI)) l.push({ baslik: `Pelin — ${x.kod}: ${ad[x.durum]} (düğmesi kendi kartında, yukarıda)`, zaman: x.zaman || simdi, klavye: null, kisa: `Pelin ${x.kod} ${x.durum === "senaryo_onay" ? "senaryo" : x.video ? "video" : x.foto ? "fotoğraf" : "üretim"}${x.maliyet ? ` · ${para(x.maliyet)}` : ""}` });
+    for (const k of (ayna.acikKartlar || []).filter((y) => simdi - (y.zaman || simdi) <= KARAR_ESKI)) l.push({ baslik: `Pelin — maliyet kartı: ${ilkCumle(k.baslik)} (düğmesi kendi kartında, yukarıda)`, zaman: k.zaman || simdi, klavye: null, kisa: paraIsAdi(k.baslik, k.tur === "nora" ? "senaryo" : /video/i.test(k.baslik) ? "video" : /foto/i.test(k.baslik) ? "fotoğraf" : "üretim") });
   }
   for (const k of await listele("kemal:pelinYayin:")) l.push({ baslik: `Kemal — ${k.name.split(":")[2].split("-")[0]}: son yayın onayı (düğmesi kendi kartında, yukarıda)`, zaman: simdi, klavye: null });
   // 16 Kasım (Patron): Kemal'in müşteri paylaşımı kartları da görünür (Patron'un onayında olanlar)
@@ -1425,6 +1437,15 @@ export async function gunlukTest(env, simdi) {
   const bozuk = satir.filter((x) => x.startsWith("❌")).length;
   return `🧪 Sabah testi (09:30): ${bozuk ? `⚠️ ${bozuk} sorun` : "hepsi çalışıyor"}\n${satir.join("\n")}`;
 }
+// 17 Kasım (Patron): raporda ham hata yazısı yok — bilinen teknik hatalar düz Türkçe tek satır
+export function hataTr(metin) {
+  const s = String(metin || "");
+  const yer = (s.match(/^([A-Za-z]+):/) || [])[1];
+  if (/error code:? ?5\d\d|Bad Gateway|Gateway Time-?out|Service Unavailable|is not valid JSON|Unexpected token/i.test(s)) return `Telegram (ya da karşı sunucu) bir an cevap vermedi; geçici kesinti, bir sonraki turda kendiliğinden tekrar denendi${yer === "webhookKur" ? " (Telegram bağlantısı kurulu, mesajlar geliyor)" : ""}`;
+  if (/Too Many Requests|error_code"?:? ?429/i.test(s)) return "Telegram kısa süre \"çok hızlı\" dedi; bekleyip tekrar denendi";
+  if (/fetch failed|network|ECONN|timed? ?out/i.test(s)) return "bağlantı bir an koptu; tekrar denendi";
+  return s;
+}
 const SORUN_ANAHTAR = { selin: "selin:hata", pelin: "pelin:hata", sami: "sami:hata", kemal: "kemal:sonHata", "kemal (Pelin teslim)": "kemal:pelinTeslimHata", "kemal (birikim)": "kemal:birikimHata", "tek kapı": "venom:tekKapiHata" };
 export async function sorunRaporu(env, simdi, sure = 86400) {
   const satir = [];
@@ -1432,7 +1453,7 @@ export async function sorunRaporu(env, simdi, sure = 86400) {
     const v = await env.KAYIT.get(k).catch(() => null);
     if (!v) continue;
     let h; try { h = JSON.parse(v); } catch { h = { hata: v, zaman: simdi }; }
-    if (h && h.zaman && simdi - h.zaman < sure) satir.push(`• ${ad}: ${kisaYaz(String(h.hata || h.metin || "").replace(/\d{9,}/g, "•••").replace(/\s+/g, " "), 140)}`);
+    if (h && h.zaman && simdi - h.zaman < sure) satir.push(`• ${ad}: ${kisaYaz(hataTr(h.hata || h.metin || "").replace(/\d{9,}/g, "•••").replace(/\s+/g, " "), 140)}`);
   }
   for (const h of (await oku(env, "venom:bot:hata", [])).filter((x) => simdi - x.zaman < sure).slice(-5)) satir.push(`• Venom (${h.yer}): ${kisaYaz(String(h.hata).split("\n")[0], 120)}`);
   const kanal = (await oku(env, "venom:kanal:son", [])).filter((x) => simdi - x.zaman < sure && x.kod && x.medya !== "yazı");
@@ -1543,7 +1564,7 @@ async function hataBildir(env, simdi) {
     if (!z || z <= (yeni[k] || 0)) continue;
     yeni[k] = z;
     if (gorulen) await defterYaz(env, { zaman: z, bot: String(ad).toLowerCase(), tur: "hata", ozet: String(h.hata || h.yol || "").slice(0, 200) }).catch(() => null); // 9 Kasım: iş defteri
-    if (gorulen && simdi - z < 3600) satir.push(`• ${ad}: ${String(h.hata || h.yol || "").slice(0, 160)}`);
+    if (gorulen && simdi - z < 3600) satir.push(`• ${ad}: ${hataTr(h.hata || h.yol || "").slice(0, 160)}`);
     if (gorulen) { const bot = String(ad).toLowerCase(); const alarm = await hataAlarmi(env, bot, z, h.hata || h.yol, simdi).catch(() => null); if (alarm) await bildir(env, alarm, { simdi, kaynak: bot, tur: "kritik" }); }
   }
   await kaydet(env, "venom:bot:hataGoruldu", yeni);
@@ -2360,14 +2381,19 @@ const satirlar = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(
 // Başlık · Genel durum · (Patron kararı — varsa) · Satış · Kanal · Site · Fabrika · Venom'un kendi çözdükleri. Ayrıntı /detay.
 const BR_AD = (m) => (m === "BLACKROSE" ? "Black Rose" : "VOLONTE");
 // 12 Kasım (D16): raporun "karar" satırı sohbetteki "Bekleyenler" ile AYNI kaynaktan (bekleyenKararlar)
+// 17 Kasım (Patron): "para 1 iş" satırında işin adı ve tutarı da yazar ("Pelin 3271 video · 1,97 $")
+export function paraIsAdi(metin, ne = "üretim") {
+  const s = String(metin || ""), kod = (s.match(/\b(\d{3,6})\b/) || [])[1], t = (s.match(/~?\s?(\d+(?:[.,]\d{1,2})?)\s?\$/) || [])[1];
+  return `Pelin${kod ? ` ${kod}` : ""} ${ne}${t ? ` · ${t.replace(".", ",")} $` : ""}`;
+}
 export async function patronKararlari(env, simdi) {
   const l = await bekleyenKararlar(env, simdi);
-  const k = { repete: [], sil: [], para: 0 };
-  for (const x of l) { if (x.tip === "sil") k.sil.push(x.kod || "?"); else if (x.tip === "para" || /Pelin|maliyet/i.test(x.baslik)) k.para++; else if (x.tip === "bitti" || x.tip === "repete") k.repete.push(x.kod || "?"); }
+  const k = { repete: [], sil: [], para: 0, paraAd: [] };
+  for (const x of l) { if (x.tip === "sil") k.sil.push(x.kod || "?"); else if (x.tip === "para" || /Pelin|maliyet/i.test(x.baslik)) { k.para++; k.paraAd.push(x.kisa || paraIsAdi(x.baslik, /video/i.test(x.baslik) ? "video" : /foto/i.test(x.baslik) ? "fotoğraf" : "iş")); } else if (x.tip === "bitti" || x.tip === "repete") k.repete.push(x.kod || "?"); }
   const p = [];
   if (k.repete.length) p.push(`repete ${[...new Set(k.repete)].join(", ")}`);
   if (k.sil.length) p.push(`silme ${[...new Set(k.sil)].join(", ")}`);
-  if (k.para) p.push(`para ${k.para} iş`);
+  if (k.para) p.push(`para ${k.para} iş (${[...new Set(k.paraAd)].slice(0, 3).join("; ")}${k.paraAd.length > 3 ? "; …" : ""})`);
   return p.length ? `🟡 Kararınız bekleniyor: ${p.join(" · ")}` : null;
 }
 // Kemal'in paylaşımdan önce kendi yaptığı düzeltme → tek cümle: "3396 kanal yazısı · açıklamadaki başka renk kelimesi vardı → çıkardım (paylaşımdan önce)"
@@ -2421,7 +2447,7 @@ export async function raporSatirlari(env, simdi, tur) {
   const venom = `🛡 Venom kendi çözdü: ${cozParca.length ? cozParca.join("; ") : "çözülecek sorun çıkmadı"}`;
   const baslik = tur === "sabah" ? `☀️ Günaydın Patron — ${tarihSaat(simdi).slice(0, 10)} (ayrıntı /detay)` : `🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)} (ayrıntı /detay)`;
   const gs = await gunlukSatis(env, simdi, g).catch(() => null); // 11 Kasım: adet + ciro (Vegawin), markalar ayrı
-  const satisSatiri = gs && gs.VOLONTE.adet != null && gs.BLACKROSE.adet != null ? `💰 ${raporSatisSatiri(gs).replace(/^Satış:/, `Satış ${ne}:`)}` : `💰 Satış ${ne}: VOLONTE ${sat.VOLONTE}, Black Rose ${sat.BLACKROSE}`;
+  const satisSatiri = gs ? `💰 ${raporSatisSatiri(gs).replace(/^Satış:/, `Satış ${ne}:`)}` : `💰 Satış ${ne}: VOLONTE ${sat.VOLONTE} adet, tutar okunamadı · Black Rose ${sat.BLACKROSE} adet, tutar okunamadı (köprü kapalı)`; // 17 Kasım: tutar markalar için ayrı
   // 14 Kasım (Patron): öneri kartı sayısı TEK kaynaktan (Kemal'in tur kaydı; iş bekçisi ve ofis ile aynı) ve "şu an" diye yazılır
   const ky = kemalSayim(await botaSor(env, "kemal", "ozet").catch(() => null), gunAnahtari(simdi));
   const kanal = `📣 Kanal ${ne}: ${payN} paylaşım${ky ? ` · ${tur === "sabah" ? "bugün şu an" : "şu an"}: ${sayimYazi(ky)}` : ""}`;

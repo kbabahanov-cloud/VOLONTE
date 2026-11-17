@@ -837,6 +837,11 @@ test("11 Kasım RAPOR DÜZENİ: sabah 09:40 en fazla 8 satır, sabit sıra (gene
   assert.match(s[0], /^☀️ Günaydın Patron — .* \(ayrıntı \/detay\)$/);
   assert.match(s[1], /^(✅ Botlar çalışıyor \(dün iş kontrolü yapılmadı\)|🔴 \d+ sorun var: )/); // 13 Kasım: "Her şey çalışıyor" sadece iş kontrolü de temizse
   assert.equal(s[2], "🟡 Kararınız bekleniyor: repete 3490");
+  // 17 Kasım (Patron): para işinin adı ve tutarı da yazar
+  o.depo.set("venom:pelinDurum", JSON.stringify({ isler: [{ id: "3271-x", kod: "3271", durum: "onay", maliyet: 1.97, zaman: ist(3, 8), video: "https://v/x.mp4" }], acikKartlar: [] }));
+  assert.equal(await v.patronKararlari(o.env, ist(3, 9, 40)), "🟡 Kararınız bekleniyor: repete 3490 · para 1 iş (Pelin 3271 video · 1,97 $)");
+  assert.equal(v.paraIsAdi("💰 3394 · Kling 3.0 4K — ~1,26 $", "video"), "Pelin 3394 video · 1,26 $");
+  o.depo.delete("venom:pelinDurum");
   assert.match(s[3], /^💰 Satış dün: VOLONTE \S+ adet( · |, )/); // 11 Kasım: adet + (varsa) ciro, markalar ayrı
   assert.match(s[3], /Black Rose \S+ adet/);
   assert.match(s[4], /^📣 Kanal dün: \S+ paylaşım$/);
@@ -1790,7 +1795,7 @@ test("5 SORU (Patron'un testi): fabrikaya dün giden (markalar ayrı, ≤4 satı
     assert.match(ciroBolumu("BLACK ROSE", JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "ciro:BLACKROSE" }) })).json()).v)).join("\n"), /2026: satış 250\.000,00 \$ · iade 0,00 \$ · NET 250\.000,00 \$ \(900 fatura\)/);
     assert.equal(gunlukCiro({ zaman: 1, satirlar: [{ tablo: "D0026X", yil: 2026, tur: "21", tutar: 5 }] }, "2026-11-11"), null); // eski köprü: günlük satır yok → "henüz gelmedi"
     // köprü günlük ciro göndermiyorsa: uydurma yok, tek satır sebep + başlatılan çözüm
-    assert.match(await aracla(o, "bugün volonte kaç sattı kaç dolar", "gunluk_satis", { gun: "bugun", magaza: "VOLONTE" }), /VOLONTE: 0 adet \(0 model\) · ciro: Vegawin'den günlük fatura toplamı henüz gelmedi\nGünlük ciro köprüden henüz gelmedi \(köprü güncellemesi gerekiyor\); gelince bu satırda yazar\./);
+    assert.match(await aracla(o, "bugün volonte kaç sattı kaç dolar", "gunluk_satis", { gun: "bugun", magaza: "VOLONTE" }), /VOLONTE: 0 adet \(0 model\) · ciro: Vegawin'den günlük fatura toplamı henüz gelmedi · gider okunamadı \(köprü kapalı\)\nGünlük ciro köprüden henüz gelmedi \(köprü güncellemesi gerekiyor\); gelince bu satırda yazar\./);
     // yapay zekâ aracı saati düşürse bile Patron'un söylediği saat kullanılır
     const o9 = ortam();
     o9.env.__patronMetni = "Merdan'a 3394 işini ilet, 12:00'ye kadar bitsin";
@@ -2590,6 +2595,10 @@ test("14 Kasım (Patron) RAPOR 3 DÜZELTME: fabrika / cari ödemesi günlük gid
     BLACKROSE: { adet: 56, model: 22, ciro: ciro(3020), gider: [{ birim: "$", tutar: 752, n: 3 }], cariOdeme: [{ birim: "$", tutar: 11000, n: 1 }], fabrika: { tutar: 11000, n: 1 } } };
   assert.equal(giderNetYazi(v.VOLONTE), "günlük gider 1.775,00 $ · net 1.628,00 $");
   assert.equal(raporSatisSatiri(v), "Satış: VOLONTE 54 adet, 3.403,00 $ (günlük gider 1.775,00 $ · net 1.628,00 $) · Black Rose 56 adet, 3.020,00 $ (günlük gider 752,00 $ · net 2.268,00 $)");
+  // 17 Kasım (Patron): köprü kapalıysa (veri gelmedi) "yok" denmez — tutar ve gider markalar için ayrı "okunamadı (köprü kapalı)"
+  const kapali = { ...v, BLACKROSE: { ...v.BLACKROSE, ciro: null, gider: null, kopruKapali: true } };
+  assert.equal(raporSatisSatiri(kapali), "Satış: VOLONTE 54 adet, 3.403,00 $ (günlük gider 1.775,00 $ · net 1.628,00 $) · Black Rose 56 adet, tutar okunamadı · gider okunamadı (köprü kapalı)");
+  assert.equal(giderNetYazi({ kopruKapali: true }), "gider okunamadı (köprü kapalı)");
   assert.equal(fabrikaOdemeSatiri(v), "🏭 Fabrikaya ödeme: 34.447,00 $ (VOLONTE defteri 23.447,00 $ · Black Rose defteri 11.000,00 $)");
   assert.equal(fabrikaOdemeSatiri({ gun: G, VOLONTE: { fabrika: { tutar: 0, n: 0 }, cariOdeme: [] }, BLACKROSE: { fabrika: null, cariOdeme: null } }), null); // ödeme yoksa satır yok
   // kasadan başka cariye de ödeme çıktıysa (ör. Celal) ayrı yazılır, gider sayılmaz

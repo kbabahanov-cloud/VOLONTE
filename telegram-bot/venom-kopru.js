@@ -74,7 +74,7 @@ export async function venomPelinAdimi(env, simdi, uretimBaslat) {
   const isler = await kuyruguAl(env, "pelinIs");
   for (const is of isler) {
     try {
-      const s = await uretimBaslat(env, { kodlar: is.kodlar, test: Boolean(is.test), sablonAd: null }, simdi);
+      const s = await uretimBaslat(env, { kodlar: is.kodlar, test: Boolean(is.test), sablonAd: null, ...(is.sadeceFoto ? { sadeceFoto: true } : {}) }, simdi); // 17 Kasım: sadece fotoğraf
       const ok = Boolean(s && s.ok);
       await sonucBildir(env, is.id, ok, ok ? (s.mesaj || `Pelin ${is.test ? "maliyet testine" : "üretime"} başladı: ${is.kodlar.join(", ")}. Hazır olanlar onayınıza gelecek.`) : `Pelin başlamadı: ${(s && s.hata) || "bilinmeyen sorun"}. Para harcanmadı.`);
     } catch (e) {

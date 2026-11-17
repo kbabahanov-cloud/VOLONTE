@@ -74,7 +74,9 @@ async function tgGercek(env, metod, govde, deneme = 0) {
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde),
   });
-  const j = await r.json();
+  // 17 Kasım: Telegram bazen bir an "error code: 502" (JSON olmayan) döner → ham hata yerine düz cevap; 5xx'te bir kez daha dene
+  const j = await r.json().catch(() => ({ ok: false, error_code: r.status, description: `Telegram geçici olarak cevap vermedi (${r.status})`, gecici: r.status >= 500 }));
+  if (j && j.gecici && !deneme) { await new Promise((ok) => setTimeout(ok, 2000)); return tgGercek(env, metod, govde, 1); }
   // Telegram "çok hızlı" derse (429) kısa bekleyip bir kez daha dene.
   const bekle = j && j.error_code === 429 && j.parameters && j.parameters.retry_after;
   if (bekle && bekle <= 15 && !deneme) {
@@ -273,6 +275,7 @@ async function webhookKur(env) {
   if (!env.SELF_URL) return;
   const hedef = `${env.SELF_URL}/telegram`;
   const b = await tg(env, "getWebhookInfo", {});
+  if (!b.ok && b.gecici) return; // Telegram'ın anlık kesintisi: bağlantı zaten kurulu, bir sonraki turda yine bakılır (hata sayılmaz)
   if (b.ok && b.result.url === hedef && GUNCELLEMELER.every((g) => (b.result.allowed_updates || []).includes(g))) return;
   const r = await tg(env, "setWebhook", { url: hedef, secret_token: env.WEBHOOK_SECRET, allowed_updates: GUNCELLEMELER, max_connections: 1 });
   await yazKV(env, "selin:webhook", { zaman: Math.floor(Date.now() / 1000), ok: r.ok, hata: r.description || null });
