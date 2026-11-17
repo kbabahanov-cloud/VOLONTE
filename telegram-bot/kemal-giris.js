@@ -6,8 +6,8 @@ import { venomDugme, venomMesaj, akisDenemesi, venomModelFoto, venomFotoTani, ve
 export * from "./worker.js";
 export { default } from "./worker.js";
 export class VenomKapisi extends WorkerEntrypoint {
-  async dugme(data, rid) { return venomDugme(this.env, data, rid); }
-  async mesaj(metin) { return venomMesaj(this.env, metin); }
+  async dugme(data, rid, kisi) { return venomDugme(this.env, data, rid, kisi || null); }
+  async mesaj(metin, kisi) { return venomMesaj(this.env, metin, kisi || null); }
   async paylasimSil(g) { return paylasimSil(this.env, g || {}); } // 10 Kasım: Patron "sil" → onay kartı YOK
   async paylasimDuzelt(g) { return paylasimDuzelt(this.env, g || {}); } // 10 Kasım: aynı medya, doğru yazı
   async soldOut(kod) { return venomSoldOut(this.env, String(kod || "")); } // 13 Kasım: Patron "sil" + stok bitmiş → kartsız SOLD OUT

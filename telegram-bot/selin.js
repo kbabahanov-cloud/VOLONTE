@@ -14,7 +14,7 @@
 
 import { defterTg, defterKarar, defterIs, defterSatir, defterYaz, defterGelen } from "./is-defteri.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
-import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, patronKisisel, elemanYolu, elemanFormYolu, sahteElemanDugme, sahteElemanMesaj } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, GUNCEL } from "./kart-tekrar.js";
 import { celalKoduMu } from "./stok.js"; // 13 Kasım (A4): Celal modelleri fotoğraf listesine ve sayıma girmez (kural 32)
 import { kuyruguAl, kuyrugaEkle } from "./venom-kopru.js";
@@ -70,7 +70,10 @@ async function tg(env, metod, govde, deneme = 0) {
   await defterTg(env, "selin", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
   return r;
 }
+// 18 Kasım (kural 100, ELEMAN KAPISI — KAPALI): en alt gönderim. Kapı bir eleman için açıksa çağrı aynı içerikle Venom'dan gider; değilse buradan.
+const tgHam = async (env, m, g) => { const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(g) }); return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` })); };
 async function tgGercek(env, metod, govde, deneme = 0) {
+  if (!deneme) { const el = await elemanYolu(env, "selin", metod, govde, (m, g) => tgHam(env, m, g)); if (el) return el; }
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde),
   });
@@ -117,13 +120,13 @@ const KILIT_MESAJI = "🔒 Siteye yükleme şu an kilitli (fotoğraflar kontrol 
 // (KV günlük yazma sınırı). Hata/durum kayıtları izlenebilsin diye KV'de kalır (depo.js).
 const selinNesne = (env) => env.SELIN.get(env.SELIN.idFromName("selin"), { locationHint: "enam" });
 // TEK KAPI (5 Kasım): Venom → Selin iç giriş (selin-giris.js "VenomKapisi"): düğme, model durumu, taslak başlat
-export async function venomMesaj(env, metin) {
-  const u = sahteMesaj(env, metin);
+export async function venomMesaj(env, metin, kisi = null) {
+  const u = kisi ? sahteElemanMesaj(metin, kisi) : sahteMesaj(env, metin); // kisi: eleman kapısı (kural 100)
   if (env.SELIN) await selinNesne(env).fetch("https://selin/guncelleme", { method: "POST", body: JSON.stringify(u) }); else await guncelleme(u, env);
   return true;
 }
-export async function venomDugme(env, data, rid) {
-  const u = sahteDugme(env, data, rid);
+export async function venomDugme(env, data, rid, kisi = null) {
+  const u = kisi ? sahteElemanDugme(data, kisi) : sahteDugme(env, data, rid);
   if (env.SELIN) await selinNesne(env).fetch("https://selin/guncelleme", { method: "POST", body: JSON.stringify(u) }); else await guncelleme(u, env);
   return true;
 }

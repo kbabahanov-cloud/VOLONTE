@@ -10,8 +10,8 @@ export class AnahtarKopru extends WorkerEntrypoint {
   async fetch(istek) { return kopruIstegi(this.env, istek); }
 }
 export class VenomKapisi extends WorkerEntrypoint { // tek kapı (5 Kasım): Venom → Pelin/Nora düğmesi
-  async dugme(data, rid) { return venomDugme(this.env, data, rid); }
-  async mesaj(metin) { return venomMesaj(this.env, metin); }
+  async dugme(data, rid, kisi) { return venomDugme(this.env, data, rid, kisi || null); }
+  async mesaj(metin, kisi) { return venomMesaj(this.env, metin, kisi || null); }
   async foto(g) { return venomFotoKaydet(this.env, g); }
   async videoYazi(g) { return venomVideoYazi(this.env, g); } // 16 Kasım: hazır videoya marka + kod yazısı (ses korunur)
   async rapor(g) { return venomRapor(this.env, g); } // 9 Kasım: Venom'un tam raporu (üretim, harcama, bekleyen, bakiye, Nora)

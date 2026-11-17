@@ -13,8 +13,8 @@ export class SelinDepo extends WorkerEntrypoint {
   async bulutTetik() { try { return await bulutTetikle(this.env, Math.floor(Date.now() / 1000), { hemen: true }); } catch (e) { return { ok: false, neden: String(e && e.message).slice(0, 120) }; } } // 17 Kasım: Pelin iş yazınca GitHub'daki ffmpeg işini başlat
 }
 export class VenomKapisi extends WorkerEntrypoint { // tek kapı (5 Kasım): Venom → Selin
-  async dugme(data, rid) { return venomDugme(this.env, data, rid); }
-  async mesaj(metin) { return venomMesaj(this.env, metin); }
+  async dugme(data, rid, kisi) { return venomDugme(this.env, data, rid, kisi || null); }
+  async mesaj(metin, kisi) { return venomMesaj(this.env, metin, kisi || null); }
   async durum(kod) { return venomSelin(this.env, "/venom/durum", kod); }
   async ozet() { return venomSelin(this.env, "/venom/ozet", null); } // 9 Kasım: Venom'un canlı sorusu
   async taslak(kod) { return venomSelin(this.env, "/venom/taslak", kod); }

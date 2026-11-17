@@ -18,7 +18,7 @@ import { kitapOku } from "./kitap.js";
 import { defterTg, defterKarar, defterIs, defterGelen } from "./is-defteri.js";
 import { acikSessizlik } from "./magaza-saat.js";
 import { durdurulduMu } from "./durdurma.js";
-import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, elemanYolu, elemanFormYolu, sahteElemanDugme, sahteElemanMesaj } from "./tek-kapi.js";
 import { kodBul } from "./ortak.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteHaftalik, siteDenemesi } from "./site-ozet.js";
@@ -88,14 +88,11 @@ async function gercekKanit(env, metod, govde, r) {
     await stokIste(env, "/ayar-yaz", { k, v: JSON.stringify(l.slice(-400)) });
   } catch { /* kanıt yazılamazsa iş durmaz */ }
 }
+// 18 Kasım (kural 100, ELEMAN KAPISI — KAPALI): en alt gönderim. Kapı bir eleman için açıksa çağrı aynı içerikle Venom'dan gider; değilse buradan.
+const tgHam = async (env, m, g) => { const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(g) }); return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` })); };
 async function tgGercek(env, metod, govde) {
   // 10 Kasım (ACİL): her gönderim doğrulanır, sınır aşımı kısaltılır, hata bir kez düzeltilip denenir, olmazsa "sami:tgHatalar"
-  return guvenliGonder(env, "sami", async (m, g) => {
-    const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${m}`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(g),
-    });
-    return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }));
-  }, metod, govde);
+  return guvenliGonder(env, "sami", async (m, g) => (await elemanYolu(env, "sami", m, g, (mm, gg) => tgHam(env, mm, gg))) || tgHam(env, m, g), metod, govde);
 }
 
 function gizliEsit(a, b) {
@@ -107,12 +104,12 @@ function gizliEsit(a, b) {
 
 // TEK KAPI (5 Kasım): Venom'dan Sami düğmesi (sami-giris.js "VenomKapisi")
 export const samiGonder = (env, metod, govde) => tg(env, metod, govde); // 16 Kasım: testler için Sami'nin TEK gönderim yolu (tek kapı dahil)
-export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
+export async function venomDugme(env, data, rid, kisi = null) { await guncelleme(kisi ? sahteElemanDugme(data, kisi) : sahteDugme(env, data, rid), env); return true; } // kisi: eleman kapısı (kural 100) — "eleman bastı"
 // 16 Kasım (denetim, kural 43): "hepsini durdur" sonrası Venom'un anında çağırdığı adımlar da durur (zamanlı işlerle aynı kontrol)
 export async function repeteAdim(env) { if (await durdurulduMu(env, "sami")) return false; await repeteKartAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: Venom → hemen (5 dk bekleme yok)
 export async function islemAdim(env) { if (await durdurulduMu(env, "sami")) return false; await islemlerAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 17 Kasım: Venom'un "mutabakatı getir" işi beklemeden
 export async function gidenAdim(env) { if (await durdurulduMu(env, "sami")) return false; await venomGidenAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: "Merdan'a söyle" → kart HEMEN (5 dk bekleme yok)
-export async function venomMesaj(env, metin) { await guncelleme(sahteMesaj(env, metin), env); return true; }
+export async function venomMesaj(env, metin, kisi = null) { await guncelleme(kisi ? sahteElemanMesaj(metin, kisi) : sahteMesaj(env, metin), env); return true; } // kisi: eleman kapısı — "eleman yazdı"
 
 export default {
   async fetch(istek, env) {

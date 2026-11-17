@@ -64,7 +64,7 @@ import { StokDO, stokKodu, indirimliMi, INDIRIMLI } from "./stok.js";
 import { siteVerisi } from "./depo-oku.js";
 import { kuyrugaEkle, kuyruguAl } from "./venom-kopru.js";
 import { kanalKontrol, engelKaydet, paylasimKaydet as gecmisKaydet, markaKesin, markaKarari, renkIngilizce, ESKI_YAZI, detayRengiMi } from "./yayin-kontrol.js";
-import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, formAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, elemanYolu, elemanFormYolu, sahteElemanDugme, sahteElemanMesaj } from "./tek-kapi.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
 import { magazaStogu, STOK_KURALI } from "./sil.js";
 import { stokIste, stokSorulariGonder as stokSorulariGonderOrtak, stokKarari as stokKarariOrtak, stokGoster as stokGosterOrtak } from "./stokbot.js";
@@ -205,15 +205,15 @@ export async function venomCalistir(env, g) {
   return kemalCalistir(env, g || {}, Math.floor(Date.now() / 1000));
 }
 // TEK KAPI: Patron Venom'da Kemal'in düğmesine bastı → aynı yol (sahte callback, Patron'dan). İç giriş: kemal-giris.js
-export async function venomMesaj(env, metin) {
+export async function venomMesaj(env, metin, kisi = null) {
   // 9 Kasım (sert müdür B): Venom emri "öner 3279 3280" → bugünün turuna ek öneri (toplu kart, Merdan + Hemra)
-  const on = String(metin || "").match(/^\/?(?:öner|oner)\s+([\d\s,]+)$/i);
+  const on = kisi ? null : String(metin || "").match(/^\/?(?:öner|oner)\s+([\d\s,]+)$/i); // Venom emri sadece Patron adına; eleman yazısı normal mesajdır
   if (on) {
     const kodlar = [...new Set(on[1].split(/[\s,]+/).filter((k) => /^\d{3,6}$/.test(k)))].slice(0, 10);
     if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/oner", { method: "POST", body: JSON.stringify({ kodlar }) })).json();
     return turEkle(env, kodlar, Math.floor(Date.now() / 1000));
   }
-  const update = sahteMesaj(env, metin);
+  const update = kisi ? sahteElemanMesaj(metin, kisi) : sahteMesaj(env, metin); // kisi: eleman kapısı (kural 100)
   if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
   else await guncellemeIsle(update, env);
   return true;
@@ -222,8 +222,8 @@ export async function venomOzet(env) {
   if (env.KATALOG) return (await kemalNesne(env).fetch("https://kemal/kemal/ozet", { method: "POST", body: "{}" })).json();
   return kemalOzet(env, Math.floor(Date.now() / 1000));
 }
-export async function venomDugme(env, data, rid) {
-  const update = sahteDugme(env, data, rid);
+export async function venomDugme(env, data, rid, kisi = null) {
+  const update = kisi ? sahteElemanDugme(data, kisi) : sahteDugme(env, data, rid);
   if (env.KATALOG) await kemalNesne(env).fetch("https://kemal/kemal/guncelleme", { method: "POST", body: JSON.stringify(update) });
   else await guncellemeIsle(update, env);
   return true;
@@ -825,6 +825,7 @@ export async function kanaldaPaylas(env, kod, ids, simdi, beden = null, { zamanl
 
 async function telegramForm(env, metod, form) {
   if (await patronaGider(env, form.get("chat_id"))) return formAktar(env, "kemal", metod, form, (m, g) => telegramGercek(env, m, g));
+  { const el = await elemanFormYolu(env, "kemal", metod, form, (m, g) => tgHam(env, m, g)); if (el) return el; } // kural 100 (kapalı)
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", body: form });
   return r.json();
 }
@@ -4610,17 +4611,11 @@ async function telegram(env, metod, govde) {
   await defterTg(env, "kemal", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
   return r;
 }
+// 18 Kasım (kural 100, ELEMAN KAPISI — KAPALI): en alt gönderim. Kapı bir eleman için açıksa çağrı aynı içerikle Venom'dan gider; değilse buradan.
+const tgHam = async (env, m, g) => { const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(g) }); return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` })); };
 async function telegramGercek(env, metod, govde) {
   // 10 Kasım (görev kâğıdı): satırda en fazla 2 düğme, yazı sınırı, hata bir kez düzeltilip denenir → "kemal:tgHatalar"; 🧪 DENEME kartı → "kemal:kanit"
-  return guvenliGonder(env, "kemal", async (m, g) => {
-    const token = String(env.BOT_TOKEN || "").trim();
-    const r = await fetch(`https://api.telegram.org/bot${token}/${m}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(g),
-    });
-    return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }));
-  }, metod, govde);
+  return guvenliGonder(env, "kemal", async (m, g) => (await elemanYolu(env, "kemal", m, g, (mm, gg) => tgHam(env, mm, gg))) || tgHam(env, m, g), metod, govde);
 }
 
 function gizliEsit(a, b) {

@@ -19,7 +19,7 @@
 import { defterTg, defterKarar, defterIs, defterSatir, defterGelen } from "./is-defteri.js";
 import { durdurulduMu, durMesaji, pelinUretimDurdu } from "./durdurma.js";
 import { kitapOku } from "./kitap.js";
-import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik } from "./tek-kapi.js";
+import { patronaGider, venomaAktar, venomCevabi, sahteDugme, sahteMesaj, tekKapiAcik, elemanYolu, elemanFormYolu, sahteElemanDugme, sahteElemanMesaj } from "./tek-kapi.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { claudeTur } from "./ai-istemci.js";
 import { markaKarari } from "./yayin-kontrol.js";
@@ -266,9 +266,10 @@ export async function tg(env, metod, govde) {
   await defterTg(env, "pelin", metod, govde, r); // 9 Kasım: iş defteri (Venom her şeyi bilir)
   return r;
 }
+// 18 Kasım (kural 100, ELEMAN KAPISI — KAPALI): en alt gönderim. Kapı bir eleman için açıksa çağrı aynı içerikle Venom'dan gider; değilse buradan.
+const tgHam = async (env, m, g) => { const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${m}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(g) }); return r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` })); };
 async function tgGercek(env, metod, govde) {
-  const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(govde) });
-  return r.json().catch(() => ({ ok: false }));
+  return (await elemanYolu(env, "pelin", metod, govde, (m, g) => tgHam(env, m, g))) || tgHam(env, metod, govde);
 }
 // Büyük video/fotoğraf: Telegram adresle en fazla 20 MB çeker (4K video sessizce düşüyordu) → Pelin indirir, dosya olarak yükler (50 MB'a kadar)
 export async function tgDosya(env, metod, alan, url, govde = {}) {
@@ -280,6 +281,7 @@ export async function tgDosya(env, metod, alan, url, govde = {}) {
   const f = new FormData();
   for (const [a, v] of Object.entries(govde)) f.append(a, typeof v === "object" ? JSON.stringify(v) : String(v));
   f.append(alan, new Blob([await k.arrayBuffer()], { type: alan === "video" ? "video/mp4" : "image/jpeg" }), alan === "video" ? "video.mp4" : "foto.jpg");
+  { const el = await elemanFormYolu(env, "pelin", metod, f, (m, g) => tgHam(env, m, g)); if (el) return el; } // kural 100 (kapalı)
   const r = await fetch(`https://api.telegram.org/bot${String(env.BOT_TOKEN || "").trim()}/${metod}`, { method: "POST", body: f });
   return r.json().catch(() => ({ ok: false }));
 }
@@ -1159,13 +1161,13 @@ function gizliEsit(a, b) {
 }
 const nesne = (env) => env.PELIN.get(env.PELIN.idFromName("pelin"), { locationHint: "enam" });
 // TEK KAPI (5 Kasım): Patron Venom'da Pelin/Nora düğmesine bastı → aynı yol (pelin-giris.js "VenomKapisi")
-export async function venomMesaj(env, metin) {
-  const u = JSON.stringify(sahteMesaj(env, metin));
+export async function venomMesaj(env, metin, kisi = null) {
+  const u = JSON.stringify(kisi ? sahteElemanMesaj(metin, kisi) : sahteMesaj(env, metin)); // kisi: eleman kapısı (kural 100)
   if (env.PELIN) await nesne(env).fetch("https://pelin/guncelleme", { method: "POST", body: u }); else await guncelleme(JSON.parse(u), env);
   return true;
 }
-export async function venomDugme(env, data, rid) {
-  const u = JSON.stringify(sahteDugme(env, data, rid));
+export async function venomDugme(env, data, rid, kisi = null) {
+  const u = JSON.stringify(kisi ? sahteElemanDugme(data, kisi) : sahteDugme(env, data, rid));
   if (env.PELIN) await nesne(env).fetch("https://pelin/guncelleme", { method: "POST", body: u }); else await guncelleme(JSON.parse(u), env);
   return true;
 }

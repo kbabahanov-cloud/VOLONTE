@@ -6,8 +6,8 @@ import { eksikKartiBul } from "./fabrika.js";
 export * from "./sami.js";
 export { default } from "./sami.js";
 export class VenomKapisi extends WorkerEntrypoint {
-  async dugme(data, rid) { return venomDugme(this.env, data, rid); }
-  async mesaj(metin) { return venomMesaj(this.env, metin); }
+  async dugme(data, rid, kisi) { return venomDugme(this.env, data, rid, kisi || null); }
+  async mesaj(metin, kisi) { return venomMesaj(this.env, metin, kisi || null); }
   async gidenAdim() { return gidenAdim(this.env); } // 11 Kasım: Venom'un ekibe verdiği iş HEMEN gider
   async eksikKarti(gun) { return eksikKartiBul(this.env, gun || null); } // 13 Kasım: fabrikaya giden son kartın aynısı (Venom gösterir)
   async islemAdim() { return islemAdim(this.env); } // 17 Kasım: Venom'un bir kerelik işi (ör. Celal mutabakatını hazırla) HEMEN
