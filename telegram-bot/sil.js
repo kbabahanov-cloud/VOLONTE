@@ -14,14 +14,14 @@ async function kuyruk(env, anahtar, kayit) {
 // siteden ve Telegram'dan ASLA kaldırılmaz. Fabrikada bitmesi kaldırma sebebi değildir. Bütün silme yolları buradan geçer.
 // Dönüş: mağaza mağaza kalan adet (VOLONTE ve BLACK ROSE AYRI yazılır, toplanmaz). yazi boşsa stok yok → silinebilir.
 export async function magazaStoklari(env, kod) {
-  const bos = { var: false, yazi: "", magazalar: {} };
+  const bos = { var: false, yazi: "", magazalar: {}, okundu: false }; // okundu: false → stok OKUNAMADI (kural 99: ne SOLD OUT ne silme)
   if (!env || !env.STOK) return bos;
   try {
     const r = await env.STOK.get(env.STOK.idFromName("stok"), { locationHint: "enam" }).fetch("https://stok/bilgi", { method: "POST", body: JSON.stringify({ kod: String(kod) }) });
     const m = {};
     for (const x of ((await r.json()) || {}).satirlar || []) m[x.magaza] = (m[x.magaza] || 0) + (Number(x.adet) || 0);
     const dolu = Object.entries(m).filter(([, n]) => n > 0);
-    return { var: dolu.length > 0, magazalar: m, yazi: dolu.map(([g, n]) => `${g === "BLACKROSE" ? "BLACK ROSE" : g} ${n} adet`).join(" · ") };
+    return { okundu: true, var: dolu.length > 0, magazalar: m, yazi: dolu.map(([g, n]) => `${g === "BLACKROSE" ? "BLACK ROSE" : g} ${n} adet`).join(" · ") };
   } catch { return bos; }
 }
 export const magazaStogu = async (env, kod) => { const s = await magazaStoklari(env, kod); return s.var ? s.yazi : 0; };

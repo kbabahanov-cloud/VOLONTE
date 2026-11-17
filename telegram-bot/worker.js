@@ -42,6 +42,7 @@ import { kemalSayim } from "./is-bekcisi.js"; // 14 Kasım: öneri kartı sayıs
 export { calistirSatiri };
 import { kitapOku } from "./kitap.js";
 import { defterTg, defterKarar, defterIs, defterCevap, defterSatir, defterYaz } from "./is-defteri.js";
+import { soldOutStokKarari } from "./sold-kapi.js";
 import { durdurulduMu, durMesaji } from "./durdurma.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { asistanCevapla, anahtarKontrol, hataMesaji } from "./asistan.js";
@@ -108,9 +109,37 @@ const ESKI_ARALIK_DK = [60, 90]; // tur sisteminden önce onaylanmış (21 Ekim)
 const YIL_SN = 365 * 86400; // sadece son 1 yılın paylaşımları önerilir
 export const KODSUZ_KALIP = /available\s+again|dispon[iİı]ble/i;
 
+// 18 Kasım (Patron, KURAL 99) — SOLD OUT KÖK KAPISI: Kemal'in BÜTÜN SOLD OUT yolları (stok bitince yazı, Patron "sil" + stok bitmiş,
+// silinemeyen eski mesajı SOLD OUT görseliyle gizleme) buradan geçer. Önce Kemal Sami'nin güncel stoğuna bakar (iki mağaza toplamı 0 ve
+// köprü verisi güncel olmalı), sonra Venom kendi okumasıyla karşılaştırır. Biri "hayır" derse SOLD OUT YAPILMAZ; sebep tek deftere yazılır
+// (aynı kod + aynı sebep günde bir kez). Venom bağlantısı kuruluysa ve cevap vermezse de yapılmaz.
+export async function soldOutKapisi(env, kod, yer, simdi = Math.floor(Date.now() / 1000)) {
+  let karar;
+  try { karar = await soldOutStokKarari((y, g) => stokIste(env, y, g), kod, simdi); } catch { karar = { izin: false, neden: "stok okunamadı (depo cevap vermedi)" }; }
+  if (karar.izin && env.VENOM) {
+    let v = null;
+    try { v = await env.VENOM.soldOutKontrol({ kod: String(kod), yer }); } catch { v = null; }
+    if (!v) karar = { izin: false, neden: "Venom'a ulaşılamadı (SOLD OUT Venom'dan geçmeden yapılmaz)" };
+    else if (!v.izin) karar = { izin: false, neden: `Venom durdurdu: ${v.neden}` };
+  }
+  if (!karar.izin) {
+    try {
+      const d = (await env.KAYIT.get("kemal:soldoutDurdu", "json").catch(() => null)) || {};
+      const e = d[kod || "-"];
+      if (!e || e.neden !== karar.neden || simdi - e.zaman > 86400) {
+        d[kod || "-"] = { zaman: simdi, neden: karar.neden, yer };
+        await env.KAYIT.put("kemal:soldoutDurdu", JSON.stringify(Object.fromEntries(Object.entries(d).filter(([, x]) => simdi - x.zaman < 14 * 86400))), { expirationTtl: 30 * 86400 });
+        await defterIs(env, "kemal", `SOLD OUT YAPILMADI (${yer}): ${karar.neden} — kural 99`, { kod: kod || null }).catch(() => null);
+      }
+    } catch { /* kayıt yazılamadıysa da SOLD OUT yapılmaz */ }
+  }
+  return karar;
+}
 // 13 Kasım (Patron): "sil" denen modelin stoğu BİTMİŞSE paylaşım silinmez — kartsız, hemen "SOLD OUT" yazılır (resim ve kod görünür kalır).
 export async function patronSoldOut(env, kod, simdi = Math.floor(Date.now() / 1000)) {
   if (!kod) return { ok: false, hata: "kod yok" };
+  const kapi = await soldOutKapisi(env, kod, "Patron 'sil' + stok bitmiş", simdi); // kural 99
+  if (!kapi.izin) return { ok: false, kod, duzenlenen: 0, hata: `SOLD OUT yapılmadı: ${kapi.neden}` };
   const r = await soldOutYaz(env, kod);
   const yapilan = (await env.KAYIT.get("kemal:soldout", "json").catch(() => null)) || {};
   yapilan[kod] = simdi;
@@ -239,6 +268,7 @@ export default {
   async scheduled(event, env) {
     try { await kitapOku(env, "kemal"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
+    try { await soldOutTaramaAdimi(env, Math.floor(Date.now() / 1000)); } catch (e) { await env.KAYIT.put("kemal:soldoutTaramaHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }).catch(() => null); }
     try { await kanalMedyaDenetimKomutu(env); await kanalMedyaGeriKoyKomutu(env); } catch (e) { await env.KAYIT.put("kemal:medyaDenetimSonuc", JSON.stringify({ ok: false, hata: String(e && e.message).slice(0, 300), zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 86400 }).catch(() => null); }
     try { await kanalVideoDegistirKomutu(env); } catch (e) { await env.KAYIT.put("kemal:videoDegistirSonuc", JSON.stringify({ ok: false, hata: String(e && e.message).slice(0, 300), zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
@@ -1397,12 +1427,15 @@ async function silmeAdimi(env, kod) {
   }
   is.kopya = is.kopya || [];
   is.gizlenen = is.gizlenen || [];
+  let kapi = null;
   for (const [i, id] of parti.entries()) {
     if (arsivKanal && !kopyalar) { is.hatali.push(id); is.hata = is.hata || "arşive kopyalanamadı (silinmedi)"; continue; }
     const r = await telegram(env, "deleteMessage", { chat_id: kanal.id, message_id: id });
     if (r.ok) { is.silinen += 1; if (kopyalar) is.kopya.push({ kanal: id, arsiv: kopyalar[i] }); continue; }
     // Patron kuralı varsa (2 Kasım): 48 saatten eski → SOLD OUT görseliyle gizle (orijinali arşivde), link Patron'a
     if (is.patron && kopyalar && ESKI_MESAJ.test(r.description || "")) {
+      if (!kapi) kapi = await soldOutKapisi(env, kod, "silinemeyen eski mesajı gizleme"); // kural 99: stok 0 değilse / okunamıyorsa SOLD OUT görseli YOK
+      if (!kapi.izin) { is.hatali.push(id); is.hata = is.hata || `48 saatten eski mesaj; SOLD OUT yapılmadı: ${kapi.neden}`; continue; }
       const g = await soldoutIleGizle(env, kanal.id, id);
       if (g.ok) { is.gizlenen.push(id); is.kopya.push({ kanal: id, arsiv: kopyalar[i], gizlendi: true }); continue; }
       is.hata = is.hata || `${r.description} — SOLD OUT ile de gizlenemedi: ${g.description || "bilinmeyen hata"}`;
@@ -1462,9 +1495,14 @@ export async function kanalaGeriKoy(env, kod, kim, site, simdi) {
   await env.KAYIT.put("hicgelmeyecek", JSON.stringify(arsiv)); // önce: yeni paylaşım "silindi" sanılmasın
   // 10 Kasım (Patron): eski mesajlar OLDUĞU GİBİ kopyalanmaz (eski yazı "PRICE. $", TEL gitmişti) — arşivdeki medya alınır,
   // Kemal'in kendi yazısıyla TEK ALBÜM olarak yeniden paylaşılır (09–21, 60 dk aralık kuralıyla).
-  if (k && k.kopya && k.kopya.length && k.arsivKanal) {
+  // 18 Kasım (Patron, kural 99): SOLD OUT görseliyle gizlenmiş eski paylaşımlar YERİNDE açılır (arşivdeki aslı geri konur; yeni kopya
+  // paylaşılmaz). Yeni albüm sadece gerçekten SİLİNMİŞ mesajların medyasıyla kurulur. (3629'un kök sebebi: geri koymada görseller kalmıştı.)
+  const gizli = ((k && k.kopya) || []).filter((x) => x.gizlendi);
+  const acma = gizli.length && k.arsivKanal ? await soldOutGorseliAc(env, kod, gizli, k.arsivKanal, simdi).catch((e) => ({ acilan: [], acilamayan: gizli.map((x) => x.kanal), hata: kisaHata(e) })) : { acilan: [], acilamayan: [] };
+  const silinmis = ((k && k.kopya) || []).filter((x) => !x.gizlendi);
+  if (k && silinmis.length && k.arsivKanal) {
     const medya = [];
-    for (const id of k.kopya.map((x) => x.arsiv).sort((a, b) => a - b).slice(0, 10)) {
+    for (const id of silinmis.map((x) => x.arsiv).sort((a, b) => a - b).slice(0, 10)) {
       const r = await telegram(env, "forwardMessage", { chat_id: k.arsivKanal, from_chat_id: k.arsivKanal, message_id: id, disable_notification: true }).catch(() => null);
       if (!r || !r.ok) continue;
       const m = r.result;
@@ -1478,16 +1516,42 @@ export async function kanalaGeriKoy(env, kod, kim, site, simdi) {
       if (s.ok) { konan = s.ertelendi ? 0 : (s.ids || []).length; ertelendi = s.ertelendi ? s.saat : null; } else hata = s.hata;
     } catch (e) { hata = kisaHata(e); }
   }
-  if ((konan || ertelendi) && !hata) await env.KAYIT.delete(`silinen:${kod}`);
-  const soldout = ((k && k.kopya) || []).filter((x) => x.gizlendi).map((x) => (kanal.kullanici ? `https://t.me/${kanal.kullanici}/${x.kanal}` : `#${x.kanal}`));
+  if ((konan || ertelendi || (!silinmis.length && acma.acilan.length)) && !hata && !acma.acilamayan.length) await env.KAYIT.delete(`silinen:${kod}`);
+  else if (k && acma.acilan.length) await env.KAYIT.put(`silinen:${kod}`, JSON.stringify({ ...k, kopya: k.kopya.filter((x) => !acma.acilan.includes(x.kanal)) })); // açılanlar kayıttan düşer
+  const soldout = acma.acilamayan.map((id) => (kanal.kullanici ? `https://t.me/${kanal.kullanici}/${id}` : `#${id}`));
   const siteOk = ["geri kondu", "zaten sitede"].includes(site);
   const metin0 = siteOk && !hata && (konan || ertelendi || !(k && k.kopya && k.kopya.length))
-    ? `↩️ ${kodGoster(kod)} geri kondu: site ${site}; kanala ${ertelendi ? `doğru yazıyla tek albüm olarak sıraya alındı (${tarihYaz(ertelendi)} civarı)` : konan ? `doğru yazıyla tek albüm paylaşıldı (${konan} mesaj)` : "arşivde kopya yoktu"}.`
+    ? `↩️ ${kodGoster(kod)} geri kondu: site ${site}; kanal${ertelendi ? `a doğru yazıyla tek albüm olarak sıraya alındı (${tarihYaz(ertelendi)} civarı)` : konan ? `a doğru yazıyla tek albüm paylaşıldı (${konan} mesaj)` : acma.acilan.length ? "da yeni paylaşım gerekmedi" : "a konacak arşiv kopyası yoktu"}.${acma.acilan.length ? ` SOLD OUT görselli ${acma.acilan.length} eski paylaşım yerinde açıldı (gerçek fotoğraf geri kondu).` : ""}`
     : `⚠️ ${kodGoster(kod)} geri koyma: site ${site || "?"}; kanal ${konan} mesaj${hata ? `, hata: ${hata}` : ""}${!k ? " (arşiv kaydı yok)" : ""}.`;
-  const metin = soldout.length ? `${metin0}\nKanalda SOLD OUT görselli ${soldout.length} eski paylaşım duruyor; isterseniz elle silin:\n${soldout.join("\n")}` : metin0;
+  const metin = soldout.length ? `${metin0}\n⚠️ Kanalda SOLD OUT görselli ${soldout.length} eski paylaşım AÇILAMADI${acma.hata ? ` (${acma.hata})` : ""}; elle silin ya da bana yazın:\n${soldout.join("\n")}` : metin0;
   await telegram(env, "sendMessage", { chat_id: muratId(env), text: metin, disable_web_page_preview: true });
 }
 
+
+// 18 Kasım (kural 99): SOLD OUT görseliyle gizlenmiş kanal mesajlarına arşivdeki ASLINI geri koyar. ciftler: [{ kanal, arsiv }].
+// Sadece ŞU AN SOLD OUT görseli taşıyan mesaja dokunur. En eski mesaja (albümün başı) Kemal'in kendi yazısı yazılır (eski yazı kopyalanmaz).
+export async function soldOutGorseliAc(env, kod, ciftler, arsivKanalId, simdi = Math.floor(Date.now() / 1000)) {
+  const kanal = await env.KAYIT.get("kanal", "json");
+  let soldUid = await env.KAYIT.get("kemal:soldout:uid").catch(() => null);
+  if (!soldUid) { const fid = await env.KAYIT.get("kemal:soldout:fileId").catch(() => null); const g = fid ? await telegram(env, "getFile", { file_id: fid }).catch(() => null) : null; soldUid = (g && g.ok && g.result.file_unique_id) || null; if (soldUid) await env.KAYIT.put("kemal:soldout:uid", soldUid).catch(() => null); }
+  if (!soldUid) return { acilan: [], acilamayan: ciftler.map((c) => c.kanal), hata: "SOLD OUT görselinin kimliği okunamadı" };
+  const oku = async (chat, id) => { const f = await telegram(env, "forwardMessage", { chat_id: arsivKanalId, from_chat_id: chat, message_id: Number(id), disable_notification: true }).catch(() => null); if (!f || !f.ok) return null; await telegram(env, "deleteMessage", { chat_id: arsivKanalId, message_id: f.result.message_id }).catch(() => null); return f.result; };
+  const acilan = [], acilamayan = [];
+  const sirali = ciftler.slice().sort((a, b) => a.kanal - b.kanal).slice(0, 20);
+  let yazi = null;
+  try { tasarimAyarla(await env.KAYIT.get("kemal:tasarim").catch(() => null)); yazi = altYazi(await yenidenPaket(env, kod, simdi, { medya: [] })).slice(0, 1024); } catch { yazi = null; }
+  for (const [i, c] of sirali.entries()) {
+    const e = await oku(kanal.id, c.kanal), a = await oku(arsivKanalId, c.arsiv);
+    const eph = e && e.photo ? e.photo[e.photo.length - 1] : null;
+    if (!eph || eph.file_unique_id !== soldUid) { if (e && (e.photo || e.video)) acilan.push(c.kanal); else acilamayan.push(c.kanal); continue; } // zaten açık (SOLD OUT görseli yok) → açılmış say
+    const aph = a && a.photo ? a.photo[a.photo.length - 1] : null, avid = a && a.video ? a.video : null;
+    if (!avid && (!aph || aph.file_unique_id === soldUid)) { acilamayan.push(c.kanal); continue; }
+    const r = await telegram(env, "editMessageMedia", { chat_id: kanal.id, message_id: Number(c.kanal), media: { type: avid ? "video" : "photo", media: avid ? avid.file_id : aph.file_id, ...(avid ? { supports_streaming: true } : {}), ...(i === 0 && yazi ? { caption: yazi, parse_mode: "HTML" } : {}) } }).catch(() => null);
+    if (r && r.ok) acilan.push(c.kanal); else acilamayan.push(c.kanal);
+  }
+  await defterIs(env, "kemal", `${kod}: SOLD OUT görselli ${acilan.length} eski paylaşım yerinde açıldı (arşivdeki aslı geri kondu)${acilamayan.length ? `, ${acilamayan.length} mesaj açılamadı` : ""} — kural 99`, { kod }).catch(() => null);
+  return { acilan, acilamayan };
+}
 
 // ---------- 10 Kasım (Patron): KANAL DÜZELTME ----------
 // KURAL: Kemal yeniden paylaşımda / geri koymada ASLA eski alt yazıyı kopyalamaz — medyayı alır, alt yazıyı her zaman kendi
@@ -1584,16 +1648,20 @@ export async function paylasimSil(env, { kod = null, ids = null } = {}, simdi = 
   }
   if (!hedef.length) return { ok: false, hata: "silinecek paylaşım bulunamadı" };
   const silinen = [], gizlenen = [], olmadi = [];
+  let kapi = null;
   for (const id of hedef.sort((a, b) => a - b)) {
     const r = await telegram(env, "deleteMessage", { chat_id: kanal.id, message_id: id }).catch(() => null);
     if (r && r.ok) { silinen.push(id); continue; }
+    if (!kapi) kapi = await soldOutKapisi(env, kod ? String(kod) : "", "silinemeyen eski mesajı gizleme", simdi); // kural 99
+    if (!kapi.izin) { olmadi.push(id); continue; }
     const g2 = await soldoutIleGizle(env, kanal.id, id).catch(() => null);
     if (g2 && g2.ok) gizlenen.push(id); else olmadi.push(id);
   }
   if (kod) await dizindenCikar(env, String(kod), hedef);
   await defterIs(env, "kemal", `kanal paylaşımı silindi (Patron): ${silinen.length} mesaj${gizlenen.length ? `, ${gizlenen.length} SOLD OUT` : ""}`, { kod }).catch(() => null);
   const link = (id) => (kanal.kullanici ? `t.me/${kanal.kullanici}/${id}` : `#${id}`);
-  return { ok: !olmadi.length, kod, silinen, gizlenen, olmadi, tarih, link: link(hedef[0]), ozet: `${kod || "paylaşım"} (${link(hedef[0])}${hedef.length > 1 ? ` +${hedef.length - 1} mesaj` : ""}${tarih ? `, ${tarihYaz(tarih)}` : ""})` };
+  const soldOutYok = kapi && !kapi.izin && olmadi.length ? kapi.neden : null;
+  return { ok: !olmadi.length, kod, silinen, gizlenen, olmadi, tarih, link: link(hedef[0]), ...(soldOutYok ? { soldOutYok, hata: `${olmadi.length} eski mesaj bot tarafından silinemiyor (Telegram 48 saat kuralı); SOLD OUT da yapılmadı: ${soldOutYok}. Elle silin: ${olmadi.slice(0, 10).map(link).join(" ")}` } : {}), ozet: `${kod || "paylaşım"} (${link(hedef[0])}${hedef.length > 1 ? ` +${hedef.length - 1} mesaj` : ""}${tarih ? `, ${tarihYaz(tarih)}` : ""})` };
 }
 // Paylaşımı düzelt: aynı medya, DOĞRU yazı. 48 saatten yeniyse sil + tek albüm olarak yeniden paylaş (09–21, 60 dk aralık);
 // eskiyse (Telegram silmeye izin vermez) alt yazıyı yerinde düzenle. Onay kartı yok; sonuç Venom'un akşam özetine tek satır.
@@ -3418,6 +3486,8 @@ export async function soldOutAdimi(env, simdi, { zorla = false } = {}) {
   }
   const sonuc = { zaman: simdi, yapilan: [], ilk: !gorulen };
   for (const kod of adaylar.slice(0, 3)) {
+    const kapi = await soldOutKapisi(env, kod, "stok bitince otomatik", simdi); // kural 99: Venom da stokla karşılaştırır; tutmazsa durur (bir saat sonra yeniden bakılır)
+    if (!kapi.izin) { (sonuc.durdu = sonuc.durdu || []).push({ kod, neden: kapi.neden }); continue; }
     const r = await soldOutYaz(env, kod);
     yapilan[kod] = simdi; delete bekleyen[kod]; delete yeniGorulen[kod];
     sonuc.yapilan.push({ kod, ...r });
@@ -3569,7 +3639,8 @@ export async function fabrikaIsleri(env, simdi) {
     await env.KAYIT.delete("venom:soldoutUygula");
     const kanal = await env.KAYIT.get("kanal", "json");
     for (const u of uygula) {
-      const g = await soldoutIleGizle(env, kanal.id, u.kanal);
+      const kapi = await soldOutKapisi(env, String(u.kod || ""), "silinemeyen eski mesajı gizleme", simdi); // kural 99
+      const g = kapi.izin ? await soldoutIleGizle(env, kanal.id, u.kanal) : { ok: false, description: `SOLD OUT yapılmadı: ${kapi.neden}` };
       const s = (await env.KAYIT.get(`silinen:${u.kod}`, "json")) || { kod: u.kod, kopya: [] };
       if (g.ok && u.arsiv && !s.kopya.some((x) => x.kanal === u.kanal)) { s.kopya.push({ kanal: u.kanal, arsiv: u.arsiv, gizlendi: true }); await env.KAYIT.put(`silinen:${u.kod}`, JSON.stringify(s)); }
       const link = kanal.kullanici ? `https://t.me/${kanal.kullanici}/${u.kanal}` : `#${u.kanal}`;
@@ -4594,6 +4665,45 @@ export async function kanalVideoDegistirKomutu(env) {
   return yaz({ ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, duzenleme: r && r.result ? r.result.edit_date || null : null, video: v ? { sure: v.duration, en: v.width, boy: v.height, boyut: v.file_size } : null, yazi: r && r.result ? String(r.result.caption || "").slice(0, 300) : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
 }
 
+// 18 Kasım (Patron: "bütün SOLD OUT'ları kontrol et"): BÜTÜN KANAL DİZİNİ SOLD OUT TARAMASI — SALT OKUMA, hiçbir şeyi değiştirmez.
+// Komut KV "kemal:soldoutTarama" = { basla: true, adet? } → dizindeki her paylaşım grubunun İLK mesajı okunur (arşive iletilir, kopya hemen
+// silinir): SOLD OUT görseli mi taşıyor, yazısı "SOLD OUT" ile mi başlıyor. Telegram hız sınırı için her turda en çok 30 mesaj; kaldığı
+// yerden sürer. Durum + sonuç KV "kemal:soldoutTaramaDurum" ({ i, liste, gorsel: [[kod, id]], yazi: [[kod, id]], okunamayan, bitti }).
+export async function soldOutTaramaAdimi(env, simdi) {
+  const komut = await env.KAYIT.get("kemal:soldoutTarama", "json").catch(() => null);
+  let d = await env.KAYIT.get("kemal:soldoutTaramaDurum", "json").catch(() => null);
+  if (komut) {
+    await env.KAYIT.delete("kemal:soldoutTarama");
+    const kodlar = (await env.KAYIT.get("kodlar", "json")) || {};
+    const liste = [];
+    for (const [kod, gruplar] of Object.entries(kodlar)) for (const g of gruplar || []) if ((g.ids || []).length) liste.push([kod, Math.min(...g.ids), g.ids.length]);
+    liste.sort((a, b) => a[1] - b[1]);
+    d = { basla: simdi, adet: Math.min(40, Number(komut.adet) || 30), liste, i: 0, gorsel: [], yazi: [], okunamayan: [], bitti: null, model: Object.keys(kodlar).length, mesaj: liste.reduce((n, x) => n + x[2], 0) };
+  }
+  if (!d || d.bitti) return null;
+  const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
+  const soldUid = await env.KAYIT.get("kemal:soldout:uid").catch(() => null);
+  if (!kanal || !arsiv || !soldUid) { d.bitti = simdi; d.hata = "kanal / arşiv / SOLD OUT görsel kimliği yok"; await env.KAYIT.put("kemal:soldoutTaramaDurum", JSON.stringify(d), { expirationTtl: 14 * 86400 }); return d; }
+  let n = 0;
+  while (d.i < d.liste.length && n < d.adet) {
+    const [kod, id] = d.liste[d.i];
+    const f = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(id), disable_notification: true }).catch(() => null);
+    if (f && !f.ok && /too many requests|retry after/i.test(String(f.description || ""))) break; // hız sınırı: sonraki turda kaldığı yerden
+    d.i += 1; n += 1;
+    if (!f || !f.ok) { d.okunamayan.push([kod, id, String((f && f.description) || "?").slice(0, 60)]); continue; }
+    const m = f.result;
+    await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: m.message_id }).catch(() => null);
+    const ph = m.photo ? m.photo[m.photo.length - 1] : null;
+    if (ph && ph.file_unique_id === soldUid) d.gorsel.push([kod, id]);
+    else if (/^\s*❌\s*SOLD OUT/i.test(String(m.caption || m.text || ""))) d.yazi.push([kod, id]);
+    if (!env.MESAJ_ARASI_MS && env.MESAJ_ARASI_MS !== 0) await new Promise((c) => setTimeout(c, 600));
+  }
+  d.son = simdi;
+  if (d.i >= d.liste.length) d.bitti = simdi;
+  await env.KAYIT.put("kemal:soldoutTaramaDurum", JSON.stringify(d), { expirationTtl: 14 * 86400 });
+  if (d.bitti) await defterIs(env, "kemal", `kanal SOLD OUT taraması bitti: ${d.model} model, ${d.liste.length} paylaşım okundu — SOLD OUT görselli ${d.gorsel.length}, SOLD OUT yazılı ${d.yazi.length}, okunamayan ${d.okunamayan.length} (salt okuma)`, {}).catch(() => null);
+  return d;
+}
 // 17 Kasım (Patron, ACİL — 3629 yanlış SOLD OUT): kanaldaki mesajların ŞU ANKİ hali (salt okuma). Komut KV "kemal:medyaDenetim" = { ids: [...] }
 // → her mesaj arşive iletilip okunur (iletilen kopya hemen silinir): tür, SOLD OUT görseli mi, yazısının başı. Sonuç "kemal:medyaDenetimSonuc".
 export async function kanalMedyaDenetimKomutu(env) {
@@ -4636,9 +4746,14 @@ export async function kanalMedyaGeriKoyKomutu(env) {
   if (k.siteden) {
     const u = (await siteUrunleriAl(env)).find((x) => String(x.kod) === kod && !x.gizli);
     if (!u) return yaz({ ok: false, hata: "model sitede yok ya da gizli — dokunulmadı" });
+    tasarimAyarla(await env.KAYIT.get("kemal:tasarim").catch(() => null)); // 18 Kasım: yazı Patron'un onayladığı güncel tasarımla (3512'de eski tasarım yazılmıştı)
     const paket = await paketHazirla(env, u, await durumBaglami(env, [kod], simdi), simdi);
     const fotolar = (paket.medya || []).filter((m) => m.type === "photo");
     if (!fotolar.length) return yaz({ ok: false, hata: "sitede fotoğraf yok — dokunulmadı" });
+    if (k.sadeceYazi) { // sadece albüm başının yazısını güncel tasarımla yeniden yaz (medyaya dokunmaz)
+      const r = await telegram(env, "editMessageCaption", { chat_id: kanal.id, message_id: Number(k.bas), caption: altYazi(paket).slice(0, 1024), parse_mode: "HTML" });
+      return yaz({ ok: Boolean(r && r.ok), sadeceYazi: true, tasarim: tasarimOku(), mesaj: r && r.result ? r.result.message_id : null, duzenleme: r && r.result ? r.result.edit_date || null : null, yazi: r && r.result ? String(r.result.caption || "").slice(0, 400) : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 160) : null });
+    }
     for (const [i, eskiId] of (k.eskiler || []).slice(0, 10).entries()) {
       if (!dizin.includes(Number(eskiId))) { sonuc.push({ eski: eskiId, ok: false, hata: "mesaj bu modelin dizininde yok" }); continue; }
       const e = await oku(eskiId), eph = e && e.photo ? e.photo[e.photo.length - 1] : null;

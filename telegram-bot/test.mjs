@@ -1822,9 +1822,12 @@ test("SİL kuralı güvenliği: arşive kopyalanamayan mesaj SİLİNMEZ; Telegra
   assert.match(mesajlar.find((m) => m.includes("3100")), /^⚠️ 3100: siteden KALDIRILAMADI \(hata: GitHub 500\); kanaldan 2 mesaj silindi, 1 mesaj SİLİNEMEDİ[\s\S]*elle silebilirsiniz[\s\S]*t\.me\/Volonteroseoffical\/301/);
 });
 
-test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyle gizlenir, alt yazı kaldırılır, orijinal arşivde; Patron'a link; /geri sonrası SOLD OUT linki hatırlatılır", async () => {
+test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım — stok 0 ise SOLD OUT görseliyle gizlenir (kural 99 kapısı), alt yazı kaldırılır, orijinal arşivde; Patron'a link; /geri: SOLD OUT görselli eski paylaşım YERİNDE açılır", async () => {
   const { fabrikaIsleri } = await import("./worker.js");
   const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "3100", adet: 0, fiyat: 25 }]); // kural 99: SOLD OUT sadece güncel stok 0 iken
+  o.gonderilen.length = 0;
   Object.assign(o.env, { MURAT_ID: "999" });
   o.depo.set("arsiv", JSON.stringify({ id: -200 }));
   o.depo.set("kemal:soldout:b64", Buffer.from([0xff, 0xd8, 0xff]).toString("base64"));
@@ -1834,8 +1837,10 @@ test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyl
     const adres = String(url);
     if (adres.endsWith("/sendPhoto")) { o.gonderilen.push({ url: adres, govde: { chat_id: istek.body.get("chat_id") } }); return new Response(JSON.stringify({ ok: true, result: { message_id: 5, photo: [{ file_id: "kucuk" }, { file_id: "SOLDOUT" }] } })); }
     if (adres.endsWith("/deleteMessage") && JSON.parse(istek.body).message_id === 300) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be deleted" }));
+    if (adres.endsWith("/forwardMessage") && JSON.parse(istek.body).message_id === 300 && JSON.parse(istek.body).from_chat_id === -100) { o.gonderilen.push({ url: adres, govde: JSON.parse(istek.body) }); return new Response(JSON.stringify({ ok: true, result: { message_id: 7777, photo: [{ file_id: "SOLDOUT", file_unique_id: o.acildi ? "asil" : "SUID" }] } })); }
     return tg(url, istek);
   };
+  o.depo.set("kemal:soldout:uid", "SUID");
   await fabrikaIsleri(o.env, o.simdi);
   const duz = cagrilar(o.gonderilen, "editMessageMedia");
   assert.deepEqual(duz.map((x) => x.govde), [{ chat_id: -100, message_id: 300, media: { type: "photo", media: "SOLDOUT", caption: "" } }]);
@@ -1847,12 +1852,74 @@ test("SİL kuralı: 48 saatten eski (silinemeyen) paylaşım SOLD OUT görseliyl
   assert.match(p[0].govde.text, /SOLD OUT görseliyle gizlendi[\s\S]*t\.me\/Volonteroseoffical\/300/);
   const k = JSON.parse(o.depo.get("silinen:3100"));
   assert.deepEqual(k.kopya.filter((x) => x.gizlendi).map((x) => x.kanal), [300]);
-  // /geri: orijinal arşivden geri konur, SOLD OUT paylaşımının linki hatırlatılır
+  // /geri (18 Kasım, kural 99): SOLD OUT görselli eski paylaşım YERİNDE açılır (arşivdeki aslı geri konur); yeni albüm sadece SİLİNMİŞ 2 mesajın medyasıyla
   o.gonderilen.length = 0;
+  const arsivKopya = k.kopya.find((x) => x.gizlendi).arsiv;
   o.depo.set("venom:kanalGeri", JSON.stringify([{ kod: "3100", kim: "Patron", site: "geri kondu" }]));
   await fabrikaIsleri(o.env, o.simdi + 600);
-  assert.equal(kanalaGiden(o.gonderilen)[0].govde.media.length, 3); // 10 Kasım: medya + yeni yazı
-  assert.match(cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text, /Kanalda SOLD OUT görselli 1 eski paylaşım duruyor[\s\S]*\/300/);
+  const ac = cagrilar(o.gonderilen, "editMessageMedia");
+  assert.equal(ac.length, 1);
+  assert.deepEqual([ac[0].govde.chat_id, ac[0].govde.message_id, ac[0].govde.media.type, ac[0].govde.media.media], [-100, 300, "photo", `f${arsivKopya}`]);
+  assert.equal(kanalaGiden(o.gonderilen)[0].govde.media.length, 2); // gizlenen mesaj yeniden paylaşılmaz (kanalda iki kopya olmaz)
+  const geri = cagrilar(o.gonderilen, "sendMessage").find((x) => x.govde.chat_id === "999").govde.text;
+  assert.match(geri, /SOLD OUT görselli 1 eski paylaşım yerinde açıldı \(gerçek fotoğraf geri kondu\)\./);
+  assert.ok(!/duruyor|AÇILAMADI/.test(geri));
+  assert.equal(o.depo.get("silinen:3100"), undefined);
+});
+
+test("KURAL 99 (18 Kasım, Patron) SOLD OUT KÖK KAPISI: stok VARSA ya da OKUNAMIYORSA SOLD OUT yok (silinemeyen eski mesaj gizlenmez, Patron'a link); köprü verisi eskiyse yok; Venom durdurursa yok; hepsi deftere", async () => {
+  const w = await import("./worker.js");
+  const { stokGuncelMi, acikSaatGecen, soldOutStokKarari } = await import("./sold-kapi.js");
+  // stok güncelliği: sadece mağazanın AÇIK saatleri sayılır (hafta içi 09–20)
+  const cuma20 = Date.UTC(2026, 10, 13, 17, 0) / 1000; // 13 Kasım 2026 cuma 20:00 İstanbul
+  assert.equal(stokGuncelMi([cuma20 - 600], cuma20 + 60 * 3600), true); // pazartesi 08:00: hafta sonu sayılmaz
+  assert.equal(stokGuncelMi([cuma20 - 600], cuma20 + 66 * 3600), false); // pazartesi 14:00: 5 açık saattir sinyal yok
+  assert.equal(stokGuncelMi([cuma20 - 600, cuma20 - 6 * 3600], cuma20), false); // bir köprü 6 açık saattir susuyor
+  assert.equal(stokGuncelMi([], cuma20), false);
+  assert.equal(acikSaatGecen(cuma20 - 7200, cuma20), 2);
+  const iste = (toplu, kopruler) => async (yol) => (yol === "/toplu" ? toplu : { kopruler });
+  assert.deepEqual(await soldOutStokKarari(iste({ 3100: { toplam: 0 } }, [{ son: cuma20 - 60 }]), "3100", cuma20), { izin: true, toplam: 0 });
+  assert.deepEqual(await soldOutStokKarari(iste({ 3100: { toplam: 4 } }, [{ son: cuma20 - 60 }]), "3100", cuma20), { izin: false, neden: "stok var (iki mağaza toplamı 4 adet)", toplam: 4 });
+  assert.match((await soldOutStokKarari(iste({}, [{ son: cuma20 - 60 }]), "3100", cuma20)).neden, /^stok okunamadı \(Vegawin'de bu kodun kaydı yok\)/);
+  assert.match((await soldOutStokKarari(iste({ 3100: { toplam: 0 } }, [{ son: cuma20 - 9 * 86400 }]), "3100", cuma20)).neden, /^stok okunamadı \(mağaza köprüsünün verisi güncel değil\)/);
+  assert.match((await soldOutStokKarari(async () => { throw new Error("x"); }, "3100", cuma20)).neden, /^stok okunamadı/);
+  // silme: stok OKUNAMIYOR (Vegawin'de kaydı yok) → silinemeyen eski mesaj SOLD OUT görseliyle GİZLENMEZ; Patron'a link gider
+  // (stoğu OLAN model zaten hiç silinmez: 10 Kasım "mağaza stoğu bitmeden kaldırılmaz" kuralı — ayrı testte)
+  const o = rotasyonOrtami();
+  stokBagla(o);
+  await kopru(o.env, [{ kod: "3200", adet: 5, fiyat: 25 }]);
+  o.gonderilen.length = 0;
+  Object.assign(o.env, { MURAT_ID: "999" });
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kemal:soldout:fileId", "SOLDOUT");
+  o.depo.set("venom:kanalSil", JSON.stringify([{ kod: "3100", kim: "Patron", zaman: o.simdi, site: "kaldirildi" }]));
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    if (String(url).endsWith("/deleteMessage") && JSON.parse(istek.body).message_id === 300) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message can't be deleted" }));
+    return tg(url, istek);
+  };
+  await w.fabrikaIsleri(o.env, o.simdi);
+  assert.equal(cagrilar(o.gonderilen, "editMessageMedia").length, 0);
+  const p = cagrilar(o.gonderilen, "sendMessage").filter((x) => x.govde.chat_id === "999");
+  assert.match(p[0].govde.text, /^⚠️ 3100: siteden kaldırıldı; kanaldan 2 mesaj silindi, 1 mesaj SİLİNEMEDİ \(48 saatten eski mesaj; SOLD OUT yapılmadı: stok okunamadı \(Vegawin'de bu kodun kaydı yok\)\)\./);
+  assert.match(p[0].govde.text, /elle silebilirsiniz[\s\S]*t\.me\/Volonteroseoffical\/300/);
+  assert.match(JSON.parse(o.depo.get("kemal:soldoutDurdu"))["3100"].neden, /^stok okunamadı/);
+  await kopru(o.env, [{ kod: "3200", adet: 5, fiyat: 25 }, { kod: "3100", adet: 5, fiyat: 25 }]);
+  assert.deepEqual(await w.soldOutKapisi(o.env, "3100", "deneme"), { izin: false, neden: "stok var (iki mağaza toplamı 5 adet)", toplam: 5 });
+  // Patron "sil" + stok bitmiş yolu: stok okunamıyorsa (kayıt yok) SOLD OUT yazılmaz
+  const r1 = await w.patronSoldOut(o.env, "9999");
+  assert.deepEqual([r1.ok, r1.duzenlenen], [false, 0]);
+  assert.match(r1.hata, /^SOLD OUT yapılmadı: stok okunamadı/);
+  // stok 0 ama VENOM durdurursa / cevap vermezse de yapılmaz; Venom izin verirse yapılır
+  await kopru(o.env, [{ kod: "3200", adet: 5, fiyat: 25 }, { kod: "3100", adet: 0, fiyat: 25 }]);
+  const sorulan = [];
+  o.env.VENOM = { soldOutKontrol: async (g) => { sorulan.push(g); return { izin: false, neden: "stok var (iki mağaza toplamı 2 adet)" }; } };
+  assert.deepEqual(await w.soldOutKapisi(o.env, "3100", "deneme"), { izin: false, neden: "Venom durdurdu: stok var (iki mağaza toplamı 2 adet)" });
+  assert.deepEqual(sorulan, [{ kod: "3100", yer: "deneme" }]);
+  o.env.VENOM = { soldOutKontrol: async () => { throw new Error("yok"); } };
+  assert.match((await w.soldOutKapisi(o.env, "3100", "deneme")).neden, /^Venom'a ulaşılamadı/);
+  o.env.VENOM = { soldOutKontrol: async () => ({ izin: true, toplam: 0 }) };
+  assert.deepEqual(await w.soldOutKapisi(o.env, "3100", "deneme"), { izin: true, toplam: 0 });
 });
 
 test("görselli istek (3319): indirme zaman aşımında 3 kez adresle dener, sonra kendisi indirip base64 gönderir; hata kısa Türkçe", async () => {
@@ -3027,4 +3094,29 @@ test("17 Kasım (Patron): kanaldaki mevcut paylaşımda SADECE video değişir (
   await kanalVideoDegistirKomutu(o.env);
   assert.equal(o.gonderilen.filter((m) => String(m.url).endsWith("/editMessageMedia")).length, 1);
   assert.match(JSON.parse(o.depo.get("kemal:videoDegistirSonuc")).hata, /paylaşımlarında yok/);
+});
+
+test("18 Kasım (Patron): kanal SOLD OUT taraması — salt okuma; her paylaşım grubunun ilk mesajı okunur, kaldığı yerden sürer, SOLD OUT görselli / yazılı olanlar listelenir", async () => {
+  const w = await import("./worker.js");
+  const o = rotasyonOrtami();
+  o.depo.set("arsiv", JSON.stringify({ id: -200 }));
+  o.depo.set("kemal:soldout:uid", "SUID");
+  o.depo.set("kemal:soldoutTarama", JSON.stringify({ basla: true, adet: 3 }));
+  const tg = globalThis.fetch;
+  globalThis.fetch = async (url, istek) => {
+    if (String(url).endsWith("/forwardMessage")) {
+      const g = JSON.parse(istek.body); o.gonderilen.push({ url: String(url), govde: g });
+      if (g.message_id === 100) return new Response(JSON.stringify({ ok: false, description: "Bad Request: message to forward not found" }));
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 9000 + g.message_id, photo: [{ file_id: "f", file_unique_id: g.message_id === 300 ? "SUID" : `u${g.message_id}` }], caption: g.message_id === 400 ? "❌ SOLD OUT / ÉPUISÉ\nCODE: 3200" : "✅ AVAILABLE" } }));
+    }
+    return tg(url, istek);
+  };
+  const d1 = await w.soldOutTaramaAdimi(o.env, o.simdi);
+  assert.deepEqual([d1.i, d1.liste.length, d1.bitti, d1.model, d1.mesaj], [3, 4, null, 4, 7]);
+  const d2 = await w.soldOutTaramaAdimi(o.env, o.simdi + 300);
+  assert.equal(d2.bitti, o.simdi + 300);
+  assert.deepEqual([d2.gorsel, d2.yazi, d2.okunamayan.map((x) => x[1])], [[["3100", 300]], [["3200", 400]], [100]]);
+  assert.deepEqual(cagrilar(o.gonderilen, "forwardMessage").map((x) => x.govde.message_id), [100, 300, 400, 500]); // sadece grubun ilk mesajı
+  assert.equal(o.gonderilen.filter((x) => /editMessage|sendMessage|sendPhoto/.test(x.url)).length, 0); // hiçbir şey değişmez, kimseye yazılmaz
+  assert.equal(await w.soldOutTaramaAdimi(o.env, o.simdi + 600), null); // bitti: yeniden çalışmaz
 });

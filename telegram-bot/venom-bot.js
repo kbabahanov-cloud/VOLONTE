@@ -25,6 +25,7 @@ import { ciroBolumu } from "./ciro.js";
 import { silKuyrugu, STOK_KURALI } from "./sil.js";
 import { topluRaporMetni } from "./venom.js";
 import { KISILER, kuyrugaEkle, kuyruguAl, hataEkle } from "./venom-kopru.js";
+import { soldOutStokKarari } from "./sold-kapi.js";
 import { siteVerisi } from "./depo-oku.js";
 import { uyumKaydi, renkUyar } from "./repete-uyum.js"; // 16 Kasım: kural 87
 import { fabrikaKontrolu } from "./fabrika-kontrol.js"; // 16 Kasım: fabrika kartı Venom kontrolü
@@ -708,6 +709,8 @@ export async function aracCalistir(env, ad, g, simdi) {
     if (ids.length) { if (env.__kuru) return "(DENEME: o paylaşım silinirdi.)"; return kanalSilYap(env, kl, ids, simdi); }
     const durum = [];
     for (const k of kl.slice(0, 6)) durum.push([k, await magazaStoklari(env, k)]);
+    const okunamayan = durum.filter(([, st]) => st.okundu === false).map(([k]) => k); // kural 99: stok okunamazsa ne SOLD OUT ne silme
+    if (okunamayan.length) { turKanit(env).yapamadi.push(`${okunamayan.join(", ")}: stok okunamadı, silinmedi`); return `YAPILMADI — ${okunamayan.join(", ")} için Sami'nin stoğu OKUNAMADI. Kural 99: stok okunamazsa ne SOLD OUT ne silme yapılır. Patron'a aynen "stok okunamadı, silmedim; stok okununca yeniden deneyin" de.`; }
     const stoklu = durum.filter(([, st]) => st.var);
     if (stoklu.length && !g.yine_de) return `SİLİNMEDİ — Patron'a AYNEN şu tek satırı yaz ve cevabını bekle: "${stoklu.map(([k, st]) => `${k} stokta var (${st.yazi})`).join("; ")}. Yine de sileyim mi?" Patron "evet" derse bu aracı yine_de=true ile yeniden çağır; başka bir şey derse hiçbir şey yapma.`;
     if (env.__kuru) return `(DENEME: ${durum.map(([k, st]) => (st.var ? `${k} silinirdi` : Object.keys(st.magazalar || {}).length ? `${k} stoğu bitmiş, SOLD OUT yapılırdı` : `${k} silinirdi`)).join("; ")}.)`;
@@ -715,7 +718,7 @@ export async function aracCalistir(env, ad, g, simdi) {
     for (const [k, st] of durum) {
       if (st.var || !Object.keys(st.magazalar || {}).length) { silinecek.push(k); continue; } // stok var (Patron "yine de" dedi) ya da Vegawin'de kaydı yok: eski yol
       const r = await botaSor(env, "kemal", "soldOut", k);
-      const x = !r ? `⚠️ ${k}: Kemal'e ulaşılamadı; SOLD OUT yapılamadı.` : r.duzenlenen ? `${k}: stoğu bitmiş — kanalda ${r.duzenlenen} paylaşım SOLD OUT yapıldı (silinmedi).` : `${k}: stoğu bitmiş; kanalda SOLD OUT yapılacak paylaşım bulunamadı${r.hata ? ` (${r.hata})` : ""}.`;
+      const x = !r ? `⚠️ ${k}: Kemal'e ulaşılamadı; SOLD OUT yapılamadı.` : r.ok === false && /SOLD OUT yapılmadı/.test(String(r.hata || "")) ? `⚠️ ${k}: ${r.hata} (kural 99).` : r.duzenlenen ? `${k}: stoğu bitmiş — kanalda ${r.duzenlenen} paylaşım SOLD OUT yapıldı (silinmedi).` : `${k}: stoğu bitmiş; kanalda SOLD OUT yapılacak paylaşım bulunamadı${r.hata ? ` (${r.hata})` : ""}.`;
       satir.push(x); (/^⚠️|bulunamadı/.test(x) ? turKanit(env).yapamadi : turKanit(env).kanit).push(x.replace(/^⚠️\s*/, ""));
     }
     if (silinecek.length) satir.push(await kanalSilYap(env, silinecek, [], simdi));
@@ -1146,6 +1149,15 @@ export async function venomFabrikaKontrol(env, g, simdi = Math.floor(Date.now() 
   const r = await fabrikaKontrolu(g || {}, venomUyumKaynaklari(env));
   await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kod: String((g || {}).kod || "") || null, ozet: `Fabrika kartı kontrolü (${(g || {}).tur || "kart"}): ${r.ozet} — ${r.ok ? "uygun, gidebilir" : `DURDU: ${r.sorun.join("; ")}`}`.slice(0, 300) }).catch(() => null);
   return r;
+}
+// 18 Kasım (Patron, KURAL 99): her SOLD OUT Venom'dan geçer — Venom Sami'nin güncel stoğunu KENDİSİ okur; iki mağaza toplamı 0 değilse ya da
+// stok okunamıyorsa durdurur. Her karar tek deftere yazılır (izin de, durdurma da).
+export async function venomSoldOutKontrol(env, g, simdi = Math.floor(Date.now() / 1000)) {
+  const kod = String((g || {}).kod || ""), yer = String((g || {}).yer || "kanal").slice(0, 60);
+  let karar;
+  try { karar = await soldOutStokKarari((y, gg) => stokIste(env, y, gg), kod, simdi); } catch { karar = { izin: false, neden: "stok okunamadı (depo cevap vermedi)" }; }
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kod: kod || null, ozet: `SOLD OUT kapısı (${yer}): ${karar.izin ? "stok 0, veri güncel → izin verildi" : `DURDU: ${karar.neden}`} — kural 99` }).catch(() => null);
+  return karar;
 }
 // 16 Kasım (Patron): Venom Kemal'in müşteri paylaşımı kartlarını ve SIRASINI görür (KV "kemal:mp:<id>", "kemal:mpSira"); görmediğini "yok" demez
 export async function musteriKartlari(env, simdi, gun = 3) {

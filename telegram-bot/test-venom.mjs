@@ -3015,3 +3015,19 @@ test("18 Kasım (Patron, kural 97–98): SORUN ÇÖZEN BEYİN — mutabakat itir
   assert.equal(o3.g.filter((x) => x.metod === "sendMessage").length, 0);
   assert.equal(o3.depo.get("sami:islemler"), undefined);
 });
+
+test("18 Kasım (Patron, KURAL 99): her SOLD OUT Venom'dan geçer — Venom stoğu kendisi okur: 0 + güncel → izin; stok var / kayıt yok / köprü eski → DURDU; her karar deftere", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  const t = ist(17, 15, 0); // salı 15:00
+  const stokYaz = (yol, g) => o.env.STOK.get().fetch(`https://stok/${yol}`, { method: "POST", body: JSON.stringify(g) });
+  await stokYaz("yaz", { magaza: "VOLONTE", urunler: [{ kod: "3394", adet: 0, fiyat: 30 }, { kod: "3629", adet: 3, fiyat: 30 }], simdi: t - 600 });
+  await stokYaz("yaz", { magaza: "BLACKROSE", urunler: [{ kod: "3629", adet: 2, fiyat: 30 }], simdi: t - 600 });
+  assert.deepEqual(await v.venomSoldOutKontrol(o.env, { kod: "3394", yer: "stok bitince otomatik" }, t), { izin: true, toplam: 0 });
+  assert.deepEqual(await v.venomSoldOutKontrol(o.env, { kod: "3629", yer: "silinemeyen eski mesajı gizleme" }, t), { izin: false, neden: "stok var (iki mağaza toplamı 5 adet)", toplam: 5 });
+  assert.match((await v.venomSoldOutKontrol(o.env, { kod: "9999", yer: "x" }, t)).neden, /^stok okunamadı \(Vegawin'de bu kodun kaydı yok\)/);
+  assert.match((await v.venomSoldOutKontrol(o.env, { kod: "3394", yer: "x" }, t + 2 * 86400)).neden, /^stok okunamadı \(mağaza köprüsünün verisi güncel değil\)/); // 2 iş günü sinyal yok
+  const d = JSON.stringify(await (await stokYaz("isd-oku", { basla: 0, bitis: t + 99999 })).json().catch(() => null));
+  const defter = JSON.stringify([...o.depo.entries()]);
+  assert.ok(/SOLD OUT kapısı \(silinemeyen eski mesajı gizleme\): DURDU: stok var \(iki mağaza toplamı 5 adet\) — kural 99/.test(defter + d));
+});
