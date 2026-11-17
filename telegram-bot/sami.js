@@ -44,6 +44,7 @@ import { testResimBayt } from "./repete-test-resim.js";
 import { kartIzle, kartBasildi, kartTakipAdimi, acikAyniKart } from "./kart-takip.js"; // 11 Kasım (kural 54): kart takibi
 import { hemraDugmesi } from "./venom-ekip.js";
 import { kartTekrarAdimi, kartTamamlaAdimi, kartIletAdimi, kisiKontrolAdimi, GUNCEL } from "./kart-tekrar.js";
+import { islemlerAdimi } from "./fabrika.js";
 import { fabrikaAdimi, eksikKomutu, fabrikaCevabi, fabrikaDugmesi, yabanciMesaji, siparisDugmesi, kararDugmesi, repeteMetni, siparisTakip, fabrikaDenemesi, fabrikaKisisiMi, aramaNotuMesaji, fiyatKisisiMi, fiyatCevabi, fabrikaYaziMesaji, fabrikaSesMesaji, zincirDugmesi, fabrikaZincirAdimi, teyitDugmesi } from "./fabrika.js";
 
 const SAAT_FARKI = 3 * 3600;
@@ -109,6 +110,7 @@ export const samiGonder = (env, metod, govde) => tg(env, metod, govde); // 16 Ka
 export async function venomDugme(env, data, rid) { await guncelleme(sahteDugme(env, data, rid), env); return true; }
 // 16 Kasım (denetim, kural 43): "hepsini durdur" sonrası Venom'un anında çağırdığı adımlar da durur (zamanlı işlerle aynı kontrol)
 export async function repeteAdim(env) { if (await durdurulduMu(env, "sami")) return false; await repeteKartAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: Venom → hemen (5 dk bekleme yok)
+export async function islemAdim(env) { if (await durdurulduMu(env, "sami")) return false; await islemlerAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 17 Kasım: Venom'un "mutabakatı getir" işi beklemeden
 export async function gidenAdim(env) { if (await durdurulduMu(env, "sami")) return false; await venomGidenAdimi(env, Math.floor(Date.now() / 1000), tg); return true; } // 11 Kasım: "Merdan'a söyle" → kart HEMEN (5 dk bekleme yok)
 export async function venomMesaj(env, metin) { await guncelleme(sahteMesaj(env, metin), env); return true; }
 

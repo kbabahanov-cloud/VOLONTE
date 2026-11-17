@@ -185,6 +185,7 @@ export default {
     if (!env.BOT_TOKEN) return;
     try { await kitapOku(env, "selin"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Selin", tg); } catch { /* */ }
+    try { await bulutTetikle(env, Math.floor(Date.now() / 1000)); } catch (e) { await env.KAYIT.put("selin:hata", JSON.stringify({ zaman: Math.floor(Date.now() / 1000), hata: `bulutTetik: ${String(e && e.message).slice(0, 200)}` }), { expirationTtl: 7 * 86400 }).catch(() => null); }
     try { await birikimAdimi(env, "selin", Math.floor(Date.now() / 1000), tg); } catch { /* bir sonraki çalışmada */ }
     try { await kartIletAdimi(env, "selin", tg); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
     try { await kartTamamlaAdimi(env, "selin", tg, Math.floor(Date.now() / 1000)); } catch { /* 10 Kasım: yarım kartları tamamla */ }
@@ -1547,6 +1548,8 @@ export async function fotoHatirlatAdimi(env, simdi) {
 export async function istekAdimi(env, simdi) {
   try { await listeTeshisi(env, simdi); } catch { /* sonraki turda */ }
   if (await durumDokum(env)) return;
+  // 17 Kasım (Patron, tek seferlik, salt okuma): mağaza hattının (0091; günlük listeyi alan hesap) kimliği gizli kayda — ekrana / depoya yazılmaz
+  if (await env.KAYIT.get("venom:selinSahipDok").catch(() => null)) { await env.KAYIT.delete("venom:selinSahipDok"); await env.KAYIT.put("venom:selinSahipGizli", String((await env.KAYIT.get("selin:sahip")) || ""), { expirationTtl: 600 }); }
   if (await istekTekrarAdimi(env, simdi)) return;
   if (await istekDuzeltAdimi(env, simdi)) return;
   const s = saat(simdi);
@@ -3026,7 +3029,7 @@ async function dugme(cq, env) {
   return cevapla("Geçersiz düğme.");
 }
 
-// 17 Kasım (Patron): AZİZ → PELİN yolu. Patron'un onayladığı Pelin fotoğrafları (sitede OLMAYAN, Selin'in listesindeki model) Selin'in
+// 17 Kasım (Patron): MAĞAZA HATTI → PELİN yolu. Patron'un onayladığı Pelin fotoğrafları (sitede OLMAYAN, Selin'in listesindeki model) Selin'in
 // kaydına girer; sonra Selin'in MEVCUT yolu çalışır (açıklama taslağı + site onay kartı sahiplere). Merdan'ın akışı değişmez.
 // Fotoğraflar arşiv kanalına konur (Selin'in kendi dosya kimlikleri için; kareGeldi ile aynı yöntem).
 export async function pelinYeniModelAdimi(env, simdi) {
@@ -3040,7 +3043,7 @@ export async function pelinYeniModelAdimi(env, simdi) {
       if ((await sitedekiKodlar(env)).has(kod)) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinYeniModel ${kod}: model zaten sitede — eklenmedi` }, 7 * 86400); continue; }
       const medya = [];
       for (const [i, url] of (x.fotolar || []).slice(0, POZ_EN_FAZLA).entries()) {
-        const r = await tg(env, "sendPhoto", { chat_id: arsiv.id, disable_notification: true, photo: String(url), caption: i === 0 ? `🤖 ${kod} — Pelin (Aziz askı fotoğrafından, Patron onaylı)` : undefined });
+        const r = await tg(env, "sendPhoto", { chat_id: arsiv.id, disable_notification: true, photo: String(url), caption: i === 0 ? `🤖 ${kod} — Pelin (mağaza askı fotoğrafından, Patron onaylı)` : undefined });
         const b = r && r.ok && r.result.photo ? r.result.photo[r.result.photo.length - 1] : null;
         if (b) medya.push({ file_id: b.file_id, tur: "foto", belge: false, boyut: b.file_size || 0, w: b.width || 0, h: b.height || 0, uid: b.file_unique_id });
       }
@@ -3054,9 +3057,23 @@ export async function pelinYeniModelAdimi(env, simdi) {
       const eski = modeller[kod] || {};
       modeller[kod] = { ...eski, kaynak: "ozel", durum: "geldi", medya, kart: [], gonderen: null, hata: 0, bildirildi: true, kacirma: 0, pelin: { isId: x.id, zaman: simdi }, sonMedya: simdi - 120 };
       await yazKV(env, "selin:modeller", modeller);
-      await defterIs(env, "selin", `${kod}: Pelin fotoğrafları (Aziz → Pelin, Patron onaylı) alındı — taslak hazırlanıyor`, { kod }).catch(() => null);
+      await defterIs(env, "selin", `${kod}: Pelin fotoğrafları (mağaza → Pelin, Patron onaylı) alındı — taslak hazırlanıyor`, { kod }).catch(() => null);
     } catch (e) {
       await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinYeniModel ${kod}: ${String(e && e.message).slice(0, 200)}` }, 7 * 86400);
     }
   }
+}
+
+// 17 Kasım (Patron): BULUT FFMPEG TETİĞİ — GitHub'ın kendi zamanlayıcısı bu depoda hiç çalışmadı; iş akışını Selin başlatır (0 $).
+// Pelin kuyruğa iş yazınca hemen (SelinDepo.bulutTetik, iç bağlantı) + Selin'in her çalışmasında yedek kontrol: kuyrukta iş varsa ve
+// son başlatmadan 4 dk geçtiyse yeniden başlatır. Kuyruk KV "ffmpeg:isler"; Selin–Merdan akışıyla ilgisi yoktur.
+export async function bulutTetikle(env, simdi, { hemen = false } = {}) {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return { ok: false, neden: "GitHub anahtarı yok" };
+  const isler = (await env.KAYIT.get("ffmpeg:isler", "json").catch(() => null)) || [];
+  if (!isler.length) return { ok: false, neden: "bekleyen iş yok" };
+  const son = Number(await env.KAYIT.get("ffmpeg:tetik").catch(() => 0)) || 0;
+  if (simdi - son < (hemen ? 20 : 240)) return { ok: false, neden: "az önce başlatıldı" };
+  await gh(env, "/actions/workflows/video-yazi.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: "main" }) });
+  await env.KAYIT.put("ffmpeg:tetik", String(simdi), { expirationTtl: 86400 });
+  return { ok: true, is: isler.length };
 }

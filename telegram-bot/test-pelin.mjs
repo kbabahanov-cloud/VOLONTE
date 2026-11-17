@@ -1802,16 +1802,16 @@ test("17 Kasım (Patron, kalıcı): onaya gelen hazır videoda ✅ Onay / ❌ Ha
   assert.match(o.g.filter((x) => x.metod === "answerCallbackQuery").at(-1).govde.text, /zaten verildi/);
 });
 
-// ---------- 17 Kasım (Patron): AZİZ → PELİN yolu ----------
-const AZIZ = 9000000005;
-const azizFoto = (o, caption, uid = "A1", gid = null) => guncelleme({ message: { message_id: 2, date: Math.floor(Date.now() / 1000), chat: { id: AZIZ, type: "private" }, from: { id: AZIZ, first_name: "Aziz" }, ...(caption ? { caption } : {}), ...(gid ? { media_group_id: gid } : {}), photo: [{ file_id: `k${uid}`, width: 90 }, { file_id: uid, width: 1280 }] } }, o.env);
-const azizYazi = (o, text) => guncelleme({ message: { message_id: 3, date: 1, chat: { id: AZIZ, type: "private" }, from: { id: AZIZ, first_name: "Aziz" }, text } }, o.env);
+// ---------- 17 Kasım (Patron): MAĞAZA HATTI → PELİN yolu ----------
+const AZIZ = 9000000005; // mağazanın Telegram hattı (test kimliği)
+const magazaFoto = (o, caption, uid = "A1", gid = null) => guncelleme({ message: { message_id: 2, date: Math.floor(Date.now() / 1000), chat: { id: AZIZ, type: "private" }, from: { id: AZIZ, first_name: "Aziz" }, ...(caption ? { caption } : {}), ...(gid ? { media_group_id: gid } : {}), photo: [{ file_id: `k${uid}`, width: 90 }, { file_id: uid, width: 1280 }] } }, o.env);
+const magazaYazi = (o, text) => guncelleme({ message: { message_id: 3, date: 1, chat: { id: AZIZ, type: "private" }, from: { id: AZIZ, first_name: "Aziz" }, text } }, o.env);
 const azizaGiden = (o) => o.g.filter((x) => x.metod === "sendMessage" && String(x.govde.chat_id) === String(AZIZ)).map((x) => x.govde.text);
-async function azizOrtami() {
+async function magazaOrtami() {
   const o = uretimOrtami();
   secimKur(o);
-  o.env.AZIZ_ID = String(AZIZ);
-  o.depo.set("venom:azizPelinAcik", "1");
+  o.env.MAGAZA_HAT_ID = String(AZIZ);
+  o.depo.set("venom:magazaPelinAcik", "1");
   for (const [magaza, kod] of [["VOLONTE", "3700"], ["VOLONTE", "3701"], ["BLACKROSE", "3801"], ["VOLONTE", "5068"], ["VOLONTE", "3557"]]) await o.env.STOK.get().fetch("https://stok/yaz", { method: "POST", body: JSON.stringify({ magaza, urunler: [{ kod, adet: 5, fiyat: 40 }], simdi: 1 }) });
   o.site.push({ kod: "3557", bedenler: "38-44", fotolar: [] }); // sitede var
   for (const k of ["3700", "3701", "3801", "5068"]) o.depo.delete(`pelinboy:${k}`);
@@ -1820,62 +1820,61 @@ async function azizOrtami() {
 const NET = { net: true, sorun: "" };
 const ANLA = { tarif: "Kırmızı krep midi elbise, astarlı.", tarif_en: "Red crepe midi dress, lined.", ust: "opak", alt: "opak", iclik: "yok", boy: "midi", neden: "astarlı, opak" };
 
-test("17 Kasım AZİZ → PELİN: kapalıyken hiçbir şey; kodsuz → 'Kodu yazın'; listede olmayan / Black Rose / Celal → 'listede yok' (para yok); kalite kötü → 'tekrar çek' (Patron'a kart YOK); günde 5 sınırı", async () => {
-  const { azizCron, AZIZ_YAZI } = await import("./pelin.js");
-  const o = await azizOrtami();
-  o.depo.set("venom:azizPelinAcik", "0");
-  await azizYazi(o, "/start");
+test("17 Kasım MAĞAZA HATTI → PELİN: kapalıyken hiçbir şey; kodsuz → 'Kodu yazın'; listede olmayan / Black Rose / Celal → 'listede yok' (para yok); kalite kötü → 'tekrar çek' (Patron'a kart YOK); günde 5 sınırı", async () => {
+  const { magazaCron, MAGAZA_YAZI } = await import("./pelin.js");
+  const o = await magazaOrtami();
+  o.depo.set("venom:magazaPelinAcik", "0");
+  await magazaYazi(o, "/start");
   assert.equal(azizaGiden(o).length, 0); // yol kapalı
-  o.depo.set("venom:azizPelinAcik", "1");
-  await azizYazi(o, "/start");
-  assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.a1);
-  await azizFoto(o, null, "K1");
-  assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.a2);
-  for (const kod of ["3557", "3801", "5068", "9999"]) { await azizFoto(o, kod, `L${kod}`); assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.a3(kod), kod); }
+  o.depo.set("venom:magazaPelinAcik", "1");
+  await magazaYazi(o, "/start");
+  assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.a1);
+  await magazaFoto(o, null, "K1");
+  assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.a2);
+  for (const kod of ["3557", "3801", "5068", "9999"]) { await magazaFoto(o, kod, `L${kod}`); assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.a3(kod), kod); }
   // kodsuz fotoğraf sonra yazılan kodla birleşir; kalite kötü → Aziz'e "tekrar çek", Patron'a kart yok
-  await azizYazi(o, "3701");
+  await magazaYazi(o, "3701");
   o.claude.cevaplar = [claudeJsonCevap({ net: false, sorun: "bulanık" })];
   const n = o.g.length;
-  await azizCron(o.env, Math.floor(Date.now() / 1000) + 200);
-  assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.net("3701"));
+  await magazaCron(o.env, Math.floor(Date.now() / 1000) + 200);
+  assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.net("3701"));
   assert.ok(!o.g.slice(n).some((x) => String(x.govde && x.govde.chat_id) === String(MURAT)), "Patron'a kart gitmemeli");
   assert.equal(o.falIstek.length, 0);
   // günde 5 model sınırı
-  o.depo.set(`pelin:azizGun:${new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10)}`, JSON.stringify(["1", "2", "3", "4", "5"]));
-  await azizFoto(o, "3700", "G1");
-  assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.a6("3700"));
-  // A0 yol açılınca bir kez Sami kuyruğuna (Aziz'e)
+  o.depo.set(`pelin:magazaGun:${new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10)}`, JSON.stringify(["1", "2", "3", "4", "5"]));
+  await magazaFoto(o, "3700", "G1");
+  assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.a6("3700"));
+  // 17 Kasım (Patron): duyuru mesajı YOK — Sami kuyruğuna (Aziz'e ya da başkasına) hiçbir şey yazılmaz
   const giden = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "giden" }) })).json();
-  assert.equal(giden.length, 1);
-  assert.deepEqual([giden[0].kime, giden[0].tur], ["aziz", "mesaj"]);
-  assert.match(giden[0].metin, /^Aziz, bundan sonra Selin'in fotoğraf listesindeki VOLONTE modellerinin askı fotoğrafını/);
+  assert.equal(giden.length, 0);
+  assert.ok(!Object.values(MAGAZA_YAZI).some((y) => /Aziz/.test(typeof y === "function" ? y("3627", 2) : y))); // hitap nötr
 });
 
-test("17 Kasım AZİZ → PELİN: tek maliyet kartı (✅/❌ + 🎬 Video da) → SADECE FOTOĞRAF üretim (ara onay yok) → sonuç kartı ön/sağ/sol/arka → ✅ kalıcı kayıt + Selin'e; kanala gitmez", async () => {
-  const { azizCron, AZIZ_YAZI } = await import("./pelin.js");
-  const o = await azizOrtami();
+test("17 Kasım MAĞAZA HATTI → PELİN: tek maliyet kartı (✅/❌ + 🎬 Video da) → SADECE FOTOĞRAF üretim (ara onay yok) → sonuç kartı ön/sağ/sol/arka → ✅ kalıcı kayıt + Selin'e; kanala gitmez", async () => {
+  const { magazaCron, MAGAZA_YAZI } = await import("./pelin.js");
+  const o = await magazaOrtami();
   o.fotoOto = false; o.noraOto = false;
-  await azizFoto(o, "3700 askı", "P1", "G7");
-  await azizFoto(o, null, "P2", "G7"); // albümün ikinci fotoğrafı (yazısız) aynı koda
+  await magazaFoto(o, "3700 askı", "P1", "G7");
+  await magazaFoto(o, null, "P2", "G7"); // albümün ikinci fotoğrafı (yazısız) aynı koda
   o.claude.cevaplar = [claudeJsonCevap(NET), claudeJsonCevap(ANLA)];
-  await azizCron(o.env, Math.floor(Date.now() / 1000) + 200);
-  assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.a4("3700", 2));
-  const kart = o.g.filter((x) => x.govde && x.govde.reply_markup && /Aziz → Pelin · 3700/.test(x.govde.text || "")).at(-1);
+  await magazaCron(o.env, Math.floor(Date.now() / 1000) + 200);
+  assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.a4("3700", 2));
+  const kart = o.g.filter((x) => x.govde && x.govde.reply_markup && /Mağaza → Pelin · 3700/.test(x.govde.text || "")).at(-1);
   assert.ok(kart, "maliyet kartı gelmeli");
   assert.match(kart.govde.text, /Sadece fotoğraf \(ön \+ sağ \+ sol \+ arka\): ~0,6\d \$/);
   assert.match(kart.govde.text, /Pelin'in anladığı: Kırmızı krep midi elbise/);
   assert.match(kart.govde.text, /Bugün 1\/5 model/);
-  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.map((s) => s.map((d) => d.callback_data)), [["paz:o:3700", "paz:x:3700"], ["paz:v:3700"]]);
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard.map((s) => s.map((d) => d.callback_data)), [["pmz:o:3700", "pmz:x:3700"], ["pmz:v:3700"]]);
   assert.ok(o.g.some((x) => x.metod === "sendMediaGroup" && String(x.govde.chat_id) === String(MURAT))); // Aziz'in fotoğrafları kartla
   assert.equal(o.falIstek.length, 0); // onaysız para yok
-  await bas(o, HEMRA, "paz:o:3700");
+  await bas(o, HEMRA, "pmz:o:3700");
   assert.equal(o.falIstek.length, 0); // sadece Patron
-  await bas(o, MURAT, "paz:v:3700"); await bas(o, MURAT, "paz:v:3700"); // video ekle / kaldır
-  await bas(o, MURAT, "paz:o:3700");
+  await bas(o, MURAT, "pmz:v:3700"); await bas(o, MURAT, "pmz:v:3700"); // video ekle / kaldır
+  await bas(o, MURAT, "pmz:o:3700");
   assert.equal(JSON.parse(o.depo.get("pelinboy:3700")).anlama.genel.ust, "opak"); // anlama ✅ ile kalıcı
   o.claude.cevaplar = Array.from({ length: 8 }, () => claudeJsonCevap(GECTI));
   await cronlar(o, 16);
-  const rec = JSON.parse(o.depo.get("pelin:aziz:3700"));
+  const rec = JSON.parse(o.depo.get("pelin:magaza:3700"));
   const is = JSON.parse(o.depo.get(`pelin:is:${rec.isId}`));
   assert.equal(is.durum, "foto_bitti", JSON.stringify(is.gecmis));
   assert.ok(!o.g.some((x) => /^👁 3700: ÖN fotoğraf onayı/.test((x.govde && x.govde.text) || ""))); // ara onay yok
@@ -1885,31 +1884,31 @@ test("17 Kasım AZİZ → PELİN: tek maliyet kartı (✅/❌ + 🎬 Video da) �
   assert.deepEqual(sonuc.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Onay", "❌ Hayır"]);
   const album = o.g.filter((x) => x.metod === "sendMediaGroup" && /ön, sağ, sol, arka/.test(x.govde.media[0].caption || "")).at(-1);
   assert.equal(album.govde.media.length, 4);
-  await bas(o, MURAT, `paz:so:${is.id}`);
+  await bas(o, MURAT, `pmz:so:${is.id}`);
   const sel = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "pelinYeniModel" }) })).json();
   assert.deepEqual([sel.length, sel[0].kod, sel[0].fotolar.length], [1, "3700", 4]);
   assert.ok(JSON.parse(o.depo.get("pelinboy:3700")).uretilen.genel.fotoOnay); // kural 91: kalıcı kayıt
   assert.equal((await teslim(o)).length, 0); // kanala gitmez (Kemal kendi sırasıyla)
-  assert.equal(JSON.parse(o.depo.get("pelin:aziz:3700")).durum, "sitede_bekle");
+  assert.equal(JSON.parse(o.depo.get("pelin:magaza:3700")).durum, "sitede_bekle");
   // aynı model yeniden gönderilirse (henüz sitede değil) "zaten Pelin'de" değil → sitede_bekle iken yeni kayıt açmaz mı? (A5 sadece iş sürerken)
   o.site.push({ kod: "3700", fotolar: [] });
-  await azizCron(o.env, Math.floor(Date.now() / 1000) + 400);
-  assert.equal(azizaGiden(o).at(-1), AZIZ_YAZI.a7("3700"));
+  await magazaCron(o.env, Math.floor(Date.now() / 1000) + 400);
+  assert.equal(azizaGiden(o).at(-1), MAGAZA_YAZI.a7("3700"));
 });
 
-test("17 Kasım AZİZ → PELİN: '🎬 Video da' seçilirse Kling 3.0 4K, Nora senaryo kartı YOK (standart sahne: ileri yürüyüş), sonuç kartında video", async () => {
-  const { azizCron } = await import("./pelin.js");
-  const o = await azizOrtami();
+test("17 Kasım MAĞAZA HATTI → PELİN: '🎬 Video da' seçilirse Kling 3.0 4K, Nora senaryo kartı YOK (standart sahne: ileri yürüyüş), sonuç kartında video", async () => {
+  const { magazaCron } = await import("./pelin.js");
+  const o = await magazaOrtami();
   o.fotoOto = false; o.noraOto = false;
-  await azizFoto(o, "3700", "V1");
+  await magazaFoto(o, "3700", "V1");
   o.claude.cevaplar = [claudeJsonCevap(NET), claudeJsonCevap(ANLA)];
-  await azizCron(o.env, Math.floor(Date.now() / 1000) + 200);
-  await bas(o, MURAT, "paz:v:3700");
+  await magazaCron(o.env, Math.floor(Date.now() / 1000) + 200);
+  await bas(o, MURAT, "pmz:v:3700");
   assert.match(o.g.filter((x) => x.metod === "editMessageText").at(-1).govde.text, /🎬 Video da \(Kling 3\.0 4K, standart sahne: ileri yürüyüş\)/);
-  await bas(o, MURAT, "paz:o:3700");
+  await bas(o, MURAT, "pmz:o:3700");
   o.claude.cevaplar = Array.from({ length: 12 }, () => claudeJsonCevap(GECTI));
   await cronlar(o, 20);
-  const rec = JSON.parse(o.depo.get("pelin:aziz:3700"));
+  const rec = JSON.parse(o.depo.get("pelin:magaza:3700"));
   const is = JSON.parse(o.depo.get(`pelin:is:${rec.isId}`));
   assert.equal(o.hfIstek.filter((x) => x.yol === "kling-video/v3.0/4k/image-to-video").length, 1, JSON.stringify(is.gecmis));
   assert.match(o.hfIstek[0].govde.prompt || JSON.stringify(o.hfIstek[0].govde), /steps toward the camera/);

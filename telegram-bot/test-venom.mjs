@@ -2929,3 +2929,18 @@ test("16 Kasım (Patron) HAZIR VİDEO 'kanala paylaş': video önce Pelin'e (yaz
   assert.equal((await kuyruguAl(o.env, "patronPaylas")).length, 0);
   assert.ok(patronaGiden(o).some((x) => /❌ 3271: İLETİLMEDİ — video yazı için Pelin'e verilemedi \(Pelin bağlantısı yok\)\. Yazısız göndermedim\./.test(x.govde.text)));
 });
+
+test("17 Kasım (Patron): mutabakat_durumu — Celal / Fuat mutabakatı gitti mi, cevap geldi mi kayıttan; iptal edilen Patron kartı defterde de kapanır", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  await o.ayar("mt:liste", ["2026-11-13-a", "2026-11-13-bc", "2026-11-17-d"]);
+  await o.ayar("mt:2026-11-13-a", { id: "2026-11-13-a", gun: "2026-11-13", durum: "gonderildi", gonderim: ist(14, 11, 23), brToplamYazi: "120.488,75 $ (A)", gecmis: [] });
+  await o.ayar("mt:2026-11-13-bc", { id: "2026-11-13-bc", gun: "2026-11-13", kisi: "celal", durum: "fark", gonderim: ist(15, 21, 20), cevapZaman: ist(16, 12, 7), fark: "1000 dolar ödeme eksik", brToplamYazi: "4.076,20 $", gecmis: [] });
+  await o.ayar("mt:2026-11-17-d", { id: "2026-11-17-d", gun: "2026-11-17", durum: "onizleme", brToplamYazi: "123.591,15 $ (A)", gecmis: [] });
+  const c = await v.mutabakatDurumu(o.env, ist(17, 16), "celal");
+  assert.match(c, /SON → Celal · 13\.11\.2026 mutabakatı: ❌ UYUŞMUYOR dedi · Celal'e gidiş 15\.11\.2026 21:20 · cevap 16\.11\.2026 12:07 · toplam 4\.076,20 \$ · açıklaması: "1000 dolar ödeme eksik"/);
+  assert.ok(!/Fuat/.test(c));
+  const f = await v.mutabakatDurumu(o.env, ist(17, 16), "fuat");
+  assert.match(f.split("\n")[0], /SON → Fuat · 17\.11\.2026 mutabakatı: önizleme kartı Patron'da — henüz GÖNDERİLMEDİ/);
+  assert.match(f.split("\n")[1], /önceki: Fuat · 13\.11\.2026 mutabakatı: gönderildi — CEVAP GELMEDİ \(bekleniyor\) · Fuat'a gidiş 14\.11\.2026 11:23/);
+});

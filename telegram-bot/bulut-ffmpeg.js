@@ -1,5 +1,5 @@
 // BULUT FFMPEG (17 Kasım, Patron): fal.ai olmadan, ÜCRETSİZ video işleri — GitHub Actions (herkese açık depo, dakika ücreti yok).
-// Akış: Pelin işi kuyruğa yazar (KV "ffmpeg:isler") → depodaki ".github/workflows/video-yazi.yml" her 5 dakikada bir Pelin'in herkese açık
+// Akış: Pelin işi kuyruğa yazar (KV "ffmpeg:isler") → depodaki ".github/workflows/video-yazi.yml" (Selin başlatır: iş yazılınca hemen + 5 dk'da bir yedek) Pelin'in herkese açık
 // "/ffmpeg/isler" ucunu okur → ffmpeg ile işler (yazı: "MARKA · KOD" katmanı videonun tamamına, sesi AYNEN kopyalar; kare: ilk/orta/son
 // kare) → sonucu depodaki "ffmpeg-cikti" dalına yazar (<id>.json + dosyalar) → Pelin o dalı okuyup sonucu alır. Video yeniden ÜRETİLMEZ.
 // Kuyrukta gizli bilgi yok (sadece video adresi, kod, marka); sonuç sadece depoya yazabilen iş akışından gelir.
@@ -13,6 +13,8 @@ export async function bulutIsEkle(env, is, simdi = Math.floor(Date.now() / 1000)
   const l = ((await env.KAYIT.get(ISLER, "json").catch(() => null)) || []).filter((x) => x.id !== is.id && simdi - (x.zaman || 0) < 2 * 86400);
   l.push({ id: String(is.id), islem: is.islem, video: String(is.video), kod: String(is.kod || ""), marka: String(is.marka || ""), ses: is.ses === "sessiz" ? "sessiz" : "koru", ...(is.muzik ? { muzik: String(is.muzik) } : {}), zaman: simdi });
   await env.KAYIT.put(ISLER, JSON.stringify(l.slice(-30)), { expirationTtl: 3 * 86400 });
+  // 17 Kasım: GitHub'ın zamanlayıcısı çalışmıyor → iş yazılınca Selin iş akışını hemen başlatır (iç bağlantı; olmazsa Selin'in yedek kontrolü başlatır)
+  try { if (env.SELIN_DEPO && typeof env.SELIN_DEPO.bulutTetik === "function") await env.SELIN_DEPO.bulutTetik(); } catch { /* yedek: Selin'in zamanlı kontrolü */ }
 }
 export async function bulutIsler(env) { return (await env.KAYIT.get(ISLER, "json").catch(() => null)) || []; }
 export async function bulutIsSil(env, id) {

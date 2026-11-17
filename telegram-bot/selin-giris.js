@@ -5,11 +5,12 @@ import { botSagligi, sonHata } from "./saglik.js";
 import { siteVerisi } from "./depo-oku.js";
 import { siteKontrol } from "./yayin-kontrol.js";
 import { depoDosya } from "./depo-oku.js";
-import { venomDugme, venomMesaj, venomSelin } from "./selin.js";
+import { venomDugme, venomMesaj, venomSelin, bulutTetikle } from "./selin.js";
 export * from "./selin.js";
 export { default } from "./selin.js";
 export class SelinDepo extends WorkerEntrypoint {
   async dosya(yol) { return depoDosya(this.env, yol); }
+  async bulutTetik() { try { return await bulutTetikle(this.env, Math.floor(Date.now() / 1000), { hemen: true }); } catch (e) { return { ok: false, neden: String(e && e.message).slice(0, 120) }; } } // 17 Kasım: Pelin iş yazınca GitHub'daki ffmpeg işini başlat
 }
 export class VenomKapisi extends WorkerEntrypoint { // tek kapı (5 Kasım): Venom → Selin
   async dugme(data, rid) { return venomDugme(this.env, data, rid); }

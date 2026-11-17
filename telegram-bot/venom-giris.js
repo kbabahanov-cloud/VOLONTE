@@ -8,5 +8,5 @@ export class VenomKapi extends WorkerEntrypoint {
   async aktar(kayit) { await aktarilanGonder(this.env, kayit); return true; }
   async sesYazi(bayt, sure) { return venomSesYazi(this.env, bayt, sure); } // 10 Kasım: Sami'deki fabrika kişilerinin sesli mesajı
   async fabrikaKontrol(g) { return venomFabrikaKontrol(this.env, g); } // 16 Kasım (Patron): fabrikaya giden her kart önce Venom'dan geçer
-  async selinDurum(kod) { return this.env.SELIN_W && typeof this.env.SELIN_W.durum === "function" ? this.env.SELIN_W.durum(String(kod)) : null; } // 17 Kasım: Pelin (Aziz yolu) "Merdan'ın bugünkü listesinde mi?" (salt okuma)
+  async selinDurum(kod) { return this.env.SELIN_W && typeof this.env.SELIN_W.durum === "function" ? this.env.SELIN_W.durum(String(kod)) : null; } // 17 Kasım: Pelin (mağaza hattı yolu) "Merdan'ın bugünkü listesinde mi?" (salt okuma)
 }

@@ -1257,7 +1257,7 @@ test("13 Kasım (Patron, A4 + B3) FOTOĞRAF HATIRLATMASI: listeden 1 saat sonra 
   assert.equal(cagri(o.g, "sendMessage").length, 0);
 });
 
-test("17 Kasım (Patron) AZİZ → PELİN → SELİN: onaylı Pelin fotoğrafları arşive konup Selin'in kaydına 'geldi' olarak girer (Selin'in kendi taslak yolu); model sitedeyse eklenmez; Merdan'ın kaydı silinmez", async () => {
+test("17 Kasım (Patron) MAĞAZA → PELİN → SELİN: onaylı Pelin fotoğrafları arşive konup Selin'in kaydına 'geldi' olarak girer (Selin'in kendi taslak yolu); model sitedeyse eklenmez; Merdan'ın kaydı silinmez", async () => {
   const { pelinYeniModelAdimi } = await import("./selin.js");
   const depo = new Map(), kuyruk = { pelinYeniModel: [{ id: "3700-x", kod: "3700", fotolar: ["https://p/on.jpg", "https://p/sag.jpg"], video: null }, { id: "3557-x", kod: "3557", fotolar: ["https://p/a.jpg"] }] };
   const g = [];
@@ -1286,4 +1286,25 @@ test("17 Kasım (Patron) AZİZ → PELİN → SELİN: onaylı Pelin fotoğraflar
   assert.ok(g.every((x) => x.metod === "sendPhoto" && x.b.chat_id === -555 && x.b.disable_notification)); // sadece arşiv kanalına, sessiz
   assert.ok(!JSON.parse(depo.get("selin:modeller"))["3557"]); // sitedeki model eklenmez
   assert.match(JSON.parse(depo.get("selin:hata")).hata, /3557: model zaten sitede/);
+});
+
+test("17 Kasım (Patron) BULUT FFMPEG TETİĞİ: kuyrukta iş varsa Selin GitHub'daki işi başlatır (dispatch, ref main); iş yoksa / az önce başlatıldıysa başlatmaz", async () => {
+  const { bulutTetikle } = await import("./selin.js");
+  const depo = new Map(), cagri = [];
+  const env = { GITHUB_TOKEN: "gh", GITHUB_REPO: "kbabahanov-cloud/VOLONTE", KAYIT: { async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; }, async put(k, v) { depo.set(k, v); }, async delete(k) { depo.delete(k); } } };
+  const asil = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => { cagri.push({ url: String(url), init }); return new Response(null, { status: 204 }); };
+  try {
+    assert.deepEqual(await bulutTetikle(env, 1000), { ok: false, neden: "bekleyen iş yok" });
+    assert.equal(cagri.length, 0);
+    depo.set("ffmpeg:isler", JSON.stringify([{ id: "x", islem: "kare" }]));
+    assert.deepEqual(await bulutTetikle(env, 1000), { ok: true, is: 1 });
+    assert.equal(cagri.length, 1);
+    assert.equal(cagri[0].url, "https://api.github.com/repos/kbabahanov-cloud/VOLONTE/actions/workflows/video-yazi.yml/dispatches");
+    assert.deepEqual([cagri[0].init.method, JSON.parse(cagri[0].init.body)], ["POST", { ref: "main" }]);
+    assert.equal((await bulutTetikle(env, 1100)).neden, "az önce başlatıldı"); // yedek kontrol: 4 dk dolmadan yeniden başlatmaz
+    assert.equal((await bulutTetikle(env, 1100, { hemen: true })).ok, true); // yeni iş yazıldı: hemen
+    assert.equal((await bulutTetikle(env, 1100 + 241)).ok, true); // iş hâlâ kuyrukta: 4 dk sonra yeniden
+    assert.equal(cagri.length, 3);
+  } finally { globalThis.fetch = asil; }
 });

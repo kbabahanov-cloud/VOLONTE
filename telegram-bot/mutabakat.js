@@ -249,6 +249,16 @@ export async function celalMutabakatMetni(env, gun) {
   if (!mesaj.length) return null;
   return { fuat: mesaj, patron: mesaj, patronBilgi: okuma, patronAdet: [], duzFuat: mesaj.map(duzYazi).join("\n\n— — —\n\n"), duzPatronBakiye: okuma.join("\n"), brToplam: null, brToplamYazi: toplam };
 }
+// 17 Kasım (Patron): Venom'un "Celal mutabakatını getir" aracı için SALT OKUMA — son ödemeler (cari bazında, dönem devri hariç).
+// Mutabakat kartının içeriğine dokunmaz; sadece Patron'a gösterilir.
+export async function celalSonOdemeler(env, adet = 5) {
+  const l = [];
+  for (const mg of ["VOLONTE", "BLACKROSE"]) {
+    const c = await ayarOku(env, `cari:CELAL:${mg}`, null);
+    for (const h of (c && c.hareketler) || []) if ((Number(h.borc) || 0) > 0 && CELAL_ADLAR.some(([k]) => k === h.hesap) && !devirMi(h, c)) l.push({ tarih: h.tarih, hesap: (CELAL_ADLAR.find(([k]) => k === h.hesap) || [])[1], tutar: Number(h.borc) });
+  }
+  return l.sort((x, y) => String(y.tarih).localeCompare(String(x.tarih))).slice(0, adet).map((x) => `${String(x.tarih).split("-").reverse().join(".")} · ${x.hesap}: ${dolar(x.tutar)}`);
+}
 const metinOf = (env, kisi, gun) => (kisi === "celal" ? celalMutabakatMetni(env, gun) : mutabakatMetni(env, gun));
 
 // ---- Arşiv (değiştirilemez) ----

@@ -20,7 +20,7 @@ import { kanitKaydet } from "./tg-guvenli.js";
 import { claudeIstemci, claudeVar, claudeTur, openaiFetch, openaiVar } from "./ai-istemci.js";
 import { stokIste } from "./stokbot.js";
 import { modelFiyatMetni } from "./fiyat.js"; // 14 Kasım: model koduyla Vegawin satış fiyatı (sadece Patron'a)
-import { bakiyeOku, mutabakatIcerigi, arsiv, fuatSuzgec, tarihSaat } from "./mutabakat.js";
+import { bakiyeOku, mutabakatIcerigi, arsiv, fuatSuzgec, tarihSaat, celalSonOdemeler } from "./mutabakat.js";
 import { ciroBolumu } from "./ciro.js";
 import { silKuyrugu, STOK_KURALI } from "./sil.js";
 import { topluRaporMetni } from "./venom.js";
@@ -372,6 +372,8 @@ const ARACLAR = [
   { name: "model_fiyati", description: "Model kodunun Vegawin'deki SATIŞ fiyatı (dolar, tek adet; mağaza bazında, yanında stok). Patron 'X'in fiyatı', 'X kaç dolar', 'fiyat getir' derse SADECE bunu kullan ve sonucu aynen ver. Sadece Patron'a; kanala, siteye, ekibe fiyat yazılmaz. Alış / maliyet / kâr vermez. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } } } } },
   { name: "yetenek_istegi", description: "Patron'un istediği işi yapacak ARACIN YOKSA (ya da görev verdiğin bot 'aracım yok' dediyse) bunu çağır: iş EKSİK ARAÇ LİSTESİ'ne yazılır. Sonra Patron'a AÇIKÇA şunu de: 'Yapamıyorum — sebep: …' ve listeye yazdığını söyle. ASLA 'not ettim', 'sisteme yazıldı', 'ilk iş yapacağım' diye geçiştirme; yapamadığın işi yapılmış ya da yolda gibi gösterme.", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string", description: "Patron ne istedi (kısa)" }, sebep: { type: "string", description: "neden yapılamıyor (tek cümle)" }, arac: { type: "string", description: "hangi araç / veri gerekli (tek cümle)" }, bot: { type: "string", description: "aracı eksik olan bot: venom, sami, kemal, selin, pelin, nora" } } } },
   { name: "musteri_kartlari", description: "Kemal'in MÜŞTERİ PAYLAŞIMI kartları (son 3 gün): onay bekleyen, onaylanıp sırada bekleyen (gece onaylanan sabah 09:00'da çıkar), kanala çıkan (saat + mesaj no), iptal. 'Müşteri kartı nerede / paylaşıldı mı / neden paylaşılmadı' sorularında SADECE bunu kullan; 'kart oluşmadı / yok' demeden önce MUTLAKA bak. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
+  { name: "mutabakat_durumu", description: "MUTABAKAT NEREDE: Fuat / Celal mutabakatı gitti mi, ne zaman gitti, cevap geldi mi (mutabık / uyuşmuyor + açıklaması / sonra), önizleme Patron'da mı — Sami'nin mutabakat kaydından CANLI okur. Patron 'Celal'in mutabakat onayı geldi mi', 'Fuat'ın mutabakatı nerede', 'mutabakat gitti mi' diye sorunca ÖNCE bunu çağır; 'kaydım yok / göremiyorum' DEME. Aracın yazdığı tarihleri ve durumu AYNEN aktar.", input_schema: { type: "object", additionalProperties: false, properties: { kisi: { type: "string", enum: ["fuat", "celal"] } } } },
+  { name: "celal_mutabakat", description: "CELAL MUTABAKATI: Patron 'Celal mutabakatını getir / göster / hazırla' deyince. Celal Kayran + Celal İndirim bakiyeleri ve son ödemelerle mutabakat KARTINI hazırlatır; kart ÖNCE Patron'a gelir ('✅ Celal'e gönder' düğmeli), Patron onaylamadan Celal'e HİÇBİR ŞEY gitmez. Araç kartın Telegram mesaj numarasını kendisi kontrol eder: sonuçta 'mesaj no' yazmıyorsa 'gönderdim / kart geldi' DEME, aracın söylediği sebebi yaz.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "eksik_arac_listesi", description: "EKSİK ARAÇ LİSTESİ: yapılamayan işler ve gereken araçlar (Patron onaylarsa Claude Code ekler). Patron 'eksik araçlar', 'yapamadığın işler' derse bunu kullan. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
 ];
 
@@ -473,7 +475,7 @@ async function kartAc(env, is, metin, simdi) {
   if (acik) return acik;
   const id = kisaId();
   await kaydet(env, `venom:bot:is:${id}`, { id, ...is, metin, durum: "bekliyor", zaman: simdi }, 7 * 86400);
-  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "kart", ozet: `Patron kartı açıldı (${is.tur || "iş"}): ${String(metin || "").split("\n")[0].slice(0, 140)}`, kod: is.kod || null, kime: "Patron" }).catch(() => null); // 13 Kasım (TEK DEFTER): Venom'un kendi kartı
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "kart", ozet: `Patron kartı açıldı (${is.tur || "iş"}): ${String(metin || "").split("\n")[0].slice(0, 140)}`, kod: is.kod || null, kime: "Patron", cbler: [`vb:k:${id}`] }).catch(() => null); // 13 Kasım (TEK DEFTER): Venom'un kendi kartı
   if (is.patronIstedi || env.__sohbette) await yaz(env, metin, { reply_markup: kartKlavye(id), posta: { tur: "cevap" } }); // Patron'un kendi isteğinin kartı: hemen
   else await bildir(env, metin, { simdi, tur: "kart", ek: { reply_markup: kartKlavye(id) } });
   return id;
@@ -865,6 +867,8 @@ export async function aracCalistir(env, ad, g, simdi) {
   }
   if (ad === "model_boyu") return `${g.kod} boyu: ${boyYazi(await boyOku(env, String(g.kod)))}`;
   if (ad === "model_fiyati") return modelFiyatMetni(env, g.kodlar || []);
+  if (ad === "mutabakat_durumu") return mutabakatDurumu(env, simdi, g.kisi || null);
+  if (ad === "celal_mutabakat") return celalMutabakatGetir(env, simdi);
   if (ad === "eksik_arac_listesi") return eksikAracMetni(env);
   if (ad === "musteri_kartlari") return musteriKartlariMetni(env, simdi);
   if (ad === "yetenek_istegi") { // 14 Kasım (Patron): "not ettim" YOK — yapılamayan iş açıkça söylenir ve EKSİK ARAÇ LİSTESİ'ne yazılır
@@ -1008,7 +1012,7 @@ export async function dugme(env, cq, simdi) {
   const is = await oku(env, `venom:bot:is:${id}`, null);
   if (!is || !["bekliyor", "emin"].includes(is.durum)) return cevap("Bu iş artık beklemiyor.");
   const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text, callback_data: "vb:-" }]] } });
-  if (islem === "x") { is.durum = "iptal"; await kaydet(env, `venom:bot:is:${id}`, is, 7 * 86400); await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `Patron kartı İPTAL etti (${is.tur || "iş"})`, kod: is.kod || null, kime: "Patron" }).catch(() => null); await cevap("İptal"); return kapat("❌ İptal edildi"); }
+  if (islem === "x") { is.durum = "iptal"; await kaydet(env, `venom:bot:is:${id}`, is, 7 * 86400); await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `Patron kartı İPTAL etti (${is.tur || "iş"})`, kod: is.kod || null, kime: "Patron", cb: `vb:k:${id}` }).catch(() => null); await cevap("İptal"); return kapat("❌ İptal edildi"); }
   if (islem === "d") {
     await kaydet(env, "venom:bot:duzelt", { id, zaman: simdi }, 3600);
     await cevap("Düzelt"); await kapat("✏️ Düzeltiliyor");
@@ -1027,7 +1031,7 @@ export async function dugme(env, cq, simdi) {
   }
   if ((islem === "E" || eminsiz) && is.durum === "emin") {
     is.durum = "yapiliyor"; is.onayZaman = simdi; await kaydet(env, `venom:bot:is:${id}`, is, 7 * 86400);
-    await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `Patron kartı ONAYLADI (${is.tur || "iş"}) → iş başladı`, kod: is.kod || null, kime: "Patron" }).catch(() => null); // 13 Kasım (TEK DEFTER)
+    await defterYaz(env, { zaman: simdi, bot: "venom", tur: "karar", ozet: `Patron kartı ONAYLADI (${is.tur || "iş"}) → iş başladı`, kod: is.kod || null, kime: "Patron", cb: `vb:k:${id}` }).catch(() => null); // 13 Kasım (TEK DEFTER)
     await cevap("Tamam");
     await isCalistir(env, is, simdi);
     await kapat("✅ Onaylandı");
@@ -1445,6 +1449,43 @@ export function hataTr(metin) {
   if (/Too Many Requests|error_code"?:? ?429/i.test(s)) return "Telegram kısa süre \"çok hızlı\" dedi; bekleyip tekrar denendi";
   if (/fetch failed|network|ECONN|timed? ?out/i.test(s)) return "bağlantı bir an koptu; tekrar denendi";
   return s;
+}
+// 17 Kasım (Patron): Celal mutabakatını GETİR — Sami kartı hazırlar (cuma akışıyla aynı kart), kart önce Patron'a gelir.
+// "Gönderdim" demeden önce kanıt: kartın Telegram'ın verdiği GERÇEK mesaj numarası Venom'un gönderim kaydından okunur.
+// 17 Kasım (Patron): "Celal'in onayı geldi mi / Fuat'ın mutabakatı nerede" — Sami'nin mutabakat kaydı (mt:liste, mt:<id>) canlı okunur
+export async function mutabakatDurumu(env, simdi, kisi = null) {
+  const ayar = async (k) => { try { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v ? JSON.parse(v) : null; } catch { return null; } };
+  const liste = (await ayar("mt:liste")) || [];
+  const kayitlar = [];
+  for (const id of liste.slice(-12)) { const r = await ayar(`mt:${id}`); if (r) kayitlar.push(r); }
+  const AD = { fuat: "Fuat", celal: "Celal" };
+  const DURUM = { onizleme: "önizleme kartı Patron'da — henüz GÖNDERİLMEDİ (Patron onaylamadı)", gonderildi: "gönderildi — CEVAP GELMEDİ (bekleniyor)", mutabik: "✅ MUTABIK dedi (onayladı)", fark: "❌ UYUŞMUYOR dedi", sonra: "⏳ \"sonra kontrol edeceğim\" dedi", eskidi: "geçersiz (yerine yenisi hazırlandı)", gecersiz: "geçersiz (yerine yenisi gönderildi)", iptal: "iptal edildi" };
+  const gunYaz = (g) => String(g || "").split("-").reverse().join(".");
+  const satir = [];
+  for (const k of ["fuat", "celal"]) {
+    if (kisi && kisi !== k) continue;
+    const l = kayitlar.filter((r) => (r.kisi || "fuat") === k).slice(-3).reverse();
+    if (!l.length) { satir.push(`${AD[k]}: kayıtlı mutabakat yok.`); continue; }
+    for (const [i, r] of l.entries()) satir.push(`${i === 0 ? "SON → " : "önceki: "}${AD[k]} · ${gunYaz(r.gun)} mutabakatı: ${DURUM[r.durum] || r.durum}${r.gonderim ? ` · ${k === "fuat" ? "Fuat'a" : "Celal'e"} gidiş ${tarihSaat(r.gonderim)}` : ""}${r.cevapZaman ? ` · cevap ${tarihSaat(r.cevapZaman)}` : ""}${r.brToplamYazi ? ` · toplam ${r.brToplamYazi}` : ""}${r.fark ? ` · açıklaması: "${String(r.fark).replace(/\s+/g, " ").slice(0, 300)}"` : ""}`);
+  }
+  return `${satir.join("\n")}\n(Kaynak: Sami'nin mutabakat kaydı, şimdi okundu. Fiyat / bakiye bilgisi SADECE Patron'a.)`;
+}
+export async function celalMutabakatGetir(env, simdi) {
+  if (env.__kuru) return "(DENEME: Celal mutabakat kartı Patron'a hazırlanırdı; denemede hiçbir şey gönderilmedi.)";
+  const gun = gunAnahtari(simdi);
+  const bekleyen = (await env.KAYIT.get("sami:islemler", "json").catch(() => null)) || [];
+  await env.KAYIT.put("sami:islemler", JSON.stringify([...(Array.isArray(bekleyen) ? bekleyen : []), { tur: "mutabakatHazirla", gun, kisi: "celal", kaynak: "venom", venomIstek: simdi }]), { expirationTtl: 3600 });
+  let calisti = false;
+  try { if (env.SAMI_W && typeof env.SAMI_W.islemAdim === "function") calisti = Boolean(await env.SAMI_W.islemAdim()); } catch (e) { await hataYaz(env, "celalMutabakat", e); }
+  const odemeler = await celalSonOdemeler(env, 5).catch(() => []);
+  const odemeSatir = `Son ödemeler: ${odemeler.length ? odemeler.join("; ") : "kayıtta ödeme yok"}`;
+  const ss = (await env.KAYIT.get("sami:islemSonuc", "json").catch(() => null)) || [];
+  const s = [...ss].reverse().find((x) => x.tur === "mutabakatHazirla" && x.zaman >= simdi - 5);
+  if (!calisti || !s) return `Celal mutabakat kartı HENÜZ GELMEDİ: Sami işi sıraya aldı ama hemen çalıştıramadı (${calisti ? "sonuç kaydı yok" : "Sami'ye ulaşılamadı ya da Sami durdurulmuş"}); birkaç dakika içinde kart Patron'a gelir. Mesaj numarası YOK — "gönderdim" deme, "sıraya alındı" de. ${odemeSatir}`;
+  if (!s.mutabakat) return `Celal mutabakatı HAZIRLANAMADI: Celal carileri Vegawin'den okunamadı (mağaza bilgisayarı köprüsü). Kart gönderilmedi. ${odemeSatir}`;
+  const kayit = (await oku(env, "venom:posta:gonderilen", [])).filter((x) => x.kaynak === "sami" && x.zaman >= simdi - 5 && x.id && /Celal/.test(String(x.ozet || ""))).at(-1);
+  if (!kayit) return `Celal mutabakat kartı hazırlandı (kayıt ${s.mutabakat.id}) ama Telegram'a ULAŞTIĞI DOĞRULANAMADI: gönderim kaydında mesaj numarası yok. "Gönderdim" deme; Patron'a "kart hazırlandı ama telefonunuza ulaştığını doğrulayamadım" de. Toplam: ${s.mutabakat.metin ? String(s.mutabakat.metin).split("\n").find((x) => /^Toplam/.test(x)) || "" : ""} ${odemeSatir}`;
+  return `Celal mutabakat kartı Patron'a geldi — Telegram mesaj no ${kayit.id} (kayıt ${s.mutabakat.id}). Kartta "✅ Celal'e gönder" düğmesi var; Patron basmadan Celal'e gitmez. ${String(s.mutabakat.metin || "").split("\n").filter((x) => /^(Celal|Toplam)/.test(x)).join(" · ")}. ${odemeSatir}`;
 }
 const SORUN_ANAHTAR = { selin: "selin:hata", pelin: "pelin:hata", sami: "sami:hata", kemal: "kemal:sonHata", "kemal (Pelin teslim)": "kemal:pelinTeslimHata", "kemal (birikim)": "kemal:birikimHata", "tek kapı": "venom:tekKapiHata" };
 export async function sorunRaporu(env, simdi, sure = 86400) {
