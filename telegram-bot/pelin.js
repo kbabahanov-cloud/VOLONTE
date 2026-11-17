@@ -1007,6 +1007,7 @@ export async function guncelleme(u, env) {
     const v = String(cq.data || "");
     if (/^pk:/.test(v)) return kurulumDugmesi(env, cq, simdi);
     if (/^pu:/.test(v)) return uretimDugmesi(env, cq, simdi);
+    if (/^pv:/.test(v)) return hvDugmesi(env, cq, simdi); // 17 Kasım: hazır video onayı (✅ Onay / ❌ Hayır)
     if (/^ps:/.test(v)) return sablonDugmesi(env, cq, simdi);
     if (/^pz:/.test(v)) return yuzDuzenDugmesi(env, cq, simdi);
     if (/^pb:/.test(v)) return boyDugmesi(env, cq, simdi);
@@ -2353,6 +2354,33 @@ export async function hazirVideoBaslat(env, g, simdi) {
   const l = await oku(env, "pelin:isler", []); l.push(is.id); await kaydet(env, "pelin:isler", l.slice(-200));
   return { ok: true, id: is.id, marka };
 }
+// 17 Kasım (Patron, kalıcı): onaya gelen HER videoda onay düğmesi olur (✅ Onay / ❌ Hayır) — "onay yazın" deyip düğmesiz bırakılmaz.
+// ✅ = işin kayıtlı bir sonraki adımı (sonra.degistir: kanaldaki mevcut paylaşımda SADECE video değişir; yoksa onaylı olarak kayda yazılır).
+export async function hvOnayKarti(env, is) {
+  const s2 = is.sonra || {};
+  const ne = s2.degistir ? `Onaylarsanız kanaldaki mevcut ${is.kod} paylaşımında SADECE video değişir (yeni paylaşım yok).` : "Onaylarsanız onaylı video olarak modelin kaydına yazılır (kanala gitmez).";
+  return tgDosya(env, "sendVideo", "video", is.sonVideo, { chat_id: murat(env), caption: `🎬 ${is.kod} — "${MARKALAR[is.marka].ad} · ${is.kod}" yazısı videonun tamamında sağ altta, ses aynen (0 $).\n${ne}`, supports_streaming: true,
+    reply_markup: { inline_keyboard: [[{ text: "✅ Onay", callback_data: `pv:o:${is.id}` }, { text: "❌ Hayır", callback_data: `pv:x:${is.id}` }]] } });
+}
+async function hvDugmesi(env, cq, simdi) {
+  const cevap = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text });
+  if (!muratMi(env, cq.from.id)) return cevap("Sadece Patron.");
+  const [, islem, id] = String(cq.data).split(":");
+  const is = await oku(env, `pelin:is:${id}`, null);
+  if (!is || is.durum !== "hv_bitti" || is.hvKarar) return cevap("Bu karar zaten verildi ya da iş yok.");
+  const kapat = (text) => tg(env, "editMessageReplyMarkup", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).then(() => yaz(env, cq.message.chat.id, text));
+  is.hvKarar = { islem, zaman: simdi };
+  if (islem === "x") { is.gecmis.push([simdi, "Patron: ❌ Hayır (video kullanılmadı)"]); await kaydet(env, `pelin:is:${id}`, is); await cevap("Tamam"); return kapat(`❌ ${is.kod}: video kullanılmadı; kanal ve kayıt değişmedi.`); }
+  const d = (is.sonra || {}).degistir;
+  if (d && d.mesajId) {
+    await env.KAYIT.put("kemal:videoDegistir", JSON.stringify({ kod: is.kod, mesajId: Number(d.mesajId), video: is.sonVideo, caption: d.caption || null }), { expirationTtl: 3 * 86400 });
+    is.gecmis.push([simdi, `Patron: ✅ Onay → kanaldaki ${is.kod} paylaşımında (mesaj ${d.mesajId}) sadece video değişiyor`]);
+  } else is.gecmis.push([simdi, "Patron: ✅ Onay → onaylı video kayda yazıldı"]);
+  await uretilenKaydet(env, is, simdi, { video: is.sonVideo, videoOnay: simdi }).catch(() => null);
+  await kaydet(env, `pelin:is:${id}`, is);
+  await cevap("Onaylandı");
+  return kapat(d && d.mesajId ? `✅ ${is.kod}: onaylandı — kanaldaki mevcut paylaşımda sadece video değiştiriliyor (yeni paylaşım yok). Sonuç Telegram'ın mesaj numarasıyla bildirilecek.` : `✅ ${is.kod}: onaylandı — onaylı video modelin kaydına yazıldı (kanala gitmedi).`);
+}
 async function hazirVideoAdimi(env, is, simdi) {
   try {
     if (is.durum === "hv_bulut") {
@@ -2368,7 +2396,7 @@ async function hazirVideoAdimi(env, is, simdi) {
       if (s2.kemal) await kuyrugaEkle(env, "patronPaylas", { id: `vp-${is.kod}-${simdi}`, kod: is.kod, medya: [...(s2.fotolar || []), { tur: "video", url: is.sonVideo }], kim: "Patron (Venom)", renk: s2.renk || null, beden: s2.beden || null });
       is.durum = "hv_bitti";
       if (s2.kemal) await tg(env, "sendMessage", { chat_id: murat(env), text: `🎬 ${is.kod}: "${MARKALAR[is.marka].ad} · ${is.kod}" yazısı videonun tamamına sağ alta basıldı, videonun kendi sesi (müzik) aynen kaldı (0 $). Kemal onay kartını (video + altyazı) size getiriyor; onaylamadan kanala gitmez.` });
-      else await tgDosya(env, "sendVideo", "video", is.sonVideo, { chat_id: murat(env), caption: s2.yazi || `🎬 ${is.kod} — "${MARKALAR[is.marka].ad} · ${is.kod}" yazısı videonun tamamında sağ altta, ses aynen (0 $). Kanala gitmedi.`, supports_streaming: true });
+      else await hvOnayKarti(env, is);
       return;
     }
     if (is.durum === "hv_kare") { const r = await yaziBekle(env, is, is.hvFal, simdi); if (!r) return; await yaziKatmani(env, is, r, is.kaynakVideo, is.sure); is.durum = "hv_katman"; is.bekleZaman = simdi; return; }

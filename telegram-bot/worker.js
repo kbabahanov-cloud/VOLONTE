@@ -239,6 +239,7 @@ export default {
   async scheduled(event, env) {
     try { await kitapOku(env, "kemal"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
+    try { await kanalVideoDegistirKomutu(env); } catch (e) { await env.KAYIT.put("kemal:videoDegistirSonuc", JSON.stringify({ ok: false, hata: String(e && e.message).slice(0, 300), zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     try { if (await kagitAcik(env, "kemal", "kisiKontrol")) await kisiKontrolAdimi(env, "kemal", telegram); } catch { /* 9 Kasım: kişi /start kontrolü */ }
     try { if (await kagitAcik(env, "kemal", "kartIlet")) await kartIletAdimi(env, "kemal", telegram); } catch { /* 9 Kasım: Hemra'nın seçtiği kişiye kart */ }
@@ -4569,4 +4570,25 @@ function tarihYaz(unix) {
 function kisalt(metin) {
   const tek = (metin || "").replace(/\s+/g, " ").trim();
   return tek.length > 80 ? tek.slice(0, 77) + "..." : tek;
+}
+
+// 17 Kasım (Patron onaylı): KANALDAKİ MEVCUT PAYLAŞIMDA SADECE VİDEOYU DEĞİŞTİR — yeni paylaşım yok.
+// Komut (KV "kemal:videoDegistir"): { kod, mesajId, video (adres), caption (HTML, mesajın mevcut altyazısı aynen) | null }.
+// Güvenlik: mesaj o modelin kanal dizininde ("kodlar") kayıtlı olmalı; değilse hiçbir şey yapılmaz. Sonuç (Telegram'ın cevabı) "kemal:videoDegistirSonuc".
+export async function kanalVideoDegistirKomutu(env) {
+  const k = await env.KAYIT.get("kemal:videoDegistir", "json").catch(() => null);
+  if (!k) return null;
+  await env.KAYIT.delete("kemal:videoDegistir");
+  const simdi = Math.floor(Date.now() / 1000);
+  const yaz = (s) => env.KAYIT.put("kemal:videoDegistirSonuc", JSON.stringify({ ...s, kod: String(k.kod), mesajId: Number(k.mesajId), zaman: simdi }), { expirationTtl: 7 * 86400 }).then(() => s);
+  const kanal = await env.KAYIT.get("kanal", "json").catch(() => null);
+  if (!kanal) return yaz({ ok: false, hata: "kanal bilgisi yok" });
+  const dizin = ((await env.KAYIT.get("kodlar", "json").catch(() => null)) || {})[String(k.kod)] || [];
+  if (!dizin.some((g) => (g.ids || []).includes(Number(k.mesajId)))) return yaz({ ok: false, hata: `mesaj ${k.mesajId} ${k.kod} paylaşımlarında yok — dokunulmadı` });
+  if (!/^https:\/\//.test(String(k.video || ""))) return yaz({ ok: false, hata: "video adresi yok" });
+  const media = { type: "video", media: String(k.video), supports_streaming: true, ...(k.caption ? { caption: String(k.caption), parse_mode: "HTML" } : {}) };
+  const r = await telegram(env, "editMessageMedia", { chat_id: kanal.id, message_id: Number(k.mesajId), media });
+  const v = r && r.result && r.result.video;
+  await defterIs(env, "kemal", r && r.ok ? `kanaldaki ${k.kod} paylaşımında video değiştirildi (mesaj ${k.mesajId}, yeni paylaşım yok)` : `kanaldaki ${k.kod} videosu değiştirilemedi: ${String((r && r.description) || "?").slice(0, 120)}`, { kod: String(k.kod) }).catch(() => null);
+  return yaz({ ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, duzenleme: r && r.result ? r.result.edit_date || null : null, video: v ? { sure: v.duration, en: v.width, boy: v.height, boyut: v.file_size } : null, yazi: r && r.result ? String(r.result.caption || "").slice(0, 300) : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
 }

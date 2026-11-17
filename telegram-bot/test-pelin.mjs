@@ -1780,3 +1780,24 @@ test("17 Kasım (Patron) SADECE FOTOĞRAF yolu: '/uret 3557 foto' → ~0,64 $ ka
   assert.equal((await teslim(o)).length, 0); // kanala gitmez
   assert.ok(JSON.parse(o.depo.get("pelinboy:3557")).uretilen, "kayda yazıldı");
 });
+
+test("17 Kasım (Patron, kalıcı): onaya gelen hazır videoda ✅ Onay / ❌ Hayır düğmesi; ✅ → kanaldaki mevcut paylaşımda SADECE video değişir (Kemal komutu), yeni paylaşım yok", async () => {
+  const { hazirVideoBaslat } = await import("./pelin.js");
+  const o = uretimOrtami();
+  o.depo.set("pelinboy:3271", JSON.stringify({ boy: "bilekalti", marka: "BLACKROSE" }));
+  const r = await hazirVideoBaslat(o.env, { kod: "3271", video: "https://volonte-venom.volonte.workers.dev/medya/aaaa", sonra: { degistir: { mesajId: 15442, caption: "<b>BLACK ROSE 3271</b>" } } }, Math.floor(Date.now() / 1000));
+  for (let i = 0; i < 3; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
+  const v = o.g.find((x) => x.metod === "sendVideo" && x.govde.reply_markup);
+  assert.ok(v, "video düğmeli gelmeli");
+  assert.deepEqual(v.govde.reply_markup.inline_keyboard[0].map((d) => [d.text, d.callback_data]), [["✅ Onay", `pv:o:${r.id}`], ["❌ Hayır", `pv:x:${r.id}`]]);
+  assert.match(v.govde.caption, /SADECE video değişir \(yeni paylaşım yok\)/);
+  await bas(o, HEMRA, `pv:o:${r.id}`);
+  assert.ok(!o.depo.get("kemal:videoDegistir")); // sadece Patron
+  await bas(o, MURAT, `pv:o:${r.id}`);
+  const k = JSON.parse(o.depo.get("kemal:videoDegistir"));
+  assert.deepEqual([k.kod, k.mesajId, k.caption], ["3271", 15442, "<b>BLACK ROSE 3271</b>"]);
+  assert.match(k.video, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/);
+  assert.equal((await teslim(o)).length, 0); // yeni paylaşım yok
+  await bas(o, MURAT, `pv:x:${r.id}`); // ikinci karar yok
+  assert.match(o.g.filter((x) => x.metod === "answerCallbackQuery").at(-1).govde.text, /zaten verildi/);
+});

@@ -767,6 +767,15 @@ test("9 / 16 Kasım POSTANE: bilgi birikir, kart ve kritik anında; düzenleme (
   assert.equal(patronaGiden(o).length, 13);
   assert.ok(kritikMi("Müşteri şikâyeti geldi: 3627 dikiş açık"));
   assert.equal(kritikMi("Bugün şikâyet yok"), false);
+  // 17 Kasım (Patron): Venom video / fotoğrafı ASLA atmaz — kartsız medya 3 dk bekler, kart gelmezse medyanın KENDİSİ Patron'a gider
+  const once = patronaGiden(o).length;
+  await v.aktarilanGonder(o.env, { bot: "pelin", metod: "sendVideo", metin: "🎬 3271 — yazılı video. Kanala gitmedi.", medya: [{ type: "video", media: "https://pelin.test/medya/v" }] });
+  assert.equal(patronaGiden(o).length, once); // henüz bekliyor (kartın albümü olabilir)
+  const d0 = Date.now; Date.now = () => d0() + 200e3;
+  try { await venomCron(o.env, Math.floor(Date.now() / 1000)); } finally { Date.now = d0; }
+  const vid = o.g.filter((x) => x.metod === "sendVideo");
+  assert.equal(vid.length, 1, "video Patron'a gitmeli (atılmamalı)");
+  assert.equal(vid[0].govde.video, "https://pelin.test/medya/v");
 });
 
 test("9 Kasım: 'bunu bana gönderme' kalıcı kural olur (son mesajın botu + türü); /kurallarım listeler, ❌ ile kaldırılır; kritik susturulmaz", async () => {

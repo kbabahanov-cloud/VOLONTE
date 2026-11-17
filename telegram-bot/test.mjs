@@ -3008,3 +3008,23 @@ test("müşteri paylaşımı — ALBÜM (15 Kasım, Patron): bir gönderideki b�
   await guncellemeIsle({ message: { message_id: 95, date: T(12), chat: { id: 333, type: "private" }, from: { id: 333, first_name: "Hemra" }, document: { file_id: "p1", mime_type: "application/pdf" }, caption: "müşteri" } }, o.env);
   assert.match(json.at(-1).govde.text, /PDF dosyasını görsele çeviremiyorum/);
 });
+
+test("17 Kasım (Patron): kanaldaki mevcut paylaşımda SADECE video değişir (editMessageMedia, altyazı aynen); mesaj o modelin dizininde değilse dokunulmaz", async () => {
+  const { kanalVideoDegistirKomutu } = await import("./worker.js");
+  const o = markaOrtami();
+  const kanalId = JSON.parse(o.depo.get("kanal")).id;
+  o.depo.set("kodlar", JSON.stringify({ 3271: [{ ids: [15442, 15443], tarih: 1, album: "a", y: 15442 }] }));
+  o.depo.set("kemal:videoDegistir", JSON.stringify({ kod: "3271", mesajId: 15442, video: "https://pelin.test/medya/x", caption: "<b>BLACK ROSE 3271</b>\nSizes: 44 · series of 4" }));
+  await kanalVideoDegistirKomutu(o.env);
+  const e = o.gonderilen.filter((m) => String(m.url).endsWith("/editMessageMedia"));
+  assert.equal(e.length, 1, o.depo.get("kemal:videoDegistirSonuc"));
+  assert.deepEqual([e[0].govde.chat_id, e[0].govde.message_id, e[0].govde.media.type, e[0].govde.media.media, e[0].govde.media.caption, e[0].govde.media.parse_mode], [kanalId, 15442, "video", "https://pelin.test/medya/x", "<b>BLACK ROSE 3271</b>\nSizes: 44 · series of 4", "HTML"]);
+  assert.ok(!o.gonderilen.some((m) => /\/send\w+$/.test(String(m.url)) && String(m.govde.chat_id) === String(kanalId))); // yeni paylaşım yok
+  assert.equal(JSON.parse(o.depo.get("kemal:videoDegistirSonuc")).ok, true);
+  assert.ok(!o.depo.get("kemal:videoDegistir")); // tek seferlik
+  // başka modelin mesajı → dokunulmaz
+  o.depo.set("kemal:videoDegistir", JSON.stringify({ kod: "3271", mesajId: 999, video: "https://pelin.test/medya/x" }));
+  await kanalVideoDegistirKomutu(o.env);
+  assert.equal(o.gonderilen.filter((m) => String(m.url).endsWith("/editMessageMedia")).length, 1);
+  assert.match(JSON.parse(o.depo.get("kemal:videoDegistirSonuc")).hata, /paylaşımlarında yok/);
+});

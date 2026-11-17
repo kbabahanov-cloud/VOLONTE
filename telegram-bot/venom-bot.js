@@ -1672,12 +1672,14 @@ export async function aktarilanGonder(env, k) {
   // 9 Kasım (Patron): POSTANE — anında sadece kart / kritik / Patron'un isteğinin cevabı; gerisi Venom'da birikir
   const karar = await postaKarar(env, { kaynak: k.bot, metin: k.metin || (medya.length ? `📷 ${medya.length} görsel` : ""), tur: cevapIs ? "cevap" : null, kart }, simdi);
   if (karar.karar === "biriktir") {
-    if (medya.length && !duzenleme && !karar.kural) { // kartın albümü olabilir: 3 dk bekler (kart gelirse birlikte gider)
+    // 17 Kasım (Patron): Venom video / fotoğrafı ASLA atmaz — kartın albümü olabilir diye 3 dk bekler; kart gelmezse medyanın KENDİSİ Patron'a gider
+    if (medya.length && !duzenleme) { // kartın albümü olabilir: 3 dk bekler (kart gelirse birlikte gider)
       const l = await oku(env, `venom:posta:medya:${k.bot}`, []);
       return kaydet(env, `venom:posta:medya:${k.bot}`, [...l.filter((x) => simdi - x.zaman < 180), { zaman: simdi, k }].slice(-5), 3600);
     }
     return biriktir(env, { kaynak: k.bot, metin: k.metin || `📷 ${medya.length} görsel`, tur: karar.tur, kategori: karar.kategori, kural: karar.kural }, simdi);
   }
+  if (karar.karar === "cozum" && medya.length && !duzenleme) await aktarGonder({ ...env, __izin: "cevap" }, { ...k, butonlar: null }, null).catch(() => null); // 17 Kasım: medya atılmaz (düğmesiz gider)
   if (karar.karar === "cozum") return cozumeEkle(env, { kaynak: k.bot, metin: k.metin || "📷 görsel", sebep: "bot kartı izin listesinde yok", klavye: k.butonlar && !duzenleme ? { inline_keyboard: await butonCevir(env, k.bot, k.butonlar) } : null }, simdi);
   env = { ...env, __izin: karar.izin };
   const klavye = k.butonlar && !duzenleme ? { inline_keyboard: await butonCevir(env, k.bot, k.butonlar) } : null;
@@ -1695,7 +1697,12 @@ async function bekleyenMedyaBosalt(env, simdi) {
     const l = await oku(env, `venom:posta:medya:${bot}`, []);
     if (!l.length || l.some((x) => simdi - x.zaman < 180)) continue;
     await env.KAYIT.delete(`venom:posta:medya:${bot}`).catch(() => null);
-    for (const x of l) await biriktir(env, { kaynak: bot, metin: x.k.metin || `📷 ${(x.k.medya || []).length} görsel`, tur: "bilgi" }, simdi);
+    // 17 Kasım (Patron): kart gelmedi → medya ATILMAZ, kendisi Patron'a gider (eskiden sadece yazısı özete düşüyordu; 3271 videosu böyle kayboldu)
+    for (const x of l) {
+      const r = await aktarGonder({ ...env, __izin: "cevap" }, x.k, null).catch((e) => ({ ok: false, description: String(e && e.message) }));
+      if (r && r.ok) await gonderildiKaydet(env, { kaynak: bot, tur: "cevap", metin: x.k.metin || "📷 görsel", id: r.result && (r.result.message_id || (Array.isArray(r.result) && r.result[0] && r.result[0].message_id)), izin: "cevap" }, simdi).catch(() => null);
+      else await biriktir(env, { kaynak: bot, metin: `${x.k.metin || "📷 görsel"} — ⚠️ görsel/video Patron'a gönderilemedi (${String((r && r.description) || "?").slice(0, 80)})`, tur: "kritik" }, simdi);
+    }
   }
 }
 async function aktarGonder(env, k, klavye) {
