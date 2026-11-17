@@ -1276,6 +1276,21 @@ test("mutabakat: 17:00 önizleme SADECE Patron'a (yeni düzen, 3 sütun); Patron
   assert.match(JSON.parse(ars[1].icerik).fuatMesaji, /^📊 BLACK ROSE – Sami\nFuat Bey,\n💰 Bakiyeler:\nBlack Rose 00: 50,00 \$\nBlack Rose 15: 100,00 \$[\s\S]*📊 VOLONTE – Sami/);
   assert.equal((await st("/arsiv-dogrula")).tamam, true);
   assert.equal((await st("/arsiv-dosyalar", { mt: id })).length, 2);
+  // 17 Kasım (Patron, kural 97): itiraz eden firmaya soru (Patron'un cümlesi); cevap kayda EKLENİR (ilk açıklama silinmez), Patron'a "soruya cevap" gider
+  const { itirazSorusu, ITIRAZ_SORUSU } = await import("./mutabakat.js");
+  const tgT = (e, metod, govde) => fetch(`https://api.telegram.org/bot${e.BOT_TOKEN}/${metod}`, { method: "POST", body: JSON.stringify(govde) }).then((r) => r.json());
+  o.g.length = 0;
+  const sr = await itirazSorusu(o.env, tgT, id, 1794900000);
+  assert.equal(sr.ok, true, JSON.stringify(sr));
+  assert.equal(cagri(o.g, "sendMessage").at(-1).govde.text, ITIRAZ_SORUSU("Fuat"));
+  assert.match(ITIRAZ_SORUSU("Celal"), /^Celal Bey, mutabakata "uyuşmuyor" dediniz\. Hangi hesapta uyuşmuyor\? Sizin defterinizde bakiye kaç\? Hangi fiş ya da ödeme farklı\?/);
+  assert.equal(String(cagri(o.g, "sendMessage").at(-1).govde.chat_id), "501");
+  assert.match((await itirazSorusu(o.env, tgT, id, 1794900000, "Bizim bakiye 5.000 $, ödeme 1.000 $ yaptık")).hata, /firmanın görmemesi gereken bilgi/); // ek soru süzgeçten geçer
+  await g2({ message: { chat: { id: 501, type: "private" }, from: { id: 501 }, text: "20 hesabında bizde 800 fazla" } }, o.env);
+  const kayit = JSON.parse((await st("/ayar-oku", { k: `mt:${id}` })).v);
+  assert.equal(kayit.fark, "3634 bizde 18 görünüyor"); // ilk açıklama korunur
+  assert.deepEqual(kayit.cevaplar.map((x) => x.metin), ["20 hesabında bizde 800 fazla"]);
+  assert.match(cagri(o.g, "sendMessage").filter((x) => x.govde.chat_id === "999").at(-1).govde.text, /^💬 Fuat mutabakat sorusuna cevap verdi \(06\.11\.2026 mutabakatı, [^)]*\):\n20 hesabında bizde 800 fazla$/);
 });
 
 test("mutabakat güvenliği: iki mağaza ayrı bakiye, tek düğme; Mutabıkım → tarih/saat/toplam/tam mesaj kayda + Patron'a 'Fuat X $ bakiyeyi onayladı'; yeni önizleme eskisini geçersiz kılar; süzgeç", async () => {

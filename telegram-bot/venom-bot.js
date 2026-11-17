@@ -372,6 +372,8 @@ const ARACLAR = [
   { name: "model_fiyati", description: "Model kodunun Vegawin'deki SATIŞ fiyatı (dolar, tek adet; mağaza bazında, yanında stok). Patron 'X'in fiyatı', 'X kaç dolar', 'fiyat getir' derse SADECE bunu kullan ve sonucu aynen ver. Sadece Patron'a; kanala, siteye, ekibe fiyat yazılmaz. Alış / maliyet / kâr vermez. Onaysız.", input_schema: { type: "object", additionalProperties: false, required: ["kodlar"], properties: { kodlar: { type: "array", items: { type: "string" } } } } },
   { name: "yetenek_istegi", description: "Patron'un istediği işi yapacak ARACIN YOKSA (ya da görev verdiğin bot 'aracım yok' dediyse) bunu çağır: iş EKSİK ARAÇ LİSTESİ'ne yazılır. Sonra Patron'a AÇIKÇA şunu de: 'Yapamıyorum — sebep: …' ve listeye yazdığını söyle. ASLA 'not ettim', 'sisteme yazıldı', 'ilk iş yapacağım' diye geçiştirme; yapamadığın işi yapılmış ya da yolda gibi gösterme.", input_schema: { type: "object", additionalProperties: false, required: ["istek"], properties: { istek: { type: "string", description: "Patron ne istedi (kısa)" }, sebep: { type: "string", description: "neden yapılamıyor (tek cümle)" }, arac: { type: "string", description: "hangi araç / veri gerekli (tek cümle)" }, bot: { type: "string", description: "aracı eksik olan bot: venom, sami, kemal, selin, pelin, nora" } } } },
   { name: "musteri_kartlari", description: "Kemal'in MÜŞTERİ PAYLAŞIMI kartları (son 3 gün): onay bekleyen, onaylanıp sırada bekleyen (gece onaylanan sabah 09:00'da çıkar), kanala çıkan (saat + mesaj no), iptal. 'Müşteri kartı nerede / paylaşıldı mı / neden paylaşılmadı' sorularında SADECE bunu kullan; 'kart oluşmadı / yok' demeden önce MUTLAKA bak. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
+  { name: "firmaya_sor", description: "MUTABAKAT İTİRAZI (kural 97): bir firma (Celal, Fuat) mutabakata 'uyuşmuyor' dediyse firmaya SORAR: 'Hangi hesapta uyuşmuyor? Sizin defterinizde bakiye kaç? Hangi fiş ya da ödeme farklı?' Rutin iştir, Patron onayı BEKLEMEZ. ek_soru verilirse (cevaptan sonra takip sorusu) güvenlik süzgecinden geçer: bizim bakiye, fiyat, ödeme tutarı, iç bilgi YAZMA — sadece soru sor. Sonuçta 'mesaj no' yoksa 'sordum' DEME. Vegawin'de HİÇBİR ŞEYİ düzeltme; düzeltme gerekiyorsa Hemra girer.", input_schema: { type: "object", additionalProperties: false, required: ["firma"], properties: { firma: { type: "string", enum: ["celal", "fuat"] }, ek_soru: { type: "string" } } } },
+  { name: "cari_hareketler", description: "CARİ HAREKETLERİ SATIR SATIR (Vegawin, salt okuma): bir firmanın (Celal: Celal Karayan + Celal İndirim; Fuat: Black Rose 00/15/20/25) cari hareketleri — tarih, hesap, borç (bizim ödememiz), alacak (firmanın kestiği fiş), kayıt no — ve hesap bakiyeleri. Mutabakat itirazında firmanın cevabını bununla satır satır karşılaştır; 'bakiye neden arttı' sorusunda iki tarih arasındaki satırları say. SADECE Patron'a gösterilir.", input_schema: { type: "object", additionalProperties: false, required: ["firma"], properties: { firma: { type: "string", enum: ["celal", "fuat"] }, gun: { type: "integer", description: "son kaç gün (varsayılan 45)" } } } },
   { name: "mutabakat_durumu", description: "MUTABAKAT NEREDE: Fuat / Celal mutabakatı gitti mi, ne zaman gitti, cevap geldi mi (mutabık / uyuşmuyor + açıklaması / sonra), önizleme Patron'da mı — Sami'nin mutabakat kaydından CANLI okur. Patron 'Celal'in mutabakat onayı geldi mi', 'Fuat'ın mutabakatı nerede', 'mutabakat gitti mi' diye sorunca ÖNCE bunu çağır; 'kaydım yok / göremiyorum' DEME. Aracın yazdığı tarihleri ve durumu AYNEN aktar.", input_schema: { type: "object", additionalProperties: false, properties: { kisi: { type: "string", enum: ["fuat", "celal"] } } } },
   { name: "celal_mutabakat", description: "CELAL MUTABAKATI: Patron 'Celal mutabakatını getir / göster / hazırla' deyince. Celal Kayran + Celal İndirim bakiyeleri ve son ödemelerle mutabakat KARTINI hazırlatır; kart ÖNCE Patron'a gelir ('✅ Celal'e gönder' düğmeli), Patron onaylamadan Celal'e HİÇBİR ŞEY gitmez. Araç kartın Telegram mesaj numarasını kendisi kontrol eder: sonuçta 'mesaj no' yazmıyorsa 'gönderdim / kart geldi' DEME, aracın söylediği sebebi yaz.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
   { name: "eksik_arac_listesi", description: "EKSİK ARAÇ LİSTESİ: yapılamayan işler ve gereken araçlar (Patron onaylarsa Claude Code ekler). Patron 'eksik araçlar', 'yapamadığın işler' derse bunu kullan. Onaysız.", input_schema: { type: "object", additionalProperties: false, properties: {} } },
@@ -867,6 +869,8 @@ export async function aracCalistir(env, ad, g, simdi) {
   }
   if (ad === "model_boyu") return `${g.kod} boyu: ${boyYazi(await boyOku(env, String(g.kod)))}`;
   if (ad === "model_fiyati") return modelFiyatMetni(env, g.kodlar || []);
+  if (ad === "firmaya_sor") return firmayaSor(env, simdi, g.firma, g.ek_soru || null);
+  if (ad === "cari_hareketler") return cariHareketler(env, simdi, g.firma, g.gun || 45);
   if (ad === "mutabakat_durumu") return mutabakatDurumu(env, simdi, g.kisi || null);
   if (ad === "celal_mutabakat") return celalMutabakatGetir(env, simdi);
   if (ad === "eksik_arac_listesi") return eksikAracMetni(env);
@@ -1045,7 +1049,7 @@ export async function dugme(env, cq, simdi) {
 
 // ---------- Harcama (4 Kasım, Patron): Venom'un kendi yapay zekâ harcaması kaydedilir; aylık tavan (öneri 30 $) ----------
 // KV "venom-harcama:<ay>" (USD). Tavan KV "venom:bot:sinir" (Patron rakamı söyleyince yazılır); yoksa 30 $. %80'de Patron'a bir kez haber.
-export const VENOM_SINIR_VARSAYILAN = 50; // 13 Kasım (Patron, kural 74): asıl değer kitaptan (botSiniri)
+export const VENOM_SINIR_VARSAYILAN = 70; // 17 Kasım (Patron): 50 → 70 $ (elemanlar Venom ile konuşacak); // 13 Kasım (Patron, kural 74): asıl değer kitaptan (botSiniri)
 const CLAUDE_FIYAT = { "claude-sonnet-5-5": { giris: 2, cikis: 10, okuma: 0.2 }, "claude-opus-5-5": { giris: 4, cikis: 20, okuma: 0.2 } };
 const SES_DAKIKA_USD = 0.003; // gpt-4o-mini-transcribe (yaklaşık)
 const ay = (t) => new Date((t + SAAT_FARKI) * 1000).toISOString().slice(0, 7);
@@ -1452,6 +1456,49 @@ export function hataTr(metin) {
 }
 // 17 Kasım (Patron): Celal mutabakatını GETİR — Sami kartı hazırlar (cuma akışıyla aynı kart), kart önce Patron'a gelir.
 // "Gönderdim" demeden önce kanıt: kartın Telegram'ın verdiği GERÇEK mesaj numarası Venom'un gönderim kaydından okunur.
+// 17 Kasım (Patron, kural 97): itiraz eden firmaya soru — Sami gönderir (iç bağlantı, hemen); Telegram mesaj no kanıt
+export async function firmayaSor(env, simdi, firma, ek = null) {
+  if (env.__kuru) return `(DENEME: ${firma === "celal" ? "Celal'e" : "Fuat'a"} itiraz sorusu giderdi; denemede gönderilmedi.)`;
+  const ayar = async (k) => { try { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v ? JSON.parse(v) : null; } catch { return null; } };
+  const liste = (await ayar("mt:liste")) || [];
+  let hedef = null;
+  for (const id of liste.slice(-12).reverse()) { const r = await ayar(`mt:${id}`); if (r && (r.kisi || "fuat") === firma && r.durum === "fark") { hedef = r; break; } }
+  if (!hedef) return `${firma === "celal" ? "Celal" : "Fuat"} için açık mutabakat itirazı yok; soru gönderilmedi.`;
+  const bekleyen = (await env.KAYIT.get("sami:islemler", "json").catch(() => null)) || [];
+  await env.KAYIT.put("sami:islemler", JSON.stringify([...(Array.isArray(bekleyen) ? bekleyen : []), { tur: "mutabakatSoru", id: hedef.id, ...(ek ? { ek: String(ek).slice(0, 600) } : {}) }]), { expirationTtl: 3600 });
+  let calisti = false;
+  try { if (env.SAMI_W && typeof env.SAMI_W.islemAdim === "function") calisti = Boolean(await env.SAMI_W.islemAdim()); } catch (e) { await hataYaz(env, "firmayaSor", e); }
+  const ss = (await env.KAYIT.get("sami:islemSonuc", "json").catch(() => null)) || [];
+  const s = [...ss].reverse().find((x) => x.tur === "mutabakatSoru" && x.zaman >= simdi - 5);
+  if (!calisti || !s || !s.soru) return `Soru sıraya alındı ama gittiği DOĞRULANAMADI (Sami hemen çalıştıramadı). Mesaj numarası yok — "sordum" deme, "sıraya aldım" de.`;
+  if (!s.soru.ok) return `Soru GİTMEDİ: ${s.soru.hata}.`;
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", ozet: `mutabakat itirazı: ${firma === "celal" ? "Celal'e" : "Fuat'a"} soruldu (mesaj no ${s.soru.mesaj}; ${String(hedef.gun).split("-").reverse().join(".")} mutabakatı)` }).catch(() => null);
+  return `${firma === "celal" ? "Celal'e" : "Fuat'a"} soruldu — Telegram mesaj no ${s.soru.mesaj}, ${s.soru.zaman}. Giden yazı: "${s.soru.metin}". Cevabı gelince kayda eklenir ve Patron'a anında düşer.`;
+}
+// 17 Kasım (Patron, kural 97): cari hareketleri satır satır (Vegawin'den köprünün okuduğu; SALT OKUMA — Venom Vegawin'de hiçbir şeyi değiştirmez)
+export async function cariHareketler(env, simdi, firma, gun = 45) {
+  const ayar = async (k) => { try { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v ? JSON.parse(v) : null; } catch { return null; } };
+  const para2 = (x) => Number(x || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const tr = (g) => String(g || "").split("-").reverse().join(".");
+  const kaynaklar = firma === "celal" ? [["cari:CELAL:VOLONTE", "VOLONTE Vegawin"], ["cari:CELAL:BLACKROSE", "Black Rose Vegawin"]] : [["cari:BLACKROSE", "Black Rose Vegawin"], ["cari:VOLONTE", "VOLONTE Vegawin"]];
+  const bas = gunAnahtari(simdi - Math.max(1, Math.min(400, Number(gun) || 45)) * 86400);
+  const cikti = [];
+  for (const [k, ad] of kaynaklar) {
+    const c = await ayar(k);
+    if (!c || !(c.hesaplar || []).length) continue;
+    const adlar = Object.fromEntries((c.hesaplar || []).map((h) => [h.anahtar, h.ad]));
+    cikti.push(`📒 ${ad} — son okuma ${tarihSaat(c.zaman)}`);
+    for (const h of c.hesaplar || []) {
+      const son = Object.entries(h.donemler || {}).filter(([t]) => /CARIGENELHAREKET$/.test(t)).sort(([a], [b]) => a.localeCompare(b)).at(-1);
+      if (son && son[1] && son[1].n) cikti.push(`• ${h.ad}: son dönem alacak ${para2(son[1].alacak)} − borç ${para2(son[1].borc)} = bakiye ${para2((son[1].alacak || 0) - (son[1].borc || 0))} $ (${son[1].n} hareket, ${tr(son[1].ilk)}–${tr(son[1].son)})`);
+    }
+    const l = (c.hareketler || []).filter((x) => String(x.tarih) >= bas).sort((x, y) => String(x.tarih).localeCompare(String(y.tarih)) || Number(x.ind) - Number(y.ind));
+    cikti.push(l.length ? `Hareketler (${tr(bas)} sonrası, ${l.length} satır):` : `(${tr(bas)} sonrası hareket yok)`);
+    for (const x of l) cikti.push(`  ${tr(x.tarih)} · ${adlar[x.hesap] || x.hesap} · ${Number(x.alacak) > 0 ? `ALACAK (firmanın fişi) ${para2(x.alacak)} $` : `BORÇ (ödememiz) ${para2(x.borc)} $`} · kayıt no ${x.ind}${x.aciklama ? ` · ${String(x.aciklama).slice(0, 60)}` : ""}`);
+  }
+  if (!cikti.length) return `${firma === "celal" ? "Celal" : "Fuat"} carileri Vegawin'den okunamadı (köprü).`;
+  return `${cikti.join("\n")}\n(Kaynak: Vegawin cari hareketleri, köprünün son okuması. Venom Vegawin'de hiçbir şeyi değiştirmez; düzeltme gerekiyorsa Hemra girer. SADECE Patron'a.)`;
+}
 // 17 Kasım (Patron): "Celal'in onayı geldi mi / Fuat'ın mutabakatı nerede" — Sami'nin mutabakat kaydı (mt:liste, mt:<id>) canlı okunur
 export async function mutabakatDurumu(env, simdi, kisi = null) {
   const ayar = async (k) => { try { const v = (await stokIste(env, "/ayar-oku", { k })).v; return v ? JSON.parse(v) : null; } catch { return null; } };

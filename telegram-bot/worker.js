@@ -239,6 +239,7 @@ export default {
   async scheduled(event, env) {
     try { await kitapOku(env, "kemal"); } catch { /* 13 Kasım (kural 37): bot her çalışmada kitabın güncel sürümünü okur (ofis "kitap sürümü") */ }
     try { await patronDenemesi(env, "Kemal", telegram); } catch { /* */ }
+    try { await kanalMedyaDenetimKomutu(env); await kanalMedyaGeriKoyKomutu(env); } catch (e) { await env.KAYIT.put("kemal:medyaDenetimSonuc", JSON.stringify({ ok: false, hata: String(e && e.message).slice(0, 300), zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 86400 }).catch(() => null); }
     try { await kanalVideoDegistirKomutu(env); } catch (e) { await env.KAYIT.put("kemal:videoDegistirSonuc", JSON.stringify({ ok: false, hata: String(e && e.message).slice(0, 300), zaman: Math.floor(Date.now() / 1000) }), { expirationTtl: 7 * 86400 }).catch(() => null); }
     try { await birikimAdimi(env, "kemal", Math.floor(Date.now() / 1000), telegram); } catch (e) { await env.KAYIT.put("kemal:birikimHata", String(e && e.message).slice(0, 300), { expirationTtl: 86400 }); }
     try { if (await kagitAcik(env, "kemal", "kisiKontrol")) await kisiKontrolAdimi(env, "kemal", telegram); } catch { /* 9 Kasım: kişi /start kontrolü */ }
@@ -4591,4 +4592,74 @@ export async function kanalVideoDegistirKomutu(env) {
   const v = r && r.result && r.result.video;
   await defterIs(env, "kemal", r && r.ok ? `kanaldaki ${k.kod} paylaşımında video değiştirildi (mesaj ${k.mesajId}, yeni paylaşım yok)` : `kanaldaki ${k.kod} videosu değiştirilemedi: ${String((r && r.description) || "?").slice(0, 120)}`, { kod: String(k.kod) }).catch(() => null);
   return yaz({ ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, duzenleme: r && r.result ? r.result.edit_date || null : null, video: v ? { sure: v.duration, en: v.width, boy: v.height, boyut: v.file_size } : null, yazi: r && r.result ? String(r.result.caption || "").slice(0, 300) : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
+}
+
+// 17 Kasım (Patron, ACİL — 3629 yanlış SOLD OUT): kanaldaki mesajların ŞU ANKİ hali (salt okuma). Komut KV "kemal:medyaDenetim" = { ids: [...] }
+// → her mesaj arşive iletilip okunur (iletilen kopya hemen silinir): tür, SOLD OUT görseli mi, yazısının başı. Sonuç "kemal:medyaDenetimSonuc".
+export async function kanalMedyaDenetimKomutu(env) {
+  const k = await env.KAYIT.get("kemal:medyaDenetim", "json").catch(() => null);
+  if (!k) return null;
+  await env.KAYIT.delete("kemal:medyaDenetim");
+  const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
+  const soldUid = await env.KAYIT.get("kemal:soldout:uid").catch(() => null);
+  const sonuc = [];
+  for (const id of (k.ids || []).slice(0, 20)) {
+    const f = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(id), disable_notification: true }).catch(() => null);
+    if (!f || !f.ok) { sonuc.push({ id, yok: true, hata: String((f && f.description) || "?").slice(0, 80) }); continue; }
+    const m = f.result;
+    await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: m.message_id }).catch(() => null);
+    const ph = m.photo ? m.photo[m.photo.length - 1] : null;
+    sonuc.push({ id, tur: m.video ? "video" : ph ? "foto" : "yazi", soldOutGorsel: Boolean(ph && soldUid && ph.file_unique_id === soldUid), yazi: String(m.caption || m.text || "").slice(0, 140), albüm: m.media_group_id || null });
+  }
+  await env.KAYIT.put("kemal:medyaDenetimSonuc", JSON.stringify({ ok: true, zaman: Math.floor(Date.now() / 1000), soldUidVar: Boolean(soldUid), sonuc }), { expirationTtl: 86400 });
+  return sonuc;
+}
+// 17 Kasım (Patron, ACİL): stoğu OLAN modelin SOLD OUT görseliyle gizlenmiş eski paylaşımına gerçek fotoğrafı GERİ koyar (yeni paylaşım yok).
+// Komut KV "kemal:medyaGeriKoy" = { kod, ciftler: [{ eski, kaynak }] } — eski: SOLD OUT görselli kanal mesajı; kaynak: aynı modelin kanaldaki
+// sağlam mesajı (fotoğrafı oradan alınır). Güvenlik: Sami'nin güncel stoğu (iki mağaza toplamı) 0'dan büyük olmalı, eski mesaj o modelin
+// kanal dizininde olmalı ve ŞU AN SOLD OUT görseli taşımalı; yazısı varsa aynen korunur. Sonuç (Telegram'ın cevabı) "kemal:medyaGeriKoySonuc".
+export async function kanalMedyaGeriKoyKomutu(env) {
+  const k = await env.KAYIT.get("kemal:medyaGeriKoy", "json").catch(() => null);
+  if (!k) return null;
+  await env.KAYIT.delete("kemal:medyaGeriKoy");
+  const simdi = Math.floor(Date.now() / 1000), kod = String(k.kod);
+  const yaz = (s) => env.KAYIT.put("kemal:medyaGeriKoySonuc", JSON.stringify({ ...s, kod, zaman: simdi }), { expirationTtl: 7 * 86400 }).then(() => s);
+  const kanal = await env.KAYIT.get("kanal", "json"), arsiv = await env.KAYIT.get("arsiv", "json");
+  const st = (await stokIste(env, "/toplu", { kodlar: [kod] }).catch(() => null) || {})[kod];
+  if (!st) return yaz({ ok: false, hata: "stok okunamadı — hiçbir şey değiştirilmedi" });
+  if (!(st.toplam > 0)) return yaz({ ok: false, hata: `stok ${st.toplam} — SOLD OUT doğru, dokunulmadı` });
+  const dizin = (((await env.KAYIT.get("kodlar", "json").catch(() => null)) || {})[kod] || []).flatMap((g) => g.ids || []);
+  const soldUid = await env.KAYIT.get("kemal:soldout:uid").catch(() => null);
+  const oku = async (id) => { const f = await telegram(env, "forwardMessage", { chat_id: arsiv.id, from_chat_id: kanal.id, message_id: Number(id), disable_notification: true }).catch(() => null); if (!f || !f.ok) return null; await telegram(env, "deleteMessage", { chat_id: arsiv.id, message_id: f.result.message_id }).catch(() => null); return f.result; };
+  const sonuc = [];
+  // Kanalda sağlam kopyası KALMAMIŞ model (3512): fotoğraflar siteden (Kemal'in normal paketi), albümün başına Kemal'in normal yazısı
+  if (k.siteden) {
+    const u = (await siteUrunleriAl(env)).find((x) => String(x.kod) === kod && !x.gizli);
+    if (!u) return yaz({ ok: false, hata: "model sitede yok ya da gizli — dokunulmadı" });
+    const paket = await paketHazirla(env, u, await durumBaglami(env, [kod], simdi), simdi);
+    const fotolar = (paket.medya || []).filter((m) => m.type === "photo");
+    if (!fotolar.length) return yaz({ ok: false, hata: "sitede fotoğraf yok — dokunulmadı" });
+    for (const [i, eskiId] of (k.eskiler || []).slice(0, 10).entries()) {
+      if (!dizin.includes(Number(eskiId))) { sonuc.push({ eski: eskiId, ok: false, hata: "mesaj bu modelin dizininde yok" }); continue; }
+      const e = await oku(eskiId), eph = e && e.photo ? e.photo[e.photo.length - 1] : null;
+      if (!eph || !soldUid || eph.file_unique_id !== soldUid) { sonuc.push({ eski: eskiId, ok: false, hata: "mesaj SOLD OUT görseli taşımıyor — dokunulmadı" }); continue; }
+      const bas = Number(eskiId) === Number(k.bas);
+      const r = await telegram(env, "editMessageMedia", { chat_id: kanal.id, message_id: Number(eskiId), media: { type: "photo", media: fotolar[i % fotolar.length].media, ...(bas ? { caption: altYazi(paket), parse_mode: "HTML" } : {}) } });
+      sonuc.push({ eski: eskiId, kaynak: "site", ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, duzenleme: r && r.result ? r.result.edit_date || null : null, yazi: r && r.result ? String(r.result.caption || "").slice(0, 120) : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 120) : null });
+    }
+    await defterIs(env, "kemal", `${kod}: stok ${st.toplam} — SOLD OUT görselli ${sonuc.filter((x) => x.ok).length} eski paylaşıma site fotoğrafı geri kondu (Patron emri, yeni paylaşım yok)`, { kod }).catch(() => null);
+    return yaz({ ok: sonuc.some((x) => x.ok), stok: st.toplam, sonuc });
+  }
+  for (const c of (k.ciftler || []).slice(0, 10)) {
+    if (!dizin.includes(Number(c.eski))) { sonuc.push({ eski: c.eski, ok: false, hata: "mesaj bu modelin dizininde yok" }); continue; }
+    const e = await oku(c.eski), y = await oku(c.kaynak);
+    const eph = e && e.photo ? e.photo[e.photo.length - 1] : null, yph = y && y.photo ? y.photo[y.photo.length - 1] : null;
+    if (!eph || !soldUid || eph.file_unique_id !== soldUid) { sonuc.push({ eski: c.eski, ok: false, hata: "mesaj SOLD OUT görseli taşımıyor — dokunulmadı" }); continue; }
+    const yvid = y && y.video ? y.video : null; // kaynak video ise video olarak geri konur (albümün aslı da öyleydi)
+    if (!yvid && (!yph || yph.file_unique_id === soldUid)) { sonuc.push({ eski: c.eski, ok: false, hata: "kaynak mesajda sağlam fotoğraf / video yok" }); continue; }
+    const r = await telegram(env, "editMessageMedia", { chat_id: kanal.id, message_id: Number(c.eski), media: { type: yvid ? "video" : "photo", media: yvid ? yvid.file_id : yph.file_id, ...(yvid ? { supports_streaming: true } : {}), ...(e.caption ? { caption: e.caption, caption_entities: e.caption_entities || [] } : {}) } });
+    sonuc.push({ eski: c.eski, kaynak: c.kaynak, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, duzenleme: r && r.result ? r.result.edit_date || null : null, yazi: r && r.result ? String(r.result.caption || "").slice(0, 80) : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 120) : null });
+  }
+  await defterIs(env, "kemal", `${kod}: stok ${st.toplam} — SOLD OUT görselli ${sonuc.filter((x) => x.ok).length} eski paylaşıma gerçek fotoğraf geri kondu (Patron emri, yeni paylaşım yok)`, { kod }).catch(() => null);
+  return yaz({ ok: sonuc.some((x) => x.ok), stok: st.toplam, sonuc });
 }

@@ -19,7 +19,7 @@ import { stokIste } from "./stokbot.js";
 import { siteVerisi, SITE_ADRESI } from "./depo-oku.js";
 import { indirimliMi, INDIRIMLI, celalKoduMu } from "./stok.js";
 import { patronMu, silKuyrugu, geriKuyrugu, magazaStoklari, magazaStogu, STOK_KURALI } from "./sil.js";
-import { fuatSuzgec, onizlemeGonder as mutabakatOnizleme, patronEmriyleGonder } from "./mutabakat.js";
+import { fuatSuzgec, onizlemeGonder as mutabakatOnizleme, patronEmriyleGonder, itirazSorusu } from "./mutabakat.js";
 import { acikRepete, engelMetni, rkGeldi, rkHemradan, dagilimYazi, dagilimAdet, denemeTemizle, modRepeteKapat, fabrikaVenomKontrol } from "./repete-kart.js"; // 11 Kasım: repete kartı (kural 43: açık repete varken yeni repete yok)
 
 const SAAT_FARKI = 3 * 3600;
@@ -2946,6 +2946,8 @@ async function tekIslem(env, simdi, tg) {
   } else if (is.tur === "mutabakatHazirla") { // 14 Kasım (Patron): mutabakat önizlemesini ŞİMDİ hazırla → kart SADECE Patron'a gider ({gun, kisi: "fuat" | "celal"}); Patron onaylamadan kimseye gitmez
     const r = await mutabakatOnizleme(env, tg, simdi, is.kaynak || "elle", { gun: /^\d{4}-\d{2}-\d{2}$/.test(String(is.gun || "")) ? is.gun : null, kisi: is.kisi === "celal" ? "celal" : "fuat" });
     sonuc.mutabakat = r ? { id: r.id, gun: r.gun, kisi: r.kisi || "fuat", durum: r.durum, kart: Boolean(r.onizlemeMesaj), metin: r.duzFuat } : null;
+  } else if (is.tur === "mutabakatSoru") { // 17 Kasım (Patron, kural 97): itiraz eden firmaya Venom'un sorusu (rutin; onay beklemez)
+    sonuc.soru = await itirazSorusu(env, tg, String(is.id || ""), simdi, is.ek || null);
   } else if (is.tur === "mutabakatGonder") { // 15 Kasım (Patron'un yazılı emri): önizlemede kalmış mutabakat aynı içerikle gönderilir
     sonuc.gonderim = await patronEmriyleGonder(env, tg, String(is.id || ""), simdi);
   } else if (is.tur === "listeDurum") { // 10 Kasım: bugünün ve dünün liste durumu (okuma; hiçbir şey göndermez)

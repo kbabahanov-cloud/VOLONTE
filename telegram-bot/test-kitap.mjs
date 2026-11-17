@@ -58,9 +58,9 @@ test("TEK KİTAP: kural değişince (KV'deki kitap) bütün botlar yeni kitabı 
   kitapBellegiSil();
 });
 
-test("PARA SINIRLARI (kural 74): tablo kitaptan okunur — Venom 50, Kemal 20, Selin 10, Sami 5 $/ay; Pelin 10 $/gün ve 100 $/ay", () => {
-  assert.deepEqual(paraSinirlari(kitapDosya), { venom: { ay: 50 }, kemal: { ay: 20 }, selin: { ay: 10 }, sami: { ay: 5 }, pelin: { gun: 10, ay: 100 } });
-  assert.deepEqual(paraSinirlari(kitapDosya.replace("Venom 50 $/ay", "Venom 65 $/ay")).venom, { ay: 65 });
+test("PARA SINIRLARI (kural 74): tablo kitaptan okunur — Venom 70, Kemal 20, Selin 10, Sami 5 $/ay; Pelin 10 $/gün ve 100 $/ay", () => {
+  assert.deepEqual(paraSinirlari(kitapDosya), { venom: { ay: 70 }, kemal: { ay: 20 }, selin: { ay: 10 }, sami: { ay: 5 }, pelin: { gun: 10, ay: 100 } });
+  assert.deepEqual(paraSinirlari(kitapDosya.replace("Venom 70 $/ay", "Venom 65 $/ay")).venom, { ay: 65 });
 });
 
 test("DERS DEFTERİ (kural 38): 27 çelişki + 12 Kasım hataları; her ders hata + kök sebep + çözüm + durum taşır; Venom özetini okur", async () => {
@@ -88,7 +88,7 @@ test("TEK KİTAP: kodda eski kural kitabı ve bilinen çelişkili cümleler kalm
   assert.match(kitapBolumu(kitapDosya, "selin"), /Black Rose modeline "VOLONTE modeli" yazmaz/);
 });
 
-test("PARA SINIRLARI: kodda kalan sabitler kitaptaki tabloyla AYNI (Pelin 10 $/gün, 100 $/ay; Sami 5; Venom 50); kitap okunamazsa kullanılan değerler de aynı", async () => {
+test("PARA SINIRLARI: kodda kalan sabitler kitaptaki tabloyla AYNI (Pelin 10 $/gün, 100 $/ay; Sami 5; Venom 70); kitap okunamazsa kullanılan değerler de aynı", async () => {
   const { SINIR_VARSAYILAN, botSiniri } = await import("./kitap.js");
   const tablo = paraSinirlari(kitapDosya);
   assert.deepEqual(SINIR_VARSAYILAN, tablo);

@@ -278,27 +278,27 @@ test("webhook: gizli anahtar yanlışsa 401; aynı güncelleme iki kez gelirse b
   assert.equal(o.claude.length, 1);
 });
 
-test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; tavan dolunca sohbet durur (Claude çağrılmaz); 13 Kasım (kural 74): tavan kitaptaki tablodan (50 $)", async () => {
+test("harcama (4 Kasım): her Claude cevabı kaydedilir; %80'de bir kez uyarı; tavan dolunca sohbet durur (Claude çağrılmaz); 13 Kasım (kural 74): tavan kitaptaki tablodan (70 $)", async () => {
   const o = ortam();
   const { venomHarcanan, venomSinir, VENOM_SINIR_VARSAYILAN } = await import("./venom-bot.js");
-  assert.equal(VENOM_SINIR_VARSAYILAN, 50);
-  assert.equal(await venomSinir(o.env), 50);
+  assert.equal(VENOM_SINIR_VARSAYILAN, 70);
+  assert.equal(await venomSinir(o.env), 70);
   o.depo.set("venom:bot:sinir", "30"); // eski kayıt artık kullanılmaz: tek tablo kitap
-  assert.equal(await venomSinir(o.env), 50);
+  assert.equal(await venomSinir(o.env), 70);
   await yazi(o, PATRON, "merhaba");
   const h1 = await venomHarcanan(o.env, Math.floor(Date.now() / 1000));
   assert.ok(h1 > 0 && h1 < 0.01, String(h1)); // 10 giriş + 5 çıkış token
   const ay = new Date((Math.floor(Date.now() / 1000) + 3 * 3600) * 1000).toISOString().slice(0, 7);
-  o.depo.set(`venom-harcama:${ay}`, "40.5");
+  o.depo.set(`venom-harcama:${ay}`, "56.5");
   await yazi(o, PATRON, "devam");
-  assert.ok(patronaGiden(o).some((x) => /Venom bu ay 40,50 \$ yapay zekâ harcadı \(aylık sınır 50 \$, %80\)/.test(x.govde.text)));
+  assert.ok(patronaGiden(o).some((x) => /Venom bu ay 56,50 \$ yapay zekâ harcadı \(aylık sınır 70 \$, %80\)/.test(x.govde.text)));
   await yazi(o, PATRON, "bir daha");
   assert.equal(patronaGiden(o).filter((x) => /%80/.test(x.govde.text)).length, 1); // bir kez
-  o.depo.set(`venom-harcama:${ay}`, "50");
+  o.depo.set(`venom-harcama:${ay}`, "70");
   const n = o.claude.length;
   await yazi(o, PATRON, "3557 için yorum yap"); // (9 Kasım: "stok 3557" ücretsiz model kartıdır, sınırdan etkilenmez)
   assert.equal(o.claude.length, n);
-  assert.match(patronaGiden(o).at(-1).govde.text, /Venom yapay zekâ sınırı \(50 \$\) doldu/);
+  assert.match(patronaGiden(o).at(-1).govde.text, /Venom yapay zekâ sınırı \(70 \$\) doldu/);
   o.depo.set(`venom-harcama:${ay}`, "49");
   await yazi(o, PATRON, "3557 için yorum yap");
   assert.equal(o.claude.length, n + 1);
