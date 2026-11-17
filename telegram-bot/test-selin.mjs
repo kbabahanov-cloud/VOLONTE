@@ -1256,3 +1256,34 @@ test("13 Kasım (Patron, A4 + B3) FOTOĞRAF HATIRLATMASI: listeden 1 saat sonra 
   assert.equal(await fotoHatirlatAdimi(o.env, ist(11, 5) + 3 * 86400), null);
   assert.equal(cagri(o.g, "sendMessage").length, 0);
 });
+
+test("17 Kasım (Patron) AZİZ → PELİN → SELİN: onaylı Pelin fotoğrafları arşive konup Selin'in kaydına 'geldi' olarak girer (Selin'in kendi taslak yolu); model sitedeyse eklenmez; Merdan'ın kaydı silinmez", async () => {
+  const { pelinYeniModelAdimi } = await import("./selin.js");
+  const depo = new Map(), kuyruk = { pelinYeniModel: [{ id: "3700-x", kod: "3700", fotolar: ["https://p/on.jpg", "https://p/sag.jpg"], video: null }, { id: "3557-x", kod: "3557", fotolar: ["https://p/a.jpg"] }] };
+  const g = [];
+  const env = {
+    BOT_TOKEN: "t", GITHUB_REPO: "kbabahanov-cloud/VOLONTE",
+    KAYIT: { async get(k, tur) { const v = depo.get(k); return v == null ? null : tur === "json" ? JSON.parse(v) : v; }, async put(k, v) { depo.set(k, v); }, async delete(k) { depo.delete(k); } },
+    STOK: { idFromName: () => "s", get: () => ({ fetch: async (url, init) => { const b = JSON.parse(init.body); if (url.endsWith("/kuyruk-al")) { const l = kuyruk[b.ad] || []; kuyruk[b.ad] = []; return Response.json(l); } if (url.endsWith("/kuyruk-ekle")) { (kuyruk[b.ad] = kuyruk[b.ad] || []).push(b.kayit); return Response.json({ ok: true }); } return Response.json({}); } }) },
+  };
+  depo.set("arsiv", JSON.stringify({ id: -555 }));
+  depo.set("selin:modeller", JSON.stringify({ 3700: { kaynak: "ozel", durum: "istendi", medya: [], kart: [] } })); // Merdan'ın bugünkü listesinde
+  const asil = globalThis.fetch;
+  let n = 0;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes("/contents/veri/urunler.json")) return Response.json({ sha: "s", content: btoa(JSON.stringify([{ kod: "3557" }])) });
+    const b = init.body ? JSON.parse(init.body) : {};
+    g.push({ metod: u.split("/").pop(), b });
+    n++;
+    return Response.json({ ok: true, result: { message_id: n, photo: [{ file_id: `k${n}`, width: 90 }, { file_id: `F${n}`, file_unique_id: `U${n}`, width: 1280, height: 1920, file_size: 9 }] } });
+  };
+  try { await pelinYeniModelAdimi(env, 1794900000); } finally { globalThis.fetch = asil; }
+  const m = JSON.parse(depo.get("selin:modeller"))["3700"];
+  assert.equal(m.durum, "geldi");
+  assert.deepEqual(m.medya.map((x) => [x.file_id, x.tur]), [["F1", "foto"], ["F2", "foto"]]);
+  assert.ok(m.pelin && m.pelin.isId === "3700-x");
+  assert.ok(g.every((x) => x.metod === "sendPhoto" && x.b.chat_id === -555 && x.b.disable_notification)); // sadece arşiv kanalına, sessiz
+  assert.ok(!JSON.parse(depo.get("selin:modeller"))["3557"]); // sitedeki model eklenmez
+  assert.match(JSON.parse(depo.get("selin:hata")).hata, /3557: model zaten sitede/);
+});

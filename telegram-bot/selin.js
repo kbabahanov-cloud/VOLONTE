@@ -243,7 +243,7 @@ export class SelinDO {
         try { await topluAdimi(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `toplu: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         return new Response("ok");
       case "/istek":
-        for (const [ad, f] of Object.entries({ istekAdimi, fotoHatirlatAdimi, videoKurtarAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi, ghTekrarAdimi })) {
+        for (const [ad, f] of Object.entries({ istekAdimi, fotoHatirlatAdimi, videoKurtarAdimi, pelinYeniModelAdimi, ozelHazirlaAdimi, gunSonuOzeti, siteSilAdimi, pelinSiteAdimi, ghTekrarAdimi })) {
           try { await f(env, simdi); } catch (e) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `${ad}: ${String(e && e.message).slice(0, 300)}` }, 7 * 86400); }
         }
         return new Response("ok");
@@ -3024,4 +3024,39 @@ async function dugme(cq, env) {
   }
   if (islem === "sv0") return cevapla("Vazgeçildi");
   return cevapla("Geçersiz düğme.");
+}
+
+// 17 Kasım (Patron): AZİZ → PELİN yolu. Patron'un onayladığı Pelin fotoğrafları (sitede OLMAYAN, Selin'in listesindeki model) Selin'in
+// kaydına girer; sonra Selin'in MEVCUT yolu çalışır (açıklama taslağı + site onay kartı sahiplere). Merdan'ın akışı değişmez.
+// Fotoğraflar arşiv kanalına konur (Selin'in kendi dosya kimlikleri için; kareGeldi ile aynı yöntem).
+export async function pelinYeniModelAdimi(env, simdi) {
+  const isler = await kuyruguAl(env, "pelinYeniModel");
+  if (!isler.length) return;
+  const arsiv = await oku(env, "arsiv", null);
+  if (!arsiv) { for (const x of isler) await kuyrugaEkle(env, "pelinYeniModel", x); return; } // arşiv yoksa iş kaybolmaz
+  for (const x of isler) {
+    const kod = String(x.kod || "");
+    try {
+      if ((await sitedekiKodlar(env)).has(kod)) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinYeniModel ${kod}: model zaten sitede — eklenmedi` }, 7 * 86400); continue; }
+      const medya = [];
+      for (const [i, url] of (x.fotolar || []).slice(0, POZ_EN_FAZLA).entries()) {
+        const r = await tg(env, "sendPhoto", { chat_id: arsiv.id, disable_notification: true, photo: String(url), caption: i === 0 ? `🤖 ${kod} — Pelin (Aziz askı fotoğrafından, Patron onaylı)` : undefined });
+        const b = r && r.ok && r.result.photo ? r.result.photo[r.result.photo.length - 1] : null;
+        if (b) medya.push({ file_id: b.file_id, tur: "foto", belge: false, boyut: b.file_size || 0, w: b.width || 0, h: b.height || 0, uid: b.file_unique_id });
+      }
+      if (x.video) {
+        const r = await tg(env, "sendVideo", { chat_id: arsiv.id, disable_notification: true, video: String(x.video), supports_streaming: true });
+        const v = r && r.ok && r.result.video;
+        if (v) medya.push({ file_id: v.file_id, tur: "video", belge: false, boyut: v.file_size || 0, w: v.width || 0, h: v.height || 0, uid: v.file_unique_id });
+      }
+      if (!medya.some((m) => m.tur === "foto")) { await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinYeniModel ${kod}: fotoğraflar arşive konamadı` }, 7 * 86400); if ((x.deneme || 0) < 3) await kuyrugaEkle(env, "pelinYeniModel", { ...x, deneme: (x.deneme || 0) + 1 }).catch(() => null); continue; }
+      const modeller = await oku(env, "selin:modeller", {});
+      const eski = modeller[kod] || {};
+      modeller[kod] = { ...eski, kaynak: "ozel", durum: "geldi", medya, kart: [], gonderen: null, hata: 0, bildirildi: true, kacirma: 0, pelin: { isId: x.id, zaman: simdi }, sonMedya: simdi - 120 };
+      await yazKV(env, "selin:modeller", modeller);
+      await defterIs(env, "selin", `${kod}: Pelin fotoğrafları (Aziz → Pelin, Patron onaylı) alındı — taslak hazırlanıyor`, { kod }).catch(() => null);
+    } catch (e) {
+      await yazKV(env, "selin:hata", { zaman: simdi, hata: `pelinYeniModel ${kod}: ${String(e && e.message).slice(0, 200)}` }, 7 * 86400);
+    }
+  }
 }

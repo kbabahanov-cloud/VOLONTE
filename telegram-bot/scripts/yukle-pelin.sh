@@ -15,7 +15,7 @@ HESAP=9b7e7d56c7c591fb6c69d2e372b04e27
 API=https://api.cloudflare.com/client/v4/accounts/$HESAP/workers/scripts/volonte-pelin
 ILK=$(curl -sS "$API/settings" | python3 -c 'import sys,json;print("evet" if not json.load(sys.stdin).get("success") else "hayir")')
 source scripts/kimlikler.sh
-KIMLIK=$(kimlik_bagla ALLOWED_IDS MURAT_ID HEMRA_ID)
+KIMLIK=$(kimlik_bagla ALLOWED_IDS MURAT_ID HEMRA_ID AZIZ_ID) # 17 Kasım: Aziz → Pelin yolu
 META=$(mktemp)
 GOC=""
 GIZLI=""

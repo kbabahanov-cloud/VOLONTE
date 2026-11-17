@@ -1,6 +1,6 @@
 # KURALLAR-PATRON.md — TEK KURAL KİTABI
 
-Sürüm: 2026-11-17.3
+Sürüm: 2026-11-17.4
 
 Bu kitap Patron'un kalıcı kurallarıdır. Bütün botlar (Venom, Sami, Kemal, Selin, Pelin, Nora ve sonradan gelecek her bot) kurallarını SADECE buradan okur: her bot ORTAK bölümünü, kendi bölümünü, PARA SINIRLARI ve KORUNAN AKIŞLAR bölümünü okur.
 Claude Code her yeni işe başlamadan önce bu kitabı ve `DERSLER.md` dosyasını okur. Her raporun son satırı:
@@ -134,3 +134,4 @@ Patron yeni kalıcı kural verdiğinde aynı anda buraya eklenir, sürüm satır
 91. Bir kez üretilen ve Patron'un onayladığı fotoğraf/video modelin kalıcı kaydına (model kartı) yazılır: hangi model, hangi renk, ne zaman, kim onayladı. Patron "sadece fotoğraf" isterse video üretilmez: ön fotoğraf (Patron onayına gelir) + sağ yan, sol yan, arka, model başı ~0,64 $; fotoğraflar sadece Patron'a gelir, kanala/siteye gitmez.
 92. Patron'a onaya gelen HER videoda Venom'da onay düğmesi olur (✅ Onay / ❌ Hayır); "onay yazın" deyip düğmesiz bırakılmaz. ✅ işin kayıtlı bir sonraki adımını yapar (ör. kanaldaki mevcut paylaşımda sadece videoyu değiştirmek), ❌ hiçbir şeyi değiştirmez.
 93. Venom bir botun Patron'a gönderdiği video ya da fotoğrafı ASLA atmaz: kartsız medya en fazla 3 dakika kartını bekler, kart gelmezse medyanın kendisi Patron'a gider; "gönderildi" ancak Telegram'ın verdiği gerçek mesaj numarasıyla söylenir.
+94. Aziz → Pelin yolu (Patron "aç" deyince açılır): Aziz, Selin'in fotoğraf listesindeki (stokta var, sitede yok) sadece VOLONTE modellerinin askı fotoğrafını ya da videosunu kodla Pelin'e gönderir; kodsuzsa Pelin "Kodu yazın" der, model listede değilse (Celal, Black Rose, sitede olan dahil) "bu model listede yok" der ve para harcamaz; fotoğraf bulanık/karanlık/ürün tam görünmüyorsa Pelin para harcamadan Aziz'e tekrar çekmesini söyler, Patron'a kart gitmez. Pelin Patron'a TEK maliyet kartı gönderir (✅ Onay / ❌ Hayır; varsayılan sadece fotoğraf ~0,64 $/model; video sadece Patron "🎬 Video da" seçerse, Nora kartı olmadan standart sahneyle). Ara onay yoktur; sonuç (ön, sağ, sol, arka + video) tek düğmeli kartla gelir, kalite kontrol beğenmezse yeniden üretilmez (kural 90). Patron onaylarsa kayıt kalıcıdır (kural 91), fotoğraflar Selin'e gider ve Selin'in kendi site onay kartı gelir; Kemal normal sırasıyla paylaşır. Merdan'ın bugünkü listesindeki model kabul edilir, kartta yazılır; Merdan'ın akışı aynen sürer. Günde en fazla 5 model; Aziz'e sonuçtan sadece "✅ siteye eklendi" gider.
