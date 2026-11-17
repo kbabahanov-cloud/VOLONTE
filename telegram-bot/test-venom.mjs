@@ -3083,3 +3083,47 @@ test("18 Kasım (kural 98): botlara yazıyla gelen mesaj tek deftere 'gelen' ola
   const c = kisiCevabi(o.env, "Fuat", l, { gun: "bugün" });
   assert.match(c, /• Yazdıkları \(2\): 12:07 \(Sami botuna\) "3634 bizde 18 görünüyor, bakiye uyuşmuyor" · 12:07 \(Sami botuna\) "\[fotoğraf\] fiş"/);
 });
+
+test("18 Kasım (Patron, EK 6): SORUN ÇÖZEN BEYİN her konuda — Patron 'araştır' der ya da bot takılır → Venom sadece OKUYARAK araştırır, tek kart (sorun ne idi · ne buldum · ne düzelttim · onayınız gereken) [Tamam, kapat]; bot kaynaklı sorun gece araştırılmaz, Patron'a ham satır gitmez", async () => {
+  const o = ortam();
+  const v = await import("./venom-bot.js");
+  // 1) Patron ister → araç sorunu açar (hemen araştırılır, saat fark etmez)
+  const gece = ist(17, 23, 30);
+  o.cevaplar.push({ arac: "sorun_arastir", girdi: { konu: "3629 neden SOLD OUT göründü", ayrinti: "stoğu var" } }, { text: "Araştırmaya aldım, kartını getireceğim." });
+  await yazi(o, PATRON, "3629 neden sold out göründü araştır");
+  let l = JSON.parse(o.depo.get("venom:sorunlar"));
+  assert.deepEqual([l.length, l[0].tur, l[0].konu, l[0].patron, l[0].durum], [1, "genel", "3629 neden SOLD OUT göründü", true, "acik"]);
+  const once = o.claude.length;
+  o.cevaplar.push({ arac: "tek_defter", girdi: { kod: "3629" } }, { arac: "bota_yaz", girdi: { bot: "kemal", metin: "düzelt" } }, { text: "DURUM: COZULDU\nKART:\n🧩 3629 SOLD OUT görseli\nSorun ne idi: stoğu olan 3629 kanalda SOLD OUT göründü.\nNe buldum: eski paylaşımlar gizlenmişti.\nNe düzelttim: bu araştırma hiçbir şeyi değiştirmez.\nOnayınız gereken: yok" });
+  await v.sorunAdimi(o.env, gece);
+  const ilk = o.claude[once];
+  assert.ok(ilk.tools.some((t) => t.name === "tek_defter") && ilk.tools.some((t) => t.name === "model_durumu"));
+  assert.ok(!ilk.tools.some((t) => ["bota_yaz", "firmaya_sor", "kanal_paylasim_sil", "pelin_uret", "kisiye_soyle", "hatirlat", "siteden_kaldir", "kemal_paylas", "mutabakat_gonder", "celal_mutabakat"].includes(t.name))); // yazan / gönderen araç YOK
+  assert.match(ilk.messages[0].content, /^SORUN: 3629 neden SOLD OUT göründü\nAyrıntı: stoğu var\nKaynak: Patron/);
+  assert.equal(o.claude.at(-1).messages.at(-1).content[0].content, "Bu araç araştırmada kullanılamaz."); // beyin yazan aracı çağırsa da çalışmaz
+  const kart = sonKart(o);
+  assert.match(kart.govde.text, /^✅ Çözdüm — 🧩 3629 SOLD OUT görseli\nSorun ne idi:[\s\S]*Ne buldum:[\s\S]*Ne düzelttim:[\s\S]*Onayınız gereken: yok$/);
+  l = JSON.parse(o.depo.get("venom:sorunlar"));
+  assert.deepEqual(kart.govde.reply_markup.inline_keyboard[0].map((b) => [b.text, b.callback_data]), [["✅ Tamam, kapat", `vso:k:${l[0].id}`]]);
+  // 2) "sorunlar" aracı durumu söyler
+  assert.match(await aracla(o, "hangi sorunlar açık", "sorunlar"), /🧩 Sorunlar \(1\):\n• 3629 neden SOLD OUT göründü — kartı Patron'da \(karar bekliyor\); açıldı \d\d\.\d\d\.\d{4} \d\d:\d\d; araştırma 1 kez; kart mesaj no \d+/);
+  // 3) bot kaynaklı sorun (Kemal: SOLD OUT kapısı "stok okunamadı"): Patron'a ham satır yok; gece araştırılmaz; sabah araştırılır; aynı sorun günde bir kez
+  const kuyruk = (kayit) => o.env.STOK.get().fetch("https://stok/kuyruk-ekle", { method: "POST", body: JSON.stringify({ ad: "venomSorun", kayit }) });
+  const olay = { tur: "genel", bot: "kemal", anahtar: "soldout:3100:stok okunamadı", konu: "3100: SOLD OUT yapılamadı — stok okunamadı", ayrinti: "köprü?", zaman: gece + 60 };
+  await kuyruk(olay); await kuyruk(olay);
+  const patronOnce = patronaGiden(o).length, claudeOnce = o.claude.length;
+  await v.sorunKuyrugu(o.env, gece + 120);
+  await v.sorunAdimi(o.env, gece + 120);
+  l = JSON.parse(o.depo.get("venom:sorunlar"));
+  assert.equal(l.filter((x) => x.anahtar === "soldout:3100:stok okunamadı").length, 1);
+  assert.equal(patronaGiden(o).length, patronOnce);
+  assert.equal(o.claude.length, claudeOnce); // gece: araştırma yok
+  o.cevaplar.push({ text: "DURUM: COZULEMEDI\nKART:\n🧩 3100 stok okunamadı\nSorun ne idi: x\nNe buldum: köprü kapalı\nNe düzelttim: yok\nOnayınız gereken: yok" });
+  await v.sorunAdimi(o.env, ist(18, 8, 5));
+  assert.match(sonKart(o).govde.text, /^🟠 Çözemedim — 🧩 3100 stok okunamadı/);
+  // 4) deneme modunda araç hiçbir şey açmaz
+  const o2 = ortam();
+  const c = await v.aracCalistir({ ...o2.env, __kuru: true }, "sorun_arastir", { konu: "deneme" }, gece);
+  assert.match(c, /^\(DENEME: "deneme" sorunu araştırmaya alınırdı/);
+  assert.equal(o2.depo.get("venom:sorunlar"), undefined);
+});

@@ -130,6 +130,7 @@ export async function soldOutKapisi(env, kod, yer, simdi = Math.floor(Date.now()
         d[kod || "-"] = { zaman: simdi, neden: karar.neden, yer };
         await env.KAYIT.put("kemal:soldoutDurdu", JSON.stringify(Object.fromEntries(Object.entries(d).filter(([, x]) => simdi - x.zaman < 14 * 86400))), { expirationTtl: 30 * 86400 });
         await defterIs(env, "kemal", `SOLD OUT YAPILMADI (${yer}): ${karar.neden} — kural 99`, { kod: kod || null }).catch(() => null);
+        if (/okunamadı|ulaşılamadı/.test(karar.neden)) await stokIste(env, "/kuyruk-ekle", { ad: "venomSorun", kayit: { tur: "genel", bot: "kemal", anahtar: `soldout:${kod || "-"}:${karar.neden}`.slice(0, 120), konu: `${kod || "kodsuz"}: SOLD OUT yapılamadı — ${karar.neden}`, ayrinti: `Kemal ${yer} için SOLD OUT yapacaktı; kural 99 kapısı durdurdu: ${karar.neden}. Stok neden okunamıyor (köprü mü kapalı, kod Vegawin'de mi yok)? Model kanalda / sitede ne durumda?`, zaman: simdi } }).catch(() => null); // Venom kendisi araştırır
       }
     } catch { /* kayıt yazılamadıysa da SOLD OUT yapılmaz */ }
   }
