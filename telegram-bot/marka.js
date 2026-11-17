@@ -113,6 +113,33 @@ export async function katmanPng(w, h, kod, marka = "VOLONTE", oran = VIDEO_ETIKE
   }
   return pngSikistir(w, h, rgb, 3);
 }
+// 17 Kasım (Patron): bulut ffmpeg (GitHub Actions) gerçek saydam katmanla basar: her yer SAYDAM, sağ altta aynı etiket
+// (beyaz yazı + yarı saydam siyah zemin). Videonun geri kalanı piksel piksel aynı kalır.
+export async function katmanRgbaPng(w, h, kod, marka = "VOLONTE", oran = VIDEO_ETIKET_ORANI) {
+  const e = etiketRgba(kod, marka);
+  const ew = Math.max(120, Math.round(w * oran));
+  const eh = Math.max(1, Math.round((e.H * ew) / e.W));
+  const kenar = Math.max(12, Math.round(w * 0.035));
+  const x0 = w - kenar - ew, y0 = h - kenar - eh;
+  const px = new Uint8Array(w * h * 4);
+  for (let y = 0; y < eh; y++) {
+    const sy = Math.min(e.H - 1, ((y + 0.5) * e.H) / eh - 0.5);
+    const y1 = Math.max(0, Math.floor(sy)), y2 = Math.min(e.H - 1, y1 + 1), fy = Math.max(0, sy - y1);
+    for (let x = 0; x < ew; x++) {
+      const sx = Math.min(e.W - 1, ((x + 0.5) * e.W) / ew - 0.5);
+      const x1 = Math.max(0, Math.floor(sx)), x2 = Math.min(e.W - 1, x1 + 1), fx = Math.max(0, sx - x1);
+      let a = 0, c = 0;
+      for (const [xx, yy, wgt] of [[x1, y1, (1 - fx) * (1 - fy)], [x2, y1, fx * (1 - fy)], [x1, y2, (1 - fx) * fy], [x2, y2, fx * fy]]) {
+        const k = (yy * e.W + xx) * 4, al = e.rgba[k + 3] / 255;
+        a += al * wgt; c += (e.rgba[k] / 255) * al * wgt;
+      }
+      const k = ((y0 + y) * w + (x0 + x)) * 4;
+      px[k] = px[k + 1] = px[k + 2] = a > 0 ? Math.min(255, Math.round((255 * c) / a)) : 0;
+      px[k + 3] = Math.round(255 * a);
+    }
+  }
+  return pngSikistir(w, h, px, 4);
+}
 export const pngRgbaSikistir = (W, H, rgba) => pngSikistir(W, H, rgba, 4);
 // Büyük görsel için sıkıştırılmış PNG (RGB ya da RGBA, zlib = CompressionStream "deflate")
 async function pngSikistir(W, H, px, kanal = 3) {

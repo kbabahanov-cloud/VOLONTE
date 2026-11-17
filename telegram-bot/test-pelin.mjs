@@ -16,6 +16,7 @@ function ortam({ fal = true } = {}) {
   const depo = new (class extends Map { set(k, v) { if (String(k).startsWith("pelinboy:")) { try { const j = JSON.parse(v); if (!j.anlamaYok) v = JSON.stringify({ ...j, ...(j.anlama ? {} : { anlama: ANLAMA_VARSAYILAN }), ...(j.marka || j.markaYok ? {} : { marka: "VOLONTE" }) }); } catch { /* düz */ } } return super.set(k, v); } })();
   const g = []; // Telegram çağrıları
   const falIstek = [];
+  const bulut = []; const bulutHata = {}; // 17 Kasım: bulut ffmpeg işleri (okunan sonuçlar)
   const hfIstek = []; // Higgsfield (sahte): POST → kuyruk, durum → tamamlandı + video
   const claude = [];
   let id = 100;
@@ -41,6 +42,16 @@ function ortam({ fal = true } = {}) {
       const n = u.split("/")[4].split("?")[0];
       const uc = decodeURIComponent(u.split("uc=")[1]);
       return Response.json(falSonuc[uc] ? falSonuc[uc](n) : { images: [{ url: `https://img/${n}a.jpg` }, { url: `https://img/${n}b.jpg` }] });
+    }
+    if (u.includes("/ffmpeg-cikti/")) { // 17 Kasım: bulut ffmpeg (GitHub Actions) sahte sonucu — kuyruktaki işe göre
+      const ad = u.split("/ffmpeg-cikti/")[1].split("?")[0];
+      if (!ad.endsWith(".json")) return new Response(`BULUT:${ad}`, { headers: { "content-type": ad.endsWith(".mp4") ? "video/mp4" : "image/jpeg" } });
+      const id = ad.slice(0, -5);
+      const is = (JSON.parse(depo.get("ffmpeg:isler") || "[]")).find((x) => x.id === id);
+      if (!is) return new Response("yok", { status: 404 });
+      bulut.push(is);
+      if (bulutHata[is.islem]) return Response.json({ ok: false, hata: bulutHata[is.islem] });
+      return Response.json(is.islem === "kare" ? { ok: true, kareler: [1, 2, 3].map((i) => `${id}-${i}.jpg`) } : { ok: true, video: `${id}.mp4` });
     }
     if (u.includes("raw.githubusercontent.com")) return Response.json(site);
     if (u.startsWith("https://api.anthropic.com")) {
@@ -74,7 +85,7 @@ function ortam({ fal = true } = {}) {
     },
   };
   for (const k of ["3557", "3601", "3627", "3630"]) depo.set(`pelinboy:${k}`, JSON.stringify({ boy: "midi" })); // testlerde boy kayıtlı (boy sorusu ayrı testte)
-  return { env, depo, g, falIstek, hfIstek, claude, falSonuc, site, yaziCevap };
+  return { env, depo, g, falIstek, hfIstek, claude, falSonuc, site, yaziCevap, bulut, bulutHata };
 }
 // Teslim kuyruğu (StokDO "pelinKanal"; okumak tüketmez)
 const teslim = async (o) => JSON.parse((await (await o.env.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: "kuyruk:pelinKanal" }) })).json()).v || "[]");
@@ -198,7 +209,8 @@ test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden ü
   assert.match(foto[0].govde.prompt, /black and gold studio/);
   assert.equal(o.hfIstek.filter((x) => x.yol === "kling-video/v4.0/image-to-video").length, 1); // kartta seçilen araç (Higgsfield)
   assert.equal(o.falIstek.filter((x) => /image-to-video/.test(x.uc)).length, 0);
-  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame").length, 3);
+  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame").length, 0); // 17 Kasım: fal yok
+  assert.deepEqual(o.bulut.filter((x) => x.islem === "kare").map((x) => x.video), [o.hfIstek.length ? `https://hf/h${o.hfIstek.length}.mp4` : o.bulut[0].video]); // kalite kontrol kareleri bulut ffmpeg'den
   const on = o.g.find((x) => /ÖNİZLEME — 3557/.test(x.govde.text || ""));
   assert.ok(on, "önizleme gelmeli");
   assert.deepEqual(on.govde.reply_markup.inline_keyboard[0].map((d) => d.text), ["✅ Onayla", "🔄 Yeniden üret", "❌ İptal"]);
@@ -213,14 +225,11 @@ test("üretim: onaysız başlamaz; foto kontrolden geçmezse otomatik yeniden ü
   await cronlar(o, 6);
   const t = await teslim(o);
   assert.deepEqual(t.map((x) => [x.kod, x.v, x.deneme, x.yayinOnayi, x.marka]), [["3557", 3, false, true, "VOLONTE"]]);
-  assert.match(t[0].video, /^https:\/\/vid\/markali/); // yazı videonun TAMAMINA basıldı (blend)
+  assert.match(t[0].video, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/); // 17 Kasım: yazı videonun TAMAMINA bulut ffmpeg ile basıldı (0 $)
   assert.match(t[0].foto, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/); // damgalı fotoğraf
-  const katman = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video");
-  assert.ok(katman.govde.images[0].frames >= 24 * 15); // katman videodan uzun
-  assert.ok(o.falIstek.some((x) => x.uc === "fal-ai/workflow-utilities/scale-video" && x.govde.width === 1080 && x.govde.height === 1920 && x.govde.crf === 20));
-  const bl = o.falIstek.find((x) => x.uc === "fal-ai/workflow-utilities/blend-video");
-  assert.deepEqual([bl.govde.top_video_url, bl.govde.blend_mode, bl.govde.shortest], [`https://vid/kapanis${o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video").length}.mp4`.replace(/kapanis\d+/, bl.govde.top_video_url.match(/kapanis\d+/)[0]), "overlay", true]);
-  assert.match(bl.govde.bottom_video_url, /^https:\/\/vid\/kucuk/);
+  const yz = o.bulut.find((x) => x.islem === "yazi");
+  assert.deepEqual([yz.kod, yz.marka], ["3557", "VOLONTE"]);
+  assert.ok(!o.falIstek.some((x) => /ffmpeg-api|workflow-utilities/.test(x.uc))); // fal ffmpeg hiç çağrılmaz
   assert.ok(!o.falIstek.some((x) => x.uc === "fal-ai/ffmpeg-api/merge-videos")); // kapanış karesi yok
   assert.ok(o.g.some((x) => /📦 3557: paket hazır — video \("VOLONTE · 3557" baştan sona sağ altta\)/.test((x.govde && x.govde.text) || ""))); // Kemal tek albüm + tek onay
 });
@@ -247,9 +256,9 @@ test("örnek video: Patron video + 'bunun gibi yap, 3557' → kareler → tarif 
   const o = uretimOrtami();
   secimKur(o);
   await guncelleme({ message: { message_id: 1, date: 1, chat: { id: MURAT, type: "private" }, from: { id: MURAT, first_name: "Murat" }, caption: "bunun gibi yap, 3557", video: { file_id: "VID", mime_type: "video/mp4", file_size: 1000 } } }, o.env);
-  const kare = o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame");
-  assert.equal(kare.length, 3);
-  assert.match(kare[0].govde.video_url, /^https:\/\/pelin\.test\/dosya\/[a-f0-9]{32}$/); // Telegram anahtarı dışarı verilmez
+  const kare = JSON.parse(o.depo.get("ffmpeg:isler")).filter((x) => x.islem === "kare"); // 17 Kasım: kareler bulut ffmpeg'den
+  assert.equal(kare.length, 1);
+  assert.match(kare[0].video, /^https:\/\/pelin\.test\/dosya\/[a-f0-9]{32}$/); // Telegram anahtarı dışarı verilmez
   o.claude.cevaplar = [claudeJsonCevap({ ad: "neon", kamera: "slow dolly in", isik: "warm neon", hiz: "slow motion", poz: "turns and smiles", ortam_havasi: "80s club", ozet: "Ağır çekim neon hava." })];
   await cronlar(o, 1);
   const t = o.g.find((x) => /Tarif çıkarıldı — "neon"/.test(x.govde.text || ""));
@@ -504,11 +513,11 @@ test("örnek video: Patron'un dosyası ve 'sitedeki 3627 videosu gibi' → karel
   const o = uretimOrtami();
   o.site.push({ kod: "3627", bedenler: "38-44", fotolar: [], videolar: ["selin/3627/0"] });
   await yazi(o, MURAT, "sitedeki 3627 videosu gibi olsun");
-  const kare = o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame");
-  assert.equal(kare.length, 3);
-  assert.equal(kare[0].govde.video_url, "https://volonte-selin.volonte.workers.dev/v2/3627/0");
+  const kare = JSON.parse(o.depo.get("ffmpeg:isler")).filter((x) => x.islem === "kare"); // 17 Kasım: bulut ffmpeg
+  assert.equal(kare.length, 1);
+  assert.equal(kare[0].video, "https://volonte-selin.volonte.workers.dev/v2/3627/0");
   await guncelleme({ message: { message_id: 5, date: 1, chat: { id: MURAT, type: "private" }, from: { id: MURAT, first_name: "M" }, document: { file_id: "VD", mime_type: "video/mp4", file_size: 5000 } } }, o.env);
-  assert.equal(o.falIstek.filter((x) => x.uc === "fal-ai/ffmpeg-api/extract-frame").length, 6);
+  assert.equal(JSON.parse(o.depo.get("ffmpeg:isler")).filter((x) => x.islem === "kare").length, 2);
   assert.match(o.g.at(-1).govde.text, /Örneği inceliyorum/);
 });
 
@@ -1369,7 +1378,8 @@ test("SANAL GİYDİRME denemesi (tek seferlik): bütçe tavanı, gerçek giysi +
   const x = JSON.parse(o.depo.get("pelin:is:3627-z"));
   assert.equal(x.durum, "paket_kontrol", JSON.stringify([x.sorunlar, x.hamHata]));
   assert.equal(x.set.aski, `https://pelin.test/dosya/${"e".repeat(32)}`);
-  assert.match(x.paket.video, /^https:\/\/vid\/markali/);
+  assert.match(x.paket.video, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/); // 17 Kasım: bulut ffmpeg
+  assert.ok(o.bulut.some((b) => b.islem === "yazi" && b.marka === "BLACKROSE" && b.kod === "3627"));
   assert.ok(!o.g.slice(n).some((m) => m.metod === "sendVideo")); // kontrol bitmeden Patron'a gitmez
   assert.equal((await teslim(o)).length, 0);
   o.depo.set("venom:pelinIsKomut", JSON.stringify({ isId: "3627-z", islem: "paketBitir" }));
@@ -1707,20 +1717,16 @@ test("16 Kasım (Patron) HAZIR VİDEO + YAZI: Patron'un müzikli videosu → Pel
   const r = await hazirVideoBaslat(o.env, { kod: "3271", video: kaynak, sure: 15, sonra: { kemal: true, fotolar: [{ tur: "foto", url: "https://v/f.jpg" }] } }, Math.floor(Date.now() / 1000));
   assert.deepEqual([r.ok, r.marka], [true, "BLACKROSE"]);
   for (let i = 0; i < 6; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
-  const uc = o.falIstek.map((x) => x.uc);
-  assert.ok(!uc.some((u) => /image-to-video$|nano-banana|scale-video/.test(u)), uc.join(",")); // yeniden üretim ve boyut değişikliği yok
-  const katman = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video");
-  assert.ok(katman.govde.images[0].frames >= 24 * 15); // yazı videonun tamamında
-  const bl = o.falIstek.find((x) => x.uc === "fal-ai/workflow-utilities/blend-video");
-  assert.equal(bl.govde.bottom_video_url, kaynak);
-  const ses = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video");
-  assert.equal(ses.govde.audio_url, kaynak); // müzik: videonun kendi sesi
+  assert.ok(!o.falIstek.length, o.falIstek.map((x) => x.uc).join(",")); // 17 Kasım: fal.ai hiç yok (ücretsiz bulut ffmpeg); yeniden üretim yok
+  const b = o.bulut.find((x) => x.islem === "yazi");
+  assert.deepEqual([b.video, b.kod, b.marka, b.ses], [kaynak, "3271", "BLACKROSE", "koru"]); // ses AYNEN kopyalanır
+  assert.ok(!JSON.parse(o.depo.get("ffmpeg:isler")).length); // sonuç alınınca kuyruktan silinir
   const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3271-hv"))[1]);
   assert.equal(is.durum, "hv_bitti");
   const q = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "patronPaylas" }) })).json();
   assert.deepEqual([q.length, q[0].kod, q[0].medya.map((m) => m.tur)], [1, "3271", ["foto", "video"]]);
   assert.equal(q[0].medya[1].url, is.sonVideo);
-  assert.ok(o.g.some((x) => /BLACK ROSE · 3271" yazısı videonun tamamına sağ alta basıldı, videonun kendi sesi \(müzik\) geri eklendi/.test((x.govde && x.govde.text) || "")));
+  assert.ok(o.g.some((x) => /BLACK ROSE · 3271" yazısı videonun tamamına sağ alta basıldı, videonun kendi sesi \(müzik\) aynen kaldı \(0 \$\)/.test((x.govde && x.govde.text) || "")));
   // markası olmayan model: başlamaz
   assert.match((await hazirVideoBaslat(o.env, { kod: "9999", video: kaynak }, 1)).mesaj, /markası model kartında yok/);
 });
@@ -1736,14 +1742,14 @@ test("16 Kasım (Patron) Pelin videosu: marka + kod yazısı ÖNİZLEMEDEN ÖNCE
   for (let i = 0; i < 6; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
   const x = JSON.parse(o.depo.get("pelin:is:3557-v"));
   assert.deepEqual([x.durum, x.videoMarkali, x.videoHam], ["onay", true, "https://vid/ham.mp4"]);
-  assert.match(x.video, /merge-audio-video/);
+  assert.match(x.video, /^https:\/\/pelin\.test\/medya\/[a-f0-9]{32}$/); // 17 Kasım: bulut ffmpeg ile yazılı
+  assert.deepEqual(o.bulut.filter((y) => y.islem === "yazi").map((y) => [y.video, y.ses]), [["https://vid/ham.mp4", "sessiz"]]);
   const on = o.g.find((y) => /ÖNİZLEME — 3557/.test((y.govde && y.govde.text) || ""));
   assert.ok(on, "önizleme gelmeli");
   assert.ok(o.g.some((y) => y.metod === "sendVideo" && y.govde && y.govde.video === x.video)); // önizlemedeki video yazılı
   // onay → paket: yazı İKİNCİ kez basılmaz
-  const once = o.falIstek.filter((y) => y.uc === "fal-ai/workflow-utilities/blend-video").length;
   await bas(o, MURAT, "pu:a:3557-v");
   for (let i = 0; i < 4; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
-  assert.equal(o.falIstek.filter((y) => y.uc === "fal-ai/workflow-utilities/blend-video").length, once);
+  assert.equal(o.bulut.filter((y) => y.islem === "yazi").length, 1); // ikinci kez basılmaz
   assert.equal(JSON.parse(o.depo.get("pelin:is:3557-v")).paket.video, x.video);
 });

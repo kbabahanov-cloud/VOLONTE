@@ -28,7 +28,8 @@ import { patronDenemesi } from "./venom.js";
 import { siteVerisi } from "./depo-oku.js";
 import { venomPelinAdimi, hataEkle, kuyrugaEkle } from "./venom-kopru.js";
 import { stokIste } from "./stokbot.js";
-import { markaBas, katmanPng } from "./marka.js";
+import { markaBas, katmanPng, katmanRgbaPng } from "./marka.js";
+import { bulutIsEkle, bulutSonuc, bulutIsSil, bulutIsler } from "./bulut-ffmpeg.js";
 import { KESIM, BUL, DETAY_YERLERI, DETAY_ETIKET, KOLAJ, ASKI_DETAY_FIYAT, kutuSec, kumasKutusu, arkaKutusu, yakaKutusu, islemeKutusu, askiGorseli, elbiseKirp, kolaj } from "./aski-detay.js";
 import { gorselBase64, gecici } from "./duzen.js";
 
@@ -1267,6 +1268,13 @@ export default {
     }
     if (istek.method === "GET" && /^\/dosya\/[a-f0-9]{32}$/.test(url.pathname)) return dosyaVer(env, url.pathname.split("/")[2]);
     if (istek.method === "GET" && /^\/medya\/[a-f0-9]{32}$/.test(url.pathname)) return medyaVer(env, url.pathname.split("/")[2], istek);
+    // 17 Kasım: bulut ffmpeg (GitHub Actions) — iş listesi ve yazı katmanı (herkese açık; gizli bilgi yok)
+    if (istek.method === "GET" && url.pathname === "/ffmpeg/isler") return Response.json((await bulutIsler(env)).map(({ id, islem, video, kod, marka, ses, muzik }) => ({ id, islem, video, kod, marka, ses, muzik: muzik || "" })));
+    if (istek.method === "GET" && url.pathname === "/ffmpeg/katman") {
+      const w = Math.round(Number(url.searchParams.get("w"))), h = Math.round(Number(url.searchParams.get("h"))), kod = String(url.searchParams.get("kod") || ""), marka = String(url.searchParams.get("marka") || "");
+      if (!(w >= 100 && w <= 4096 && h >= 100 && h <= 4096) || !/^\d{3,6}$/.test(kod) || !MARKALAR[marka]) return new Response("geçersiz", { status: 400 });
+      return new Response(await katmanRgbaPng(w, h, kod, marka), { headers: { "content-type": "image/png", "cache-control": "no-store" } });
+    }
     // 4 Kasım: gizli test sayfaları (360° görüntüleyici) — KV "pelinsayfa:<ad>"; medyayla aynı adres (CORS derdi yok), arama motoruna kapalı
     if (istek.method === "GET" && /^\/sayfa\/[a-z0-9-]{3,40}$/.test(url.pathname)) { const h = await env.KAYIT.get(`pelinsayfa:${url.pathname.slice(7)}`); return h ? new Response(h, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex, nofollow" } }) : new Response("Sayfa yok", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } }); }
     return new Response("Pelin çalışıyor.");
@@ -2188,7 +2196,7 @@ async function paketAdimi(env, is, simdi) {
     is.paket = p;
     // 4 Kasım (Patron): askı/360 ŞİMDİLİK YOK — paket = mankenli video + mankenli foto seti (ön, sağ, sol, arka)
     if (!ASKI_PAKETTE && is.videoMarkali) { is.ad = { yok: "kapalı (Patron kararı)" }; is.paket.ekler = []; return paketSonu(env, is, simdi, marka, is.video); } // 16 Kasım: yazı önizlemeden önce basıldı → ikinci kez basılmaz
-    if (!ASKI_PAKETTE) { is.ad = { yok: "kapalı (Patron kararı)" }; is.paket.ekler = []; is.paketFal = await falGonder(env, KARE.uc, { video_url: is.video, frame_type: "last" }); is.durum = "paket_kare"; is.bekleZaman = simdi; return; }
+    if (!ASKI_PAKETTE) { is.ad = { yok: "kapalı (Patron kararı)" }; is.paket.ekler = []; is.paketBulut = `${is.id}-p${simdi.toString(36)}`; await bulutIsEkle(env, { id: is.paketBulut, islem: "yazi", video: is.video, kod: is.kod, marka, ses: "sessiz" }, simdi); is.durum = "paket_bulut"; is.bekleZaman = simdi; return; } // 17 Kasım: fal.ai yok — bulut ffmpeg
     await askiDetayBaslat(env, is, simdi);
     is.durum = "paket_aski"; is.bekleZaman = simdi; return;
   }
@@ -2207,6 +2215,16 @@ async function paketAdimi(env, is, simdi) {
     is.durum = "paket_kare"; is.bekleZaman = simdi; return;
   }
   const bekle = async (f) => { const r = await falDurum(env, f).catch(() => ({ bitti: false })); if (!r.bitti && simdi - is.bekleZaman > 3600) return { bitti: true, hata: "1 saatte bitmedi" }; return r.bitti ? r : null; };
+  if (is.durum === "paket_bulut") { // 17 Kasım (Patron): onay sonrası yazı ücretsiz bulut ffmpeg ile
+    const s = await bulutSonuc(env, is.paketBulut);
+    if (!s) { if (simdi - is.bekleZaman > 3 * 3600) throw new Error("bulut ffmpeg 3 saatte bitmedi"); return; }
+    if (!s.ok) throw new Error(`yazı basılamadı (bulut ffmpeg): ${s.hata}`);
+    const vr = await fetch(s.video).catch(() => null);
+    if (!vr || !vr.ok) return;
+    const v = await medyaKaydet(env, await vr.arrayBuffer(), "video/mp4");
+    await bulutIsSil(env, is.paketBulut);
+    return paketSonu(env, is, simdi, marka, v);
+  }
   if (is.durum === "video_duzelt") { // var olan damgalı videoyu 1080×1920 + sessiz ses izi (YENİDEN ÜRETİM YOK)
     const r = await bekle(is.paketFal); if (!r) return;
     if (r.hata || !r.video) throw new Error(`video boyutlanamadı: ${r.hata || "yok"}`);
@@ -2309,13 +2327,30 @@ export async function hazirVideoBaslat(env, g, simdi) {
   if (!marka) return { ok: false, mesaj: `${kod} markası model kartında yok — yazı basılmadı` };
   const sure = Math.max(1, Math.min(600, Math.ceil(Number(g.sure) || 180)));
   const is = { id: `${kod}-hv${kisaId()}`, tur: "hazirVideo", kod, marka, kaynakVideo: video, sure, sonra: g.sonra || null, durum: "hv_kare", maliyet: 0, deneme: false, yayinYok: false, zaman: simdi, bekleZaman: simdi, gecmis: [[simdi, `hazır video (Patron) — "${MARKALAR[marka].ad} · ${kod}" yazısı basılacak, ses korunur`]] };
-  try { is.hvFal = await falGonder(env, KARE.uc, { video_url: video, frame_type: "first" }); } catch (e) { return { ok: false, mesaj: String(e.message).replace(/; durdum, Patron'a soruyorum$/, "") }; }
+  is.durum = "hv_bulut"; // 17 Kasım (Patron): fal.ai yok — ücretsiz bulut ffmpeg (GitHub Actions), ses AYNEN kopyalanır
+  await bulutIsEkle(env, { id: is.id, islem: "yazi", video, kod, marka, ses: "koru" }, simdi);
   await kaydet(env, `pelin:is:${is.id}`, is);
   const l = await oku(env, "pelin:isler", []); l.push(is.id); await kaydet(env, "pelin:isler", l.slice(-200));
   return { ok: true, id: is.id, marka };
 }
 async function hazirVideoAdimi(env, is, simdi) {
   try {
+    if (is.durum === "hv_bulut") {
+      const s = await bulutSonuc(env, is.id);
+      if (!s) { if (simdi - (is.zaman || simdi) > 3 * 3600) throw new Error("bulut ffmpeg 3 saatte bitmedi"); return; }
+      if (!s.ok) throw new Error(`bulut ffmpeg: ${s.hata}`);
+      const vr = await fetch(s.video).catch(() => null);
+      if (!vr || !vr.ok) return; // dosya henüz yayılmadı: sonraki turda
+      is.sonVideo = await medyaKaydet(env, await vr.arrayBuffer(), "video/mp4");
+      await bulutIsSil(env, is.id);
+      is.maliyet = 0; is.gecmis.push([simdi, `yazı basıldı (bulut ffmpeg, 0 $), ses aynen: ${is.sonVideo}`]);
+      const s2 = is.sonra || {};
+      if (s2.kemal) await kuyrugaEkle(env, "patronPaylas", { id: `vp-${is.kod}-${simdi}`, kod: is.kod, medya: [...(s2.fotolar || []), { tur: "video", url: is.sonVideo }], kim: "Patron (Venom)", renk: s2.renk || null, beden: s2.beden || null });
+      is.durum = "hv_bitti";
+      if (s2.kemal) await tg(env, "sendMessage", { chat_id: murat(env), text: `🎬 ${is.kod}: "${MARKALAR[is.marka].ad} · ${is.kod}" yazısı videonun tamamına sağ alta basıldı, videonun kendi sesi (müzik) aynen kaldı (0 $). Kemal onay kartını (video + altyazı) size getiriyor; onaylamadan kanala gitmez.` });
+      else await tgDosya(env, "sendVideo", "video", is.sonVideo, { chat_id: murat(env), caption: s2.yazi || `🎬 ${is.kod} — "${MARKALAR[is.marka].ad} · ${is.kod}" yazısı videonun tamamında sağ altta, ses aynen (0 $). Kanala gitmedi.`, supports_streaming: true });
+      return;
+    }
     if (is.durum === "hv_kare") { const r = await yaziBekle(env, is, is.hvFal, simdi); if (!r) return; await yaziKatmani(env, is, r, is.kaynakVideo, is.sure); is.durum = "hv_katman"; is.bekleZaman = simdi; return; }
     if (is.durum === "hv_katman") { const f = await yaziKaristir(env, is, is.kaynakVideo, simdi); if (!f) return; is.hvFal = f; is.durum = "hv_birlestir"; is.bekleZaman = simdi; return; }
     if (is.durum === "hv_birlestir") {
@@ -2346,6 +2381,17 @@ async function hazirVideoAdimi(env, is, simdi) {
 // Pelin'in ürettiği videoda önizlemeden ÖNCE yazı (oy_*): hata olursa yazısız önizleme gelir, not düşülür (para tekrar harcanmaz)
 async function onYaziAdimi(env, is, simdi) {
   try {
+    if (is.durum === "oy_bulut") {
+      const s = await bulutSonuc(env, is.oyId);
+      if (!s) { if (simdi - (is.bekleZaman || simdi) > 3 * 3600) throw new Error("bulut ffmpeg 3 saatte bitmedi"); return; }
+      if (!s.ok) throw new Error(`bulut ffmpeg: ${s.hata}`);
+      const vr = await fetch(s.video).catch(() => null);
+      if (!vr || !vr.ok) return;
+      is.videoHam = is.video; is.video = await medyaKaydet(env, await vr.arrayBuffer(), "video/mp4"); is.videoMarkali = true;
+      await bulutIsSil(env, is.oyId);
+      is.gecmis.push([simdi, "marka + kod yazısı önizlemeden önce basıldı (bulut ffmpeg, 0 $)"]);
+      is.durum = is.oySonra || "onay"; return;
+    }
     if (is.durum === "oy_kare") { const r = await yaziBekle(env, is, is.oyFal, simdi); if (!r) return; is.marka = is.marka || ((await boyOku(env, is.kod)) || {}).marka; await yaziKatmani(env, is, r, is.video, 60); is.durum = "oy_katman"; is.bekleZaman = simdi; return; }
     if (is.durum === "oy_katman") { const f = await yaziKaristir(env, is, is.video, simdi); if (!f) return; is.oyFal = f; is.durum = "oy_birlestir"; is.bekleZaman = simdi; return; }
     if (is.durum === "oy_birlestir") {
@@ -2537,9 +2583,18 @@ async function uretimAdimi(env, is, simdi) {
   // Müzik (deneme): sessiz videonun üstüne müzik (fal ffmpeg merge-audio-video); sessiz hali saklanır → müzik sonra değiştirilebilir
   if (is.durum === "muzik_gonder") {
     is.videoSessiz = is.videoSessiz || is.video;
-    is.fal = await falGonder(env, "fal-ai/ffmpeg-api/merge-audio-video", { video_url: is.videoSessiz, audio_url: is.muzik.url, start_offset: 0 });
-    is.falFiyat = 0.01; is.bekleZaman = simdi; await harcamaYaz(env, 0.01, simdi);
-    is.durum = "muzik_bekle"; return;
+    is.muzikBulut = `${is.id}-m${simdi.toString(36)}`; is.fal = null; // 17 Kasım: fal.ai yok — müzik ücretsiz bulut ffmpeg ile eklenir
+    await bulutIsEkle(env, { id: is.muzikBulut, islem: "muzik", video: is.videoSessiz, kod: is.kod, marka: is.marka || "", muzik: is.muzik.url }, simdi);
+    is.bekleZaman = simdi; is.durum = "muzik_bekle"; return;
+  }
+  if (is.durum === "muzik_bekle" && is.muzikBulut) {
+    const b = await bulutSonuc(env, is.muzikBulut);
+    if (!b && simdi - is.bekleZaman < 3 * 3600) return;
+    const vr = b && b.ok ? await fetch(b.video).catch(() => null) : null;
+    if (b && b.ok && (!vr || !vr.ok)) return;
+    await bulutIsSil(env, is.muzikBulut);
+    if (!b || !b.ok) { is.hamHata = String(b ? b.hata : "3 saatte bitmedi").slice(0, 400); is.muzikHata = "müzik eklenemedi"; is.video = is.videoSessiz; is.durum = "onay"; return; }
+    is.video = await medyaKaydet(env, await vr.arrayBuffer(), "video/mp4"); is.muzikEklendi = true; is.gecmis.push([simdi, `müzik eklendi (bulut ffmpeg, 0 $): ${is.muzik.ad}`]); is.durum = "onay"; return;
   }
   if (is.durum === "muzik_bekle") {
     const s = await bekle(); if (!s) return;
@@ -2580,9 +2635,14 @@ async function uretimAdimi(env, is, simdi) {
       is.durum = "uyari"; is.sorunlar = [`video üretilemedi: ${falHataTr(s.hata)} — ${TEKRAR_YOK}`]; await hataVenoma(env, is, "video", simdi); return;
     }
     is.video = s.video; is.kareler = []; is.kareFal = [];
-    for (const f of ["first", "middle", "last"]) { is.kareFal.push(await falGonder(env, KARE.uc, { video_url: is.video, frame_type: f })); }
-    await harcamaYaz(env, 3 * KARE.saniye * URETIM_SN, simdi);
+    // 17 Kasım: kalite kontrol kareleri ücretsiz bulut ffmpeg'den (fal "extract-frame" izni kapalı → kontrol kare göremiyordu, geri yürüme kaçtı)
+    is.kareBulut = `${is.id}-k${is.videoDeneme || 0}`; await bulutIsEkle(env, { id: is.kareBulut, islem: "kare", video: is.video, kod: is.kod, marka: is.marka || "" }, simdi);
     is.durum = "kare_bekle"; is.bekleZaman = simdi; return;
+  }
+  if (is.durum === "kare_bekle" && is.kareBulut && !is.kareler.length) {
+    const s = await bulutSonuc(env, is.kareBulut);
+    if (!s) { if (simdi - is.bekleZaman < 3 * 3600) return; is.kareler = ["yok", "yok", "yok"]; }
+    else { await bulutIsSil(env, is.kareBulut); is.kareler = s.ok && (s.kareler || []).length ? s.kareler : ["yok", "yok", "yok"]; }
   }
   if (is.durum === "kare_bekle") {
     for (const [i, f] of is.kareFal.entries()) {
@@ -2606,7 +2666,7 @@ async function uretimAdimi(env, is, simdi) {
     // 16 Kasım (Patron): marka + kod yazısı önizlemeden ÖNCE videonun tamamına basılır (deneme işleri hariç; ~0,06 $). ON_YAZI "0": sadece eski testler
     const sonra = k.gecti ? (is.muzik && !is.muzikEklendi ? "muzik_gonder" : "onay") : "uyari";
     if (!k.gecti) is.sorunlar = k.sorunlar; // 4 Kasım (Patron): video kendi kendine YENİDEN ÜRETİLMEZ; Patron karar verir
-    if (env.ON_YAZI !== "0" && !is.yayinYok && !is.videoMarkali && MARKALAR[is.marka || ((await boyOku(env, is.kod)) || {}).marka]) { is.oySonra = sonra; is.durum = "oy_kare"; is.bekleZaman = simdi; is.oyFal = await falGonder(env, KARE.uc, { video_url: is.video, frame_type: "first" }); return; }
+    if (env.ON_YAZI !== "0" && !is.yayinYok && !is.videoMarkali && MARKALAR[is.marka || ((await boyOku(env, is.kod)) || {}).marka]) { is.marka = is.marka || ((await boyOku(env, is.kod)) || {}).marka; is.oySonra = sonra; is.durum = "oy_bulut"; is.bekleZaman = simdi; is.oyId = `${is.id}-y${is.videoDeneme || 0}`; await bulutIsEkle(env, { id: is.oyId, islem: "yazi", video: is.video, kod: is.kod, marka: is.marka, ses: "sessiz" }, simdi); return; } // 17 Kasım: ücretsiz bulut ffmpeg
     is.durum = sonra; return;
   }
 }
@@ -2728,7 +2788,7 @@ export async function uretimCron(env, simdi) {
   for (const id of liste) {
     if (islenen >= 8) break;
     const is = await oku(env, `pelin:is:${id}`, null);
-    if (!is || !["hv_kare", "hv_katman", "hv_birlestir", "hv_ses", "oy_kare", "oy_katman", "oy_birlestir", "oy_ses", "foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz", "paket_gonder", "paket_aski", "aski_detay", "paket_kare", "paket_katman", "paket_birlestir", "paket_ses", "video_duzelt", "video_duzelt_ses"].includes(is.durum)) continue;
+    if (!is || !["hv_bulut", "oy_bulut", "paket_bulut", "hv_kare", "hv_katman", "hv_birlestir", "hv_ses", "oy_kare", "oy_katman", "oy_birlestir", "oy_ses", "foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz", "paket_gonder", "paket_aski", "aski_detay", "paket_kare", "paket_katman", "paket_birlestir", "paket_ses", "video_duzelt", "video_duzelt_ses"].includes(is.durum)) continue;
     islenen++;
     const once = is.durum;
     if (/^hv_/.test(is.durum)) { await hazirVideoAdimi(env, is, simdi); await kaydet(env, `pelin:is:${id}`, is); continue; } // 16 Kasım: hazır video + yazı (kendi hata yolu)
@@ -2784,7 +2844,7 @@ export async function sablonDenemesi(env, p, simdi) {
   ].join("\n"));
 }
 // ---------- AYNA (4 Kasım, Patron onaylı): Pelin'in işleri ofiste CANLI → KV "venom:pelinDurum" (sadece değişince yazılır) ----------
-const CALISAN = ["hv_kare", "hv_katman", "hv_birlestir", "hv_ses", "oy_kare", "oy_katman", "oy_birlestir", "oy_ses", "foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz", "paket_gonder", "paket_aski", "aski_detay", "paket_kare", "paket_katman", "paket_birlestir", "paket_ses", "video_duzelt", "video_duzelt_ses"];
+const CALISAN = ["hv_bulut", "oy_bulut", "paket_bulut", "hv_kare", "hv_katman", "hv_birlestir", "hv_ses", "oy_kare", "oy_katman", "oy_birlestir", "oy_ses", "foto_gonder", "foto_bekle", "sahne_gonder", "sahne_bekle", "set_gonder", "set_bekle", "video_gonder", "video_bekle", "kare_bekle", "muzik_gonder", "muzik_bekle", "senaryo_yaz", "paket_gonder", "paket_aski", "aski_detay", "paket_kare", "paket_katman", "paket_birlestir", "paket_ses", "video_duzelt", "video_duzelt_ses"];
 const BEKLEYEN = ["foto_onay", "senaryo_onay", "onay", "uyari", "kart"];
 export async function aynaYaz(env, simdi) {
   const liste = await oku(env, "pelin:isler", []);
@@ -3196,10 +3256,9 @@ async function ornekVideo(env, m, simdi) {
   }
   const kod = (yazi.match(/\b(\d{3,6})\b/) || [])[1] || null;
   const id = kisaId();
-  const kareFal = [];
-  for (const f of ["first", "middle", "last"]) kareFal.push(await falGonder(env, KARE.uc, { video_url: url, frame_type: f }));
-  await harcamaYaz(env, 3 * KARE.saniye * 10, simdi);
-  await kaydet(env, `pelin:ornek:${id}`, { id, kod, yazi: yazi.slice(0, 300), kareFal, kareler: [], zaman: simdi }, 7 * 86400);
+  const kareFal = []; // 17 Kasım: kareler ücretsiz bulut ffmpeg'den (fal "extract-frame" izni kapalı)
+  await bulutIsEkle(env, { id: `or-${id}`, islem: "kare", video: url, kod: kod || "" }, simdi);
+  await kaydet(env, `pelin:ornek:${id}`, { id, kod, yazi: yazi.slice(0, 300), kareFal, kareBulut: `or-${id}`, kareler: [], zaman: simdi }, 7 * 86400);
   const l = await oku(env, "pelin:ornekler", []); l.push(id); await kaydet(env, "pelin:ornekler", l.slice(-20));
   await yaz(env, m.chat.id, `🎞 Örneği inceliyorum${kod ? ` (${kod} için)` : ""}: kamera hareketi, ışık, hız, poz ve ortam havasını tarif olarak çıkaracağım. Birebir kopya yapılmaz; başkasının yüzü, logosu, müziği kullanılmaz.`);
   return true;
@@ -3209,6 +3268,11 @@ async function ornekCron(env, simdi) {
   for (const id of await oku(env, "pelin:ornekler", [])) {
     const o = await oku(env, `pelin:ornek:${id}`, null);
     if (!o || o.tarif || o.hata) continue;
+    if (o.kareBulut && !o.kareler.length) {
+      const b = await bulutSonuc(env, o.kareBulut);
+      if (!b && simdi - o.zaman < 3 * 3600) continue;
+      await bulutIsSil(env, o.kareBulut); o.kareler = b && b.ok && (b.kareler || []).length ? b.kareler : ["yok"];
+    }
     for (const [i, f] of o.kareFal.entries()) { if (o.kareler[i]) continue; const s = await falDurum(env, f).catch(() => ({ bitti: false })); if (s.bitti) o.kareler[i] = (s.resimler && s.resimler[0]) || "yok"; }
     if (o.kareler.filter(Boolean).length < o.kareFal.length && simdi - o.zaman < 3600) { await kaydet(env, `pelin:ornek:${id}`, o, 7 * 86400); continue; }
     const kareler = o.kareler.filter((x) => x && x !== "yok");
