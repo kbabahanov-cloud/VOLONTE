@@ -101,7 +101,9 @@ jobs:
             [ -f "$f" ] || continue
             z=$(jq -r '.zaman // 0' "$f" 2>/dev/null || echo 0)
             if [ $((simdi - z)) -lt 172800 ]; then
-              b=$(basename "$f" .json); cp -n "eski/$b".* cikti/ 2>/dev/null; cp -n "eski/$b"-*.jpg cikti/ 2>/dev/null
+              b=$(basename "$f" .json)
+              cp -n "eski/$b".* cikti/ 2>/dev/null || true
+              cp -n "eski/$b"-*.jpg cikti/ 2>/dev/null || true   # kare dosyası olmayan sonuçta cp hata verir; iş düşmemeli (17 Kasım: ikinci çalışma burada düşmüştü)
             fi
           done
           cd cikti
