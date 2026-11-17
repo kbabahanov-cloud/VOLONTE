@@ -64,6 +64,7 @@ function ortam({ fal = true } = {}) {
   const stok = new StokDO({ storage: { sql } });
   const env = {
     STOK: { idFromName: () => "stok", get: () => ({ fetch: (url, init) => stok.fetch(new Request(url, init)) }) },
+    ON_YAZI: "0", // 16 Kasım: önizleme öncesi yazı eski testlerde kapalı (kendi testleri ayrı)
     BOT_TOKEN: "t", ANTHROPIC_API_KEY: "k", SELF_URL: "https://pelin.test", WEBHOOK_SECRET: "s", ALLOWED_IDS: `${MURAT},9000000003`, MURAT_ID: String(MURAT), HEMRA_ID: String(HEMRA),
     ...(fal ? { FAL_KEY: "fal-anahtar", HF_API_KEY: "kid:ksecret" } : {}),
     KAYIT: {
@@ -1695,4 +1696,54 @@ test("16 Kasım (Patron) BİR KEZ ÜRETİLEN KAYDEDİLİR: onaylanan fotoğraf m
   o.g.length = 0;
   await yazi(o, MURAT, "/uret 3271 yeniden");
   assert.ok(o.g.some((x) => /💰 Üretim — 1 model: 3271/.test(x.govde.text || "")));
+});
+
+test("16 Kasım (Patron) HAZIR VİDEO + YAZI: Patron'un müzikli videosu → Pelin 'BLACK ROSE · 3271' yazısını videonun tamamına basar (yeniden üretim yok), videonun KENDİ sesi geri eklenir, sonra Kemal'e (onay kartı Patron'a)", async () => {
+  const { hazirVideoBaslat } = await import("./pelin.js");
+  const o = uretimOrtami();
+  o.depo.set("pelinboy:3271", JSON.stringify({ boy: "bilekalti", marka: "BLACKROSE" }));
+  for (const uc of ["fal-ai/ffmpeg-api/images-to-video", "fal-ai/workflow-utilities/blend-video", "fal-ai/ffmpeg-api/merge-audio-video"]) o.falSonuc[uc] = (n) => ({ video: { url: `https://vid/${uc.split("/").pop()}-${n}.mp4` } });
+  const kaynak = "https://volonte-venom.volonte.workers.dev/medya/aaaa";
+  const r = await hazirVideoBaslat(o.env, { kod: "3271", video: kaynak, sure: 15, sonra: { kemal: true, fotolar: [{ tur: "foto", url: "https://v/f.jpg" }] } }, Math.floor(Date.now() / 1000));
+  assert.deepEqual([r.ok, r.marka], [true, "BLACKROSE"]);
+  for (let i = 0; i < 6; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
+  const uc = o.falIstek.map((x) => x.uc);
+  assert.ok(!uc.some((u) => /image-to-video$|nano-banana|scale-video/.test(u)), uc.join(",")); // yeniden üretim ve boyut değişikliği yok
+  const katman = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/images-to-video");
+  assert.ok(katman.govde.images[0].frames >= 24 * 15); // yazı videonun tamamında
+  const bl = o.falIstek.find((x) => x.uc === "fal-ai/workflow-utilities/blend-video");
+  assert.equal(bl.govde.bottom_video_url, kaynak);
+  const ses = o.falIstek.find((x) => x.uc === "fal-ai/ffmpeg-api/merge-audio-video");
+  assert.equal(ses.govde.audio_url, kaynak); // müzik: videonun kendi sesi
+  const is = JSON.parse([...o.depo.entries()].find(([k]) => k.startsWith("pelin:is:3271-hv"))[1]);
+  assert.equal(is.durum, "hv_bitti");
+  const q = await (await o.env.STOK.get().fetch("https://stok/kuyruk-al", { method: "POST", body: JSON.stringify({ ad: "patronPaylas" }) })).json();
+  assert.deepEqual([q.length, q[0].kod, q[0].medya.map((m) => m.tur)], [1, "3271", ["foto", "video"]]);
+  assert.equal(q[0].medya[1].url, is.sonVideo);
+  assert.ok(o.g.some((x) => /BLACK ROSE · 3271" yazısı videonun tamamına sağ alta basıldı, videonun kendi sesi \(müzik\) geri eklendi/.test((x.govde && x.govde.text) || "")));
+  // markası olmayan model: başlamaz
+  assert.match((await hazirVideoBaslat(o.env, { kod: "9999", video: kaynak }, 1)).mesaj, /markası model kartında yok/);
+});
+
+test("16 Kasım (Patron) Pelin videosu: marka + kod yazısı ÖNİZLEMEDEN ÖNCE basılır; onaydan sonra ikinci kez basılmaz", async () => {
+  const o = uretimOrtami();
+  o.env.ON_YAZI = "1";
+  o.depo.set("pelinboy:3557", JSON.stringify({ boy: "midi", marka: "VOLONTE" }));
+  for (const uc of ["fal-ai/ffmpeg-api/images-to-video", "fal-ai/workflow-utilities/blend-video", "fal-ai/ffmpeg-api/merge-audio-video"]) o.falSonuc[uc] = (n) => ({ video: { url: `https://vid/${uc.split("/").pop()}-${n}.mp4` } });
+  o.depo.set("pelin:is:3557-v", JSON.stringify({ id: "3557-v", kod: "3557", marka: "VOLONTE", durum: "kare_bekle", video: "https://vid/ham.mp4", kareler: ["https://img/k1.jpg", "https://img/k2.jpg", "https://img/k3.jpg"], kareFal: [], urunler: ["u"], gecmis: [], maliyet: 1, bekleZaman: Math.floor(Date.now() / 1000), setTamam: true }));
+  o.depo.set("pelin:isler", JSON.stringify(["3557-v"]));
+  o.claude.cevaplar = [claudeJsonCevap(GECTI)];
+  for (let i = 0; i < 6; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
+  const x = JSON.parse(o.depo.get("pelin:is:3557-v"));
+  assert.deepEqual([x.durum, x.videoMarkali, x.videoHam], ["onay", true, "https://vid/ham.mp4"]);
+  assert.match(x.video, /merge-audio-video/);
+  const on = o.g.find((y) => /ÖNİZLEME — 3557/.test((y.govde && y.govde.text) || ""));
+  assert.ok(on, "önizleme gelmeli");
+  assert.ok(o.g.some((y) => y.metod === "sendVideo" && y.govde && y.govde.video === x.video)); // önizlemedeki video yazılı
+  // onay → paket: yazı İKİNCİ kez basılmaz
+  const once = o.falIstek.filter((y) => y.uc === "fal-ai/workflow-utilities/blend-video").length;
+  await bas(o, MURAT, "pu:a:3557-v");
+  for (let i = 0; i < 4; i++) await pelinCron(o.env, Math.floor(Date.now() / 1000));
+  assert.equal(o.falIstek.filter((y) => y.uc === "fal-ai/workflow-utilities/blend-video").length, once);
+  assert.equal(JSON.parse(o.depo.get("pelin:is:3557-v")).paket.video, x.video);
 });

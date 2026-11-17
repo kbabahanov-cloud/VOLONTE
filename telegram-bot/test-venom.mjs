@@ -2886,3 +2886,28 @@ test("16 Kasım (Patron) İŞ KONTROLÜ: Selin '15 model istendi, 0 fotoğraf ge
   const r1 = selinBak({ ozet: { bugunListe: { n: 15, gelen: 4 }, durumlar: {} }, s: 12 });
   assert.match(bekciMetni({ selin: r1 }, "12:00"), /✅ Selin: fotoğraf listesi gitti \(15 model\), 4 modelin fotoğrafı geldi/);
 });
+
+test("16 Kasım (Patron) HAZIR VİDEO 'kanala paylaş': video önce Pelin'e (yazı + müzik korunur), Kemal'e yazısız GİTMEZ; Pelin'e ulaşılamazsa iletilmez", async () => {
+  const o = ortam();
+  o.depo.set("venom:kemalPaylasAcik", "1");
+  const istekler = [];
+  o.env.PELIN_W = { videoYazi: async (g) => { istekler.push(g); return { ok: true, id: "3271-hvx", marka: "BLACKROSE" }; } };
+  const video = (fid, caption) => guncelleme({ update_id: uid++, message: { message_id: 3, date: 1, chat: { id: PATRON, type: "private" }, from: { id: PATRON }, video: { file_id: fid, duration: 21 }, ...(caption ? { caption } : {}) } }, o.env);
+  o.cevaplar.push({ arac: "kemal_paylas", girdi: { kod: "3271" } }, { text: "Hazırlanıyor." });
+  await video("V1", "3271 kanala paylaş");
+  o.depo.set("venom:bot:medya", JSON.stringify(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => ({ ...m, zaman: 1 }))));
+  await venomCron(o.env, 1793900000);
+  assert.equal(istekler.length, 1);
+  assert.deepEqual([istekler[0].kod, istekler[0].sure, istekler[0].sonra.kemal], ["3271", 21, true]);
+  assert.match(istekler[0].video, /\/medya\/[a-f0-9]{32}$/);
+  assert.equal((await kuyruguAl(o.env, "patronPaylas")).length, 0); // Kemal'e yazısız gitmedi
+  assert.ok(patronaGiden(o).some((x) => /✅ 3271: video Pelin'de — yazı videonun tamamına sağ alta basılıyor, müzik korunuyor/.test(x.govde.text)));
+  // Pelin'e ulaşılamazsa: iletilmez, yazısız da gitmez
+  o.env.PELIN_W = null;
+  o.cevaplar.push({ arac: "kemal_paylas", girdi: { kod: "3271" } }, { text: "Hazırlanıyor." });
+  await video("V2", "3271 kanala paylaş");
+  o.depo.set("venom:bot:medya", JSON.stringify(JSON.parse(o.depo.get("venom:bot:medya")).map((m) => ({ ...m, zaman: 1 }))));
+  await venomCron(o.env, 1793900400);
+  assert.equal((await kuyruguAl(o.env, "patronPaylas")).length, 0);
+  assert.ok(patronaGiden(o).some((x) => /❌ 3271: İLETİLMEDİ — video yazı için Pelin'e verilemedi \(Pelin bağlantısı yok\)\. Yazısız göndermedim\./.test(x.govde.text)));
+});

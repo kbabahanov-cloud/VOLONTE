@@ -1501,9 +1501,18 @@ async function paylasimGonder(env, simdi) {
     if (!r.ok) continue;
     const id = crypto.randomUUID().replace(/-/g, "");
     await env.KAYIT.put(`venommedya:${id}`, await r.arrayBuffer(), { expirationTtl: 3 * 86400, metadata: { tur: m.tur === "video" ? "video/mp4" : "image/jpeg" } });
-    liste.push({ tur: m.tur, url: `${env.SELF_URL}/medya/${id}` });
+    liste.push({ tur: m.tur, url: `${env.SELF_URL}/medya/${id}`, ...(m.sure ? { sure: m.sure } : {}) });
   }
   await env.KAYIT.delete("venom:bot:medya");
+  // 16 Kasım (Patron): Patron'un HAZIR videosu önce Pelin'e — "MARKA · KOD" yazısı videonun tamamına sağ alta basılır, videonun kendi sesi (müzik)
+  // korunur; sonra Kemal onay kartını (video + altyazı) Patron'a getirir. Kemal videoya yazı basmaz. Pelin'e ulaşılamazsa video yazısız GİTMEZ.
+  const vid = liste.find((m) => m.tur === "video");
+  if (vid) {
+    const p = env.PELIN_W && typeof env.PELIN_W.videoYazi === "function" ? await env.PELIN_W.videoYazi({ kod: b.kod, video: vid.url, sure: vid.sure || null, sonra: { kemal: true, fotolar: liste.filter((m) => m.tur !== "video"), renk: b.renk || null, beden: b.beden || null } }).catch((e) => ({ ok: false, mesaj: String(e && e.message).slice(0, 160) })) : { ok: false, mesaj: "Pelin bağlantısı yok" };
+    if (p && p.ok) { await kaydet(env, "venom:bot:sonPaylasim", { kod: b.kod, liste, zaman: simdi }, 3 * 86400).catch(() => null); await isKaydet(env, "pelin", `${b.kod} hazır videoya marka yazısı (sonra Kemal kartı)`, simdi); }
+    else await iletimHatasi(env, `${b.kod}: video Pelin'e (yazı) verilemedi: ${(p && p.mesaj) || "?"}`, simdi);
+    return yaz(env, p && p.ok ? `✅ ${b.kod}: video Pelin'de — yazı videonun tamamına sağ alta basılıyor, müzik korunuyor (~0,06 $); bitince Kemal onay kartını (video + altyazı) getirecek.${liste.length > 1 ? ` Fotoğraflar (${liste.length - 1}) da aynı karta girer.` : ""}` : `❌ ${b.kod}: İLETİLMEDİ — video yazı için Pelin'e verilemedi (${(p && p.mesaj) || "?"}). Yazısız göndermedim.`);
+  }
   if (!liste.length) { await iletimHatasi(env, `${b.kod}: Patron'un dosyaları indirilemedi (Kemal'e gitmedi)`, simdi); return yaz(env, `❌ ${b.kod}: İLETİLMEDİ — dosyalar indirilemedi (20 MB üstü olabilir); tekrar gönderir misiniz?`); }
   const ok = await kemaleVer(env, b, liste, simdi, medya.slice(-10).map((m) => ({ type: m.tur === "video" ? "video" : "photo", media: m.file_id })));
   const fs = liste.filter((m) => m.tur !== "video").length, vs = liste.length - fs;
@@ -1928,7 +1937,7 @@ export async function guncelleme(u, env) {
   }
   let metin = m.text || m.caption || "";
   // 5 Kasım: fotoğraf/video → son 1 saatin medya listesi (Kemal paylaşımı için)
-  const dosya = m.photo ? { tur: "foto", file_id: m.photo[m.photo.length - 1].file_id } : m.video ? { tur: "video", file_id: m.video.file_id } : m.document && /^(image|video)\//.test(m.document.mime_type || "") ? { tur: /^video/.test(m.document.mime_type) ? "video" : "foto", file_id: m.document.file_id } : null;
+  const dosya = m.photo ? { tur: "foto", file_id: m.photo[m.photo.length - 1].file_id } : m.video ? { tur: "video", file_id: m.video.file_id, sure: Number(m.video.duration) || null } : m.document && /^(image|video)\//.test(m.document.mime_type || "") ? { tur: /^video/.test(m.document.mime_type) ? "video" : "foto", file_id: m.document.file_id } : null;
   if (dosya) {
     const l = await oku(env, "venom:bot:medya", []);
     await kaydet(env, "venom:bot:medya", [...l, { ...dosya, zaman: simdi }].slice(-10), 3 * 3600);
