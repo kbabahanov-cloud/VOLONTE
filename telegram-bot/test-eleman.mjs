@@ -122,8 +122,24 @@ test("Eleman Venom'a YAZAR: yanıt → o bota; konu belli → ilgili bota; belir
   // 20 dk sonra, konu belli ("fiyat") → Sami (soru sorulmaz)
   const son = JSON.parse((await (await o.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `venom:el:son:${MERDAN}` }) })).json()).v);
   await o.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `venom:el:son:${MERDAN}`, v: JSON.stringify(son.map((x) => ({ ...x, zaman: x.zaman - 1200 }))) }) });
-  await venomaYaz(o, MERDAN, "3627 fiyatı kaç");
-  assert.equal(o.durum.samiMesaj.at(-1).metin, "3627 fiyatı kaç");
+  await venomaYaz(o, MERDAN, "fiyat listesi lazım");
+  assert.equal(o.durum.samiMesaj.at(-1).metin, "fiyat listesi lazım");
+  // KOD / renk / beden / marka içeren yazı: hedef belli olsa da HER ZAMAN "Şunu anladım … Doğru mu?" (kural 100)
+  const n0 = o.durum.samiMesaj.length;
+  await venomaYaz(o, MERDAN, "3627 siyah büyük beden 40 adet fabrikadan gelecek");
+  assert.equal(o.durum.samiMesaj.length, n0); // onaysız iletilmez
+  const ks = o.giden("venom", MERDAN, "sendMessage").at(-1);
+  assert.equal(ks.govde.text, 'Şunu anladım: KOD 3627 · renk siyah · beden büyük beden · 40 adet ("3627 siyah büyük beden 40 adet fabrikadan gelecek") — stok / fiyat / repete / liste işi. Doğru mu?');
+  assert.deepEqual(ks.govde.reply_markup.inline_keyboard[0].map((b) => b.text), ["✅ Doğru", "❌ Yanlış"]);
+  await venomdaBas(o, MERDAN, { data: ks.govde.reply_markup.inline_keyboard[0][1].callback_data, mesaj: 7050 }); // ❌ Yanlış → iletilmez
+  assert.equal(o.durum.samiMesaj.length, n0);
+  assert.match(o.g.filter((x) => x.bot === "venom" && x.metod === "editMessageText").at(-1).govde.text, /^❌ İletmedim\. Doğrusunu yeniden yazın\.$/);
+  await venomaYaz(o, MERDAN, "3627 siyah büyük beden 30 adet fabrikadan gelecek");
+  const ks2 = o.giden("venom", MERDAN, "sendMessage").at(-1);
+  await venomdaBas(o, MERDAN, { data: ks2.govde.reply_markup.inline_keyboard[0][0].callback_data, mesaj: 7051 }); // ✅ Doğru → Sami'ye
+  assert.equal(o.durum.samiMesaj.at(-1).metin, "3627 siyah büyük beden 30 adet fabrikadan gelecek");
+  assert.equal(venom.elAnlasilan("tamam, yarın bakarım"), null);
+  assert.match(venom.elAnlasilan("black rose 3512 bej 38 beden"), /^KOD 3512 · BLACK ROSE · renk bej · beden 38 beden /);
   // belirsiz ("bir şey soracağım"; son konuşma 20 dk önce) → "Şunu anladım … Doğru mu?" (tahmin: son 30 dk'da konuşan Sami)
   const son2 = JSON.parse((await (await o.STOK.get().fetch("https://stok/ayar-oku", { method: "POST", body: JSON.stringify({ k: `venom:el:son:${MERDAN}` }) })).json()).v);
   await o.STOK.get().fetch("https://stok/ayar-yaz", { method: "POST", body: JSON.stringify({ k: `venom:el:son:${MERDAN}`, v: JSON.stringify(son2.map((x) => ({ ...x, zaman: Math.floor(Date.now() / 1000) - 1200 }))) }) });
@@ -235,4 +251,29 @@ test("Fotoğraflı kart ve dosya: botun dosyası indirilip Venom'un botuyla yeni
   const liste = o.g.filter((x) => x.metod === "sendMessage");
   assert.deepEqual(liste.map((x) => [x.bot, String(x.govde.chat_id)]), [["venom", MERDAN]]);
   assert.match(liste[0].govde.text, /^📋 Bugün cevabınızı bekleyen işler \(1\):\n• 3627 eksik listesi kontrolü\nKartlar yukarıda duruyor; düğmesine basmanız yeterli\.$/);
+});
+
+test("Akşam raporu satırı ve yedek yol haberi: kapı kapalıyken satır yok; açıkken elemanların cevapsız işleri kişi kişi; Venom düşüp bot eski yoldan gittiyse Patron'a TEK satır (bir kez)", async () => {
+  const kapali = ortam({ acik: null });
+  assert.equal(await venom.elemanAksamSatiri(kapali.venomEnv, ist(18, 20)), null);
+  assert.equal(await venom.elemanYedekHaber(kapali.venomEnv, ist(18, 20)), null);
+  const o = ortam({ acik: [MERDAN, HEMRA] });
+  assert.equal(await venom.elemanAksamSatiri(o.venomEnv, ist(18, 20)), "👥 Elemanlar: bugün cevapsız iş kalmadı.");
+  const { defterYaz } = await import("./is-defteri.js");
+  await defterYaz(o.venomEnv, { zaman: ist(18, 10), bot: "sami", tur: "kart", kime: MERDAN, kod: "3627", ozet: "3627 eksik", chat: MERDAN, mesaj: 5, cbler: ["a:1"] });
+  await defterYaz(o.venomEnv, { zaman: ist(17, 10), bot: "selin", tur: "kart", kime: MERDAN, kod: "3628", ozet: "3628 foto", chat: MERDAN, mesaj: 6, cbler: ["a:2"] });
+  await defterYaz(o.venomEnv, { zaman: ist(18, 11), bot: "sami", tur: "kart", kime: HEMRA, kod: "3629", ozet: "3629", chat: HEMRA, mesaj: 7, cbler: ["a:3"] });
+  await defterYaz(o.venomEnv, { zaman: ist(18, 11), bot: "sami", tur: "kart", kime: FUAT, kod: "3630", ozet: "3630", chat: FUAT, mesaj: 8, cbler: ["a:4"] }); // fabrika: sayılmaz
+  assert.equal(await venom.elemanAksamSatiri(o.venomEnv, ist(18, 20)), "👥 Elemanların cevapsız işleri: Merdan 2 (1 bugünkü) · Hemra 1");
+  // yedek yol: Venom düşer → Sami doğrudan gönderir → Venom gelince Patron'a tek satır
+  const ham = async (m, g) => (await fetch(`https://api.telegram.org/botsami-token/${m}`, { method: "POST", body: JSON.stringify(g) })).json();
+  o.durum.venomKapali = true;
+  assert.equal(await elemanYolu(o.samiEnv, "sami", "sendMessage", { chat_id: Number(MERDAN), text: "x" }, ham), null); // null → bot kendi yolundan gönderir
+  o.durum.venomKapali = false;
+  o.g.length = 0;
+  await venom.elemanYedekHaber(o.venomEnv, ist(18, 12));
+  await venom.elemanYedekHaber(o.venomEnv, ist(18, 12, 5));
+  const haber = o.g.filter((x) => x.bot === "venom" && x.metod === "sendMessage" && String(x.govde.chat_id) === String(PATRON));
+  assert.equal(haber.length, 1);
+  assert.match(haber[0].govde.text, /^⚠️ \d\d\.\d\d\.\d{4} \d\d:\d\d: Venom cevap vermedi; Sami elemana eski yoldan \(kendi botundan\) gönderdi\. İş kaybolmadı; 10 dakika sonra yeniden Venom'dan gider\.$/);
 });

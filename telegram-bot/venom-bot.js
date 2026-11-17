@@ -2407,7 +2407,7 @@ export async function venomCron(env, simdi) {
   // 11 Kasım: Claude Code'un bir kerelik işleri — KV "venom:claudeIslem" = [{tur:"testMesaj", metin} | {tur:"kopruOku"}] → "venom:claudeIslemSonuc"
   try { await claudeIslemAdimi(env, simdi); } catch (e) { await hataYaz(env, "claudeIslem", e); }
   try { await sorunKuyrugu(env, simdi); await sorunAdimi(env, simdi); } catch (e) { await hataYaz(env, "sorun", e); } // 18 Kasım: sorun çözen beyin
-  try { await elemanGunlukListe(env, simdi); } catch (e) { await hataYaz(env, "elemanGunluk", e); } // kural 100 (KAPALI): 09:30 günlük iş listesi
+  try { await elemanGunlukListe(env, simdi); await elemanYedekHaber(env, simdi); } catch (e) { await hataYaz(env, "elemanGunluk", e); } // kural 100 (KAPALI): 09:30 günlük iş listesi; yedek yol haberi
   try { await rkAdimi(env, simdi); } catch (e) { await hataYaz(env, "repeteKart", e); }
   try { await kartCevapsizAdimi(env, simdi); } catch (e) { await hataYaz(env, "kartCevapsiz", e); }
   try { await tasarimOrnekAdimi(env, simdi); } catch (e) { await hataYaz(env, "tasarimOrnek", e); }
@@ -3532,7 +3532,7 @@ export async function gunOzeti(env, simdi) {
   const bekleyen = await bekleyenlerMetni(env, simdi);
   const ym = await oku(env, `venom:yeniModelSayac:${gunAnahtari(simdi)}`, null);
   const yeniSatir = ym ? `🆕 Yeni model kartları (Merdan/Hemra): ${ym.soruldu || 0} soruldu · ${ym.onay || 0} paylaşıldı · ${ym.gec || 0} geçildi · ${ym.beklesin || 0} beklesin${ym.durdu ? ` · ${ym.durdu} Venom kontrolünde durdu` : ""}` : null;
-  const metin = [`🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, ...(satir.length ? satir : ["• Bugün Venom üzerinden iş yapılmadı."]), await paraOzeti(env, simdi, venomAy).catch(() => `💵 Pelin bugün ${pelinBugun.toFixed(2)} $`), `   (Venom bu ay ${venomAy.toFixed(2).replace(".", ",")} $ / ${await venomSinir(env)} $)`, yeniSatir, await sorunRaporu(env, simdi).catch(() => null), await bitmeyenIsler(env, simdi).catch(() => null), await videoRaporu(env, simdi), bekleyen, "İyi akşamlar Patron."].filter(Boolean).join("\n");
+  const metin = [`🌙 Günün özeti — ${tarihSaat(simdi).slice(0, 10)}`, ...(satir.length ? satir : ["• Bugün Venom üzerinden iş yapılmadı."]), await paraOzeti(env, simdi, venomAy).catch(() => `💵 Pelin bugün ${pelinBugun.toFixed(2)} $`), `   (Venom bu ay ${venomAy.toFixed(2).replace(".", ",")} $ / ${await venomSinir(env)} $)`, yeniSatir, await elemanAksamSatiri(env, simdi).catch(() => null), await sorunRaporu(env, simdi).catch(() => null), await bitmeyenIsler(env, simdi).catch(() => null), await videoRaporu(env, simdi), bekleyen, "İyi akşamlar Patron."].filter(Boolean).join("\n");
   const g = await oku(env, "venom:bot:gunluk", []);
   await kaydet(env, "venom:bot:gunluk", [...g.filter((x) => x.gun !== gunAnahtari(simdi)), { gun: gunAnahtari(simdi), ozet: [satir.join("; ") || "Venom'la iş yok", `Pelin ${pelinBugun.toFixed(2)} $`].join(" · ").slice(0, 300) }].slice(-30));
   return metin;
@@ -3841,6 +3841,12 @@ async function elemanDugmesi(env, cq, simdi) {
     const [, rid, harf] = String(cq.data).split(":");
     const b = await elAyar(env, `venom:el:bek:${rid}`);
     if (!b || String(b.kim) !== kim || b.bitti) return cevap("Bu soru kapandı.");
+    if (harf === "x") { // ❌ Yanlış: hiçbir yere iletilmez
+      await elAyarYaz(env, `venom:el:bek:${rid}`, { ...b, bitti: simdi, bot: null });
+      await cevap("İletilmedi");
+      await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kime: kim, ozet: `eleman "yanlış" dedi; yazı iletilmedi: "${String(b.metin).replace(/\s+/g, " ").slice(0, 100)}"` }).catch(() => null);
+      return tgEl(env, "editMessageText", { chat_id: Number(kim), message_id: cq.message.message_id, text: "❌ İletmedim. Doğrusunu yeniden yazın." });
+    }
     const bot = EL_HARF_BOT[harf];
     if (!bot) return cevap("?");
     await elAyarYaz(env, `venom:el:bek:${rid}`, { ...b, bitti: simdi, bot });
@@ -3868,6 +3874,18 @@ export function elKonu(metin) {
   if (/video|manken|üretim|pelin/.test(t)) a.push("pelin");
   return a;
 }
+// Yazıdaki kod / renk / beden / marka / adet (kuralla; yapay zekâ çağrısı yok). Hiçbiri yoksa null.
+const EL_RENK = /siyah|beyaz|kırmızı|mavi|lacivert|yeşil|haki|bej|krem|ekru|gri|füme|antrasit|pembe|pudra|mor|lila|bordo|kahve|vizon|taba|sarı|hardal|turuncu|leopar|çizgili|desenli/g;
+export function elAnlasilan(metin) {
+  const t = String(metin || "").toLocaleLowerCase("tr");
+  const kodlar = [...new Set((t.match(/(?<![\d.,])\d{4}(?![\d.,])/g) || []))];
+  const renkler = [...new Set(t.match(EL_RENK) || [])];
+  const beden = [...new Set((t.match(/büyük beden|küçük beden|büyük|küçük|standart|(?<![\p{L}\d])(?:xs|s|m|l|xl|xxl|3xl)(?![\p{L}\d])|(?<![\p{L}\d])(?:3[468]|4[02468]|5[024])\s*beden|beden\s*(?:3[468]|4[02468]|5[024])(?![\p{L}\d])/gu) || []))];
+  const marka = /black\s*rose|blackrose/.test(t) ? "BLACK ROSE" : /volonte/.test(t) ? "VOLONTE" : null;
+  const adet = (t.match(/(\d{1,4})\s*(?:adet|tane|seri)/) || [])[0] || null;
+  if (!kodlar.length && !renkler.length && !beden.length && !marka) return null;
+  return [kodlar.length ? `KOD ${kodlar.join(", ")}` : null, marka, renkler.length ? `renk ${renkler.join(", ")}` : null, beden.length ? `beden ${beden.join(", ")}` : null, adet].filter(Boolean).join(" · ") + ` ("${String(metin).replace(/\s+/g, " ").slice(0, 160)}")`;
+}
 async function elIlet(env, bot, metin, kisi, neden, simdi) {
   const ok = Boolean(await botaSor(env, bot, "mesaj", metin, kisi));
   await defterYaz(env, { zaman: simdi, bot: "venom", tur: ok ? "is" : "hata", kime: String(kisi.id), ozet: `eleman yazısı ${BOT_AD[bot]} botuna ${ok ? "iletildi" : "İLETİLEMEDİ"} (${neden}): "${String(metin).replace(/\s+/g, " ").slice(0, 120)}"` }).catch(() => null);
@@ -3892,15 +3910,21 @@ export async function elemanMesaji(env, m, simdi) {
   if (!metin.trim()) return null;
   if (/^\//.test(metin.trim())) return yazEl("Komutlar burada kullanılmaz. Ne istediğinizi yazıyla yazın; ilgili yere ben iletirim.");
   const son = (await elAyar(env, `venom:el:son:${kim}`)) || [];
-  // 1) Bir bot mesajına YANIT ise → o bot (kesin)
+  // Hedef bot: 1) bir bot mesajına YANIT ise o bot; 2) son 10 dakikada konuşan bot + konu çelişmiyorsa o bot; 3) tek konu adayı
   const y = m.reply_to_message ? son.find((x) => x.mid === m.reply_to_message.message_id) : null;
-  if (y) return elIlet(env, y.bot, metin, { ...kisi, yanit: { message_id: y.mid, text: m.reply_to_message.text || m.reply_to_message.caption || "" } }, "yanıt", simdi);
-  // 2) Son 10 dakikada konuşan bot + konu çelişmiyorsa → o bot; 3) tek konu adayı → o bot; 4) belirsiz → "Şunu anladım … Doğru mu?"
+  const yanit = y ? { message_id: y.mid, text: m.reply_to_message.text || m.reply_to_message.caption || "" } : null;
   const adaylar = elKonu(metin), sonBot = (son.filter((x) => simdi - x.zaman <= 600).at(-1) || {}).bot || null;
-  if (sonBot && (!adaylar.length || adaylar.includes(sonBot))) return elIlet(env, sonBot, metin, kisi, "son konuşma", simdi);
-  if (!sonBot && adaylar.length === 1) return elIlet(env, adaylar[0], metin, kisi, "konu", simdi);
-  const tahmin = adaylar[0] || sonBot || (son.filter((x) => simdi - x.zaman <= 1800).at(-1) || {}).bot || null;
+  const kesin = y ? [y.bot, "yanıt"] : sonBot && (!adaylar.length || adaylar.includes(sonBot)) ? [sonBot, "son konuşma"] : !sonBot && adaylar.length === 1 ? [adaylar[0], "konu"] : null;
+  const anlasilan = elAnlasilan(metin); // kod / renk / beden / marka / adet
+  // Kural 100: kod, renk, beden ve marka içeren işlerde "Şunu anladım … Doğru mu?" HEP sorulur; içermiyorsa ve hedef kesinse doğrudan iletilir
+  if (kesin && !anlasilan) return elIlet(env, kesin[0], metin, { ...kisi, ...(yanit ? { yanit } : {}) }, kesin[1], simdi);
   const rid = kisaId();
+  if (kesin) {
+    await elAyarYaz(env, `venom:el:bek:${rid}`, { kim, metin: metin.slice(0, 3500), zaman: simdi, ...(yanit ? { yanit } : {}) });
+    await defterYaz(env, { zaman: simdi, bot: "venom", tur: "is", kime: kim, ozet: `eleman yazısında kod / renk / beden / marka var → "Doğru mu?" soruldu: ${anlasilan}` }).catch(() => null);
+    return yazEl(`Şunu anladım: ${anlasilan} — ${EL_KONU_AD[kesin[0]]} işi. Doğru mu?`, { reply_markup: { inline_keyboard: [[{ text: "✅ Doğru", callback_data: `vey:${rid}:${EL_BOT_HARF[kesin[0]]}` }, { text: "❌ Yanlış", callback_data: `vey:${rid}:x` }]] } });
+  }
+  const tahmin = adaylar[0] || sonBot || (son.filter((x) => simdi - x.zaman <= 1800).at(-1) || {}).bot || null;
   await elAyarYaz(env, `venom:el:bek:${rid}`, { kim, metin: metin.slice(0, 3500), zaman: simdi });
   const dugme = (b) => ({ text: b === tahmin ? "✅ Doğru" : EL_KONU_AD[b], callback_data: `vey:${rid}:${EL_BOT_HARF[b]}` });
   const digerleri = Object.keys(EL_BOT_HARF).filter((b) => b !== tahmin).map((b) => [dugme(b)]);
@@ -3925,4 +3949,24 @@ export async function elemanGunlukListe(env, simdi) {
     if (r2 && r2.ok) { n += 1; await defterYaz(env, { zaman: simdi, bot: "venom", tur: "mesaj", kime: kim, ozet: `günlük iş listesi (${l.length} iş)`, chat: kim, mesaj: r2.result.message_id }).catch(() => null); }
   }
   return n;
+}
+// Akşam raporu satırı (kural 100): kapısı açık elemanların bugün cevapsız kalan kartları — kişi başına sayı. Kapı kapalıysa / iş yoksa satır yok.
+export async function elemanAksamSatiri(env, simdi) {
+  const kisiler = [...(await elemanKapi(env)).kisiler];
+  if (!kisiler.length) return null;
+  const bas = Math.floor(Date.parse(`${gunAnahtari(simdi)}T00:00:00+03:00`) / 1000);
+  const bekleyen = ((await stokIste(env, "/isd-bekleyen", { enEski: simdi - 7 * 86400 }).catch(() => [])) || []).filter((x) => kisiler.includes(String(x.kime)));
+  if (!bekleyen.length) return "👥 Elemanlar: bugün cevapsız iş kalmadı.";
+  const say = {};
+  for (const x of bekleyen) { const ad = defterKisi(env, x.kime) || "eleman"; say[ad] = say[ad] || { n: 0, bugun: 0 }; say[ad].n += 1; if (x.zaman >= bas) say[ad].bugun += 1; }
+  return `👥 Elemanların cevapsız işleri: ${Object.entries(say).map(([ad, s]) => `${ad} ${s.n}${s.bugun !== s.n ? ` (${s.bugun} bugünkü)` : ""}`).join(" · ")}`;
+}
+// Yedek yol haberi (kural 100): Venom cevap vermediği için bir bot elemana ESKİ yoldan gittiyse Patron'a TEK satır (olay başına bir kez)
+export async function elemanYedekHaber(env, simdi) {
+  const h = await oku(env, "venom:elemanKapiHata", null);
+  if (!h || !h.zaman) return null;
+  if ((await oku(env, "venom:elemanKapiHaber", 0)) >= h.zaman) return null;
+  await kaydet(env, "venom:elemanKapiHaber", h.zaman, 8 * 86400);
+  await defterYaz(env, { zaman: simdi, bot: "venom", tur: "hata", ozet: `eleman kapısı yedek yola geçti (${BOT_AD[h.bot] || h.bot}, ${tarihSaat(h.zaman)}): ${String(h.hata || "").slice(0, 120)}` }).catch(() => null);
+  return yaz({ ...env, __izin: "kritik" }, `⚠️ ${tarihSaat(h.zaman)}: Venom cevap vermedi; ${BOT_AD[h.bot] || h.bot} elemana eski yoldan (kendi botundan) gönderdi. İş kaybolmadı; 10 dakika sonra yeniden Venom'dan gider.`, { posta: { izin: "kritik" } });
 }
