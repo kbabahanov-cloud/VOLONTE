@@ -2707,6 +2707,10 @@ async function claudeIslemAdimi(env, simdi) {
       const r = await tg(env, "sendPhoto", { chat_id: patron(env), photo: String(is.url || ""), caption: String(is.yazi || "").slice(0, 1000), izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
       sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
     }
+    else if (is.tur === "patronaVideo") { // 17 Kasım (Patron): kayıtlı bir videoyu (yeni üretim YOK, 0 $) Venom'dan Patron'a gönder; Telegram'ın cevabı kanıt olarak kayda
+      const r = await tg(env, "sendVideo", { chat_id: patron(env), video: String(is.url || ""), caption: String(is.yazi || "").slice(0, 1000), supports_streaming: true, izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
+      sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, tarih: r && r.result ? r.result.date : null, video: r && r.result && r.result.video ? { sure: r.result.video.duration, boyut: r.result.video.file_size, en: r.result.video.width, boy: r.result.video.height } : null, hata: r && !r.ok ? String(r.description || "?").slice(0, 200) : null });
+    }
     else if (is.tur === "testMesaj") { // Patron'a test mesajı; Telegram'ın döndürdüğü hali (telefona giden) kayda
       const r = await tg(env, "sendMessage", { chat_id: patron(env), text: String(is.metin || "").slice(0, 4000), izin: "cevap" }).catch((e) => ({ ok: false, description: String(e.message || e) }));
       sonuc.push({ tur: is.tur, ok: Boolean(r && r.ok), mesaj: r && r.result ? r.result.message_id : null, yazi: r && r.result ? r.result.text : null, bicim: r && r.result ? r.result.entities || null : null, hata: r && !r.ok ? r.description : null });
