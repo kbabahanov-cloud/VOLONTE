@@ -2266,8 +2266,9 @@
   "videolar": [
    "selin/3383/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-03"
+  "gizli": true,
+  "eklenme": "2026-11-03",
+  "bitti": true
  },
  {
   "kod": "3392",
