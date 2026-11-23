@@ -170,8 +170,9 @@
   "videolar": [
    "selin/3489/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-10"
+  "gizli": true,
+  "eklenme": "2026-11-10",
+  "bitti": true
  },
  {
   "kod": "988",
