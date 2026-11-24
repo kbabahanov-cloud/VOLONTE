@@ -3511,8 +3511,9 @@
   "videolar": [
    "selin/3606/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-10-30"
+  "gizli": true,
+  "eklenme": "2026-10-30",
+  "bitti": true
  },
  {
   "kod": "3607",
@@ -4038,8 +4039,9 @@
   "videolar": [
    "selin/3407/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-10-29"
+  "gizli": true,
+  "eklenme": "2026-10-29",
+  "bitti": true
  },
  {
   "kod": "3360",
