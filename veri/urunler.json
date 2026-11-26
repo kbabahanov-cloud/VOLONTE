@@ -1177,8 +1177,9 @@
   "videolar": [
    "selin/3570/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-05"
+  "gizli": true,
+  "eklenme": "2026-11-05",
+  "bitti": true
  },
  {
   "kod": "3572",
@@ -1378,8 +1379,9 @@
   "videolar": [
    "selin/3612/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-04"
+  "gizli": true,
+  "eklenme": "2026-11-04",
+  "bitti": true
  },
  {
   "kod": "3148",
