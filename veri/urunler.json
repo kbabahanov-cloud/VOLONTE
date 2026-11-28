@@ -3758,9 +3758,8 @@
   "videolar": [
    "selin/3583/0"
   ],
-  "gizli": true,
-  "eklenme": "2026-10-30",
-  "bitti": true
+  "gizli": false,
+  "eklenme": "2026-10-30"
  },
  {
   "kod": "3578",
