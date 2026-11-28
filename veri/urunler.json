@@ -1098,8 +1098,9 @@
   "videolar": [
    "selin/3561/0"
   ],
-  "gizli": false,
-  "eklenme": "2026-11-05"
+  "gizli": true,
+  "eklenme": "2026-11-05",
+  "bitti": true
  },
  {
   "kod": "3560",
